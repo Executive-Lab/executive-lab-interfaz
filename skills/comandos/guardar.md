@@ -1,5 +1,7 @@
 ---
 description: Guardar en git
+# Solo cuando se pide: guarda una copia, y eso no se hace por su cuenta (decisión 141).
+disable-model-invocation: true
 ---
 
 Guarda en git todo el trabajo actual.

@@ -103,7 +103,8 @@ async function revisar({ lineas = [], carpetaAparte = null } = {}) {
     `Habla con: ${conQuien.ahora || '(ninguno)'}`, // diccionario: interno
     ...conQuien.cuales.map((a) => `  ${a.nombre.padEnd(8)} ${comoEsta(a)}`), // diccionario: interno
     `  habilidades en: ${donde.carpetaDeHabilidades() || '(ese asistente no tiene carpeta conocida)'}`, // diccionario: interno
-    `  botones en:     ${donde.carpetaDeComandos() || '(ese asistente no tiene botones)'}`, // diccionario: interno
+    `  botones en:     ${donde.carpetaDeBotones() || donde.carpetaDeComandos() || '(ese asistente no tiene botones)'}`, // diccionario: interno
+    ...(donde.carpetaDeBotones() && donde.carpetaDeComandos() ? [`  comandos de antes en: ${donde.carpetaDeComandos()}`] : []), // diccionario: interno
     `  ayudantes en:   ${donde.carpetaDeAgentes() || '(ese asistente no tiene ayudantes)'}`, // diccionario: interno
     '',
     'Suelo del arnés:',

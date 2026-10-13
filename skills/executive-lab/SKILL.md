@@ -63,31 +63,39 @@ esta carpeta.** Lo que escribas ahí aparece; lo que no, no existe para él. Tre
 ### 1. Cuando algo se repite, ofrécele dejarlo escrito
 
 A la segunda o tercera vez que el alumno pide lo mismo —o cuando diga "esto lo hago todas las
-semanas"— ofrécele dejarlo escrito para la próxima. Cómo, depende de con quién trabaje:
+semanas"— ofrécele dejarlo escrito para la próxima. Si dice que sí, crea una **habilidad con botón**.
+Es lo mismo con Claude y con Codex; solo cambia la carpeta:
 
-**Con Claude, un comando.** Si dice que sí, crea `.claude/commands/<verbo-objeto>.md`:
+- **Con Claude**: `.claude/skills/<verbo-objeto>/SKILL.md`, y apúntala en `.rsc.json`, en `ownSkills`:
+  esa carpeta es la del arnés, y así la trata como suya y la barra la enseña como suya.
+- **Con Codex**: `.agents/skills/<verbo-objeto>/SKILL.md`, que es donde Codex las encuentra solo.
 
 ```markdown
 ---
+name: resumen-del-mes
 description: Preparar el resumen de ventas del mes
-boton: Preparar el resumen del mes
-grupo: aprendido
-icono: 📈
+metadata:
+  boton: Resumen del mes
+  grupo: aprendido
+  icono: 📈
 ---
 
 Instrucciones para ti, no para él: qué mirar, en qué orden, qué preguntar si falta algo.
 ```
 
-`boton:` es lo único que hace que aparezca en la barra, y es el **nombre** del comando tal y como
-él lo va a leer: el nombre de la cosa —«Resumen del mes»—, no una frase sobre lo que sabes hacer.
+`boton` es lo único que hace que aparezca en la barra, y es el **nombre** de la habilidad tal y como él
+la va a leer: el nombre de la cosa —«Resumen del mes»—, no una frase sobre lo que sabes hacer.
 `grupo: diario` para lo de todos los días, `aprendido` (el valor por defecto) para lo que le has
-enseñado. Dile en una línea que ya lo tiene en la barra, y cómo se escribe (`/resumen-del-mes`).
+enseñado. Van dentro de `metadata`, que es donde una habilidad guarda lo que no es suyo.
 
-**Con Codex no hay comandos**: el arnés no le escribe ninguno, y una carpeta de comandos no la lee.
-Deja una habilidad propia en `.codex/rsc/<verbo-objeto>/SKILL.md`, junto a esta, con `name:` y
-`description:` en la cabecera y las mismas instrucciones para ti debajo. Apúntala en `.rsc.json`,
-en `ownSkills`, para que la barra la enseñe como suya en *Habilidades (skills)*. Dile en una línea
-que ya la tiene, y cómo se pide: «Usa la habilidad «resumen-del-mes»».
+Con eso también la usarás tú cuando te lo pida con sus palabras («hazme el resumen del mes»). **Si hace
+algo que no se deshace solo** —enviar, publicar, borrar, pagar— que se use solo cuando él lo pida: con
+Claude, añade `disable-model-invocation: true` a la cabecera; con Codex, deja al lado
+`agents/openai.yaml` con `policy:` y, debajo, `  allow_implicit_invocation: false`.
+
+Dile en una línea que ya lo tiene en la barra, y cómo se pide: `/resumen-del-mes` con Claude,
+`$resumen-del-mes` con Codex. No crees comandos nuevos (`.claude/commands/`): son el formato de antes.
+Los que ya haya siguen funcionando y no se tocan.
 
 ### 2. Cada clave, en el `.env` de su herramienta — y solo ahí
 

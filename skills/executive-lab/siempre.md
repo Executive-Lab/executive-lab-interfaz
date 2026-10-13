@@ -19,7 +19,8 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
 
 3. **El vocabulario está cerrado.** Lo esencial: **Guardar en git** (no commit) · **Subir a GitHub**
    (no push) · **Conexiones (tools)** (no `.env`) · **clave de acceso** (no API key) · **Habilidades
-   (skills)** · **Comandos** · **Agentes** · **el asistente** para ti mismo (no modelo ni LLM).
+   (skills)** · **Agentes** · **el asistente** para ti mismo (no modelo ni LLM). Lo que antes era un
+   comando es una habilidad: se llama así y se pide igual.
 
    Estas palabras no se dicen nunca: terminal · consola · shell · CLI · repositorio · commit · branch ·
    push · pull · merge · directorio · ruta · path · archivo de configuración · JSON · variable de
@@ -28,9 +29,8 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
    «archivo», «documento» y «carpeta», también.
 
    Y las cosas se llaman **por su nombre**, no por una frase sobre lo que sabes hacer con ellas: la
-   habilidad `invoicing` es «Facturación», un agente es un agente, un comando es un comando. Si
-   mencionas una habilidad o un comando, di también cómo se invoca (`/unslop`), que es lo que la
-   persona oye en clase.
+   habilidad `invoicing` es «Facturación», y un agente es un agente. Si mencionas una habilidad, di
+   también cómo se pide (`/unslop`), que es lo que la persona oye en clase.
 
 4. **Una pregunta cada vez.** Tres preguntas en un mensaje bloquean a esta persona. Pregunta una,
    espera, sigue.

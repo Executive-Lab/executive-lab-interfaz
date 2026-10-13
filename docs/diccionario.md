@@ -93,8 +93,8 @@ jerga por goteo.
 | borrar un documento sin leer | Quitar |
 | borrar uno ya leído, con lo que aprendió de él | Quitar algo que ya ha leído |
 | los scripts de una herramienta | Consultas (dentro de cada programa) |
-| `.claude/commands/` con `boton:` | Comandos (los que llevan botón salen arriba) |
-| un asistente sin carpeta de comandos (Codex) | Tu asistente no trabaja con comandos (en Comandos) · Tu asistente no trabaja con botones (en Acciones rápidas) |
+| una habilidad con `boton` en su `metadata` (`.claude/skills/`, o `.agents/skills/` con Codex), o un comando de antes con `boton:` (decisión 141) | Habilidades (skills) (las que llevan botón salen arriba) · en la radiografía: Habilidades con botón |
+| un asistente sin carpeta de comandos (Codex) | Tu asistente no trabaja con comandos (en Comandos, en la barra completa) · Tu asistente no trabaja con botones (en Acciones rápidas, solo si tampoco tiene habilidades con botón) |
 | lo que se fija arriba del todo | Acciones rápidas · Elegir cuáles |
 | `02-DOCS/wiki/` | Conocimiento (wiki) (dentro, «Conocimiento de <nombre>») |
 | un tema de la wiki | Un tema |
@@ -107,7 +107,7 @@ jerga por goteo.
 | sacar uno de ahí | Llevarte un archivo |
 | los tres montones juntos (inbox, procesados, raw) | Documentos entregados |
 | un documento tirado en la carpeta, sin colocar | Sin colocar todavía |
-| `.claude/commands/` entero | Comandos |
+| `.claude/commands/` entero | Comandos, en la barra completa · en la sencilla, dentro de Habilidades (skills): los suyos con las instaladas y los del arnés plegados con las del arnés (decisión 141) |
 | una habilidad instalada fuera del catálogo curado | Instalada aquí, fuera del catálogo (en la (i), dentro de Instaladas); se nombra con lo que diga su propia cabecera, y solo si está en español |
 | `bro` | Escribirlo como lo diría una persona |
 | `eli5` | Explicártelo desde cero |
@@ -177,7 +177,7 @@ jerga por goteo.
 | lo que pasó con un aviso que mandó (su incidencia, cerrada; decisión 134), en la pantalla principal, hasta que pulsa «Entendido» | un fallo, cerrado como hecho: «Lo que contaste ya está arreglado: «{título}». Te llega con la próxima versión de la barra, si no la tienes ya.» · una mejora, cerrada como hecha: «Lo que propusiste ya está hecho: «{título}». Te llega con la próxima versión de la barra, si no la tienes ya.» · algo que no se entendía, cerrado como hecho: «Executive Lab ha contestado a lo que contaste: «{título}». Lo tienes en GitHub.» · cerrado de otra forma: «Executive Lab ha leído lo que contaste: «{título}». De momento se queda como está.» · Verlo en GitHub · Entendido |
 | recibir también las prereleases (`executiveLab.probarAntes`, para todo el editor; decisión 134), en Ayuda (Esta barra) y en la principal | Probar las versiones nuevas antes · «Te llegan antes que a nadie, para ver si van bien. Alguna puede fallar.» · puesto: «Te llegan las versiones de prueba antes que a nadie.» · Dejar de probarlas antes · en la principal: «Hay una versión de prueba de la barra: la {0.44.0}.» · en Ayuda: «Tienes la {0.43.0}. Hay una de prueba más nueva: la {0.44.0}.» · si no se puede guardar: «No he podido guardar el ajuste. Pulsa «Algo va mal» y pásale el código a tu tutor.» |
 | ponerse al día sola (`executiveLab.actualizarSola`, encendido de fábrica; decisión 136), en Ayuda (Esta barra) | encendido: «Se pone al día sola: cuando hay una versión nueva, la baja, la comprueba y la deja puesta.» · Que me pregunte antes · apagado: Que se ponga al día sola · puesta: la tarjeta de siempre, «Ya está puesta la {0.45.0}. Recarga la ventana para empezar a usarla: no se pierde nada.» · Recargar ahora |
-| la pantalla principal sencilla (decisión 138; la completa de antes, con `executiveLab.barraCompleta`) | los grupos: Documentos (con «2 sin leer» al lado) · Acciones (Conexiones (tools), Conectar algo nuevo, y Comandos, Habilidades (skills) y Agentes solo si hay alguno) · Ayuda (Seguir donde lo dejé, Conversación nueva, Dime qué hago ahora, Pedir ayuda en el foro, Sugerencias, Más ayuda; decisión 139) · sus avisos: «Te he abierto una conversación nueva.» · «Te he abierto {Codex}. Para empezar una conversación nueva, pulsa el «+» de arriba de su ventana.» · «Te lo he dejado escrito en la conversación: dale a enviar. Cuando te conteste, copia el mensaje y pégalo en «Resolver dudas», en Circle.» · «No he podido hablar con el asistente. Pulsa «Algo va mal» y pásale el código a tu tutor.» · «No he podido abrir {Claude}. Pulsa «Algo va mal» y pásale el código a tu tutor.» · «{Claude} no está en este ordenador. Díselo a tu tutor.» · la línea de las copias, solo si las hay: «✓ Todo guardado, hace 5 minutos» · «✓ Todo guardado, hace un momento» · «… hace una hora» · «… hace 3 horas» · «… ayer» · con cambios: «Hay cambios sin guardar» · abajo, en pequeño: «Barra {0.45.0}» · Cambiar de proyecto · el ajuste: «Enseña la barra completa de antes, con todo lo que la sencilla deja apagado. Para quien necesite verlo todo.» |
+| la pantalla principal sencilla (decisión 138; la completa de antes, con `executiveLab.barraCompleta`) | los grupos: Documentos (con «2 sin leer» al lado) · Acciones (Conexiones (tools), Conectar algo nuevo, y Habilidades (skills) —con los comandos de antes dentro— y Agentes solo si hay alguno) · Ayuda (Seguir donde lo dejé, Conversación nueva, Dime qué hago ahora, Pedir ayuda en el foro, Sugerencias, Más ayuda; decisión 139) · sus avisos: «Te he abierto una conversación nueva.» · «Te he abierto {Codex}. Para empezar una conversación nueva, pulsa el «+» de arriba de su ventana.» · «Te lo he dejado escrito en la conversación: dale a enviar. Cuando te conteste, copia el mensaje y pégalo en «Resolver dudas», en Circle.» · «No he podido hablar con el asistente. Pulsa «Algo va mal» y pásale el código a tu tutor.» · «No he podido abrir {Claude}. Pulsa «Algo va mal» y pásale el código a tu tutor.» · «{Claude} no está en este ordenador. Díselo a tu tutor.» · la línea de las copias, solo si las hay: «✓ Todo guardado, hace 5 minutos» · «✓ Todo guardado, hace un momento» · «… hace una hora» · «… hace 3 horas» · «… ayer» · con cambios: «Hay cambios sin guardar» · abajo, en pequeño: «Barra {0.45.0}» · Cambiar de proyecto · el ajuste: «Enseña la barra completa de antes, con todo lo que la sencilla deja apagado. Para quien necesite verlo todo.» |
 | los datos que van debajo de un aviso, en «Qué más va con esto» (se enseñan tal cual, plegados, porque es exactamente lo que se manda; decisión 131) | Barra · Arnés · Sistema · Asistente · y, según el aviso: Botón (el nombre de dentro del botón que falló) y su pila · --- lo último que apuntó la barra --- · Código de incidencia · --- informe de «Algo va mal» --- |
 | un encargo largo en Windows, que va por el portapapeles (el enlace lleva el texto en la URL, y Windows la corta sobre los 2.048 caracteres; decisión 130) | «Es un texto largo: te lo he copiado para que llegue entero. Pégalo con Ctrl+V en la caja de {Claude} y dale a enviar.» |
 | la marca de su web no se puede usar porque encima no se lee nada, en Tu marca | «No he podido usar lo que hay: con ese fondo no se lee nada encima. Pídele al asistente uno más claro o más oscuro.» |
@@ -249,6 +249,11 @@ deja sin poder atar una cosa con otra justo cuando está aprendiendo las dos a l
 El paréntesis es la forma de tener las dos: manda la palabra en cristiano, y detrás va la que va a
 oír fuera. No al revés.
 
+**Desde el 13 de octubre de 2026 (decisión 141), Comandos ya no es una clase aparte.** Claude juntó los
+comandos con las habilidades —*«Custom commands have been merged into skills»*— y Codex quitó los suyos.
+Lo que se repite se guarda como habilidad con botón, y los comandos que ya hay salen dentro de
+**Habilidades (skills)**. «Comandos» solo queda en la barra completa, que no se ha borrado.
+
 ## Cuarta regla: las cosas se llaman por lo que son, no por lo que el asistente sabe hacer
 
 **Decisión de Jose, 21 de septiembre de 2026:** *«que no haya "simplificaciones" excesivas como
@@ -262,8 +267,9 @@ imposible atar lo que se oye en clase —skill, comando, agente— con lo que se
 Tres consecuencias, que valen para todo lo que se escriba a partir de ahora:
 
 1. **Una clase de cosa se nombra por su nombre**, en español, con el término de RSC entre paréntesis
-   cuando en clase se dice en inglés: **Habilidades (skills)** · **Comandos** · **Agentes** ·
-   **Conexiones (tools)** · **Conocimiento (wiki)**. Ni «ayudantes», ni «botones», ni «procesos».
+   cuando en clase se dice en inglés: **Habilidades (skills)** · **Agentes** · **Conexiones (tools)** ·
+   **Conocimiento (wiki)** (y **Comandos**, solo en la barra completa: decisión 141). Ni «ayudantes», ni
+   «botones», ni «procesos».
 2. **Una cosa concreta se nombra por su nombre**, no por una frase sobre lo que hace: la habilidad
    `invoicing` es **Facturación**, no «llevar tus facturas de principio a fin»; el agente
    `refuter-security` es **Revisor de seguridad**. Lo que hace va en la (i), en una frase. Y el

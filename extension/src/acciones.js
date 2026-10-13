@@ -18,19 +18,46 @@ const nombres = require('./nombres');
 // hacer. Dentro de cada grupo, por orden alfabético de etiqueta.
 const ORDEN_DE_GRUPOS = ['diario', 'aprendido'];
 
-function acciones() {
-  // Cada asistente los guarda en su sitio, y Codex no los guarda en ninguno:
-  // RSC no le escribe comandos. Leer la carpeta de Claude en un arnés de Codex
-  // daría cero botones sin decir por qué.
-  const carpeta = donde.carpetaDeComandos();
+// ── Las habilidades con botón (decisión 141) ─────────────────────────────
+//
+// Con Claude y con Codex un botón es una habilidad con `boton:` en su cabecera
+// —dentro de `metadata:`, que el lector aplana—. Se leen de donde las deja cada
+// uno (`botones` en `sitios.js`) y se piden como él: `/nombre` o `$nombre`.
+function habilidadesConBoton() {
+  const carpeta = donde.carpetaDeBotones();
   if (!carpeta || !fs.existsSync(carpeta)) return [];
+  const halladas = [];
+  for (const entrada of fs.readdirSync(carpeta, { withFileTypes: true })) {
+    if (entrada.name.startsWith('.') || !(entrada.isDirectory() || entrada.isSymbolicLink())) continue;
+    const campos = frontmatter.leer(path.join(carpeta, entrada.name, 'SKILL.md'));
+    const etiqueta = typeof campos.boton === 'string' ? campos.boton.trim() : '';
+    if (!etiqueta) continue;
+    halladas.push({
+      ...donde.elBoton(entrada.name),
+      etiqueta,
+      icono: typeof campos.icono === 'string' && campos.icono ? campos.icono : '▸',
+      grupo: ORDEN_DE_GRUPOS.includes(campos.grupo) ? campos.grupo : 'aprendido',
+    });
+  }
+  return halladas;
+}
 
-  const encontradas = [];
-  for (const fichero of fs.readdirSync(carpeta)) {
+function acciones() {
+  const deHabilidades = habilidadesConBoton();
+  // Si una habilidad y un comando se llaman igual, manda la habilidad, como en
+  // Claude (*«A skill and a file in .claude/commands/ → The skill»*).
+  const yaEstan = new Set(deHabilidades.map((h) => h.nombre));
+  const encontradas = [...deHabilidades];
+
+  // Y los comandos, que se siguen leyendo: el formato de antes, el que tienen
+  // muchas carpetas, y el de los asistentes que no han dado el paso. Cada uno
+  // los guarda en su sitio, y Codex no los guarda en ninguno.
+  const carpeta = donde.carpetaDeComandos();
+  for (const fichero of carpeta && fs.existsSync(carpeta) ? fs.readdirSync(carpeta) : []) {
     // Cada asistente los escribe a su manera: `.prompt.md` en Copilot, y en
     // Cline se piden con su `.md` detrás (E3).
     const comando = donde.elComando(fichero);
-    if (!comando) continue;
+    if (!comando || yaEstan.has(comando.nombre)) continue;
 
     const campos = frontmatter.leer(path.join(carpeta, fichero));
     const etiqueta = typeof campos.boton === 'string' ? campos.boton.trim() : '';
@@ -152,4 +179,4 @@ function todos() {
   });
 }
 
-module.exports = { acciones, todos };
+module.exports = { acciones, todos, habilidadesConBoton };

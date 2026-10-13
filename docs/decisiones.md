@@ -4929,3 +4929,42 @@ Así que va en dos pasos:
 2. **El traslado, cuando la 0.47.0 haya llegado a casi todos.** Se pone sola al abrir el editor, así que
    basta con unos días de clase. Quien se quede en la 0.46.0 o antes verá que hay una versión nueva y
    tendrá que bajarla de la página una vez. Después, otra versión pasa a preguntar a la dirección nueva.
+
+## 141. Los comandos son habilidades
+
+**Fecha:** 13 de octubre de 2026 · **Estado:** hecho
+
+Jose: *«skill y comando es lo mismo, solo que comando es un concepto desfasado… nos cargamos el
+concepto de comando y lo metemos todo en skills»*, y, visto lo que dicen las dos casas, *«juntémoslo en
+skills»*.
+
+Lo que dicen ellas:
+
+- **Claude**: *«Custom commands have been merged into skills. A file at `.claude/commands/deploy.md`
+  and a skill at `.claude/skills/deploy/SKILL.md` both create `/deploy` and work the same way. Your
+  existing `.claude/commands/` files keep working.»* Un comando es *«the older format and still
+  works»*, y si los dos se llaman igual, manda la habilidad.
+- **Codex** quitó sus comandos («custom prompts», obsoletos y retirados en marzo de 2026) y se queda con
+  las habilidades del estándar abierto, que lee de `.agents/skills/` en la carpeta y se piden con `$`.
+- Las dos dejan una habilidad **solo para cuando se pide**: Claude con `disable-model-invocation: true`,
+  y Codex con `allow_implicit_invocation: false` en `agents/openai.yaml`.
+
+Y lo que cambia:
+
+- **Un botón es una habilidad con `boton` en su `metadata`**, con Claude en `.claude/skills/` y con
+  Codex en `.agents/skills/` (`sitios.js`, `botones` y `botonSePideCon`). **Los alumnos con Codex tienen
+  botones por primera vez**: antes salían solo de los comandos, y Codex no tiene.
+- **Los cuatro de los raíles** (ayuda, empezar, guardar, seguir) se ponen como habilidades, escritas
+  desde la misma fuente (`como-habilidad.js`). «Guardar» solo cuando se pide; los demás, también cuando
+  el alumno lo dice con sus palabras. Con Claude se declaran en `ownSkills`, como `executive-lab`.
+- **La regla del asistente es una para los dos**: lo que se repite, como habilidad con botón; con efectos
+  que no se deshacen solos, solo cuando se pida; y ningún comando nuevo.
+- **Nada se borra.** Los comandos que ya hay se siguen leyendo y siguen siendo botones; si uno se llama
+  como una habilidad, manda la habilidad, como en Claude. En la pantalla sencilla, la fila «Comandos»
+  queda apagada en `piezas.json`, y los comandos salen dentro de **Habilidades (skills)**: los suyos con
+  las instaladas, los del arnés plegados con los del arnés. La pantalla de Comandos sigue en la barra
+  completa. Los demás asistentes, que no han dado el paso, siguen con sus comandos.
+- La decisión 98 nombraba «Comandos» como una clase; desde esta, va dentro de Habilidades.
+
+Queda fuera: RSC sigue escribiendo sus cuatro comandos en el formato de antes. No es nuestro; se le puede
+abrir una incidencia.

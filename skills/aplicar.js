@@ -28,6 +28,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const sitios = require('./sitios');
 const noEntra = require('./no-entra-en-git');
+const { comoHabilidad } = require('./como-habilidad');
 
 const [, , destinoBruto, ...banderas] = process.argv;
 const forzar = banderas.includes('--forzar');
@@ -87,7 +88,7 @@ for (const raro of raros) hechos.push(`sin raíles para "${raro}": no sé dónde
 const en = (...partes) => path.join(destino, ...partes);
 const comoSeEscribe = (partes) => partes.join('/');
 
-// 1 y 2. La habilidad y los comandos, donde mire cada uno.
+// 1 y 2. La habilidad y los botones, donde mire cada uno.
 //
 // Y comandos no hay para todos: RSC solo escribe comandos para ocho
 // asistentes, y Codex no es uno. No es que estén en otro sitio — con Codex no
@@ -96,6 +97,11 @@ const comoSeEscribe = (partes) => partes.join('/');
 function ponerLaHabilidadYLosComandos(quien, suyo) {
   copiarCarpeta(path.join(origen, 'executive-lab'), en(...suyo.habilidades, 'executive-lab'));
   hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/`);
+  // Con Claude y con Codex, los botones son habilidades (decisión 141).
+  if (suyo.botones) {
+    ponerLosBotonesComoHabilidades(quien, suyo);
+    return;
+  }
   if (!suyo.comandos) {
     hechos.push(`sin comandos: ${quien} no tiene dónde guardarlos, y no me los invento`);
     return;
@@ -120,6 +126,50 @@ function ponerLaHabilidadYLosComandos(quien, suyo) {
     fs.writeFileSync(hasta, nuestro);
   }
   hechos.push(`${comoSeEscribe(suyo.comandos)}/ (${cuantos.length - suyos.length} comandos${suyos.length ? `; ${suyos.map((s) => `«${s}»`).join(', ')} es tuyo y no lo toco` : ''})`);
+}
+
+// Los cuatro de `comandos/`, como habilidades: la misma fuente, escrita como la
+// lee cada uno (`como-habilidad.js`). Un comando que ya estuviera de otro día se
+// queda donde está —no se borra nada—, y Claude, con los dos, usa la habilidad
+// (*«A skill and a file in .claude/commands/ → The skill»*).
+const habilidadesDeBotones = [];
+
+function ponerLosBotonesComoHabilidades(quien, suyo) {
+  const fuentes = fs.readdirSync(path.join(origen, 'comandos')).filter((f) => f.endsWith('.md'));
+  const suyos = [];
+  for (const fichero of fuentes) {
+    const nombre = fichero.replace(/\.md$/, '');
+    const nuestro = fs.readFileSync(path.join(origen, 'comandos', fichero), 'utf8');
+    const { skill, openai } = comoHabilidad(nuestro, nombre, quien);
+    const carpeta = en(...suyo.botones, nombre);
+    const hasta = path.join(carpeta, 'SKILL.md');
+    // Un enlace con ese nombre es de otro —RSC enlaza así las suyas—, lleve a
+    // algo o a nada: no se escribe a través de él.
+    let esEnlace = false;
+    try {
+      esEnlace = fs.lstatSync(carpeta).isSymbolicLink();
+    } catch { /* no está */ }
+    if (esEnlace) {
+      suyos.push(nombre);
+      continue;
+    }
+    // Una suya que se llame igual no se pisa: es nuestra si dice lo mismo en su
+    // `description`, como con los comandos.
+    if (fs.existsSync(hasta) && descripcionDe(leerSiHay(hasta)) !== descripcionDe(nuestro)) {
+      suyos.push(nombre);
+      continue;
+    }
+    fs.mkdirSync(carpeta, { recursive: true });
+    fs.writeFileSync(hasta, skill);
+    if (openai) {
+      fs.mkdirSync(path.join(carpeta, 'agents'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, 'agents', 'openai.yaml'), openai);
+    }
+    // Las que caen donde RSC guarda las suyas se declaran como propias, igual que
+    // `executive-lab`, para que un `repair` no las tome por basura.
+    if (comoSeEscribe(suyo.botones) === comoSeEscribe(suyo.habilidades)) habilidadesDeBotones.push(nombre);
+  }
+  hechos.push(`${comoSeEscribe(suyo.botones)}/ (${fuentes.length - suyos.length} habilidades con botón${suyos.length ? `; ${suyos.map((s) => `«${s}»`).join(', ')} es tuya y no la toco` : ''})`);
 }
 
 // 3. Que el asistente sepa que la habilidad está ahí.
@@ -500,8 +550,9 @@ if (fs.existsSync(declaracion)) {
   try {
     const rsc = JSON.parse(fs.readFileSync(declaracion, 'utf8'));
     const propias = new Set(rsc.ownSkills || []);
-    if (!propias.has('executive-lab')) {
-      propias.add('executive-lab');
+    const nuestras = ['executive-lab', ...habilidadesDeBotones];
+    if (nuestras.some((id) => !propias.has(id))) {
+      nuestras.forEach((id) => propias.add(id));
       rsc.ownSkills = [...propias];
       fs.writeFileSync(declaracion, `${JSON.stringify(rsc, null, 2)}\n`);
       hechos.push('.rsc.json (declarada en ownSkills)');

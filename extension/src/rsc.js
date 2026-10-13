@@ -145,7 +145,16 @@ async function anadir(id) {
 // (E3; revisión de F5, m3).
 function habilidadesEnDisco() {
   const donde = require('./donde');
-  const carpeta = donde.carpetaDeHabilidades();
+  const enSuCarpeta = habilidadesEn(donde.carpetaDeHabilidades());
+  // Con Codex, las de botón van en `.agents/skills`, que es donde él las lee,
+  // y no con las de RSC (decisión 141). Están puestas, así que se ven.
+  const deBotones = donde.carpetaDeBotones();
+  if (!deBotones || deBotones === donde.carpetaDeHabilidades()) return enSuCarpeta;
+  return [...enSuCarpeta, ...habilidadesEn(deBotones).filter((id) => !enSuCarpeta.includes(id))];
+}
+
+function habilidadesEn(carpeta) {
+  const donde = require('./donde');
   if (!carpeta || !fs.existsSync(carpeta)) return [];
   const ext = donde.habilidadEnUnFichero();
   try {

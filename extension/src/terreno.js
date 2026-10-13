@@ -440,6 +440,9 @@ function laHabilidadEsLaDeHoy(carpetaDeLaExtension, puesta) {
 // que el reponer pone, o lo que espera al sí de alguien (C-4).
 function losComandosSonLosDeHoy(carpetaDeLaExtension) {
   const nuestros = carpetaDeLaExtension && path.join(carpetaDeLaExtension, 'media', 'railes', 'comandos');
+  // Con Claude y Codex van como habilidades (decisión 141), escritas como las
+  // escribe `aplicar.js`; un comando de antes que siga ahí ya no cuenta.
+  if (donde.carpetaDeBotones()) return lasDeBotonSonLasDeHoy(nuestros, carpetaDeLaExtension);
   const suyos = donde.carpetaDeComandos();
   if (!nuestros || !suyos || !fs.existsSync(nuestros)) return true;
   try {
@@ -457,6 +460,25 @@ function losComandosSonLosDeHoy(carpetaDeLaExtension) {
       if (!fs.existsSync(aqui)) return false;
       const [nuestro, suyo] = [fs.readFileSync(path.join(nuestros, fichero), 'utf8'), fs.readFileSync(aqui, 'utf8')];
       return nuestro === suyo || descripcion(nuestro) !== descripcion(suyo);
+    });
+  } catch {
+    return true;
+  }
+}
+
+function lasDeBotonSonLasDeHoy(nuestros, carpetaDeLaExtension) {
+  if (!nuestros || !fs.existsSync(nuestros)) return true;
+  try {
+    const { comoHabilidad, descripcionDe } = require(path.join(carpetaDeLaExtension, 'media', 'railes', 'como-habilidad.js'));
+    const quien = donde.paraQuien();
+    return fs.readdirSync(nuestros).filter((f) => f.endsWith('.md')).every((fichero) => {
+      const nombre = fichero.replace(/\.md$/, '');
+      const aqui = path.join(donde.carpetaDeBotones(), nombre, 'SKILL.md');
+      if (!fs.existsSync(aqui)) return false;
+      const fuente = fs.readFileSync(path.join(nuestros, fichero), 'utf8');
+      const suya = fs.readFileSync(aqui, 'utf8');
+      // Una suya que se llama como una nuestra no es nuestra de antes: no se pisa.
+      return suya === comoHabilidad(fuente, nombre, quien).skill || descripcionDe(fuente) !== descripcionDe(suya);
     });
   } catch {
     return true;
@@ -821,14 +843,15 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       detalle: !conArnes ? 'Cuando esté montado' : (temas ? `${temas} ${temas === 1 ? 'tema' : 'temas'}` : 'Todavía no ha aprendido nada'),
     }, { como: 'solo', etiqueta: 'Darle documentos (inbox)', accion: { tipo: 'verPapeles' } }),
     // Los botones solo son una pieza que falta si ese asistente llega a
-    // tenerlos. Con Codex no los hay nunca —RSC no le escribe comandos— así que
-    // una cruz permanente ahí no es información: es un reproche por algo que no
-    // se puede arreglar. Cuando no puede haberlos, esta línea no sale.
+    // tenerlos: una cruz permanente no es información, es un reproche por algo
+    // que no se puede arreglar. Con Claude y con Codex salen de sus habilidades
+    // (decisión 141); con otros, de sus comandos; si no puede haberlos, esta
+    // línea no sale.
     ...(donde.puedeTenerBotones() ? [conArreglo({
-      nombre: 'Comandos',
+      nombre: 'Habilidades con botón',
       estado: !conArnes ? 'noAplica' : (botones ? 'si' : 'no'),
       detalle: !conArnes ? 'Cuando esté montado' : (botones ? `${botones}` : 'Ninguno todavía'),
-    }, { como: 'solo', etiqueta: 'Ver los que hay', accion: { tipo: 'verComandos' } })] : []),
+    }, { como: 'solo', etiqueta: 'Ver los que hay', accion: { tipo: 'verSaberes' } })] : []),
     // Con el arnés puesto y sin historial en la carpeta no hay copias, aunque
     // lo demás esté entero: pasa cuando se eligió seguir sin ellas (B3), y
     // decía «Listas» (B7). Se ofrecen, con su botón.

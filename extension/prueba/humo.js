@@ -2940,10 +2940,10 @@ exec git "$@"
     // montada para un asistente que no está puesto se comporta como si
     // estuviera rota —los botones no hacen nada— y no lo decía nadie.
     assert.ok(por['Tu asistente'], 'se dice cuál es el asistente');
-    assert.ok(por['Comandos'], 'con Claude sí puede haberlos');
+    assert.ok(por['Habilidades con botón'], 'con Claude sí puede haberlos');
 
-    // Y con Codex no puede haberlos nunca: RSC no le escribe comandos. Una cruz
-    // permanente ahí no informa, reprocha algo que no se puede arreglar.
+    // Y con Codex también, desde que los botones son habilidades (decisión 141):
+    // antes no podía haberlos nunca, y la línea no salía.
     const fs2 = require('node:fs');
     const conCodex = fs2.mkdtempSync(path.join(os.tmpdir(), 'radio-codex-'));
     fs2.writeFileSync(path.join(conCodex, '.rsc.json'), JSON.stringify({ version: 1, targets: ['codex'] }));
@@ -2954,7 +2954,8 @@ exec git "$@"
     vscode.guion.raiz = empresa;
 
     const nombres = suya.piezas.map((p) => p.nombre);
-    assert.ok(!nombres.includes('Comandos'), 'con Codex esa línea no sale');
+    assert.ok(nombres.includes('Habilidades con botón'), 'con Codex también puede haber botones, y no se dice');
+    assert.ok(!nombres.includes('Comandos'), 'sale «Comandos», que ya no es una cosa aparte');
     assert.ok(nombres.includes('Tu asistente'), 'pero sí cuál es el asistente');
     return `${radio.piezas.length} piezas`;
   });
@@ -3605,25 +3606,28 @@ exec git "$@"
     return `${delDiccionario.length} palabras, las mismas en los dos sitios`;
   });
 
-  await comprobar('en Codex la habilidad no manda crear comandos', () => {
-    // D4. La habilidad mandaba crear `.claude/commands/` pasara lo que pasara, y
-    // con Codex no hay comandos: RSC no le escribe ninguno y Codex no lee esa
-    // carpeta. Lo que se repite se deja como habilidad propia.
+  await comprobar('la habilidad manda dejar lo que se repite como habilidad con botón, con los dos', () => {
+    // D4, y la decisión 141. Mandaba crear `.claude/commands/` pasara lo que
+    // pasara, y con Codex no hay comandos. Después, comando con Claude y
+    // habilidad con Codex. Ahora, con los dos, una habilidad con botón, cada una
+    // donde la encuentra su asistente; y ningún comando nuevo.
     for (const donde of [path.join(RAIZ, '..', 'skills'), path.join(RAIZ, 'media', 'railes')]) {
       const skill = fs.readFileSync(path.join(donde, 'executive-lab', 'SKILL.md'), 'utf8');
       const seccion = skill.slice(skill.indexOf('### 1. Cuando algo se repite'), skill.indexOf('### 2. '));
       assert.ok(seccion.length > 100, 'no encuentro la sección de lo que se repite');
-      const deClaude = seccion.indexOf('**Con Claude');
-      const deCodex = seccion.indexOf('**Con Codex');
-      assert.ok(deClaude >= 0 && deCodex > deClaude, 'no distingue a Claude de Codex');
-      const loDeCodex = seccion.slice(deCodex);
-      assert.match(loDeCodex, /no hay comandos/, 'no dice que con Codex no hay comandos');
-      assert.match(loDeCodex, /\.codex\/rsc\/<verbo-objeto>\/SKILL\.md/, 'no dice dónde va la habilidad propia');
-      assert.match(loDeCodex, /ownSkills/, 'no dice que se declara como suya');
-      assert.ok(!loDeCodex.includes('.claude/commands'), 'con Codex sigue mandando crear un comando');
-      assert.ok(!seccion.slice(0, deClaude).includes('.claude/commands'), 'manda crear un comando antes de decir con quién');
+      assert.match(seccion, /\*\*Con Claude\*\*: `\.claude\/skills\/<verbo-objeto>\/SKILL\.md`/, 'no dice dónde va con Claude');
+      assert.match(seccion, /\*\*Con Codex\*\*: `\.agents\/skills\/<verbo-objeto>\/SKILL\.md`/, 'no dice dónde va con Codex');
+      assert.match(seccion, /metadata:\n  boton: /, 'el botón no va en su metadata');
+      assert.match(seccion, /disable-model-invocation: true/, 'no dice cómo se deja solo para cuando se pida, con Claude');
+      assert.match(seccion, /allow_implicit_invocation: false/, 'ni con Codex');
+      assert.match(seccion, /ownSkills/, 'no dice que con Claude se declara como suya');
+      assert.match(seccion, /No crees comandos nuevos/, 'no dice que los comandos son lo de antes');
+      // Y la barra la lee: lo que se enseña a escribir es lo que `acciones.js` encuentra.
+      const ejemplo = seccion.match(/```markdown\n([\s\S]*?)```/)[1];
+      const campos = require(path.join(RAIZ, 'src', 'frontmatter.js')).analizar(ejemplo);
+      assert.equal(campos.boton, 'Resumen del mes', 'el ejemplo no se lee como botón');
     }
-    return 'con Claude, un comando; con Codex, una habilidad propia';
+    return 'una habilidad con botón, con Claude y con Codex';
   });
 
   await comprobar('accompaniment y accompaniment_level dan el mismo dial', () => {
@@ -4616,9 +4620,9 @@ exec git "$@"
       assert.match(ayudante.queHace, /contrato que se acerca/, 'el ayudante en TOML se lee entero');
 
       const donde = cargar('donde');
-      assert.equal(donde.puedeTenerBotones(), false, 'Codex no tiene botones, y la barra lo sabe');
+      assert.equal(donde.puedeTenerBotones(), true, 'con Codex, los botones son habilidades (decisión 141)');
       assert.equal(donde.puedeTenerAjustes(), false, 'ni fichero de permisos');
-      assert.equal(cargar('acciones').todos().length, 0, 'así que no se enseña ninguno');
+      assert.equal(cargar('acciones').todos().length, 0, 'comandos no tiene ninguno, así que no se enseña ninguno');
 
       const reglas = cargar('reglas').queHay();
       assert.equal(reglas.cual, 'otros', 'manda AGENTS.md');
@@ -4646,7 +4650,7 @@ exec git "$@"
       const susComandos = panel.mandar({
         tipo: 'comandos',
         comandos: cargar('acciones').todos(),
-        puedeTenerBotones: donde.puedeTenerBotones(),
+        puedeTenerBotones: donde.puedeTenerComandos(),
       });
       assert.match(susComandos, /no trabaja con comandos/, 'la pantalla de comandos dice por qué no hay ninguno');
       assert.ok(!/Se van creando/.test(susComandos), 'y no promete que se vayan creando solos');
@@ -4981,7 +4985,13 @@ exec git "$@"
 
     const claude = poner(['claude']);
     assert.ok(claude.hay('.claude', 'skills', 'executive-lab', 'SKILL.md'), 'con Claude, donde siempre');
-    assert.ok(claude.hay('.claude', 'commands', 'seguir.md'), 'y sus cuatro comandos');
+    // Los cuatro, como habilidades (decisión 141), y ningún comando nuevo.
+    for (const nombre of ['ayuda', 'empezar', 'guardar', 'seguir']) assert.ok(claude.hay('.claude', 'skills', nombre, 'SKILL.md'), `con Claude, falta la habilidad «${nombre}»`);
+    assert.ok(!claude.hay('.claude', 'commands'), 'con Claude, se siguen poniendo comandos');
+    const guardarDeClaude = fs2.readFileSync(path.join(claude.carpeta, '.claude', 'skills', 'guardar', 'SKILL.md'), 'utf8');
+    assert.match(guardarDeClaude, /^disable-model-invocation: true$/m, 'guardar en git, con Claude, se usa sin que se pida');
+    assert.match(fs2.readFileSync(path.join(claude.carpeta, '.claude', 'skills', 'seguir', 'SKILL.md'), 'utf8'), /^name: seguir\ndescription: "Seguir donde lo dejé"\nmetadata:\n  boton: "Seguir donde lo dejé"/m, 'el botón, en su metadata');
+    assert.doesNotMatch(fs2.readFileSync(path.join(claude.carpeta, '.claude', 'skills', 'seguir', 'SKILL.md'), 'utf8'), /disable-model-invocation/, 'seguir no se puede pedir con palabras');
 
     const codex = poner(['codex'], { 'AGENTS.md': '# AGENTS.md\n\nLo que ya había aquí.\n' });
     assert.ok(codex.hay('.codex', 'rsc', 'executive-lab', 'SKILL.md'), 'con Codex, en la suya');
@@ -4989,6 +4999,11 @@ exec git "$@"
     // Codex no tiene carpeta de comandos: RSC no le escribe ninguno, nunca. No
     // se los inventamos en una carpeta muerta.
     assert.ok(!codex.hay('.codex', 'commands'), 'sin comandos, porque no hay dónde');
+    // Pero sí botones: como habilidades, donde Codex las lee (decisión 141).
+    for (const nombre of ['ayuda', 'empezar', 'guardar', 'seguir']) assert.ok(codex.hay('.agents', 'skills', nombre, 'SKILL.md'), `con Codex, falta la habilidad «${nombre}»`);
+    assert.equal(fs2.readFileSync(path.join(codex.carpeta, '.agents', 'skills', 'guardar', 'agents', 'openai.yaml'), 'utf8'), 'policy:\n  allow_implicit_invocation: false\n', 'guardar en git, con Codex, se usa sin que se pida');
+    assert.ok(!codex.hay('.agents', 'skills', 'seguir', 'agents'), 'seguir, con Codex, no se puede pedir con palabras');
+    assert.doesNotMatch(fs2.readFileSync(path.join(codex.carpeta, '.agents', 'skills', 'guardar', 'SKILL.md'), 'utf8'), /disable-model-invocation/, 'a Codex se le pone un campo que no es suyo');
 
     // Y Codex no descubre las habilidades solo: lee su AGENTS.md. Una habilidad
     // que nadie nombra es una habilidad que no se carga.
@@ -5036,13 +5051,15 @@ exec git "$@"
     const hay = (...p) => fs.existsSync(path.join(carpeta, ...p));
     const leer = (...p) => fs.readFileSync(path.join(carpeta, ...p), 'utf8');
     assert.ok(hay('.claude', 'skills', 'executive-lab', 'siempre.md'), 'Claude, sin raíles');
-    assert.ok(hay('.claude', 'commands', 'guardar.md'), 'Claude, sin sus comandos');
+    assert.ok(hay('.claude', 'skills', 'guardar', 'SKILL.md'), 'Claude, sin sus botones');
+    assert.ok(hay('.agents', 'skills', 'guardar', 'SKILL.md'), 'Codex, sin sus botones');
     assert.match(leer('CLAUDE.md'), /@\.claude\/skills\/executive-lab\/siempre\.md/, 'Claude, sin el bloque');
     assert.match(leer('.claude', 'settings.json'), /executive-lab\/freno\.mjs/, 'Claude, sin el freno');
     assert.ok(hay('.codex', 'rsc', 'executive-lab', 'siempre.md'), 'Codex, sin raíles');
     assert.match(leer('AGENTS.md'), /\.codex\/rsc\/executive-lab\/siempre\.md/, 'Codex, sin lo que le nombra la habilidad');
     // Y lo que es de la carpeta, una vez.
     assert.equal((leer('.rsc.json').match(/executive-lab/g) || []).length, 1, 'declarada dos veces en ownSkills');
+    assert.deepEqual(JSON.parse(leer('.rsc.json')).ownSkills, ['executive-lab', 'ayuda', 'empezar', 'guardar', 'seguir'], 'las de botón que caen con las de RSC, sin declarar');
     return 'los dos, cada uno en lo suyo';
   });
 
@@ -6896,9 +6913,12 @@ exec git "$@"
       escribir('CLAUDE.md', '\n<!-- executive-lab:start -->\n@.claude/skills/executive-lab/siempre.md\n<!-- executive-lab:end -->\n');
       // Y el bloque de lo que no entra en git (F1).
       escribir('.gitignore', `${require(path.join(RAIZ, 'media', 'railes', 'no-entra-en-git')).elBloque()}\n`);
+      // Y los cuatro botones, como habilidades (decisión 141).
       const COMANDOS_DE_HOY = path.join(RAIZ, 'media', 'railes', 'comandos');
+      const { comoHabilidad } = require(path.join(RAIZ, 'media', 'railes', 'como-habilidad'));
       for (const fichero of fs2.readdirSync(COMANDOS_DE_HOY)) {
-        escribir(`.claude/commands/${fichero}`, fs2.readFileSync(path.join(COMANDOS_DE_HOY, fichero), 'utf8'));
+        const nombre = fichero.replace(/\.md$/, '');
+        escribir(`.claude/skills/${nombre}/SKILL.md`, comoHabilidad(fs2.readFileSync(path.join(COMANDOS_DE_HOY, fichero), 'utf8'), nombre, 'claude').skill);
       }
       assert.ok(terrenoM.comoEstanLosRailes().alDia, 'la de hoy está al día');
       let pieza = (await terrenoM.radiografia()).piezas.find((p) => p.nombre === 'Lo que pone la barra');
@@ -6955,15 +6975,27 @@ exec git "$@"
     };
     terrenoM.saberDondeEstamos(RAIZ);
     try {
-      // Con Claude: un comando de otro día.
+      // Con Claude: un botón de otro día (una habilidad, decisión 141).
       const claude = montarCon(['claude']);
       vscode.guion.raiz = claude;
       assert.ok(terrenoM.comoEstanLosRailes().alDia, 'los de hoy no están al día: la prueba no mira nada');
-      const comando = path.join(claude, '.claude', 'commands', 'guardar.md');
+      const comando = path.join(claude, '.claude', 'skills', 'guardar', 'SKILL.md');
       fs.appendFileSync(comando, '\nLo que decía la semana pasada.\n');
-      assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'un comando de antes se da por al día');
+      assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'un botón de antes se da por al día');
       fs.rmSync(comando);
-      assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'sin uno de los comandos se da por al día');
+      assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'sin uno de los botones se da por al día');
+      // Un comando nuestro de antes, que se queda donde estaba, no cuenta: manda la habilidad.
+      const conComandoViejo = montarCon(['claude']);
+      vscode.guion.raiz = conComandoViejo;
+      fs.mkdirSync(path.join(conComandoViejo, '.claude', 'commands'), { recursive: true });
+      fs.writeFileSync(path.join(conComandoViejo, '.claude', 'commands', 'guardar.md'), '---\ndescription: Guardar en git\n---\nLo de antes.\n');
+      assert.ok(terrenoM.comoEstanLosRailes().alDia, 'un comando de antes deja los raíles viejos para siempre');
+      // Con Codex: un botón de otro día.
+      const codexViejo = montarCon(['codex']);
+      vscode.guion.raiz = codexViejo;
+      assert.ok(terrenoM.comoEstanLosRailes().alDia, 'los botones de hoy, con Codex, no están al día');
+      fs.appendFileSync(path.join(codexViejo, '.agents', 'skills', 'seguir', 'SKILL.md'), '\nLo de antes.\n');
+      assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'con Codex, un botón de antes se da por al día');
 
       // Con Claude: el bloque de CLAUDE.md, apuntando a otra cosa.
       const otra = montarCon(['claude']);
@@ -6977,7 +7009,7 @@ exec git "$@"
       assert.ok(terrenoM.comoEstanLosRailes().alDia, 'los de hoy, con Codex, no están al día');
       fs.writeFileSync(path.join(codex, 'AGENTS.md'), '\n<!-- executive-lab:start -->\nLéete `.codex/rsc/executive-lab/SKILL.md` antes de hacer nada y respeta lo que diga: es la habilidad siempre activa de esta carpeta.\n<!-- executive-lab:end -->\n');
       assert.ok(!terrenoM.comoEstanLosRailes().alDia, 'un bloque de AGENTS.md de antes se da por al día');
-      return 'un comando, uno que falta y dos bloques de antes, todos vistos';
+      return 'un botón, uno que falta, uno de Codex y dos bloques de antes, todos vistos';
     } finally {
       terrenoM.saberDondeEstamos(null);
       vscode.guion.raiz = empresa;
@@ -8762,14 +8794,20 @@ exec git "$@"
     // `guardar.md` suyo se pisaba en cada pasada, también en la carpeta de
     // alguien, y con D6 dejaba los raíles «de una versión anterior» para siempre.
     // Es nuestro si dice lo mismo que el nuestro en su `description`.
-    const leer = (c, n) => fs.readFileSync(path.join(c, '.claude', 'commands', n), 'utf8');
+    // Con Claude ahora son habilidades (decisión 141): vale lo mismo para una
+    // habilidad suya que se llame como una nuestra, y un comando suyo de antes
+    // no se toca nunca.
+    const leer = (c, n) => fs.readFileSync(path.join(c, '.claude', 'skills', n, 'SKILL.md'), 'utf8');
     const carpeta = conEnganchesDeRsc('comando-suyo-');
+    fs.mkdirSync(path.join(carpeta, '.claude', 'skills', 'guardar'), { recursive: true });
     fs.mkdirSync(path.join(carpeta, '.claude', 'commands'), { recursive: true });
     const SUYO = '---\ndescription: Guardar las facturas en la carpeta del trimestre\n---\nGuárdalas por fecha.\n';
-    fs.writeFileSync(path.join(carpeta, '.claude', 'commands', 'guardar.md'), SUYO);
+    fs.writeFileSync(path.join(carpeta, '.claude', 'skills', 'guardar', 'SKILL.md'), SUYO);
+    fs.writeFileSync(path.join(carpeta, '.claude', 'commands', 'empezar.md'), SUYO);
     ponerLosRailesEn(carpeta);
-    assert.equal(leer(carpeta, 'guardar.md'), SUYO, 'se ha pisado su comando');
-    assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'commands', 'seguir.md')), 'y los demás no se ponen');
+    assert.equal(leer(carpeta, 'guardar'), SUYO, 'se ha pisado su habilidad');
+    assert.equal(fs.readFileSync(path.join(carpeta, '.claude', 'commands', 'empezar.md'), 'utf8'), SUYO, 'se ha tocado un comando suyo');
+    assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'skills', 'seguir', 'SKILL.md')), 'y los demás no se ponen');
     vscode.guion.raiz = carpeta;
     try {
       assert.ok(cargar('terreno').comoEstanLosRailes(RAIZ).alDia, 'con un comando suyo, los raíles son viejos para siempre');
@@ -8780,10 +8818,10 @@ exec git "$@"
     // Uno nuestro de otro día, en cambio, se pone al día.
     const vieja = conEnganchesDeRsc('comando-nuestro-viejo-');
     ponerLosRailesEn(vieja);
-    const hoy = leer(vieja, 'guardar.md');
-    fs.writeFileSync(path.join(vieja, '.claude', 'commands', 'guardar.md'), `${hoy}\nLo que decía la semana pasada.\n`);
+    const hoy = leer(vieja, 'guardar');
+    fs.writeFileSync(path.join(vieja, '.claude', 'skills', 'guardar', 'SKILL.md'), `${hoy}\nLo que decía la semana pasada.\n`);
     ponerLosRailesEn(vieja);
-    assert.equal(leer(vieja, 'guardar.md'), hoy, 'uno nuestro de antes no se pone al día');
+    assert.equal(leer(vieja, 'guardar'), hoy, 'uno nuestro de antes no se pone al día');
     return 'el suyo, intacto · el nuestro de antes, al día';
   });
 
@@ -11717,7 +11755,7 @@ exec git "$@"
       const { _: _porque, ...encendidas } = tabla;
       assert.deepEqual(encendidas, {
         tarjetaUnica: true, documentos: true, acciones: true, ayuda: true, copias: true, pie: true,
-        accionesRapidas: false, pulso: false, conocimiento: false, enQueEstamos: false, ajustes: false,
+        accionesRapidas: false, pulso: false, conocimiento: false, enQueEstamos: false, ajustes: false, comandos: false,
       }, 'la tabla de piezas ha cambiado');
       const ajuste = require(path.join(RAIZ, 'package.json')).contributes.configuration.properties['executiveLab.barraCompleta'];
       assert.equal(ajuste.default, false, 'de fábrica tiene que salir la sencilla');
@@ -11758,9 +11796,14 @@ exec git "$@"
 
       // Acciones, con lo que hay; y la línea de las copias, solo si las hay.
       const conCosas = pintar({ ...conTodo, comandos: 3, habilidades: 2, hayAgentes: true, copias: { hace: 'hace 5 minutos', sinGuardar: false, subir: false } });
-      for (const sale of ['Comandos', 'Habilidades \\(skills\\)', 'Agentes', '✓ Todo guardado, hace 5 minutos', 'Guardar en git', 'Ver las copias guardadas']) {
+      for (const sale of ['Habilidades \\(skills\\)', 'Agentes', '✓ Todo guardado, hace 5 minutos', 'Guardar en git', 'Ver las copias guardadas']) {
         assert.match(conCosas, new RegExp(sale), `habiéndolo, no sale «${sale}»`);
       }
+      // Los comandos son habilidades (decisión 141): su fila, apagada; y con solo
+      // comandos, sale Habilidades, que es donde están.
+      assert.doesNotMatch(conCosas, />\s*Comandos\s*</, 'sale la fila de Comandos, que va dentro de Habilidades');
+      assert.match(pintar({ ...conTodo, comandos: 2, habilidades: 0 }), /Habilidades \(skills\)/, 'con solo comandos, no se llega a ellos');
+      assert.match(pintar({ ...conTodo, comandos: 2, piezas: { ...tabla, comandos: true } }), />\s*Comandos\s*</, 'encendida en la tabla, la fila de Comandos no vuelve');
       assert.doesNotMatch(conCosas, /Subir a GitHub/, 'sale Subir a GitHub sin cuenta ni sitio');
       assert.match(pintar({ ...conTodo, copias: { hace: 'ayer', sinGuardar: true, subir: true } }), /Hay cambios sin guardar.*Subir a GitHub/s);
 
@@ -11787,7 +11830,7 @@ exec git "$@"
       const botones = adonde(pintar({ ...conTodo, comandos: 3, habilidades: 2, hayAgentes: true, copias: { hace: 'ayer', sinGuardar: false, subir: true } }));
       const quiero = {
         'Darle documentos (inbox)': 'anadirDocumentos', 'Documentos entregados': 'verPapeles', 'Resultados (out)': 'verSalidas',
-        'Conexiones (tools)': 'verConexiones', 'Conectar algo nuevo': 'pedir', Comandos: 'verComandos', 'Habilidades (skills)': 'verSaberes', Agentes: 'verAgentes',
+        'Conexiones (tools)': 'verConexiones', 'Conectar algo nuevo': 'pedir', 'Habilidades (skills)': 'verSaberes', Agentes: 'verAgentes',
         'Seguir donde lo dejé': 'pedir', 'Conversación nueva': 'conversacionNueva', 'Dime qué hago ahora': 'pedir', 'Pedir ayuda en el foro': 'pedirAyudaEnElForo',
         Sugerencias: 'verSugerencias', 'Más ayuda': 'verAyuda',
         'Guardar en git': 'guardarCopia', 'Ver las copias guardadas': 'verCopias', 'Subir a GitHub': 'verCopiaFuera',
@@ -11948,6 +11991,110 @@ exec git "$@"
       proveedor.enviar = antes.enviar;
       asistentes.elDeAhora = antes.elDeAhora;
       vscode.guion.comandosDeClaude = antes.comandos;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+    }
+  });
+
+  await comprobar('los botones son habilidades, con Claude y con Codex, y los comandos de antes siguen', async () => {
+    // Decisión 141. Claude juntó comandos y habilidades, y Codex quitó los suyos.
+    const cp = require('node:child_process');
+    const montar = (targets) => {
+      const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'botones-'));
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets }));
+      const hecho = cp.spawnSync(process.execPath, [path.join(RAIZ, 'media', 'railes', 'aplicar.js'), carpeta], { encoding: 'utf8' });
+      assert.equal(hecho.status, 0, hecho.stderr);
+      return carpeta;
+    };
+    const escribir = (carpeta, rel, texto) => {
+      fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, rel), texto);
+    };
+    const antes = { extensiones: vscode.guion.extensionesInstaladas };
+    try {
+      // Claude: los cuatro de los raíles, como habilidades; tres llevan botón.
+      const claude = montar(['claude']);
+      vscode.guion.raiz = claude;
+      const acc = cargar('acciones');
+      const deClaude = acc.acciones();
+      assert.deepEqual(deClaude.map((b) => b.prompt).sort(), ['/ayuda', '/empezar', '/seguir'], 'los botones de Claude no salen de sus habilidades');
+      assert.equal(deClaude.find((b) => b.nombre === 'seguir').etiqueta, 'Seguir donde lo dejé', 'el botón, leído de su metadata');
+      assert.equal(deClaude.find((b) => b.nombre === 'seguir').grupo, 'diario');
+
+      // Una suya, escrita con su botón; y un comando de antes, que sigue saliendo.
+      escribir(claude, '.claude/skills/resumen-del-mes/SKILL.md', '---\nname: resumen-del-mes\ndescription: "Preparar el resumen del mes"\nmetadata:\n  boton: "Resumen del mes"\n  icono: "📈"\n---\nMira las ventas.\n');
+      escribir(claude, '.claude/commands/facturas.md', '---\ndescription: Repasar las facturas\nboton: Repasar las facturas\n---\nRepasa.\n');
+      // Y un comando con el nombre de una habilidad: manda la habilidad, como en Claude.
+      escribir(claude, '.claude/commands/seguir.md', '---\ndescription: Seguir donde lo dejé\nboton: El seguir de antes\n---\nLo de antes.\n');
+      // Y uno que trae el arnés, que va plegado con las del arnés.
+      escribir(claude, '.claude/commands/learn.md', '---\ndescription: Extract reusable patterns\n---\nLearn.\n');
+      escribir(claude, '.claude/commands/resume-session.md', '---\ndescription: Resume the last session\n---\nResume.\n');
+      escribir(claude, '.claude/skills/.rsc-state.json', JSON.stringify({ commands: ['learn', 'resume-session'] }));
+      const conTodo = acc.acciones();
+      assert.ok(conTodo.some((b) => b.prompt === '/resumen-del-mes' && b.etiqueta === 'Resumen del mes' && b.icono === '📈'), 'una habilidad suya con botón no sale');
+      assert.ok(conTodo.some((b) => b.prompt === '/facturas'), 'un comando de antes deja de salir');
+      assert.equal(conTodo.filter((b) => b.nombre === 'seguir').length, 1, 'sale dos veces: la habilidad y el comando');
+      assert.equal(conTodo.find((b) => b.nombre === 'seguir').etiqueta, 'Seguir donde lo dejé', 'manda el comando, no la habilidad');
+
+      // En la pantalla de Habilidades: el comando suyo, entre las instaladas;
+      // el que se llama como una habilidad, no; y repintar no duplica nada.
+      const proveedor = vscode.registrado.proveedor;
+      const enviados = [];
+      const enviar = proveedor.enviar;
+      proveedor.enviar = (m) => enviados.push(m);
+      try {
+        await proveedor.verSaberes();
+      } finally {
+        proveedor.enviar = enviar;
+      }
+      const datos = enviados.find((m) => m.tipo === 'saberes');
+      // La habilidad se llama como su botón, y un comando del arnés que se llama
+      // igual («Seguir donde lo dejé») no sale dos veces.
+      assert.ok([...datos.suyas, ...datos.otras].some((h) => h.id === 'seguir' && h.nombre === 'Seguir donde lo dejé'), 'la habilidad con botón no se llama como su botón');
+      assert.deepEqual(datos.comandos.map((c) => c.nombre).sort(), ['facturas', 'learn'], 'los comandos de antes no llegan, o llega el que ya es habilidad');
+      const panel = require('./panel-falso').montarPanel();
+      const pantalla = panel.mandar(datos);
+      assert.match(pantalla, /Repasar las facturas/, 'un comando de antes no sale entre las habilidades');
+      // Los números de cada (i) cambian al repintar; lo demás, no.
+      const sinNumeros = (html) => html.replace(/\bq\d+\b/g, 'q');
+      const delArnes = (html) => (html.match(/Las del arnés<span class="cuantos">(\d+)<\/span>/) || [])[1];
+      assert.equal(delArnes(pantalla), String(datos.deSerie.length + 1), 'el comando del arnés no va plegado con las del arnés');
+      assert.equal(sinNumeros(panel.mandar(datos)), sinNumeros(pantalla), 'repintar cambia la pantalla');
+      assert.ok(cargar('rsc').habilidadesEnDisco().includes('resumen-del-mes'));
+
+      // Codex: donde él las lee, y se piden con $.
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      const codex = montar(['codex']);
+      vscode.guion.raiz = codex;
+      assert.equal(cargar('donde').paraQuien(), 'codex');
+      const deCodex = cargar('acciones').acciones();
+      assert.deepEqual(deCodex.map((b) => b.prompt).sort(), ['$ayuda', '$empezar', '$seguir'], 'con Codex no hay botones, o se piden como en Claude');
+      const enDisco = cargar('rsc').habilidadesEnDisco();
+      for (const id of ['executive-lab', 'ayuda', 'seguir']) assert.ok(enDisco.includes(id), `con Codex no se ve «${id}»`);
+      assert.match(fs.readFileSync(cargar('donde').ficheroDeLaHabilidad('seguir'), 'utf8'), /name: seguir/, 'con Codex, la de botón no se encuentra');
+      assert.equal(cargar('saberes').comoSePide('seguir'), '$seguir', 'con Codex, una de botón no se pide como él');
+      assert.match(cargar('saberes').comoSePide('executive-lab'), /^Usa la habilidad/, 'las de RSC, con Codex, se piden con palabras');
+
+      // Un enlace con el nombre de un botón es de otro: ni se escribe a través
+      // de él ni, si lleva a nada, se queda a medias lo demás.
+      const conEnlaces = fs.mkdtempSync(path.join(os.tmpdir(), 'botones-enlace-'));
+      fs.writeFileSync(path.join(conEnlaces, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      const destino = fs.mkdtempSync(path.join(os.tmpdir(), 'botones-destino-'));
+      fs.mkdirSync(path.join(conEnlaces, '.claude', 'skills'), { recursive: true });
+      fs.symlinkSync(destino, path.join(conEnlaces, '.claude', 'skills', 'guardar'));
+      fs.symlinkSync(path.join(destino, 'no-existe'), path.join(conEnlaces, '.claude', 'skills', 'ayuda'));
+      const hecho = cp.spawnSync(process.execPath, [path.join(RAIZ, 'media', 'railes', 'aplicar.js'), conEnlaces], { encoding: 'utf8' });
+      assert.equal(hecho.status, 0, `un enlace roto corta los raíles: ${hecho.stderr}`);
+      assert.deepEqual(fs.readdirSync(destino), [], 'se escribe a través de un enlace de otro');
+      assert.ok(fs.existsSync(path.join(conEnlaces, 'CLAUDE.md')), 'con un enlace, lo demás no se pone');
+      assert.ok(fs.existsSync(path.join(conEnlaces, '.claude', 'skills', 'seguir', 'SKILL.md')), 'con un enlace, los otros botones no se ponen');
+
+      // Y una descripción con comillas se lee igual que se escribió.
+      const ch = require(path.join(RAIZ, 'media', 'railes', 'como-habilidad'));
+      const conComillas = '---\ndescription: Preparar el «resumen» y el "cierre"\n---\nHazlo.\n';
+      assert.equal(ch.descripcionDe(ch.comoHabilidad(conComillas, 'cierre', 'claude').skill), ch.descripcionDe(conComillas), 'con comillas, la nuestra no se reconoce');
+      return 'Claude con /, Codex con $, la habilidad manda, y los comandos de antes siguen';
+    } finally {
+      vscode.guion.raiz = empresa;
       vscode.guion.extensionesInstaladas = antes.extensiones;
     }
   });
@@ -12311,7 +12458,10 @@ exec git "$@"
         // Lo que RSC escribe de verdad para Codex, y que `sitios.js` promete.
         assert.ok(fs.existsSync(path.join(codex, '.codex', 'rsc')), 'sus habilidades van en .codex/rsc');
         assert.ok(fs.existsSync(path.join(codex, 'AGENTS.md')), 'y lo que lee siempre es AGENTS.md');
-        assert.equal(dondeM.puedeTenerBotones(), false, 'a Codex RSC no le escribe comandos');
+        // RSC no le escribe comandos, pero los botones son habilidades (decisión 141).
+        assert.equal(dondeM.puedeTenerComandos(), false, 'a Codex RSC no le escribe comandos');
+        assert.equal(dondeM.puedeTenerBotones(), true, 'y aun así tiene botones, de sus habilidades');
+        assert.ok(fs.existsSync(path.join(codex, '.agents', 'skills', 'seguir', 'SKILL.md')), 'los raíles le dejan sus botones donde los lee');
 
         // El raíl, en su sitio y nombrado donde Codex lo lee: no los encuentra
         // solo, como Claude.
