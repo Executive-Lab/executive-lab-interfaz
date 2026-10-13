@@ -2,7 +2,7 @@
 type: ftd
 title: Los comandos son habilidades
 date: 2026-10-13
-status: en curso
+status: hecho
 ---
 
 # Los comandos son habilidades
@@ -38,7 +38,7 @@ en skills»* tras ver lo que dicen Claude y Codex. Decisión 141.
   Codex se pide con `$`, la barra vigila `.agents/skills`, un enlace con el nombre de un botón no se
   pisa ni corta los raíles, y el soporte dice dónde están los botones. 4 mutantes más, tumbados.
   VS Code de verdad: «todo bien».
-- [ ] 8. Las máquinas de GitHub.
+- [x] 8. Las máquinas de GitHub — el-dmg, windows, vscode-de-verdad y el-exe en verde (PR #20).
 
 ## Evidence
 
