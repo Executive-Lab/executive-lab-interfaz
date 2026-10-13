@@ -955,6 +955,15 @@ ${cabecera}
       otras: sabe.otras,
       // Las que el arnés monta para funcionar. Plegadas, pero se ven.
       deSerie: sabe.deSerie,
+      // Los comandos de antes, que son habilidades (decisión 141). Si ya hay una
+      // habilidad con ese nombre, manda ella, como en Claude.
+      // Y por el rótulo: el «resume-session» del arnés se llama «Seguir donde lo
+      // dejé», igual que la habilidad `seguir`, y hacen lo mismo.
+      comandos: (() => {
+        const yaSon = new Set(rsc.habilidadesEnDisco());
+        const rotulos = new Set([...sabe.suyas, ...sabe.sabe, ...sabe.otras, ...sabe.deSerie].map((h) => String(h.nombre || '').toLowerCase()));
+        return acciones.todos().filter((c) => !yaSon.has(c.nombre) && !rotulos.has(String(c.etiqueta || '').toLowerCase()));
+      })(),
       instaladas: sabe.instaladas,
       encajan: sabe.encajan,
     });
@@ -1141,7 +1150,7 @@ ${cabecera}
   // Todos los comandos, no solo los que llevan botón.
   async verComandos() {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'comandos', comandos: acciones.todos(), puedeTenerBotones: donde.puedeTenerBotones() });
+    this.enviar({ tipo: 'comandos', comandos: acciones.todos(), puedeTenerBotones: donde.puedeTenerComandos() });
   }
 
   // Qué le vendría bien a esto: lo que ve la barra leyendo el disco, y un botón
@@ -2119,6 +2128,8 @@ function loQueMira() {
   const suyas = [
     donde.carpetaDeComandos(),
     donde.carpetaDeHabilidades(),
+    // Las de botón, que con Codex van aparte (decisión 141).
+    donde.carpetaDeBotones(),
     donde.carpetaDeAgentes(),
   ].map(suCarpeta).filter(Boolean).map((c) => `${c}/**`);
 

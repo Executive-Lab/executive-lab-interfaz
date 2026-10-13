@@ -1,5 +1,5 @@
 {
-  "_": "Qué sale en la pantalla principal sencilla (decisión 138). Nada se borra: lo que está a false está apagado, sigue en el código y probado, y se enciende cambiando la línea. El ajuste executiveLab.barraCompleta enseña la pantalla completa de antes, entera.",
+  "_": "Qué sale en la pantalla principal sencilla (decisión 138). Nada se borra: lo que está a false está apagado, sigue en el código y probado, y se enciende cambiando la línea. El ajuste executiveLab.barraCompleta enseña la pantalla completa de antes, entera. Los comandos son habilidades (decisión 141): su fila va apagada y salen dentro de Habilidades.",
   "tarjetaUnica": true,
   "documentos": true,
   "acciones": true,
@@ -10,5 +10,6 @@
   "pulso": false,
   "conocimiento": false,
   "enQueEstamos": false,
-  "ajustes": false
+  "ajustes": false,
+  "comandos": false
 }

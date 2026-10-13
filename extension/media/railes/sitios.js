@@ -65,10 +65,28 @@
 // memoria entre conversaciones es la excepción y no sale de aquí: esa sí la
 // monta para Codex, por su propio camino (`targets/memory.js`), y la barra la
 // ve como ve las demás — porque su fichero está en `.rsc/`.
+// ── Los botones son habilidades (decisión 141) ───────────────────────────
+//
+// Claude juntó los comandos con las habilidades: *«Custom commands have been
+// merged into skills»*, y un comando es *«the older format and still works»*.
+// Codex quitó los suyos (los «custom prompts», en marzo de 2026) y se queda con
+// las habilidades del estándar abierto, que lee de `.agents/skills/` en la
+// carpeta. Así que, para los dos con los que habla la barra, un botón es una
+// habilidad con `boton:` en su cabecera:
+//
+//   `botones`          dónde las dejan los raíles y el asistente, y donde la barra
+//                      las busca. No es de RSC: no sale en su tabla.
+//   `botonSePideCon`   lo que va delante de su nombre al pedirla: `/` en Claude,
+//                      `$` en Codex.
+//
+// Los comandos de antes se siguen leyendo, y para los demás asistentes, que no
+// han hecho ese cambio, los botones siguen siendo comandos.
 const SITIOS = {
   claude: {
     habilidades: ['.claude', 'skills'],
     comandos: ['.claude', 'commands'],
+    botones: ['.claude', 'skills'],
+    botonSePideCon: '/',
     ajustes: ['.claude', 'settings.json'],
     agentes: ['.claude', 'agents'],
     // Claude encuentra sus habilidades solo: lee `.claude/skills/*/SKILL.md`.
@@ -79,6 +97,8 @@ const SITIOS = {
   codex: {
     habilidades: ['.codex', 'rsc'],
     comandos: null,
+    botones: ['.agents', 'skills'],
+    botonSePideCon: '$',
     ajustes: null,
     agentes: ['.codex', 'agents'],
     siempre: { fichero: ['AGENTS.md'], compartido: true },

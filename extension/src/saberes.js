@@ -24,6 +24,7 @@
 // invocarla. Antes se mandaba «Quiero <frase>», que ni nombraba la habilidad
 // ni la disparaba. Ver `comoSePide`.
 
+const fs = require('node:fs');
 const path = require('node:path');
 const consejos = require('./consejos');
 const nombres = require('./nombres');
@@ -51,6 +52,10 @@ function lasSuyas() {
 // habilidad por su identificador, que es lo que él tiene en su carpeta.
 function comoSePide(id) {
   if (donde.paraQuien() === 'claude') return `/${id}`;
+  // Las de botón, donde Codex las encuentra solo, se piden como él: `$id`
+  // (decisión 141). Las de RSC, que lee por su AGENTS.md, con palabras.
+  const deBotones = donde.carpetaDeBotones();
+  if (deBotones && fs.existsSync(path.join(deBotones, id, 'SKILL.md'))) return donde.elBoton(id).prompt;
   return `Usa la habilidad «${id}» (skill). Pregúntame lo que necesites.`;
 }
 
@@ -78,7 +83,9 @@ function loQueDiceSuCabecera(id, raizDeHabilidades) {
   const primera = sinEntradilla.split(/(?<=\.)\s/)[0] || sinEntradilla;
 
   return {
-    nombre: '',
+    // Una habilidad con botón se llama como su botón (decisión 141): es el
+    // nombre que el alumno ya ve arriba.
+    nombre: typeof campos.boton === 'string' ? campos.boton.trim() : '',
     queHace: nombres.enEspanol(primera) ? primera.charAt(0).toUpperCase() + primera.slice(1) : '',
   };
 }

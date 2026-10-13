@@ -457,16 +457,23 @@ function pantallaSaberes(datos) {
   const suyas = datos.suyas || [];
   const sabe = datos.sabe || [];
   const otras = datos.otras || [];
-  const deSerie = datos.deSerie || [];
+  // Una copia: se le añaden los comandos del arnés, y repintar no puede duplicarlos.
+  const deSerie = [...(datos.deSerie || [])];
   const puede = datos.puedeAprender || [];
   const demas = datos.lasDemas || [];
 
   const conOrigen = (lista, origen) => lista.map((c) => ({ ...c, origen }));
+  // Los comandos de antes, que son habilidades (decisión 141): los suyos, con
+  // las instaladas; los del arnés, plegados con las del arnés.
+  const comoHabilidad = (c) => ({ id: c.nombre, nombre: c.etiqueta, frase: c.queHace, prompt: c.prompt });
+  const comandos = datos.comandos || [];
   const instaladas = [
     ...conOrigen(suyas, 'tuya'),
+    ...conOrigen(comandos.filter((c) => !c.delArnes).map(comoHabilidad), 'tuya'),
     ...conOrigen(sabe, 'catalogo'),
     ...conOrigen(otras, 'aqui'),
   ];
+  deSerie.push(...comandos.filter((c) => c.delArnes).map(comoHabilidad));
 
   // Sugerencias: las que pegan con lo escrito y, si son pocas, hasta seis de
   // las que pegan con esta clase de carpeta. Lo demás del catálogo —lo que no
@@ -1710,8 +1717,10 @@ function grupoAccionesSencillo() {
         pequeno: true,
         accion: { tipo: 'pedir', prompt: 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es, móntame la conexión con lo que haga falta y comprueba que funciona antes de darla por buena.' },
       })}
-      ${estado.comandos ? boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } }) : ''}
-      ${estado.habilidades ? boton({ etiqueta: 'Habilidades (skills)', icono: '✨', pequeno: true, accion: { tipo: 'verSaberes' } }) : ''}
+      ${/* Los comandos son habilidades (decisión 141): salen dentro de
+            Habilidades. La fila de Comandos queda apagada en la tabla, no borrada. */''}
+      ${encendida('comandos') && estado.comandos ? boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } }) : ''}
+      ${estado.habilidades || estado.comandos ? boton({ etiqueta: 'Habilidades (skills)', icono: '✨', pequeno: true, accion: { tipo: 'verSaberes' } }) : ''}
       ${estado.hayAgentes ? boton({ etiqueta: 'Agentes', icono: '🤖', pequeno: true, accion: { tipo: 'verAgentes' } }) : ''}`,
   });
 }

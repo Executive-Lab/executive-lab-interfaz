@@ -23,6 +23,7 @@
 // windsurf, cline y roo. Con Codex no hay ninguno que leer, nunca. Eso no es un
 // fallo nuestro, pero sí hay que decirlo en vez de enseñar un hueco.
 
+const fs = require('node:fs');
 const path = require('node:path');
 const proyecto = require('./proyecto');
 const sitios = require('../media/railes/sitios');
@@ -86,8 +87,16 @@ const ficheroDeLaHabilidad = (id) => {
   const carpeta = carpetaDeHabilidades();
   if (!carpeta) return null;
   const ext = habilidadEnUnFichero();
-  return ext ? path.join(carpeta, `${id}${ext}`) : path.join(carpeta, id, 'SKILL.md');
+  if (ext) return path.join(carpeta, `${id}${ext}`);
+  const aqui = path.join(carpeta, id, 'SKILL.md');
+  // Con Codex, las de botón están en `.agents/skills`, no con las de RSC.
+  const otra = carpetaDeBotones() ? path.join(carpetaDeBotones(), id, 'SKILL.md') : null;
+  return !fs.existsSync(aqui) && otra && fs.existsSync(otra) ? otra : aqui;
 };
+
+// Las habilidades con botón (decisión 141): dónde están, y cómo se piden.
+const carpetaDeBotones = () => carpetaDe('botones');
+const elBoton = (nombre) => ({ nombre, prompt: `${susSitios().botonSePideCon || '/'}${nombre}` });
 const acabaUnComando = () => susSitios().comandoAcabaEn || '.md';
 // De un fichero de la carpeta de comandos, el comando y cómo se pide; o null si
 // no es uno de este asistente.
@@ -104,7 +113,10 @@ const ficheroDelComando = (nombre) => {
 
 // ¿Este asistente llega a tener botones? Sirve para poder decir "aquí no hay
 // botones porque este asistente no los tiene" en vez de dejar el hueco.
-const puedeTenerBotones = () => Boolean(susSitios().comandos);
+// Con Claude y Codex, de sus habilidades; con los demás, de sus comandos.
+const puedeTenerBotones = () => Boolean(susSitios().botones || susSitios().comandos);
+// Y comandos, el formato de antes: los que se leen en la pantalla de Comandos.
+const puedeTenerComandos = () => Boolean(susSitios().comandos);
 const puedeTenerAjustes = () => Boolean(susSitios().ajustes);
 
 // ¿Y este asistente llega a tener frenos? RSC solo se los engancha a Claude, así
@@ -117,4 +129,5 @@ module.exports = {
   SITIOS, paraQuien, carpetaDeHabilidades, carpetaDeComandos, carpetaDeAgentes, ficheroDeAjustes,
   carpetaDeOtro, ficheroDeEstado, ficheroDeEstadoDe, puedeTenerBotones, puedeTenerAjustes,
   puedeTenerFrenos, habilidadEnUnFichero, ficheroDeLaHabilidad, acabaUnComando, elComando, ficheroDelComando,
+  carpetaDeBotones, elBoton, puedeTenerComandos,
 };
