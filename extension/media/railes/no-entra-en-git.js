@@ -56,6 +56,22 @@ const LO_QUE_NO_ENTRA = [
   // Los avisos para Executive Lab, mandados o no: llevan lo que la barra apuntó
   // por dentro, y lo que sale de aquí sale limpio y solo con su sí (decisión 131).
   '02-DOCS/raw/avisos/',
+  // Los vídeos y las imágenes de disco, que pesan mucho y hacen el historial enorme
+  // sin vuelta atrás (decisión 146). Aquí, y no solo al guardar desde la barra,
+  // porque así tampoco entran cuando guarda el asistente. Con las dos formas de
+  // cada letra: el iPhone escribe `.MOV`, y git no siempre mira sin mayúsculas.
+  '*.[mM][pP]4',
+  '*.[mM][oO][vV]',
+  '*.[mM]4[vV]',
+  '*.[aA][vV][iI]',
+  '*.[mM][kK][vV]',
+  '*.[wW][eE][bB][mM]',
+  '*.[wW][mM][vV]',
+  '*.[mM][pP][gG]',
+  '*.[mM][pP][eE][gG]',
+  '*.3[gG][pP]',
+  '*.[dD][mM][gG]',
+  '*.[iI][sS][oO]',
 ];
 
 // Las marcas van como comentarios de `.gitignore`: una línea con `<!--`, como las
@@ -66,7 +82,7 @@ const ENTRE_MARCAS = /# executive-lab:start[\s\S]*?# executive-lab:end/;
 
 const elBloque = () => [
   DESDE,
-  '# Lo que no entra en las copias: claves y ficheros de acceso. Lo pone la barra de Executive Lab.',
+  '# Lo que no entra en las copias: claves, ficheros de acceso y vídeos. Lo pone la barra de Executive Lab.',
   ...LO_QUE_NO_ENTRA,
   HASTA,
 ].join('\n');

@@ -5146,3 +5146,27 @@ hecho la clase.
 Queda fuera: quitar el rodeo del freno, que con la 3 RSC ya pone a quien no es técnico. Y trabajar
 con la versión de una carpeta que va por delante: haría falta bajarla del registro oficial sin npx y
 comprobar su huella.
+
+## 146. Lo pesado no entra en las copias
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 8 de la decisión 142. En la clase del 13-10, un alumno quería meter «unos 100 gigas» de
+fotos y vídeos en su carpeta. La barra guardaba con `git add -A`, y con «guardar solo» encendido todo
+eso entraba en el historial, que no se deshace. Por eso poner copias seguía con su botón.
+
+- **Los vídeos y las imágenes de disco** van al bloque del `.gitignore` que ponen los raíles (`.mp4`,
+  `.mov`, `.webm`, `.dmg`…), con las dos formas de cada letra, porque el iPhone escribe `.MOV`. Ahí
+  valen también cuando guarda el asistente, con git a pelo.
+- **Un fichero de más de 20 MB** que git todavía no seguía se queda fuera de la copia, en la carpeta, y
+  se dice. Lo que ya estaba en git sigue: sacarlo lo decide la persona.
+- **Si lo nuevo de una copia pasa de 200 MB en total**, no se guarda: son muchos ficheros pequeños,
+  como cien gigas de fotos, y cuáles se guardan lo decide la persona (P9). Se dice, con un botón que se
+  lo pide al asistente sin borrar ni mover nada. Vale para el botón, para «guardar solo», para el punto
+  de partida, que ahora dice el motivo de verdad, y para «Volver a como estaba», que no vuelve sin una
+  copia de antes.
+- **La habilidad «guardar» del asistente** lo dice igual.
+- **Poner copias pasa a hacerse solo** al abrir la carpeta, salvo si la persona eligió no tenerlas.
+- **Un fallo que ya estaba:** después de «Volver a como estaba», la copia de la vuelta se guardaba sin
+  la lista de lo que no entra, y metía las claves que la copia de antes había dejado fuera. Ahora las
+  dos copias calculan lo que se queda fuera en el mismo sitio (`loQueSeQuedaFuera`).

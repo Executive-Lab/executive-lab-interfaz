@@ -911,7 +911,8 @@ const COMO_SE_HACE = {
       return {
         ok: false,
         detalle: hecho.mensaje,
-        pega: 'No he podido guardar el punto de partida. Lo demás está listo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
+        // Con demasiado peso nuevo, el motivo de verdad y no «Algo va mal» (decisión 146).
+        pega: hecho.demasiado ? hecho.mensaje : 'No he podido guardar el punto de partida. Lo demás está listo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
       };
     }
     return { ok: true };

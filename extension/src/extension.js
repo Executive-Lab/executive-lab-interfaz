@@ -320,6 +320,13 @@ ${cabecera}
           if (detalle) this.salida.appendLine(detalle);
           return ok;
         },
+        // Sin git no se instala nada solo: eso abre el instalador del sistema. Y con
+        // demasiado peso nuevo no se guarda (decisión 146): se queda con su botón.
+        ponerCopias: async () => {
+          const hecho = await arrancar.ponerLasCopias(this.contexto);
+          if (!hecho.ok && hecho.mensaje) this.salida.appendLine(`[solo] copias: ${hecho.mensaje}`); // diccionario: interno
+          return hecho.ok;
+        },
       }, (linea) => this.salida.appendLine(linea));
       // Lo que se va a decir arreglado se mira otra vez: un `repair` que no
       // encuentra nada sale bien igual, y la frase diría algo que no ha pasado

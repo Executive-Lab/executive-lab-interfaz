@@ -91,7 +91,7 @@ pasaron a hacerse al abrir la carpeta, y la barra lo dice en una frase. Dos se q
 | Lo que debería estar puesto | Traerlas ahora | Solo |
 | Cosas del arnés fuera de sitio | Arreglarlo ahora | Solo, si no hay nada que decidir |
 | Freno ante órdenes peligrosas | Ponerlo ahora | **Botón**: solo sale en carpetas cuyo historial no creó la barra, y toca sus ajustes (P4, C-4) |
-| Copias de seguridad aquí | Ponerlas ahora | **Botón**: guarda la carpeta entera. Hasta que lo pesado quede fuera de git (punto 8), podría meter gigas en el historial, y eso no se deshace. Si eligió no tenerlas, es suyo |
+| Copias de seguridad aquí | Ponerlas ahora | Solo, desde el punto 8: lo pesado queda fuera y con demasiado peso no se guarda. Si eligió no tenerlas, **botón**: es suyo |
 
 Además, se hacen solos otros dos:
 - «El asistente, montado aquí» → «Terminar de prepararlo», cuando el montaje se quedó a medias y no
@@ -160,7 +160,7 @@ hacerse solo, porque no se puede deshacer.
   dos se quedan con su botón, cada uno por su motivo.
 - [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
 - [ ] 7. La prueba que dice que la clave puede escribir.
-- [ ] 8. Lo pesado, fuera de git.
+- [x] 8. Lo pesado, fuera de git: decisión 146. Y poner copias, solo.
 - [ ] 9. Cuándo caduca una clave.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
 - [ ] 11. La foto del cerebro.
@@ -217,12 +217,17 @@ hacerse solo, porque no se puede deshacer.
   ordenador ya conoce: **la primera vez que un alumno abra con esta barra una carpeta montada antes,
   tendrá que pulsar un botón del arnés una vez**.
 
+- **Punto 8** (decisión 146): `humo.js` 369, con `--con-arnes` 376, contrato 14 y empresas en verde.
+  Las mutaciones caen 8 de 9. La que vive es casi equivalente: sin saltar el origen de un renombrado,
+  ese nombre se lee como una entrada más y se descarta porque no existe. Y se encontró un fallo que ya
+  estaba: la copia de «Volver a como estaba» metía las claves que la de antes había dejado fuera.
+
 ## Next
 
-Por orden:
-- el 6, que es lo que hace falta antes de dar la barra a la comunidad;
-- después el 8, que desbloquea poner copias solas;
-- y luego el 7 y del 9 al 12.
+Del 1 al 6 y el 8, hechos. Por orden:
+- el 7, la prueba que dice que la clave puede escribir;
+- el 9, cuándo caduca una clave;
+- y del 10 al 12.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la

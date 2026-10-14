@@ -870,11 +870,10 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         // «Porque lo elegiste», solo a quien lo eligió: salía siempre que faltaba
         // git (revisión de F2, m12).
         detalle: sigueSinCopias ? 'Sin copias, porque lo elegiste' : 'Todavía sin copias',
-        // Si eligió seguir sin copias, es suyo. Y aunque no lo eligiera, poner
-        // copias guarda la carpeta entera, y mientras lo pesado no se quede
-        // fuera solo (punto 8 de ftd/lo-que-se-puede-se-hace-solo.md) podría
-        // meter gigas de vídeo en el historial, que no se deshace.
-        arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' }, retiene: sigueSinCopias ? 'loDecide' : 'noSeDeshace' },
+        // Si eligió seguir sin copias, es suyo. Si no, se ponen solas: lo pesado ya
+        // se queda fuera de la copia, y con demasiado peso nuevo no se guarda
+        // (decisión 146, `guardar.js`).
+        arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' }, ...(sigueSinCopias ? { retiene: 'loDecide' } : { alAbrir: true }) },
       }
       : conArreglo({
         nombre: 'Copias de seguridad aquí',

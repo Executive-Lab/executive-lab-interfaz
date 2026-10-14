@@ -6628,6 +6628,80 @@ exec git "$@"
     }
   });
 
+  await comprobar('lo pesado se queda fuera de la copia, y con demasiado peso nuevo no se guarda', async () => {
+    // Decisión 146. Un alumno de la clase quería meter «unos 100 gigas» de fotos y
+    // vídeos, y con «guardar solo» entraban todos en el historial, que no se
+    // deshace. Ficheros dispersos: pesan lo que dicen sin ocupar el disco.
+    const guardarM = cargar('guardar');
+    if (!(await guardarM.hayGit())) return 'SALTADA: sin git';
+    const historial = require(path.join(RAIZ, '..', 'instalador', 'comun', 'historial.js'));
+    const cp = require('node:child_process');
+    const MB = 1024 * 1024;
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'lo-pesado-'));
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'casa-'));
+    const antes = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
+    const disperso = (rel, megas) => { fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true }); fs.writeFileSync(path.join(carpeta, rel), ''); fs.truncateSync(path.join(carpeta, rel), megas * MB); };
+    const enLaCopia = () => cp.execFileSync('git', ['-C', carpeta, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const copias = () => Number(cp.execFileSync('git', ['-C', carpeta, 'rev-list', '--count', '--all'], { encoding: 'utf8' }).trim() || 0);
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    vscode.guion.raiz = carpeta;
+    try {
+      assert.ok((await historial.iniciar(carpeta)).ok);
+      // Un fichero de más de 20 MB, con espacios y tildes: fuera, y se dice.
+      fs.writeFileSync(path.join(carpeta, 'notas.md'), '# Notas\n');
+      disperso('catálogo grande.pdf', 25);
+      let hecho = await guardarM.guardar('Con uno pesado');
+      assert.equal(hecho.ok, true, hecho.mensaje);
+      assert.ok(!enLaCopia().includes('catálogo grande.pdf'), `lo pesado entra en la copia: ${enLaCopia().join(', ')}`);
+      assert.ok(enLaCopia().includes('notas.md'), 'lo demás no entra');
+      assert.match(hecho.mensaje, /No he metido «catálogo grande\.pdf» en la copia: pesa mucho y la haría enorme\. Sigue en tu carpeta\./);
+      assert.ok(fs.existsSync(path.join(carpeta, 'catálogo grande.pdf')), 'lo pesado no sigue en la carpeta');
+
+      // Muchos pequeños que suman más de 200 MB: no se guarda nada, y se dice con su botón.
+      const antesDeLasFotos = copias();
+      for (let i = 0; i < 11; i += 1) disperso(path.join('fotos', `IMG_${i}.jpg`), 19);
+      hecho = await guardarM.guardar('Con muchas fotos');
+      assert.equal(hecho.ok, false, 'guarda cientos de megas de golpe');
+      assert.equal(hecho.demasiado, true);
+      assert.match(hecho.mensaje, /^No he guardado la copia: hay 209 MB de archivos nuevos/);
+      assert.equal(hecho.boton && hecho.boton.accion.tipo, 'pedir', 'sin botón para ordenarlo');
+      assert.equal(copias(), antesDeLasFotos, 'con demasiado se ha guardado algo');
+      assert.ok(fs.existsSync(path.join(carpeta, 'fotos', 'IMG_0.jpg')), 'se ha tocado algún archivo');
+
+      // Y volver atrás, que guarda antes y después: ninguna de las dos mete lo que no
+      // entra. La de después se guardaba sin la lista, y metía las claves.
+      fs.rmSync(path.join(carpeta, 'fotos'), { recursive: true });
+      const [primera] = (await guardarM.copias()).slice(-1);
+      fs.writeFileSync(path.join(carpeta, '.env'), 'STRIPE_SECRET_KEY=sk_de_verdad\n');
+      const vuelta = await guardarM.volverA(primera.id);
+      assert.equal(vuelta.ok, true, vuelta.mensaje);
+      assert.ok(!enLaCopia().includes('.env'), 'volver atrás mete las claves en la copia');
+      assert.ok(!enLaCopia().includes('catálogo grande.pdf'), 'volver atrás mete lo pesado en la copia');
+      assert.ok(fs.existsSync(path.join(carpeta, '.env')) && fs.existsSync(path.join(carpeta, 'catálogo grande.pdf')), 'volver atrás borra lo que se quedó fuera');
+      return 'el de 25 MB, fuera y dicho; 209 MB nuevos, sin guardar y con botón; y volver atrás tampoco los mete';
+    } finally {
+      if (antes === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = antes;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('los vídeos no entran en git aunque guarde el asistente, y las fotos sí', async () => {
+    // Decisión 146: el bloque de los raíles, para que valga también cuando guarda el
+    // asistente con git a pelo. El iPhone escribe `.MOV`.
+    const noEntra = require(path.join(RAIZ, '..', 'skills', 'no-entra-en-git.js'));
+    const cp = require('node:child_process');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'videos-'));
+    cp.execFileSync('git', ['init', '-q', carpeta]);
+    cp.execFileSync('git', ['-C', carpeta, 'config', 'core.ignorecase', 'false']);
+    fs.writeFileSync(path.join(carpeta, '.gitignore'), `${noEntra.elBloque()}\n`);
+    const ignorado = (rel) => cp.spawnSync('git', ['-C', carpeta, 'check-ignore', '-q', rel]).status === 0;
+    for (const video of ['IMG_0001.MOV', 'reunion.mp4', 'clase.Mp4', 'demo.webm', 'disco.dmg']) assert.ok(ignorado(video), `${video} entraría en git`);
+    for (const otro of ['foto.jpg', 'logo.png', 'factura.pdf', 'notas.md', 'audio.m4a']) assert.ok(!ignorado(otro), `${otro} se queda fuera de git`);
+    return 'vídeos e imágenes de disco fuera, con mayúsculas o sin ellas; fotos y documentos, dentro';
+  });
+
   await comprobar('cada clave suelta sabe a qué herramienta va', async () => {
     // Jose, 21-09-2026, con una captura: sus claves vivían en un `.env.local`
     // de la raíz —Replicate, Pexels, Buffer, Drive, Telegram juntas— y la
