@@ -1723,7 +1723,7 @@ function grupoAccionesSencillo() {
         etiqueta: 'Conectar algo nuevo',
         icono: '➕',
         pequeno: true,
-        accion: { tipo: 'pedir', prompt: 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es, móntame la conexión con lo que haga falta y comprueba que funciona antes de darla por buena.' },
+        accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
       })}
       ${/* Los comandos son habilidades (decisión 141): salen dentro de
             Habilidades. La fila de Comandos queda apagada en la tabla, no borrada. */''}
@@ -2103,7 +2103,7 @@ function grupoAccionesCompleto() {
           etiqueta: 'Conectar algo nuevo',
           icono: '➕',
           pequeno: true,
-          accion: { tipo: 'pedir', prompt: 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es, móntame la conexión con lo que haga falta y comprueba que funciona antes de darla por buena.' },
+          accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
         })}
 `,
     })}`;
@@ -2265,7 +2265,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       ${deApps}
       ${porMontar}
       ${nada('Todavía no hay ninguna puesta en su sitio. Cuando le pidas al asistente que conecte tu correo, tu facturación o lo que uses, aparecerán aquí.')}
-      ${boton({ etiqueta: 'Conectar algo', icono: '▸', principal: !sueltas && !enLasCopias, accion: { tipo: 'pedir', prompt: 'Quiero conectar una herramienta que uso. Pregúntame cuál y guíame paso a paso.' } })}
+      ${boton({ etiqueta: 'Conectar algo', icono: '▸', principal: !sueltas && !enLasCopias, accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO } })}
       ${volver()}`;
   }
 
@@ -2286,26 +2286,70 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
           ? `${p.etiqueta} — ${plural(p.faltan, 'falta una clave', 'faltan {n} claves')}`
           : (p.fueraDeSitio
             ? `${p.etiqueta} — puesta, pero fuera de su sitio`
-            // Se autentica con un fichero y no con claves: decir su nombre a
-            // secas dejaría pensando que no tiene nada puesto (decisión 105).
-            : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta))),
-      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.fueraDeSitio ? '◐' : '●')),
+            // Lo que dijo su última prueba, mientras sus claves sigan igual
+            // (decisión 146): «conectada», o por qué falla, en una frase.
+            : (p.prueba
+              ? (p.prueba.ok ? `${p.etiqueta} — conectada · probada ${p.prueba.cuando}` : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
+              // Se autentica con un fichero y no con claves: decir su nombre a
+              // secas dejaría pensando que no tiene nada puesto (decisión 105).
+              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta)))),
+      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.fueraDeSitio ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●'))),
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}
     ${porMontar}
   `;
 }
 
+// Lo que se le pide al asistente para conectar algo (decisión 146). Con RSC 3
+// trae una habilidad para esto, `connect-tool`: investiga la herramienta de
+// verdad, elige la forma más segura, monta la carpeta con su prueba y guía.
+// Y lo que la barra necesita leer después: los pasos en su README y de dónde
+// sale cada clave, para la guía de uno en uno.
+const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es. Si tienes la habilidad connect-tool, úsala. '
+  + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, y de dónde sale cada clave en su CREDENTIALS.md. '
+  + 'Comprueba que funciona antes de darla por buena.';
+
+// «Esa clave no vale. Cópiala otra vez entera.» → «esa clave no vale».
+const laPrimeraFrase = (t) => {
+  const frase = String(t || '').split(/(?<=[.:])\s/)[0].replace(/[.:]$/, '');
+  return frase.charAt(0).toLowerCase() + frase.slice(1);
+};
+
 // Una herramienta: cómo se conecta, sus claves, su prueba y sus cositas.
-function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal }) {
+function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false }) {
   const faltaAlguna = claves.some((c) => !c.puesta);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
 
   // Los pasos los escribe el asistente al investigar la herramienta. Se
   // enseñan mientras falte alguna clave: cuando ya está todo puesto, estorban.
-  const guia = proveedor.pasos && proveedor.pasos.length && faltaAlguna
-    ? `<ol class="guia">${proveedor.pasos.map((p) => `<li>${texto(p)}</li>`).join('')}</ol>`
-    : '';
+  //
+  // Y de uno en uno (decisión 146): una lista de diez pasos con tres campos
+  // debajo es una pared. «No lo encuentro» le pasa al asistente la herramienta
+  // y el paso, para que lo busque; y la lista entera sigue a un clic.
+  const pasos = proveedor.pasos || [];
+  const ir = (n, todos = false) => ({ tipo: 'pasoDeLaGuia', proveedor: proveedor.id, paso: n, todos });
+  const unPaso = () => {
+    const n = Math.min(paso, pasos.length - 1);
+    const ultimo = n === pasos.length - 1;
+    const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]);
+    return `
+      <div class="conexion guia-paso">
+        <p class="pista">${texto(`Paso ${n + 1} de ${pasos.length}`)}</p>
+        <p class="nombre">${texto(pasos[n])}</p>
+        ${hablaDeLaClave || ultimo ? `<p class="pista">${texto('Cuando la tengas, pégala abajo y pulsa «Guardar»: la pruebo yo.')}</p>` : ''}
+        <div class="fila">
+          ${proveedor.ayuda ? boton({ etiqueta: 'Abrir su página', icono: '↗', pequeno: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+          ${!ultimo ? boton({ etiqueta: 'Hecho, siguiente', icono: '▸', principal: true, pequeno: true, accion: ir(n + 1) }) : ''}
+          ${n > 0 ? boton({ etiqueta: 'Atrás', pequeno: true, discreto: true, accion: ir(n - 1) }) : ''}
+        </div>
+        ${boton({ etiqueta: 'No lo encuentro', icono: '💬', pequeno: true, discreto: true, accion: { tipo: 'pedir', prompt: `Estoy conectando ${proveedor.etiqueta} y me he atascado en el paso ${n + 1} de ${pasos.length}: «${pasos[n]}». No lo encuentro. Búscalo en su ayuda de hoy y dime exactamente dónde está, con lo que voy a ver en la pantalla. Si los pasos ya no son así, corrígelos en su README.` } })}
+        ${boton({ etiqueta: 'Ver todos los pasos', pequeno: true, discreto: true, accion: ir(n, true) })}
+      </div>`;
+  };
+  const guia = !pasos.length || !faltaAlguna ? ''
+    : (todosLosPasos
+      ? `<ol class="guia">${pasos.map((p) => `<li>${texto(p)}</li>`).join('')}</ol>${boton({ etiqueta: 'De uno en uno', pequeno: true, discreto: true, accion: ir(paso) })}`
+      : unPaso());
 
   const formularios = claves.length
     ? claves.map((c) => `
@@ -2343,7 +2387,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${volver({ tipo: 'verConexiones' })}
     <p class="titulo">${texto(proveedor.etiqueta)}</p>
     ${guia ? `<h2>Cómo conectarla</h2>${guia}` : ''}
-    ${proveedor.ayuda && faltaAlguna ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+    ${proveedor.ayuda && faltaAlguna && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${faltaAlguna ? '<hr class="separador">' : ''}
     ${algunaFuera && ordenar ? boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: ordenar } }) : ''}
     ${claves.length ? '<p class="detalle">Pega la clave entera. Los espacios y las comillas los quito yo.</p>' : ''}

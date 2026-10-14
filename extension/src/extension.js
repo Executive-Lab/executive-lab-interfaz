@@ -92,6 +92,9 @@ const CLAVE_PETICIONES = 'executiveLab.peticiones';
 // Los recordatorios (decisión 144): cuándo se pulsó cada botón, cuándo se hizo
 // o se dejó para luego cada recordatorio, de cuál se avisó ya, y las costumbres
 // que la barra convirtió en recordatorio (para decirlo una vez y no repetirlo).
+// Lo que dijo la última prueba de cada conexión, con la huella de sus claves
+// (decisión 146): la lista lo enseña mientras las claves sigan igual.
+const CLAVE_PRUEBAS = 'executiveLab.pruebasDeConexion';
 const CLAVE_USOS = 'executiveLab.usosDeBotones';
 const CLAVE_RECORDATORIOS = 'executiveLab.recordatoriosHechos';
 const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
@@ -703,6 +706,7 @@ ${cabecera}
       verConexiones: () => this.verConexiones(),
       verConexion: () => this.verConexion(mensaje.proveedor),
       guardarClave: () => this.guardarClave(mensaje.proveedor, mensaje.clave, mensaje.valor),
+      pasoDeLaGuia: () => this.pasoDeLaGuia(mensaje.proveedor, mensaje.paso, mensaje.todos),
       probar: () => this.probar(mensaje.proveedor),
       hacerCosita: () => this.hacerCosita(mensaje.proveedor, mensaje.fichero, mensaje.etiqueta, mensaje.pideDatos),
 
@@ -1000,7 +1004,8 @@ ${cabecera}
     this.donde = { tipo: 'conexiones' };
     this.enviar({
       tipo: 'conexiones',
-      proveedores: conexiones.proveedores(),
+      // Cada una, con cómo fue su última prueba, si sus claves no han cambiado.
+      proveedores: conexiones.proveedores().map((p) => ({ ...p, prueba: this.laUltimaPrueba(p.id) })),
       // Si el arnés se montó sobre un proyecto que ya existía, puede haber
       // claves guardadas donde estuvieran. Aquí no se leen: se avisa.
       sueltas: sueltas.resumen(),
@@ -1015,9 +1020,13 @@ ${cabecera}
     if (!datos) return this.verConexiones();
     this.donde = { tipo: 'conexion', proveedor };
     const desordenadas = sueltas.resumen();
+    const guia = (this.guias || {})[proveedor] || {};
     return this.enviar({
       tipo: 'conexion',
       ...datos,
+      // Por qué paso de la guía va, o si quiere verlos todos (decisión 146).
+      paso: Math.min(Math.max(Number(guia.paso) || 0, 0), Math.max(datos.proveedor.pasos.length - 1, 0)),
+      todosLosPasos: Boolean(guia.todos),
       cositas: conexiones.scripts(proveedor),
       // Si alguna clave de esta conexión está en otro sitio, el botón que lo
       // arregla va aquí mismo, que es donde se ve el problema (decisión 104).
@@ -1026,15 +1035,57 @@ ${cabecera}
     });
   }
 
-  guardarClave(proveedor, clave, valor) {
+  // Guardar, y si ya están todas, probarla sin que nadie lo pida (P9): lo
+  // siguiente que haría el alumno es pulsar «Probar», y lo que necesita saber
+  // es si funciona (decisión 146).
+  async guardarClave(proveedor, clave, valor) {
     const { ok, mensaje } = conexiones.escribir(proveedor, clave, valor);
-    this.verConexion(proveedor, { texto: mensaje, malo: !ok });
+    if (!ok) return this.verConexion(proveedor, { texto: mensaje, malo: true });
+    const datos = conexiones.claves(proveedor);
+    const faltan = datos ? datos.claves.filter((c) => !c.puesta).length : 0;
+    if (faltan || !conexiones.tienePrueba(proveedor)) {
+      return this.verConexion(proveedor, { texto: faltan ? `Guardada. ${faltan === 1 ? 'Falta 1 por poner.' : `Faltan ${faltan} por poner.`}` : mensaje, malo: false });
+    }
+    this.enviar({ tipo: 'esperando', que: 'Guardada. Probando la conexión…' });
+    const prueba = await this.probarYApuntar(proveedor);
+    // Si mientras tanto se fue a otra pantalla, no se le devuelve: lo que salió
+    // ya está apuntado y la lista lo dice.
+    const sigueAqui = this.donde && this.donde.tipo === 'conexion' && this.donde.proveedor === proveedor;
+    if (!sigueAqui) return this.donde && this.donde.tipo === 'conexiones' ? this.verConexiones() : undefined;
+    return this.verConexion(proveedor, { texto: `Guardada. ${prueba.mensaje}`, malo: !prueba.ok });
   }
 
   async probar(proveedor) {
     this.enviar({ tipo: 'esperando', que: 'Probando la conexión…' });
-    const { ok, mensaje } = await conexiones.probar(proveedor);
+    const { ok, mensaje } = await this.probarYApuntar(proveedor);
     this.verConexion(proveedor, { texto: mensaje, malo: !ok });
+  }
+
+  async probarYApuntar(proveedor) {
+    // La huella de las claves que se prueban, de antes: si cambian mientras la
+    // prueba corre, lo que diga no es de las nuevas.
+    const huella = conexiones.huella(proveedor);
+    const hecho = await conexiones.probar(proveedor);
+    // Lo pasajero —sin internet, no contesta— no dice nada de la conexión: no
+    // se recuerda, y se queda lo que hubiera.
+    if (hecho.pasajero) return hecho;
+    const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
+    pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella };
+    await this.almacen().update(CLAVE_PRUEBAS, pruebas);
+    return hecho;
+  }
+
+  // La última prueba, si sus claves siguen como cuando se probó; si no, null.
+  laUltimaPrueba(proveedor) {
+    const una = (this.almacen().get(CLAVE_PRUEBAS) || {})[proveedor];
+    if (!una || una.huella !== conexiones.huella(proveedor)) return null;
+    return { ok: una.ok, mensaje: una.mensaje, cuando: copias.haceCuanto(new Date(una.cuando).toISOString()) };
+  }
+
+  // La guía, de paso en paso. Se recuerda mientras dure la ventana.
+  pasoDeLaGuia(proveedor, paso, todos = false) {
+    this.guias = { ...(this.guias || {}), [proveedor]: { paso, todos } };
+    return this.verConexion(proveedor);
   }
 
   // Modo mixto: lo que solo mira se ejecuta y se enseña; lo que pide datos o
