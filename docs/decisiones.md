@@ -5170,3 +5170,23 @@ eso entraba en el historial, que no se deshace. Por eso poner copias seguía con
 - **Un fallo que ya estaba:** después de «Volver a como estaba», la copia de la vuelta se guardaba sin
   la lista de lo que no entra, y metía las claves que la copia de antes había dejado fuera. Ahora las
   dos copias calculan lo que se queda fuera en el mismo sitio (`loQueSeQuedaFuera`).
+
+**Lo que encontró la revisión adversaria** (PR #30), reproducido y arreglado, con su prueba:
+
+- **Un repositorio dentro de la carpeta** (una plantilla clonada, por ejemplo) entraba en la copia como
+  una referencia, sin sus ficheros. Desde entonces, cada vistazo de la barra a git corría el
+  `core.fsmonitor` y los filtros `clean` de ese repositorio, que son órdenes de quien lo hizo. Con las
+  copias puestas solas al abrir, bastaba con abrir la carpeta. Ahora no entra, y se dice («tiene sus
+  propias copias»). Además, la barra llama a git con `core.fsmonitor=false` y
+  `diff.ignoreSubmodules=all`, y no le pasa al `add` el que ya estaba en la copia.
+- **Lo que ya estaba en git y crece** entraba entero en cada copia, sin tope: una base de datos de
+  5 GB que cambia, por ejemplo. Sigue entrando, pero cuenta para los 200 MB. El botón le pide al
+  asistente que, si la persona quiere, lo saque de las copias sin quitarlo de la carpeta.
+- **Con miles de ficheros pesados la copia fallaba**: la lista no cabía en la orden (E2BIG; en
+  Windows, con unos cientos). Ahora va por la entrada, y literal, porque un `[1]` en un nombre sacaba
+  de la copia a otro fichero que se le parecía. El aviso nombra los tres primeros y cuántos más.
+- **Poner copias sola, con demasiado peso,** dejaba git sin ninguna copia, y la pieza decía «Listas».
+  Ahora quita el historial vacío que acaba de crear, y la pieza sigue con su botón.
+- **Si `git status` fallaba, se guardaba sin tope.** Ahora no se guarda.
+- **Leer `git status`:** el nombre viejo de un renombrado se tomaba por un cambio más, y un enlace a un
+  fichero grande contaba como pesado aunque git solo guarde el enlace. Las dos cosas, arregladas.

@@ -6687,6 +6687,145 @@ exec git "$@"
     }
   });
 
+  await comprobar('guardar no corre nada de otro repositorio, cuenta lo que crece y no deja nada a medias', async () => {
+    // La revisión de la 146, reproducido, con git de verdad. Con las copias puestas
+    // solas al abrir, seis cosas:
+    //   · un repositorio dentro de la carpeta entraba en la copia, y desde entonces
+    //     cada vistazo corría su `core.fsmonitor` y sus filtros `clean`;
+    //   · un fichero que ya estaba en git y crecía entraba entero, sin tope;
+    //   · el nombre viejo de un renombrado se leía como un cambio más;
+    //   · un `[1]` en un nombre sacaba de la copia a otro que se le parecía;
+    //   · con miles de ficheros pesados, la lista no cabía en la orden (E2BIG);
+    //   · poner copias sola, con demasiado peso, dejaba un historial sin copias, y la
+    //     pieza decía «Listas».
+    const guardarM = cargar('guardar');
+    if (!(await guardarM.hayGit())) return 'SALTADA: sin git';
+    const historial = require(path.join(RAIZ, '..', 'instalador', 'comun', 'historial.js'));
+    const cp = require('node:child_process');
+    const MB = 1024 * 1024;
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'casa-'));
+    const antes = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
+    const disperso = (carpeta, rel, bytes) => { fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true }); fs.writeFileSync(path.join(carpeta, rel), ''); fs.truncateSync(path.join(carpeta, rel), bytes); };
+    const git = (carpeta, ...args) => cp.execFileSync('git', ['-C', carpeta, '-c', 'user.name=x', '-c', 'user.email=x@x', ...args], { encoding: 'utf8' });
+    const enLaCopia = (carpeta) => git(carpeta, 'ls-tree', '-r', '--name-only', 'HEAD').split('\n').filter(Boolean);
+    const conCopia = async (nombre) => {
+      const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), `${nombre}-`));
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      fs.writeFileSync(path.join(carpeta, 'notas.md'), '# Notas\n');
+      vscode.guion.raiz = carpeta;
+      assert.ok((await historial.iniciar(carpeta)).ok);
+      return carpeta;
+    };
+    try {
+      // ── 1. El repositorio de dentro: con un `fsmonitor` y un filtro que dejan marca.
+      let carpeta = await conCopia('anidado');
+      const marcas = path.join(casa, 'marcas');
+      fs.mkdirSync(marcas);
+      const conBarras = (ruta) => ruta.replace(/\\/g, '/');
+      const marcar = path.join(casa, 'marcar.js');
+      fs.writeFileSync(marcar, "require('fs').writeFileSync(require('path').join(process.argv[2], process.argv[3]), ''); if (process.argv[3] === 'clean') process.stdin.pipe(process.stdout); else process.exit(1);\n");
+      const orden = (que) => `"${conBarras(process.execPath)}" "${conBarras(marcar)}" "${conBarras(marcas)}" ${que}`;
+      const dentro = path.join(carpeta, 'plantilla');
+      fs.mkdirSync(dentro);
+      cp.execFileSync('git', ['init', '-q', dentro]);
+      fs.writeFileSync(path.join(dentro, 'a.txt'), 'hola\n');
+      git(dentro, 'add', 'a.txt');
+      git(dentro, 'commit', '-qm', 'a');
+      git(dentro, 'config', 'core.fsmonitor', orden('fsmonitor'));
+      git(dentro, 'config', 'filter.x.clean', orden('clean'));
+      fs.writeFileSync(path.join(dentro, '.gitattributes'), '* filter=x\n');
+      const enElFuturo = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+      fs.utimesSync(path.join(dentro, 'a.txt'), enElFuturo, enElFuturo);
+      let hecho = await guardarM.guardar('Con otro repositorio dentro');
+      assert.equal(hecho.ok, true, hecho.mensaje);
+      assert.ok(!enLaCopia(carpeta).includes('plantilla'), 'el repositorio de dentro entra en la copia');
+      assert.match(hecho.mensaje, /No he metido «plantilla» en la copia: tiene sus propias copias\. Sigue en tu carpeta\./);
+      // Y si ya estaba en la copia (lo guardó otro), ni guardar ni mirar lo abren.
+      git(carpeta, 'update-index', '--add', '--cacheinfo', `160000,${git(dentro, 'rev-parse', 'HEAD').trim()},plantilla`);
+      git(carpeta, 'commit', '-qm', 'lo guardó otro');
+      for (const m of fs.readdirSync(marcas)) fs.rmSync(path.join(marcas, m));
+      fs.appendFileSync(path.join(carpeta, 'notas.md'), 'más\n');
+      assert.ok((await guardarM.cambiosSinGuardar()) >= 1);
+      hecho = await guardarM.guardar('Con él ya dentro');
+      assert.equal(hecho.ok, true, hecho.mensaje);
+      await cargar('procesos').git('status', '--porcelain');
+      assert.deepEqual(fs.readdirSync(marcas), [], 'la barra corre la configuración del repositorio de dentro');
+      assert.ok(enLaCopia(carpeta).includes('plantilla'), 'lo que ya estaba en la copia se ha sacado');
+      // La trampa funciona: un git sin las opciones sí la corre.
+      cp.spawnSync('git', ['-C', carpeta, 'status', '--porcelain']);
+      assert.ok(fs.readdirSync(marcas).length > 0, 'la trampa no salta ni con git a pelo: la prueba no prueba nada');
+
+      // ── 2. Lo que ya estaba en git y crece cuenta para el tope.
+      carpeta = await conCopia('crece');
+      fs.writeFileSync(path.join(carpeta, 'base.sqlite'), 'x');
+      assert.equal((await guardarM.guardar('Con la base pequeña')).ok, true);
+      fs.truncateSync(path.join(carpeta, 'base.sqlite'), 210 * MB);
+      hecho = await guardarM.guardar('Con la base enorme');
+      assert.equal(hecho.ok, false, 'un fichero que ya estaba entra con 210 MB en la copia');
+      assert.match(hecho.mensaje, /^No he guardado la copia: hay 210 MB de archivos nuevos o cambiados/);
+      assert.equal(git(carpeta, 'cat-file', '-s', 'HEAD:base.sqlite').trim(), '1', 'la base enorme ha entrado');
+
+      // ── 3. El nombre viejo de un renombrado no es un cambio: aquí se leía como
+      //       «grande.bin», que no ha cambiado y pesa 201 MB.
+      carpeta = await conCopia('renombre');
+      disperso(carpeta, 'grande.bin', 201 * MB);
+      fs.writeFileSync(path.join(carpeta, 'ab grande.bin'), 'poca cosa\n');
+      git(carpeta, 'add', '-A');
+      git(carpeta, 'commit', '-qm', 'base');
+      git(carpeta, 'mv', 'ab grande.bin', 'renombrado.txt');
+      hecho = await guardarM.guardar('Con un renombrado');
+      assert.equal(hecho.ok, true, `un renombrado cuenta lo que no cambió: ${hecho.mensaje}`);
+      assert.ok(enLaCopia(carpeta).includes('renombrado.txt'));
+
+      // ── 4. Un nombre con corchetes no saca de la copia a otro que se le parece.
+      carpeta = await conCopia('corchetes');
+      fs.writeFileSync(path.join(carpeta, 'Foto 1.zip'), 'la de antes\n');
+      assert.equal((await guardarM.guardar('Con la primera')).ok, true);
+      disperso(carpeta, 'Foto [1].zip', 25 * MB);
+      git(carpeta, 'add', '--', ':(literal)Foto [1].zip');
+      hecho = await guardarM.guardar('Con la de corchetes');
+      assert.equal(hecho.ok, true, hecho.mensaje);
+      assert.ok(enLaCopia(carpeta).includes('Foto 1.zip'), 'el nombre con corchetes ha sacado otro de la copia');
+      assert.ok(!enLaCopia(carpeta).includes('Foto [1].zip'), 'lo pesado entra en la copia');
+
+      // ── 5. Miles de ficheros pesados: la lista no va en la orden. No en Windows:
+      //       NTFS no deja disperso un fichero que se alarga, y serían 126 GB de verdad.
+      //       El camino es el mismo, por la entrada, y aquí queda probado.
+      const enWindows = process.platform === 'win32';
+      if (!enWindows) {
+        carpeta = await conCopia('miles');
+        const largo = 'v'.repeat(180);
+        for (let i = 0; i < 6000; i += 1) disperso(carpeta, path.join('crudos', `${largo}-${i}.raw`), 21 * MB);
+        fs.appendFileSync(path.join(carpeta, 'notas.md'), 'más\n');
+        hecho = await guardarM.guardar('Con miles de pesados');
+        assert.equal(hecho.ok, true, `con miles de pesados no se guarda: ${hecho.mensaje}`);
+        assert.deepEqual(enLaCopia(carpeta).filter((r) => r.startsWith('crudos/')), [], 'lo pesado entra en la copia');
+        assert.match(hecho.mensaje, /y 5997 más en la copia: pesan mucho/, 'el aviso los nombra todos');
+        fs.rmSync(path.join(carpeta, 'crudos'), { recursive: true, force: true });
+      }
+
+      // ── 6. Poner copias sola, con demasiado peso: sin historial a medias.
+      carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'sin-hueco-'));
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      for (let i = 0; i < 11; i += 1) disperso(carpeta, path.join('fotos', `IMG_${i}.jpg`), 19 * MB);
+      vscode.guion.raiz = carpeta;
+      const memoria = new Map();
+      const contexto = { extensionPath: RAIZ, workspaceState: { get: (k) => memoria.get(k), update: async (k, v) => memoria.set(k, v) } };
+      const puestas = await cargar('arrancar').ponerLasCopias(contexto);
+      assert.equal(puestas.ok, false, 'ha puesto copias con 209 MB nuevos');
+      assert.match(puestas.mensaje, /^No he guardado la copia/);
+      assert.equal(puestas.boton && puestas.boton.accion.tipo, 'pedir', 'sin el botón para ordenarlo');
+      assert.ok(!fs.existsSync(path.join(carpeta, '.git')), 'queda un historial sin copias, y la pieza diría «Listas»');
+      assert.ok(fs.existsSync(path.join(carpeta, 'fotos', 'IMG_0.jpg')), 'se ha tocado algún archivo');
+      return `el repositorio de dentro, fuera y sin correr nada; lo que crece, con tope; renombrados y corchetes bien;${enWindows ? '' : ' 6000 pesados caben;'} y poner copias no deja nada a medias`;
+    } finally {
+      if (antes === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = antes;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
   await comprobar('los vídeos no entran en git aunque guarde el asistente, y las fotos sí', async () => {
     // Decisión 146: el bloque de los raíles, para que valga también cuando guarda el
     // asistente con git a pelo. El iPhone escribe `.MOV`.

@@ -913,6 +913,7 @@ const COMO_SE_HACE = {
         detalle: hecho.mensaje,
         // Con demasiado peso nuevo, el motivo de verdad y no «Algo va mal» (decisión 146).
         pega: hecho.demasiado ? hecho.mensaje : 'No he podido guardar el punto de partida. Lo demás está listo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
+        ...(hecho.boton ? { boton: hecho.boton } : {}),
       };
     }
     return { ok: true };
@@ -1171,11 +1172,19 @@ async function crearUnaCarpetaDentro(base, salida) {
 async function ponerLasCopias(contexto) {
   if (!(await git.hay())) return { ok: false, faltaGit: true };
   await loQueDecidio(contexto).update(CLAVE_SIN_GIT, undefined);
+  const habia = proyecto.existe('.git');
   if (!(await prepararHistorial())) {
     return { ok: false, mensaje: 'No he podido preparar las copias. Pulsa «Algo va mal» y pásale el código a tu tutor.' };
   }
   const partida = await COMO_SE_HACE.puntoDePartida();
-  if (!partida.ok) return { ok: false, mensaje: partida.pega };
+  if (!partida.ok) {
+    // El historial que se acaba de crear, sin ninguna copia, se quita: con él, la
+    // pieza decía «Listas» sin haber copias, y no quedaba botón (revisión de la 146).
+    if (!habia && !(await procesos.git('rev-parse', '--verify', '-q', 'HEAD')).salida.trim()) {
+      try { fs.rmSync(path.join(proyecto.raiz(), '.git'), { recursive: true, force: true }); } catch { /* se queda: lo dice la pieza */ }
+    }
+    return { ok: false, mensaje: partida.pega, ...(partida.boton ? { boton: partida.boton } : {}) };
+  }
   return { ok: true, mensaje: 'Ya hay copias. La primera es el punto de partida.' };
 }
 

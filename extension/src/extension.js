@@ -321,7 +321,8 @@ ${cabecera}
           return ok;
         },
         // Sin git no se instala nada solo: eso abre el instalador del sistema. Y con
-        // demasiado peso nuevo no se guarda (decisión 146): se queda con su botón.
+        // demasiado peso no se guarda (decisión 146): no queda historial a medias, y la
+        // pieza sigue con su botón, que lo dice.
         ponerCopias: async () => {
           const hecho = await arrancar.ponerLasCopias(this.contexto);
           if (!hecho.ok && hecho.mensaje) this.salida.appendLine(`[solo] copias: ${hecho.mensaje}`); // diccionario: interno
@@ -2097,7 +2098,7 @@ ${cabecera}
       hecho = await arrancar.ponerLasCopias(this.contexto);
       if (hecho.faltaGit) return undefined; // lo que pasa ya lo ha dicho instalarGit
     }
-    this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
+    this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok, ...(hecho.boton ? { boton: hecho.boton } : {}) });
     return this.refrescar(true);
   }
 

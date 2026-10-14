@@ -217,10 +217,18 @@ hacerse solo, porque no se puede deshacer.
   ordenador ya conoce: **la primera vez que un alumno abra con esta barra una carpeta montada antes,
   tendrá que pulsar un botón del arnés una vez**.
 
-- **Punto 8** (decisión 146): `humo.js` 369, con `--con-arnes` 376, contrato 14 y empresas en verde.
-  Las mutaciones caen 8 de 9. La que vive es casi equivalente: sin saltar el origen de un renombrado,
-  ese nombre se lee como una entrada más y se descarta porque no existe. Y se encontró un fallo que ya
-  estaba: la copia de «Volver a como estaba» metía las claves que la de antes había dejado fuera.
+- **Punto 8** (decisión 146): `humo.js` 370, contrato 14 y diccionario en verde. Al escribirlo salió un
+  fallo que ya estaba: la copia de «Volver a como estaba» metía las claves que la de antes había dejado
+  fuera.
+- **La revisión adversaria del punto 8** encontró siete fallos, reproducidos y arreglados con su prueba.
+  - El más serio, de seguridad: un repositorio de git dentro de la carpeta entraba en la copia, y desde
+    entonces cada vistazo de la barra corría órdenes de quien lo hizo (`fsmonitor`, filtros `clean`).
+    Con las copias puestas solas, bastaba con abrir la carpeta.
+  - Los otros seis, de corrección: lo que ya estaba en git y crecía, sin tope; E2BIG con miles de
+    pesados; comodines al sacar del índice; un historial vacío al poner copias con demasiado peso; sin
+    tope si `git status` fallaba; y los renombrados.
+  - La prueba nueva usa git de verdad y comprueba que la trampa salta con git a pelo. Las mutaciones
+    caen 12 de 12, también la del renombrado que antes vivía.
 
 ## Next
 
