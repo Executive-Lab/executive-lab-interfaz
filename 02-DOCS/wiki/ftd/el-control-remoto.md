@@ -2,7 +2,7 @@
 type: ftd
 title: El control remoto de Claude, para todas las sesiones
 date: 2026-10-14
-status: en curso
+status: hecho
 ---
 
 # El control remoto de Claude, para todas las sesiones
@@ -29,7 +29,8 @@ hemos hecho con el focus view»*, en la extensión y en los instaladores. Decisi
 - [x] 2. Instaladores (Mac y Windows) y desinstaladores (Inno, `desinstalar.ps1`, `desinstalar.command`).
 - [x] 3. La barra, al arrancar con Claude instalado; las pruebas, en una carpeta de mentira.
 - [x] 4. Mutaciones a mano — 5, las 5 tumbadas.
-- [ ] 5. Todas las baterías y las máquinas de GitHub.
+- [x] 5. Todas las baterías y las máquinas de GitHub — humo 359, contrato, empresas, diccionario, PowerShell,
+  VS Code de verdad; el-dmg, windows, vscode-de-verdad y el-exe en verde (PR #23, fusionada).
 
 ## Evidence
 

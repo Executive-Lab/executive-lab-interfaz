@@ -5018,3 +5018,44 @@ Necesita un plan de pago con la cuenta de claude.ai; sin eso, Claude lo ignora.
 - **Al desinstalar se quita**, pero solo si lo pusimos nosotros (una marca al lado) y sigue como lo
   dejamos: el `[UninstallRun]` de Inno, `desinstalar.ps1` y `desinstalar.command`.
 - Las pruebas trabajan en una carpeta de Claude de mentira: nunca tocan la de quien las corre.
+
+## 144. Los recordatorios, y lo que cada asistente sabe hacer solo
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Jose: *«Investiga bien y metámoslos [/schedule, /goal y /loop], pero […] la idea es quitar fricción. Lo
+ideal es que la barra sea interactiva e inteligente y detecte cuándo vale la pena proponer a los alumnos
+cosas, en este caso las tareas programadas»*. Y Eric, sobre las rutinas: son de cada asistente, y no son
+iguales.
+
+Lo que hay de verdad (documentación de los dos, 14-10-2026):
+
+| | Claude | Codex |
+|---|---|---|
+| `/goal`: seguir hasta que se cumpla algo | sí | sí, con el mismo nombre |
+| `/loop`: repetir mientras la conversación sigue abierta (7 días como mucho) | sí | no |
+| En la nube, con el ordenador apagado | `/schedule` (rutinas): pide GitHub, no ve la carpeta del ordenador, deja lo hecho allí | sus tareas de la web: tampoco ven la carpeta |
+| En el ordenador, a una hora | en la app de escritorio de Claude, abierta | en la app de escritorio de ChatGPT, abierta |
+| Crearlas desde otro programa | no: solo desde su app o hablándole | no |
+
+Así que lo que vale igual para todos lo lleva la barra:
+
+- **Un recordatorio vive en la propia habilidad**: `cuando` en su `metadata`, en cron (`"0 9 * * 1"`, cada
+  lunes a las 9). Lo leen igual la barra, el asistente y quien abra el fichero. Los raíles, al ponerse al
+  día, lo conservan.
+- **La barra es el reloj**: cada minuto mira si toca alguno, y si toca —también si tocó con el editor
+  cerrado— lo dice una vez con un aviso del editor y deja la tarjeta «Toca: … » en la principal, con
+  «Hacerlo ahora» y «Ahora no». Hacerlo es un clic suyo: ni Claude ni Codex dejan que otro programa mande
+  el mensaje por él, y lo que hace una habilidad puede salir de su ordenador o costar algo (P9).
+- **La costumbre se convierte en recordatorio sola (P9)**: si un botón se pulsa el mismo día de la semana
+  en tres de las últimas cinco semanas, el mismo día del mes tres meses, o casi todos los laborables de la
+  última semana, la barra le pone su `cuando` y lo dice una vez, con «No hace falta» para quitarlo. Lo que
+  se dijo que no hacía falta no vuelve. La barra ve los botones que se pulsan en ella, no la conversación.
+- **Lo demás lo propone el asistente**, que sí ve la conversación (la regla de `SKILL.md`): `/goal` con los
+  dos para un encargo largo con un final claro; `/loop` solo con Claude, para vigilar algo mientras
+  trabaja; `/schedule` solo con Claude, y solo si de verdad tiene que pasar con el ordenador apagado.
+- En *Habilidades (skills)* se ven los recordatorios, con «Quitar».
+- De paso, «Conversación nueva» con Codex usa su `chatgpt.newChat`, que es el comando que documenta.
+
+Queda fuera, como propuesta: que se haga del todo solo, sin el clic. Pediría ejecutar el asistente por
+debajo, sin nadie delante, o la app de escritorio de cada uno.

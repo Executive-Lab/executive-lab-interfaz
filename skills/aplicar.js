@@ -28,7 +28,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const sitios = require('./sitios');
 const noEntra = require('./no-entra-en-git');
-const { comoHabilidad } = require('./como-habilidad');
+const { comoHabilidad, cuandoDe } = require('./como-habilidad');
 
 const [, , destinoBruto, ...banderas] = process.argv;
 const forzar = banderas.includes('--forzar');
@@ -140,9 +140,10 @@ function ponerLosBotonesComoHabilidades(quien, suyo) {
   for (const fichero of fuentes) {
     const nombre = fichero.replace(/\.md$/, '');
     const nuestro = fs.readFileSync(path.join(origen, 'comandos', fichero), 'utf8');
-    const { skill, openai } = comoHabilidad(nuestro, nombre, quien);
     const carpeta = en(...suyo.botones, nombre);
     const hasta = path.join(carpeta, 'SKILL.md');
+    // Con su recordatorio, si lo tenía (decisión 144).
+    const { skill, openai } = comoHabilidad(nuestro, nombre, quien, { cuando: cuandoDe(leerSiHay(hasta)) });
     // Un enlace con ese nombre es de otro —RSC enlaza así las suyas—, lleve a
     // algo o a nada: no se escribe a través de él.
     let esEnlace = false;

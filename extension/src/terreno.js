@@ -469,7 +469,7 @@ function losComandosSonLosDeHoy(carpetaDeLaExtension) {
 function lasDeBotonSonLasDeHoy(nuestros, carpetaDeLaExtension) {
   if (!nuestros || !fs.existsSync(nuestros)) return true;
   try {
-    const { comoHabilidad, descripcionDe } = require(path.join(carpetaDeLaExtension, 'media', 'railes', 'como-habilidad.js'));
+    const { comoHabilidad, descripcionDe, cuandoDe } = require(path.join(carpetaDeLaExtension, 'media', 'railes', 'como-habilidad.js'));
     const quien = donde.paraQuien();
     return fs.readdirSync(nuestros).filter((f) => f.endsWith('.md')).every((fichero) => {
       const nombre = fichero.replace(/\.md$/, '');
@@ -478,7 +478,8 @@ function lasDeBotonSonLasDeHoy(nuestros, carpetaDeLaExtension) {
       const fuente = fs.readFileSync(path.join(nuestros, fichero), 'utf8');
       const suya = fs.readFileSync(aqui, 'utf8');
       // Una suya que se llama como una nuestra no es nuestra de antes: no se pisa.
-      return suya === comoHabilidad(fuente, nombre, quien).skill || descripcionDe(fuente) !== descripcionDe(suya);
+      // Con su recordatorio, que no la hace de antes (decisión 144).
+      return suya === comoHabilidad(fuente, nombre, quien, { cuando: cuandoDe(suya) }).skill || descripcionDe(fuente) !== descripcionDe(suya);
     });
   } catch {
     return true;
