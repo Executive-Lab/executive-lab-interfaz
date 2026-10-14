@@ -2,7 +2,7 @@
 type: ftd
 title: La barra se va a la organización Executive-Lab
 date: 2026-10-09
-status: en curso
+status: hecho
 ---
 
 # La barra se va a la organización Executive-Lab
@@ -28,10 +28,12 @@ traslado. Decisión 140.
 - [x] 2. Revisión de seguridad — sin nada que bloquee; un refuerzo aplicado (el paquete, subido por
   `minarkap`; las seis versiones publicadas lo cumplen) y un detalle (nuestra dirección con un punto
   detrás ya no se tapa). 2 mutantes más, los 2 tumbados. VS Code de verdad: «todo bien».
-- [ ] 3. La 0.47.0 publicada.
-- [ ] 4. Unos días para que llegue, y el traslado (lo hace Jose, o yo si me lo pide).
-- [ ] 5. Tras el traslado: comprobar que la dirección vieja redirige (versiones e incidencias), cambiar el
-  `origin` de esta carpeta y los README, y una versión con `REPO` en la organización.
+- [x] 3. La 0.47.0 publicada (09-10-2026).
+- [x] 4. El traslado, el 14-10-2026, con el sí de Jose y la 0.49.0 recién publicada.
+- [x] 5. Tras el traslado: la dirección vieja redirige (301, en la API y en la descarga); contra GitHub de
+  verdad, el código de la barra pregunta a la vieja, recibe la 0.49.0 con el paquete en `Executive-Lab` y la
+  da por buena para ponerla sola. `origin`, README y `sitio.js` (`REPO` en la organización) cambiados; la
+  0.50.0 ya pregunta allí.
 
 ## Evidence
 

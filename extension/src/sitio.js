@@ -12,10 +12,11 @@
 // `minarkap`. Antes salía de `REPO`, y con la dirección nueva no habría cuadrado
 // ninguna.
 //
-// Cuando el traslado esté hecho y casi todos tengan una barra que lo sepa,
-// `REPO` pasa a ser la de la organización; la vieja se queda en `SITIOS`.
+// El traslado se hizo el 14 de octubre de 2026, con la 0.49.0 ya publicada: desde
+// la 0.50.0 se pregunta a la organización. La de antes se queda en `SITIOS`, por
+// los enlaces que ya estaban guardados.
 
-const REPO = 'minarkap/executive-lab-interfaz';
+const REPO = 'Executive-Lab/executive-lab-interfaz';
 const SITIOS = ['minarkap/executive-lab-interfaz', 'Executive-Lab/executive-lab-interfaz'];
 const QUIEN_PUBLICA = 'minarkap';
 

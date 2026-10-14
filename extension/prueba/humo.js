@@ -1727,7 +1727,7 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
       };
       assert.deepEqual(await avisosM.mandar({ titulo: 'Un título', cuerpo: 'Un cuerpo' }, 'clave-de-prueba'),
         { ok: true, numero: 7, url: 'https://github.com/minarkap/executive-lab-interfaz/issues/7' });
-      assert.equal(pedidas[0].url, 'https://api.github.com/repos/minarkap/executive-lab-interfaz/issues');
+      assert.equal(pedidas[0].url, 'https://api.github.com/repos/Executive-Lab/executive-lab-interfaz/issues');
       assert.equal(pedidas[0].opciones.method, 'POST');
       assert.equal(pedidas[0].opciones.headers.Authorization, 'Bearer clave-de-prueba');
       assert.deepEqual(JSON.parse(pedidas[0].opciones.body), { title: 'Un título', body: 'Un cuerpo' }, 'le pone etiquetas o algo más');
@@ -12065,7 +12065,7 @@ exec git "$@"
       for (let i = 0; i < 20 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       await new Promise((listo) => setTimeout(listo, 50));
       assert.equal(pedidas.length, 1, `una pregunta por aviso, o ninguna al pintar: ${pedidas.length}`);
-      assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/minarkap\/executive-lab-interfaz\/issues\?state=closed&since=/);
+      assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/Executive-Lab\/executive-lab-interfaz\/issues\?state=closed&since=/);
 
       // Una vez al día.
       await proveedor.refrescar(true);

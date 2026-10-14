@@ -4906,7 +4906,7 @@ dejé**, **Conversación nueva**, **Dime qué hago ahora**, **Pedir ayuda en el 
 
 ## 140. La barra se va a la organización Executive-Lab
 
-**Fecha:** 9 de octubre de 2026 · **Estado:** en curso (la barra ya lo acepta; falta el traslado)
+**Fecha:** 9 de octubre de 2026 · **Estado:** hecho (trasladado el 14 de octubre, con la 0.49.0; la 0.50.0 ya pregunta a la organización)
 
 Jose: *«el proyecto está en Executive-Lab, no? la org»*. No lo estaba: vivía en su cuenta,
 `minarkap/executive-lab-interfaz`. Se traslada a `Executive-Lab/executive-lab-interfaz`.
