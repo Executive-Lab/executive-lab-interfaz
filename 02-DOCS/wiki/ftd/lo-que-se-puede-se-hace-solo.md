@@ -158,7 +158,7 @@ hacerse solo, porque no se puede deshacer.
   los cuatro casos lo retiene.
 - [x] 5. Lo que se puede, al abrir la carpeta y dicho en una frase. Son cinco de los siete, y los otros
   dos se quedan con su botón, cada uno por su motivo.
-- [ ] 6. Pasar a RSC 3.
+- [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
 - [ ] 7. La prueba que dice que la clave puede escribir.
 - [ ] 8. Lo pesado, fuera de git.
 - [ ] 9. Cuándo caduca una clave.
@@ -225,8 +225,9 @@ Por orden:
 - y luego el 7 y del 9 al 12.
 
 Además, de la revisión:
-- **Contarle a Eric el fallo del borrado, en privado.** Lo decide Jose: es un fallo de seguridad de
-  RSC, y una incidencia pública enseñaría cómo aprovecharlo.
+- ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la
+  2.0.15 y la 2.0.20 borran; desde la 2.1.0 se para). Como la barra pasa a la 3, Jose decidió no
+  contarlo (14-10).
 - **Lo que la barra lanza con git, sin `core.fsmonitor` ni los ganchos de la carpeta.** Ya pasaba antes
   de este cambio, y es poco probable, pero una carpeta traída con su `.git` podría ejecutar algo suyo.
 - **Mirar `--dry-run` antes de un `repair` solo**, por si algún día una pieza con arreglo automático

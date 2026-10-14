@@ -49,6 +49,10 @@ const GUARDIANES = [
   { id: 'danger-guard', fichero: 'danger-guard.mjs', interruptor: '.no-danger-guard', soloSiNoEsTecnico: true },
   { id: 'gitmoji-guard', fichero: 'gitmoji-guard.mjs', interruptor: '.no-gitmoji' },
   { id: 'ship-guard', fichero: 'ship-guard.mjs', interruptor: '.no-ship-guard' },
+  // De la 3 (decisión 145). El de la rama principal no frena en las carpetas de
+  // la barra, que la dejan abierta (`.no-trunk-guard`), como se dijo en clase.
+  { id: 'branch-guard', fichero: 'branch-guard.mjs', interruptor: '.no-trunk-guard' },
+  { id: 'copy-guard', fichero: 'copy-guard.mjs', interruptor: '.no-copy-guard' },
 ];
 
 const hayEnRsc = (nombre) => {
@@ -99,6 +103,14 @@ const AUTOMATISMOS = [
   // asistente ya estaba en marcha, su conversación no lo ve hasta abrirla otra
   // vez, como el relevo: eso lo pide la pieza del relevo.
   { id: 'update-check', fichero: 'session-start.mjs', entorno: 'RSC_NO_UPDATE_CHECK', porQueApagado: 'Apagado a propósito: aquí va la versión de tu clase' },
+  // De la 3 (decisión 145). La actualización sola la apaga el mismo entorno que el
+  // aviso; la wiki compartida y la rama principal las decide la barra al montar.
+  { id: 'auto-update', fichero: 'auto-update.mjs', interruptor: '.no-auto-update', entorno: 'RSC_NO_UPDATE_CHECK', porQueApagado: 'Apagado a propósito: las versiones las lleva la barra' },
+  { id: 'knowledge-sync', fichero: 'knowledge-sync.mjs', interruptor: '.no-knowledge-sync', porQueApagado: 'Apagado a propósito: compartir con tu equipo, cuando digas' },
+  { id: 'ftd-nudge', fichero: 'ftd-nudge.mjs', interruptor: '.no-ftd-nudge' },
+  { id: 'ftd-close', interruptor: '.no-ftd-close' },
+  { id: 'trunk-open', interruptor: '.no-trunk-open' },
+  { id: 'worktree-isolation', interruptor: '.no-worktree-isolation' },
 ];
 
 // La memoria no tiene interruptor: se apaga en la declaración, con

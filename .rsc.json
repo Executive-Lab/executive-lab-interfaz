@@ -6,13 +6,12 @@
   "skills": [
     "analyze",
     "automation-strategy",
-    "bro",
     "clarify",
+    "connect-tool",
     "constitution",
     "debug",
     "decision-challenge",
     "deprecation",
-    "eli5",
     "fable-operator",
     "ftd",
     "harness",
@@ -26,7 +25,6 @@
     "sdd",
     "sdd-init",
     "ship",
-    "show-me",
     "simplify-code",
     "source-grounded-development",
     "specify",
@@ -47,11 +45,13 @@
     "texto-de-la-barra",
     "executive-lab"
   ],
-  "catalogVersion": "2.0.15",
+  "catalogVersion": "3.0.22",
   "tier": null,
   "optOuts": [
     "audit",
+    "auto-update",
     "gitmoji",
+    "knowledge-sync",
     "worktree-cleanup"
   ],
   "onboarding": {

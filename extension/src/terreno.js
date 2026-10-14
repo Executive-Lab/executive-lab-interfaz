@@ -962,14 +962,14 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
     const suya = proyecto.versionDelCatalogo();
     const nuestra = rsc.VERSION_DE_RESPALDO;
     const relacion = rsc.comoEsLaVersion(suya);
-    // Más nueva que la de la clase (B5, C-10): una versión para toda la clase
-    // (P7), pero no se baja en silencio. El botón nombra antes lo que se pierde.
+    // Por delante de la barra (P7, decisión 145): está al día. La barra trabaja
+    // ahí con la versión de la carpeta (`rsc.correr`) y no ofrece bajarla, que
+    // es lo contrario de lo que hizo la clase.
     if (relacion === 'nueva') {
       piezas.push({
         nombre: 'La versión del arnés',
-        estado: 'aMedias',
-        detalle: 'Esta carpeta se montó con una versión del arnés más nueva que la de tu clase.',
-        arreglo: { como: 'solo', etiqueta: 'Ponerla como la de la clase', accion: { tipo: 'ponerComoLaDeLaClase' }, retiene: 'noSeDeshace' },
+        estado: 'si',
+        detalle: `${suya}, más nueva que la de la barra`,
       });
     } else {
       const alDia = !suya || relacion === 'igual';

@@ -79,13 +79,23 @@ en la conversación de alguien.
 
 **Se comprueba**: ningún botón de la pantalla puede pedir algo sin texto.
 
-## P7 · Una versión del catálogo para toda la cohorte
+## P7 · La serie de la clase, y la lleva la barra
 
-El arnés se fija exacto, sin rangos, y subir de versión es una decisión que se
-toma y se escribe — nunca un efecto secundario de un `npm install`.
+La barra trae una versión exacta, sin rangos, de la serie con la que va la clase. Subir de versión es
+una decisión que se toma y se escribe, nunca un efecto secundario de un `npm install`.
 
-**Se comprueba**: la versión tiene que decir lo mismo en los cinco sitios donde
-está escrita.
+**Enmienda del 14-10-2026, decisión 145.** La clase montó RSC desde el chat con la 3.0.22, y la 3.x se
+pone al día sola dentro de su serie. «La misma versión exacta para todos» ya no describía la clase.
+Ahora:
+- lo que va **por detrás** (una 3 más vieja, o una 2) se pone al día, y solo (P9);
+- lo que va **por delante** está al día: la barra trabaja ahí con la versión de esa carpeta y nunca
+  corre encima la suya, que la bajaría sin avisar (RSC no compara versiones), ni ofrece bajarla;
+- en las carpetas de la barra el arnés no se actualiza por su cuenta, porque las versiones las lleva la
+  barra (C4).
+
+**Se comprueba**: la versión tiene que decir lo mismo en todos los sitios donde está escrita. Además,
+una carpeta que va por delante se corre con su versión y no con la de la barra, y no sale ningún botón
+para bajarla.
 
 ## P8 · Lo que se descarga no entra en el proyecto
 
@@ -127,6 +137,3 @@ tiene quien lo haga al abrir (`solo.js`). Otras pruebas cubren el resto:
 - sin nadie delante, el montaje no abre ninguna ventana ni crea el historial;
 - lo que se dice arreglado se mira otra vez;
 - el arnés no corre si algún nombre suyo sale de la carpeta.
-
-Choca con P7 en un punto: RSC 3 se pone al día sola dentro de su serie. P7 se enmienda en el trabajo de
-pasar a la 3.

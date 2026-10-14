@@ -68,22 +68,25 @@ proyecto suyo, el botón se llama **Añadir el asistente a esto** y el panel ens
 encontrado.)
 
 El asistente de la extensión le hará las preguntas que RSC necesita —de qué va, qué quiere resolver,
-qué tal se maneja, cuánto quiere que le expliquen, con quién trabaja y, si va a construir algo, de qué
+qué tal se maneja, con quién trabaja y, si va a construir algo, de qué
 tamaño— en lenguaje llano, y montará el arnés con esas respuestas.
 
 Si prefiere que lo hagas tú, las respuestas son suyas, no tuyas: pregúntaselas una a una y luego
 
 ```bash
-npx @ericrisco/rsc@2.0.15 onboard \
+npx @ericrisco/rsc@3.0.22 onboard \
   --technical-level <non-technical|mixed|technical> \
-  --accompaniment <L0|L1|L2|L3> \
   --project-kind <software|operations|research|content|mixed> \
   --goal "<lo que quiera conseguir>" \
-  --software-scope <small|growing|complex> \
+  --software-scope <small|growing|complex> --workflow main \
   --target <claude|codex>
-# el tamaño solo cuenta con software y mixed, y con esos dos es obligatorio.
+# el tamaño y --workflow main solo cuentan con software y mixed, y con esos dos son obligatorios.
 # imprime un plan y su huella; solo después de que ACEPTE ese plan exacto:
-npx @ericrisco/rsc@2.0.15 onboard ...mismos flags... --accept-plan <huella>
+npx @ericrisco/rsc@3.0.22 onboard ...mismos flags... --accept-plan <huella>
+# y como la deja la barra (decisión 145): la rama principal abierta y nada que salga sin preguntar
+npx @ericrisco/rsc@3.0.22 main unlock
+npx @ericrisco/rsc@3.0.22 knowledge-sync off
+npx @ericrisco/rsc@3.0.22 git-permissions off
 ```
 
 Y por último, los raíles de Executive Lab (idioma y vocabulario), que van dentro de la extensión:

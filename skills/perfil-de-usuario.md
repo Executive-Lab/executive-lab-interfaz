@@ -1,6 +1,5 @@
 ---
 technical_level: non-technical
-accompaniment: L3
 project_kind: operations
 language: es
 executive_lab_rails: 1
@@ -15,16 +14,17 @@ Goal: llevar mi empresa con ayuda de la IA
 Trabaja en una pyme y no programa. Ha llegado al arnés por la formación de Executive Lab, no por
 curiosidad técnica. Puede tener poca soltura con el ordenador.
 
-## Qué significan los diales aquí
+## Qué significa el nivel aquí
 
-Estos dos valores son **un punto de partida prudente**, para cuando los raíles se ponen antes de que
+Este valor es **un punto de partida prudente**, para cuando los raíles se ponen antes de que
 el alumno haya respondido nada. En cuanto pasa por el wizard, manda lo que él eligió.
 
 **`technical_level`** — `non-technical` es lenguaje llano y analogías de cosas que se tocan, sin una
 palabra técnica sin mostrarla antes. `mixed` y `technical` aflojan eso.
 
-**`accompaniment`** — `L3` es acompañamiento total: se explica cada decisión y se desarrollan las
-opciones. `L1` es lo justo. **Se cambia cuando la persona lo pide**, no por iniciativa propia.
+El dial de acompañamiento (`accompaniment`, L0–L3) ya no existe: RSC lo retiró y su `orient` lo
+ignora (decisión 145). Si la persona pide que le expliques más o menos, se hace, y si quiere que dure,
+se guarda como algo que el asistente aprende de ella. **Nunca por iniciativa propia.**
 
 **`language: es`** — español en todo: respuestas, nombres de ficheros y carpetas, títulos de lo que se
 escriba en `02-DOCS/`, y mensajes de las copias de seguridad.

@@ -1346,26 +1346,6 @@
       ]
     },
     {
-      "id": "bro",
-      "nombre": "Tono humano",
-      "frase": "Quita el tono de máquina de un texto sin cambiar lo que dice.",
-      "palabras": [
-        "tono",
-        "humano",
-        "natural",
-        "redaccion",
-        "reescribir",
-        "correo",
-        "mensaje"
-      ],
-      "para": [
-        "operations",
-        "content",
-        "software",
-        "research"
-      ]
-    },
-    {
       "id": "building-agents",
       "nombre": "Construcción de agentes de IA",
       "frase": "Montar un agente que usa herramientas, se evalúa y controla su coste.",
@@ -1888,25 +1868,6 @@
       ],
       "para": [
         "software"
-      ]
-    },
-    {
-      "id": "eli5",
-      "nombre": "Explicación desde cero",
-      "frase": "Una página con dibujos y sin palabras raras, para algo que no conoces de nada.",
-      "palabras": [
-        "explicacion",
-        "entender",
-        "sencillo",
-        "basico",
-        "novato",
-        "formacion"
-      ],
-      "para": [
-        "operations",
-        "content",
-        "software",
-        "research"
       ]
     },
     {
@@ -3305,25 +3266,6 @@
       ]
     },
     {
-      "id": "show-me",
-      "nombre": "Dibujo o esquema",
-      "frase": "Te lo enseña con un esquema cuando es más fácil verlo que leerlo.",
-      "palabras": [
-        "esquema",
-        "dibujo",
-        "diagrama",
-        "grafico",
-        "visual",
-        "proceso"
-      ],
-      "para": [
-        "operations",
-        "content",
-        "software",
-        "research"
-      ]
-    },
-    {
       "id": "skill-scout",
       "nombre": "Búsqueda de la habilidad que falta",
       "frase": "Detectar que hay una habilidad que haría el trabajo mejor y todavía no está puesta.",
@@ -3912,6 +3854,29 @@
       "para": [
         "operations",
         "software"
+      ]
+    },
+    {
+      "id": "connect-tool",
+      "nombre": "Conectar una herramienta",
+      "frase": "Busca cómo se conecta de verdad tu programa y deja la conexión hecha y probada, empezando solo por mirar.",
+      "palabras": [
+        "conectar",
+        "conexion",
+        "herramienta",
+        "erp",
+        "crm",
+        "odoo",
+        "holded",
+        "sap",
+        "programa",
+        "base de datos"
+      ],
+      "para": [
+        "operations",
+        "content",
+        "software",
+        "research"
       ]
     }
   ]

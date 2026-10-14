@@ -1,9 +1,10 @@
 // Hablar con el arnés RSC.
 //
-// Siempre con la versión fijada, nunca con @latest: toda la cohorte tiene que
-// correr exactamente el mismo catálogo, o dejan de servir las instrucciones de
-// clase. Y siempre a través de node + el punto de entrada del paquete: sin npx
-// por medio, que en Windows es un .cmd y en cualquier sitio tarda segundos.
+// Nunca con @latest. La barra trae una versión de la serie de la clase (P7,
+// decisión 145) y la corre con node y el punto de entrada del paquete, sin npx
+// por medio, que en Windows es un .cmd y en cualquier sitio tarda segundos. La
+// excepción es una carpeta que va por delante: ahí se corre la suya (ver
+// `correr`).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,11 +12,21 @@ const procesos = require('./procesos');
 const proyecto = require('./proyecto');
 const entorno = require('./entorno');
 
-// Último recurso si .rsc.json no dice versión. Se actualiza a mano, a
-// propósito: subir de versión es una decisión, no un efecto secundario.
-const VERSION_DE_RESPALDO = '2.0.15';
+// La versión que trae la barra, y el último recurso si .rsc.json no dice ninguna.
+// Se actualiza a mano, a propósito: subir de versión es una decisión, no un
+// efecto secundario.
+const VERSION_DE_RESPALDO = '3.0.22';
 
-// Cómo es una versión frente a la de la clase: 'igual', 'vieja' o 'nueva'. Por
+// Cómo es una versión frente a la que trae la barra (P7, decisión 145: la serie
+// de la clase, y la lleva la barra):
+//
+//   · 'vieja' — va por detrás, sea una 3 más vieja o una 2: se pone al día, y
+//     al abrir la carpeta se hace solo (P9);
+//   · 'nueva' — va por delante: está al día. La barra nunca corre encima la suya,
+//     que la bajaría sin decirlo (RSC no compara versiones), ni ofrece bajarla;
+//   · 'igual'.
+//
+// Por
 // sus números y no como texto (B5): comparada como texto, la 2.0.13 salía
 // distinta de la 2.0.5 y se tomaba por anterior, y el arranque la bajaba.
 //
@@ -41,6 +52,8 @@ function comoEsLaVersion(version) {
 // Solo tres números: la carpeta escribe esto, y con un alias, una dirección o un
 // `&` decidía qué se baja de npm, y en Windows pasaba por `cmd.exe` (revisión
 // de seguridad de P9, L1).
+const vaPorDelante = () => comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva';
+
 function paquete() {
   const suya = proyecto.versionDelCatalogo();
   return `@ericrisco/rsc@${/^\d+\.\d+\.\d+$/.test(String(suya || '')) ? suya : VERSION_DE_RESPALDO}`;
@@ -56,7 +69,8 @@ function paquete() {
 // reproducido). Antes de dejarle escribir, se miran todos los nombres: los de
 // `.rsc.json` y los de cada fichero de estado. Con uno que sale de la carpeta,
 // no se corre, y el motivo queda en el informe de «Algo va mal».
-const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge']);
+const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge', 'install', 'upgrade', 'restore',
+  'main', 'isolation', 'knowledge-sync', 'git-permissions', 'agents', 'agent-model']);
 // Lo que el arnés usa como nombre de carpeta o de fichero al borrar
 // (`install-apply.js`, `repair.js`, `targets/agents.js`, `targets/commands.js`).
 const NOMBRES_DEL_ESTADO = ['skills', 'agents', 'explicitAgents', 'commands'];
@@ -107,12 +121,38 @@ let carpetaDeLaExtension = null;
 const saberDondeEstamos = (ruta) => { carpetaDeLaExtension = ruta; };
 
 async function correr(args, opciones) {
-  if (QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run')) {
+  // Pedir el plan de `onboard` no escribe nada: lo que escribe es aceptarlo.
+  const escribe = QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run') && args[1] !== 'status'
+    && (args[0] !== 'onboard' || args.includes('--accept-plan'));
+  if (escribe) {
     const malos = nombresQueSalenDeLaCarpeta();
     if (malos.length) {
       return { codigo: 1, salida: '', error: `no se corre ${args[0]}: hay nombres que salen de la carpeta (${malos.slice(0, 3).join(' · ')})` }; // diccionario: interno
     }
   }
+
+  // Una carpeta que va por delante (P7, decisión 145). La barra no corre encima
+  // la suya para escribir, que la bajaría sin avisar: RSC no compara versiones.
+  // Y tampoco baja la de la carpeta de npm. npx lee el `.npmrc` de la carpeta,
+  // así que una preparada podía mandarlo a su registro, o meter opciones de Node
+  // que cargan un fichero suyo, y ejecutar lo que quisiera solo con abrir la barra
+  // (revisión de seguridad del paso a la 3, H1, reproducido). Mirar sin escribir
+  // se hace con la de dentro; escribir espera a que la barra se ponga al día, y
+  // mientras tanto lo hace el asistente, si se lo piden.
+  if (escribe && vaPorDelante()) {
+    return { codigo: 1, salida: '', error: `no se corre ${args[0]}: la carpeta va por delante de la barra`, porDelante: true }; // diccionario: interno
+  }
+
+  // Al pasar de la 2 a la 3, o al montar, lo que la barra decide va justo antes de
+  // escribir, en un solo sitio para todos los caminos; y si la orden no sale, se
+  // quita (decisión 145, `decidir.js`).
+  const puestas = escribe ? await require('./decidir').antesDeEscribir() : null;
+  const hecho = await lanzar(args, opciones);
+  if (puestas && hecho.codigo !== 0) require('./decidir').quitar(puestas);
+  return hecho;
+}
+
+function lanzar(args, opciones) {
   const entrada = entorno.entradaDelArnes(proyecto.raiz(), carpetaDeLaExtension);
   if (entrada) return procesos.node([entrada, ...args], opciones);
 
@@ -173,13 +213,10 @@ async function retomar() {
 // eso no se cree a su código de salida: se mira si la habilidad ha aparecido
 // de verdad en el disco.
 //
-// En una carpeta montada con un arnés más nuevo que el de la clase no se añade
-// nada (revisión de F4, I2): el `add` de la clase deja su versión en la carpeta,
-// y la bajaría sin decirlo; con una habilidad que solo trae la nueva, falla y
-// borra su base. Primero se pone como la de la clase, con su botón.
+// En una carpeta que va por delante, el `add` de la barra dejaría su versión y la
+// bajaría sin decirlo (revisión de F4, I2). Por eso `correr` usa ahí la suya.
 async function anadir(id) {
   if (!/^[a-z0-9-]{2,40}$/.test(id)) return { ok: false };
-  if (comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') return { ok: false, masNueva: true };
 
   // Para todos los asistentes declarados que sabemos dónde miran, a la vez (`--target
   // claude,codex`, medido con el paquete): con uno solo, el otro se quedaba con una
@@ -300,7 +337,7 @@ function queHayQueArreglar({ codigo, salida }) {
 //
 // `gitmoji` tiene además su propio campo, porque se puede apagar y el informe
 // dice si lo está. Los otros dos se apagan igual, con su fichero en `.rsc/`.
-const LOS_GUARDIANES = ['danger-guard', 'gitmoji-guard', 'ship-guard'];
+const LOS_GUARDIANES = ['danger-guard', 'gitmoji-guard', 'ship-guard', 'branch-guard'];
 
 function queGuardianes(informe) {
   if (!informe) return null;
@@ -551,5 +588,5 @@ module.exports = {
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,
-  paquete, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
+  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
 };

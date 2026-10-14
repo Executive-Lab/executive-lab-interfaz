@@ -228,6 +228,10 @@
     "fable-operator": {
       "nombre": "Operar con Fable",
       "queHace": "Cómo sacar partido al modelo más capaz de Claude."
+    },
+    "connect-tool": {
+      "nombre": "Conectar una herramienta",
+      "queHace": "Cuando nombras un programa tuyo (un ERP, un CRM, una hoja de cálculo), busca cómo se conecta de verdad, empieza solo mirando y deja la conexión hecha y probada."
     }
   },
   "ayudantes": {
@@ -250,6 +254,10 @@
     "spec-miner": {
       "nombre": "Extractor de especificación",
       "queHace": "Lee un código que ya existía y saca de él un borrador de qué hace y por qué, sin tocarlo."
+    },
+    "finding-verifier": {
+      "nombre": "Verificador de hallazgos",
+      "queHace": "Comprueba uno a uno los fallos que encuentra una revisión antes de darlos por buenos."
     }
   },
   "_patrones": [
@@ -368,10 +376,14 @@
     "lo normal y es bueno; lo que no puede ser es que nadie los nombre hasta que",
     "uno bloquea algo, que es justo el peor momento para enterarse.",
     "",
-    "`danger-guard` importa más que ninguno aquí, y RSC 2.0.15 solo lo engancha cuando",
-    "el plan practica la cadena SDD; ahí actúa con quien no es técnico. Donde RSC",
-    "no lo pone, lo ponen los raíles (`freno.mjs`, su misma copia), con la misma",
-    "regla (C1 de todo-cuadra). Lo dicen Las reglas, con su origen."
+    "`danger-guard` importa más que ninguno aquí. RSC 2.0.15 solo lo enganchaba con la",
+    "cadena SDD; desde la 2.0.16 lo pone a quien no es técnico. Donde RSC no lo pone,",
+    "lo ponen los raíles (`freno.mjs`, su misma copia), con la misma regla (C1 de",
+    "todo-cuadra). Lo dicen Las reglas, con su origen.",
+    "",
+    "La 3 trae dos más: el de lo principal (`branch-guard`), que en las carpetas de la",
+    "barra no frena porque lo principal va abierto, y el de frases prohibidas",
+    "(`copy-guard`), que solo actúa si el proyecto las declara."
   ],
   "guardianes": {
     "danger-guard": {
@@ -385,6 +397,14 @@
     "ship-guard": {
       "nombre": "Aviso de trabajo a medias",
       "queHace": "Avisa si vas a dejar atrás algo sin guardar o sin subir a GitHub."
+    },
+    "branch-guard": {
+      "nombre": "Freno a guardar en lo principal",
+      "queHace": "En un proyecto con equipo o publicado, el asistente pregunta antes de guardar en lo principal. En las carpetas de la barra lo principal va abierto, como en clase."
+    },
+    "copy-guard": {
+      "nombre": "Frases que no se dicen",
+      "queHace": "Si el proyecto tiene frases prohibidas, no deja que el asistente te conteste con ellas: lo hace reescribir."
     }
   },
   "_automatismos": [
@@ -442,6 +462,30 @@
     "update-check": {
       "nombre": "El aviso de versión nueva",
       "queHace": "Al abrir una conversación mira si hay una versión más nueva del arnés y le pide al asistente que te la ofrezca."
+    },
+    "auto-update": {
+      "nombre": "La actualización sola del arnés",
+      "queHace": "Pone sola la versión nueva del arnés al empezar una conversación. En las carpetas de la barra las versiones las lleva la barra."
+    },
+    "knowledge-sync": {
+      "nombre": "Compartir el conocimiento con el equipo",
+      "queHace": "Sube solas las conexiones y lo que sabe de tu empresa a una copia compartida, y trae lo de los demás."
+    },
+    "ftd-nudge": {
+      "nombre": "El aviso del documento de trabajo",
+      "queHace": "Si el asistente cambia algo sin haber escrito antes de qué va el trabajo, se lo recuerda una vez."
+    },
+    "ftd-close": {
+      "nombre": "Cerrar los documentos de trabajo",
+      "queHace": "Cuando un trabajo terminado entra en lo principal, da por hechos sus documentos."
+    },
+    "trunk-open": {
+      "nombre": "Lo principal, cerrado al asistente",
+      "queHace": "Decidido para este proyecto: el asistente trabaja aparte y pregunta antes de guardar en lo principal."
+    },
+    "worktree-isolation": {
+      "nombre": "Trabajo aparte con otra conversación",
+      "queHace": "Si otra conversación trabaja en la misma carpeta, lo nuevo va a una copia aparte para no pisarla."
     }
   }
 }

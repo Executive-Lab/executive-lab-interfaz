@@ -90,3 +90,6 @@ extension/.vscode-test/
 .claude/commands/learn.md
 .claude/commands/resume-session.md
 .claude/commands/save-session.md
+.worktrees/
+.claude/skills/connect-tool
+.claude/agents/finding-verifier.md

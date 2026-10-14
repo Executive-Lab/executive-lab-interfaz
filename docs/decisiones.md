@@ -5008,7 +5008,8 @@ o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
     sincronizar cada nombre de su fichero de estado, que viaja en git, sin mirar adónde apunta. Se
     reprodujo con la 2.0.15: `../../victim` desapareció. Ya pasaba con el botón. Ahora la barra no deja
     escribir al arnés si algún nombre de `.rsc.json` o de un `.rsc-state.json` sale de la carpeta. Es un
-    fallo de RSC y conviene contárselo a Eric en privado, no en una incidencia pública.
+    fallo de RSC, pero solo de la 2.0.x: desde la 2.1.0 se para solo, y la barra pasa a la 3 (decisión
+    145), así que no se le cuenta a Eric.
   - **Con el instalador, la confianza del editor está apagada y vale para todas las carpetas.** Lo que
     se hace solo pasa a hacerse solo en una carpeta que este ordenador ya conoce, porque alguien pulsó
     en ella un botón del arnés.
@@ -5085,3 +5086,63 @@ Así que lo que vale igual para todos lo lleva la barra:
 
 Queda fuera, como propuesta: que se haga del todo solo, sin el clic. Pediría ejecutar el asistente por
 debajo, sin nadie delante, o la app de escritorio de cada uno.
+
+## 145. La barra pasa a la 3, y P7 pasa a ser la serie de la clase
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 6 de la decisión 142. En la clase del 13-10 los alumnos montaron RSC desde el chat con la
+3.0.22, que se pone al día sola dentro de su serie. La barra seguía fijada en la 2.0.15 y, ante una
+carpeta más nueva, ofrecía «Ponerla como la de la clase», que la bajaba: lo contrario de lo que había
+hecho la clase.
+
+- **La barra trae la 3.0.22.** La versión está en los mismos sitios de siempre, y la copia fijada del
+  freno es la de la 3.0.22, con el `shell-unwrap.mjs` que carga para mirar dentro de `bash -c`.
+- **P7, enmendada: la serie de la clase, y la lleva la barra.**
+  - Lo que va por detrás, sea una 3 más vieja o una 2, se pone al día, y solo (P9).
+  - Lo que va por delante está al día. Se mira con el arnés de la barra y no se escribe con él, que la
+    bajaría sin avisar, porque RSC no compara versiones. Al pulsar algo que escribiría, la barra dice
+    que espere a ponerse al día y que mientras tanto se lo pida al asistente.
+  - Primero se probó correr ahí la versión de la carpeta con npx. La revisión de seguridad lo tumbó,
+    reproducido: npx lee el `.npmrc` de la carpeta, y una preparada bajaba y ejecutaba lo que quería
+    solo con abrir la barra. Así que nada de npx.
+  - Ya no se ofrece bajarla, y el código que lo hacía se ha quitado.
+- **El dial ya no existe.** RSC lo retiró en la 2.1.0 porque pocos sabían contestarlo, y su `orient`
+  dice que se ignore. La barra deja de preguntarlo, así que el montaje pasa de 8–12 preguntas a 7–11.
+  También deja de mandarlo y quita «Cuánto te explica» de «Cómo te habla», donde queda «Con qué
+  palabras», que es lo que la 3 lee. Lo que el asistente deba hacer distinto con una persona, lo
+  aprende de ella. Los raíles calibran por el nivel técnico.
+- **En las carpetas de la barra, como se dijo en clase.** Con algo que construir, el montaje manda
+  `--workflow main`. Y cuando una carpeta pasa de la 2 a la 3, o se monta, la barra decide en
+  `decidir.js`. Se llama desde `rsc.correr` justo antes de cualquier orden que escriba, porque una 2 pasa
+  a la 3 por montar, traer, ponerla al día, añadir, arreglar o cambiar de asistente. Decidirlo solo en
+  dos de esos caminos dejaba los otros sin nada (revisión de corrección, reproducido).
+  - **Lo que sale del ordenador, o lo cambia, sin preguntar**, queda apagado siempre, también en una
+    carpeta de alguien, porque lo trae la barra: la wiki no se sube sola (`.no-knowledge-sync`) y el
+    arnés no se actualiza solo (`.no-auto-update`).
+  - **La rama principal abierta** (`.no-trunk-guard`) solo en una carpeta cuyo historial creó la barra
+    (P4), y nunca encima de un «ramas y PR» que el equipo ya eligió (`trunk-open`).
+  - **En un montaje nuevo**, el asistente no puede subir sin preguntar (`git-permissions off`). Si el
+    equipo ya lo tenía declarado, se respeta. Si falla, se dice.
+  - **Antes que lo de la barra, lo del equipo:** se ponen las marcas que ya declaraba `.rsc.json`. Con
+    `.rsc/` puesta, RSC rehace sus decisiones con lo que encuentra y perdería las que solo estaban
+    escritas ahí. Pasó al subir este repositorio a la 3 (se perdieron `audit`, `gitmoji` y
+    `worktree-cleanup`), y el `repair` de la 3 lo hacía igual en una carpeta de la 2.
+  - **Si la orden no sale, lo puesto se quita.** Pedir el plan no cuenta: escribir es aceptarlo.
+  - **Nunca a través de un enlace**, y sin pisar nada que ya tenga ese nombre.
+  - **Una carpeta que ya va en la 3 no se toca:** es de quien la montó, y si alguien enciende algo, se
+    queda encendido.
+- **Lo nuevo y lo retirado:**
+  - `connect-tool` es «Conectar una herramienta», de serie, y se ofrece en el catálogo.
+  - `bro`, `eli5` y `show-me` salen de lo que se ofrece, y siguen con nombre para las carpetas viejas.
+  - Los guardianes `branch-guard` («Freno a guardar en lo principal») y `copy-guard` («Frases que no
+    se dicen») tienen nombre.
+  - La regla 7 nombra los verbos nuevos: `agents`, `agent-model`, `copy`, `git-permissions`,
+    `isolation`, `knowledge-sync`, `main`, `purge` y `review`.
+- **Este repositorio también va en la 3.0.22.** Con `auto-update` y `knowledge-sync` apagados, porque
+  aquí no está la barra para impedirlos. Quien trabaje en la carpeta principal tiene que poner al día
+  su arnés: `npm install --prefix extension/media/harness` y luego `sync` con el de dentro.
+
+Queda fuera: quitar el rodeo del freno, que con la 3 RSC ya pone a quien no es técnico. Y trabajar
+con la versión de una carpeta que va por delante: haría falta bajarla del registro oficial sin npx y
+comprobar su huella.

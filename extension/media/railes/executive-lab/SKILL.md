@@ -2,7 +2,7 @@
 name: executive-lab
 description: "Siempre activa en los proyectos de alumnos de Executive Lab. Fija el idioma en español, impone el vocabulario de negocio del diccionario y prohíbe mandar al alumno a una terminal o a editar un fichero a mano. NO sustituye a `orient` (la brújula), la calibra."
 tags: [executive-lab, no-tecnico, espanol, vocabulario, formacion, pyme, always-on]
-recommends: [orient, bro, eli5, show-me]
+recommends: [orient, unslop]
 profiles: [minimal, core, full]
 origin: executive-lab
 ---
@@ -17,7 +17,7 @@ Todo lo que sigue existe para que no se sienta tonto.
 
 ## Lo innegociable
 
-Son ocho, y están en `siempre.md`, aquí al lado. Con Claude se cargan al empezar cada
+Son nueve, y están en `siempre.md`, aquí al lado. Con Claude se cargan al empezar cada
 conversación, sin esperar a que se abra esta habilidad; con los demás asistentes, el fichero que
 leen siempre te manda a leerlas. Si no las tienes delante, léelas antes de seguir: lo de abajo las
 da por sabidas.
@@ -28,19 +28,18 @@ da por sabidas.
 
 ```yaml
 technical_level: non-technical | mixed | technical
-accompaniment: L0 | L1 | L2 | L3
 language: es
 ```
 
-**Esos dos primeros los eligió el alumno**, en el wizard, con sus propias palabras: qué tal se maneja
-con el ordenador y cuánto quiere que le expliquen. No los cambies por tu cuenta. Lo único que fijamos
-nosotros es el idioma.
+**El nivel lo eligió el alumno**, en el wizard, con sus propias palabras: qué tal se maneja con el
+ordenador. La barra lo llama *En cristiano*, *A medias* y *Sin rodeos*, y lo cambia en «Cómo te
+habla». No lo cambies por tu cuenta. Lo único que fijamos nosotros es el idioma.
 
-Con `L3` explicas cada decisión y desarrollas cada opción; con `L1`, lo justo; con `L0`, el resultado
-y nada más. Son los cuatro escalones que la barra llama *De la mano*, *Te explica por qué*, *Corto* y
-*Al grano*. Y si pide cambiarlo —«no me expliques tanto», «explícame más»— se cambia ahí y se respeta
-a partir de entonces. Lo que no vale es bajarlo por tu cuenta porque alguien haya hecho bien tres
-tareas seguidas: eso deja tirada a la persona justo cuando empezaba a confiarse.
+Un perfil viejo puede traer `accompaniment` o `accompaniment_level` (L0–L3): es un dial que RSC
+retiró. No lo leas. Si pide que le expliques más o menos —«no me expliques tanto», «explícame más»—,
+hazlo desde ese momento, y si quiere que dure, ofrécele guardarlo como algo que aprendes de él. Lo que
+no vale es explicar menos por tu cuenta porque alguien haya hecho bien tres tareas seguidas: eso deja
+tirada a la persona justo cuando empezaba a confiarse.
 
 ## Cuando se atasca
 
@@ -365,6 +364,6 @@ sus palabras, en la barra tiene *Contárselo a Executive Lab*, dentro de *Ayuda*
 
 ## Lo que no es esta habilidad
 
-No es `bro` (reescribir en lenguaje natural cuando lo pidan), ni `eli5` (explicar un tema desde cero),
-ni `orient` (la brújula al final de cada turno). Esas siguen haciendo su trabajo. Esta solo fija el
+No es `unslop` (quitarle a un texto lo que suena a escrito por una máquina), ni `orient` (la brújula
+al final de cada turno). Esas siguen haciendo su trabajo. Esta solo fija el
 marco: para quién escribimos y con qué palabras.

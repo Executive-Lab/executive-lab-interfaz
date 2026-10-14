@@ -2,7 +2,7 @@
 // Pone los raíles de Executive Lab en el proyecto de un alumno.
 //
 //   node aplicar.js "~/Documentos/Mi Empresa IA"
-//   node aplicar.js <carpeta> --forzar     (vuelve a poner los diales aunque ya estuvieran)
+//   node aplicar.js <carpeta> --forzar     (vuelve a poner el perfil aunque ya estuviera)
 //   node aplicar.js <carpeta> --ajena      (su historial es de alguien: lo que toca ficheros suyos
 //                                           se queda pendiente, y la barra lo ofrece con su botón)
 //   node aplicar.js <carpeta> --ajena --poner-freno   (ese botón: el freno, con su sí)
@@ -415,7 +415,7 @@ hechos.push(callarLosAvisos());
 //
 // RSC solo engancha el suyo cuando el plan practica la cadena SDD, y en el resto
 // de carpetas de alumno nada paraba un `rm -rf`. La habilidad trae el
-// envoltorio y la copia fijada del de RSC (`freno.mjs` y `freno-rsc-2.0.15.mjs`,
+// envoltorio y la copia fijada del de RSC (`freno.mjs` y `freno-rsc-3.0.22.mjs`,
 // copiados en el paso 1); aquí se engancha antes de cada orden.
 //
 // La orden no lleva `.rsc/`: RSC quita todo enganche con esa aguja cuando
@@ -536,9 +536,8 @@ function ajustarPerfil() {
 
   fs.writeFileSync(perfil, texto.replace(bloque[0], `---\n${frontmatter}\n---\n`));
 
-  const dial = (frontmatter.match(/^accompaniment:\s*(\S+)/m) || [])[1] || '?';
   const nivel = (frontmatter.match(/^technical_level:\s*(\S+)/m) || [])[1] || '?';
-  return `02-DOCS/wiki/harness/user-profile.md (idioma es · se respetan ${nivel} y ${dial})`;
+  return `02-DOCS/wiki/harness/user-profile.md (idioma es · se respeta ${nivel})`;
 }
 
 hechos.push(ajustarPerfil());
