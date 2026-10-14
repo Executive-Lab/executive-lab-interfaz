@@ -4992,9 +4992,35 @@ o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
     clave puede escribir, lo pesado fuera de git y cuándo caduca una clave.
 - **Choca con P7.** RSC 3 se pone al día sola dentro de su serie, y P7 fija una versión exacta. Se
   enmienda en el trabajo de pasar a la 3.
-- **Todavía no se comprueba.** La prueba de P9 es la primera tarea pendiente: cada arreglo que cambia
-  algo, o se hace al abrir la carpeta, o dice qué caso lo retiene. Hasta entonces, la constitución lo
-  dice tal cual.
+- **Se comprueba**, y se cumple, desde el segundo paso (rama `se-hace-solo-2`):
+  - cada arreglo que cambia algo dice `alAbrir` o `retiene`;
+  - al abrir una carpeta de confianza, la barra hace lo marcado y lo cuenta en una frase;
+  - el montaje tiene un modo sin nadie delante, que solo sigue por traer, ponerlo al día, adoptar o
+    completar sin preguntas, y que no abre ninguna ventana;
+  - dos de los siete que el repaso daba por solos se quedan con su botón, cada uno por su motivo:
+    - **el freno**, porque esa pieza solo sale en carpetas cuyo historial no creó la barra y toca sus
+      ajustes (P4, C-4);
+    - **poner copias**, porque guarda la carpeta entera, y mientras lo pesado no se quede fuera de
+      git podría meter gigas de vídeo en el historial.
+- **La revisión adversaria del segundo paso** (corrección y seguridad) encontró cuatro fallos que
+  bloqueaban, y los cuatro se arreglaron con su prueba:
+  - **Un repositorio preparado podía borrar carpetas del ordenador al traerlo.** El arnés borra al
+    sincronizar cada nombre de su fichero de estado, que viaja en git, sin mirar adónde apunta. Se
+    reprodujo con la 2.0.15: `../../victim` desapareció. Ya pasaba con el botón. Ahora la barra no deja
+    escribir al arnés si algún nombre de `.rsc.json` o de un `.rsc-state.json` sale de la carpeta. Es un
+    fallo de RSC y conviene contárselo a Eric en privado, no en una incidencia pública.
+  - **Con el instalador, la confianza del editor está apagada y vale para todas las carpetas.** Lo que
+    se hace solo pasa a hacerse solo en una carpeta que este ordenador ya conoce, porque alguien pulsó
+    en ella un botón del arnés.
+  - **Sin nadie delante, el montaje podía crear el historial** y deshacer un «seguir sin copias».
+  - **Un plan que no se podía comparar se daba por bueno.**
+
+  Y se arreglaron varios menores:
+  - la frase se mira otra vez antes de decirla;
+  - espera a la pantalla principal y a que se vea la barra;
+  - un botón del arnés pulsado a mitad del arreglo dice «Estoy arreglando esta carpeta»;
+  - una carpeta de un arnés más nuevo no se toca sola;
+  - la versión que declara la carpeta solo vale con tres números.
 
 ## 143. El control remoto de Claude, puesto para todas las sesiones
 

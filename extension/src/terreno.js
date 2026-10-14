@@ -775,6 +775,11 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
   //   'solo'    lo hace la barra de un clic
   //   'agente'  se lo pedimos al asistente, con el encargo escrito
   //   'persona' solo puede hacerlo quien está delante del ordenador
+  //
+  // Y un 'solo' que cambia algo en la carpeta dice además una de dos (P9,
+  // decisión 142; ver `solo.js`): `alAbrir: true`, y la barra lo hace al abrir
+  // la carpeta sin esperar a nadie; o `retiene`, con el caso de P9 que pide el sí
+  // de esa persona. Los que solo llevan a otra pantalla no dicen nada.
   const conArreglo = (pieza, arreglo) => (pieza.estado === 'si' || pieza.estado === 'noAplica' || !arreglo
     ? pieza
     : { ...pieza, arreglo });
@@ -799,7 +804,9 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       detalle: hay.tipo === 'conArnes'
         ? `${proyecto.faltanLosInnegociables() ? 'Montado' : 'Listo'}${montadoEl ? `, desde el ${montadoEl}` : ''}`
         : hay.tipo === 'aMedias' ? 'Se quedó a medias' : 'Todavía no',
-    }, { como: 'solo', etiqueta: 'Terminar de prepararlo', accion: { tipo: 'arrancar' } }),
+    // A medias, terminarlo es seguir con lo que ya contestó: se hace solo. Sin
+    // nada montado, prepararla pide sus respuestas.
+    }, { como: 'solo', etiqueta: 'Terminar de prepararlo', accion: { tipo: 'arrancar' }, ...(hay.tipo === 'aMedias' ? { alAbrir: true } : { retiene: 'loDecide' }) }),
     conArreglo({
       nombre: 'Tu asistente',
       estado: loTiene ? 'si' : 'no',
@@ -814,7 +821,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       nombre: 'Lo que el arnés hace solo',
       estado: tarde ? 'aMedias' : (arrancan ? 'si' : 'no'),
       detalle: tarde ? 'Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : (arrancan ? 'Listo' : 'No arranca en este ordenador'),
-    }, { como: 'solo', etiqueta: 'Arreglarlo', accion: { tipo: 'arreglarElRelevo' } })] : []),
+    }, { como: 'solo', etiqueta: 'Arreglarlo', accion: { tipo: 'arreglarElRelevo' }, alAbrir: true })] : []),
     // ── Lo que cuelga del arnés, mientras no hay arnés ────────────────────
     //
     // Sin arnés montado, «no tienes conexiones» y «no ha aprendido nada» no son
@@ -863,7 +870,11 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         // «Porque lo elegiste», solo a quien lo eligió: salía siempre que faltaba
         // git (revisión de F2, m12).
         detalle: sigueSinCopias ? 'Sin copias, porque lo elegiste' : 'Todavía sin copias',
-        arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' } },
+        // Si eligió seguir sin copias, es suyo. Y aunque no lo eligiera, poner
+        // copias guarda la carpeta entera, y mientras lo pesado no se quede
+        // fuera solo (punto 8 de ftd/lo-que-se-puede-se-hace-solo.md) podría
+        // meter gigas de vídeo en el historial, que no se deshace.
+        arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' }, retiene: sigueSinCopias ? 'loDecide' : 'noSeDeshace' },
       }
       : conArreglo({
         nombre: 'Copias de seguridad aquí',
@@ -871,7 +882,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         detalle: hay.tipo === 'empezada' && hay.conHistorial
           ? 'Ya tenías un historial tuyo; no lo toco'
           : (conArnes ? 'Listas' : 'Cuando prepares la carpeta'),
-      }, { como: 'solo', etiqueta: 'Preparar esta carpeta', accion: { tipo: 'arrancar' } })),
+      }, { como: 'solo', etiqueta: 'Preparar esta carpeta', accion: { tipo: 'arrancar' }, retiene: 'loDecide' })),
     conArreglo({
       nombre: 'Copias fuera de este ordenador',
       estado: cuenta.conectado ? 'si' : 'no',
@@ -908,7 +919,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         nombre: 'Freno ante órdenes peligrosas',
         estado: 'no',
         detalle: 'Todavía no: toca los ajustes de Claude de esta carpeta',
-        arreglo: { como: 'solo', etiqueta: 'Ponerlo ahora', accion: { tipo: 'ponerElFreno' } },
+        // Toca los ajustes de una carpeta que ya era suya: P4 y C-4.
+        arreglo: { como: 'solo', etiqueta: 'Ponerlo ahora', accion: { tipo: 'ponerElFreno' }, retiene: 'loDecide' },
       });
     }
   }
@@ -921,7 +933,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       nombre: 'Lo que este proyecto traía puesto',
       estado: 'no',
       detalle: `${parte.habilidades.colgando.length} ${parte.habilidades.colgando.length === 1 ? 'cosa declarada que no está' : 'cosas declaradas que no están'} en este ordenador`,
-      arreglo: { como: 'solo', etiqueta: 'Traerlo ahora', accion: { tipo: 'arrancar' } },
+      arreglo: { como: 'solo', etiqueta: 'Traerlo ahora', accion: { tipo: 'arrancar' }, alAbrir: true },
     });
   }
 
@@ -957,7 +969,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         nombre: 'La versión del arnés',
         estado: 'aMedias',
         detalle: 'Esta carpeta se montó con una versión del arnés más nueva que la de tu clase.',
-        arreglo: { como: 'solo', etiqueta: 'Ponerla como la de la clase', accion: { tipo: 'ponerComoLaDeLaClase' } },
+        arreglo: { como: 'solo', etiqueta: 'Ponerla como la de la clase', accion: { tipo: 'ponerComoLaDeLaClase' }, retiene: 'noSeDeshace' },
       });
     } else {
       const alDia = !suya || relacion === 'igual';
@@ -965,7 +977,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         nombre: 'La versión del arnés',
         estado: alDia ? 'si' : 'aMedias',
         detalle: alDia ? (suya || 'la que trae la barra') : `${suya}, y la barra ya trae la ${nuestra}`,
-        ...(alDia ? {} : { arreglo: { como: 'solo', etiqueta: 'Ponerlo al día', accion: { tipo: 'arrancar' } } }),
+        ...(alDia ? {} : { arreglo: { como: 'solo', etiqueta: 'Ponerlo al día', accion: { tipo: 'arrancar' }, alAbrir: true } }),
       });
     }
   }
@@ -1041,7 +1053,10 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         estado: 'no',
         // Por sus nombres, no por lo que escribe el arnés (G3).
         detalle: `${falta.length} ${falta.length === 1 ? 'cosa declarada que no está' : 'cosas declaradas que no están'}: ${falta.slice(0, 3).map((f) => `«${require('./nombres').comoSeLlama({ habilidad: 'habilidades', agente: 'ayudantes', comando: 'comandos' }[f.que], f.id, {}).nombre}»`).join(', ')}`, // diccionario: interno
-        arreglo: { como: 'solo', etiqueta: 'Traerlas ahora', accion: { tipo: 'arreglar' } },
+        // `repair` sin `--yes` aplica lo que restaura y deja pendiente lo que hay
+        // que decidir, y antes guarda copia (`scripts/lib/repair.js`). Lo único
+        // que crearía de nuevo es `.rsc.json`, y esta pieza solo sale con él puesto.
+        arreglo: { como: 'solo', etiqueta: 'Traerlas ahora', accion: { tipo: 'arreglar' }, alAbrir: true },
       });
     }
 
@@ -1058,7 +1073,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
           ? `${roto.solas.length + roto.aDecidir.length} ${roto.solas.length + roto.aDecidir.length === 1 ? 'cosa' : 'cosas'}, y ${roto.aDecidir.length} ${roto.aDecidir.length === 1 ? 'necesita' : 'necesitan'} que alguien decida`
           : (roto.solas.length === 1 ? '1 cosa, y se arregla sola' : `${roto.solas.length} cosas, y se arreglan solas`),
         arreglo: soloFix
-          ? { como: 'solo', etiqueta: 'Arreglarlo ahora', accion: { tipo: 'arreglar' } }
+          ? { como: 'solo', etiqueta: 'Arreglarlo ahora', accion: { tipo: 'arreglar' }, alAbrir: true }
           : { como: 'persona', etiqueta: 'Ver qué pasa', accion: { tipo: 'algoVaMal' } },
       });
     }
@@ -1138,6 +1153,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
           como: 'solo',
           etiqueta: viejos ? 'Ponerlo al día' : 'Ajustarlo ahora',
           accion: viejos ? { tipo: 'ponerLosRailesAlDia' } : (sinBloque ? { tipo: 'ponerElBloque' } : { tipo: 'arrancar' }),
+          // Al día, solos (decisión 108); el bloque toca un fichero suyo (C-4).
+          ...(sinBloque ? { retiene: 'loDecide' } : { alAbrir: true }),
         },
       }),
     });

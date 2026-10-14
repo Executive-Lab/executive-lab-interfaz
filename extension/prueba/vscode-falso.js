@@ -28,6 +28,7 @@ const guion = {
   extensionesInstaladas: ['anthropic.claude-code'],
   comandosDeCodex: ['chatgpt.openSidebar', 'chatgpt.addToThread'],
   raiz: null,
+  confianza: false,         // vscode.workspace.isTrusted
   // Más carpetas abiertas en la misma ventana, detrás de `raiz`.
   otrasRaices: [],
   // La sesión de GitHub del editor. null = no ha entrado; un objeto = dentro.
@@ -107,6 +108,9 @@ module.exports = {
   RelativePattern: class { constructor(base, patron) { this.base = base; this.pattern = patron; registrado.vigilado = patron; } },
 
   workspace: {
+    // Sin confianza, salvo que la prueba la dé: así la activación no se pone a
+    // arreglar sola la empresa de mentira en mitad de otras pruebas (P9).
+    get isTrusted() { return guion.confianza; },
     get workspaceFolders() {
       if (!guion.raiz) return undefined;
       const nombre = (p) => p.split(/[\\/]/).filter(Boolean).pop();

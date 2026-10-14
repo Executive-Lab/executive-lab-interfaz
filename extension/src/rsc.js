@@ -38,8 +38,63 @@ function comoEsLaVersion(version) {
   return 'igual';
 }
 
+// Solo tres números: la carpeta escribe esto, y con un alias, una dirección o un
+// `&` decidía qué se baja de npm, y en Windows pasaba por `cmd.exe` (revisión
+// de seguridad de P9, L1).
 function paquete() {
-  return `@ericrisco/rsc@${proyecto.versionDelCatalogo() || VERSION_DE_RESPALDO}`;
+  const suya = proyecto.versionDelCatalogo();
+  return `@ericrisco/rsc@${/^\d+\.\d+\.\d+$/.test(String(suya || '')) ? suya : VERSION_DE_RESPALDO}`;
+}
+
+// ── Nombres que salen de la carpeta ─────────────────────────────────────
+//
+// Al sincronizar, el arnés borra cada habilidad que su fichero de estado
+// (`<raíz del asistente>/.rsc-state.json`) tenga y el plan no, uniendo el nombre
+// a su carpeta sin comprobarlo (`scripts/install-apply.js` de la 2.0.15). Ese
+// fichero viaja en git: un repositorio con un nombre como `../../Documents`
+// borraba esa carpeta del ordenador al traerlo (revisión de seguridad de P9, H1,
+// reproducido). Antes de dejarle escribir, se miran todos los nombres: los de
+// `.rsc.json` y los de cada fichero de estado. Con uno que sale de la carpeta,
+// no se corre, y el motivo queda en el informe de «Algo va mal».
+const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge']);
+// Lo que el arnés usa como nombre de carpeta o de fichero al borrar
+// (`install-apply.js`, `repair.js`, `targets/agents.js`, `targets/commands.js`).
+const NOMBRES_DEL_ESTADO = ['skills', 'agents', 'explicitAgents', 'commands'];
+const nombreSeguro = (id) => typeof id === 'string' && id.length > 0 && id.length < 200
+  && !/[\\/:\0]/.test(id) && id !== '.' && id !== '..';
+
+function nombresQueSalenDeLaCarpeta(raiz = proyecto.raiz()) {
+  if (!raiz) return [];
+  const malos = [];
+  const leer = (fichero) => { try { return JSON.parse(fs.readFileSync(fichero, 'utf8')); } catch { return null; } };
+  const mirar = (donde, valor) => {
+    const nombres = Array.isArray(valor) ? valor : (valor && typeof valor === 'object' ? Object.keys(valor) : []);
+    for (const id of nombres) if (!nombreSeguro(id)) malos.push(`${donde}: ${JSON.stringify(id)}`);
+  };
+  const declaracion = leer(path.join(raiz, '.rsc.json'));
+  if (declaracion) for (const clave of ['skills', 'ownSkills', 'agents', 'commands']) mirar(`.rsc.json ${clave}`, declaracion[clave]);
+  // Los estados viven en la raíz de cada asistente, y todas empiezan por punto
+  // (`.claude/skills`, `.codex/rsc`, `.cursor/rules`…): se buscan ahí, hasta tres
+  // niveles, sin entrar en `.git`.
+  const buscar = (dir, nivel) => {
+    let entradas = [];
+    try { entradas = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entradas) {
+      const ruta = path.join(dir, e.name);
+      if (e.isFile() && e.name === '.rsc-state.json') {
+        const estado = leer(ruta) || {};
+        // Solo los nombres: el estado también guarda rutas (`ignoreEntriesAdded`, los
+        // `files` de cada habilidad), y esas el arnés ya las comprueba antes de borrar.
+        for (const clave of NOMBRES_DEL_ESTADO) mirar(`${path.relative(raiz, ruta)} ${clave}`, estado[clave]);
+      } else if (e.isDirectory() && nivel < 3 && e.name !== '.git' && e.name !== 'node_modules') {
+        buscar(ruta, nivel + 1);
+      }
+    }
+  };
+  let arriba = [];
+  try { arriba = fs.readdirSync(raiz, { withFileTypes: true }); } catch { /* sin carpeta, nada */ }
+  for (const e of arriba) if (e.isDirectory() && e.name.startsWith('.') && e.name !== '.git') buscar(path.join(raiz, e.name), 1);
+  return malos;
 }
 
 // Cómo se invoca, por orden de preferencia:
@@ -52,6 +107,12 @@ let carpetaDeLaExtension = null;
 const saberDondeEstamos = (ruta) => { carpetaDeLaExtension = ruta; };
 
 async function correr(args, opciones) {
+  if (QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run')) {
+    const malos = nombresQueSalenDeLaCarpeta();
+    if (malos.length) {
+      return { codigo: 1, salida: '', error: `no se corre ${args[0]}: hay nombres que salen de la carpeta (${malos.slice(0, 3).join(' · ')})` }; // diccionario: interno
+    }
+  }
   const entrada = entorno.entradaDelArnes(proyecto.raiz(), carpetaDeLaExtension);
   if (entrada) return procesos.node([entrada, ...args], opciones);
 
@@ -490,5 +551,5 @@ module.exports = {
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,
-  paquete, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
+  paquete, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
 };
