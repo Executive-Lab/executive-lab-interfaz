@@ -37,6 +37,9 @@ function habilidadesConBoton() {
       etiqueta,
       icono: typeof campos.icono === 'string' && campos.icono ? campos.icono : '▸',
       grupo: ORDEN_DE_GRUPOS.includes(campos.grupo) ? campos.grupo : 'aprendido',
+      // Cuándo recordarla, si lo tiene (decisión 144).
+      cuando: typeof campos.cuando === 'string' && campos.cuando ? campos.cuando : null,
+      fichero: path.join(carpeta, entrada.name, 'SKILL.md'),
     });
   }
   return halladas;
@@ -69,6 +72,8 @@ function acciones() {
       icono: typeof campos.icono === 'string' ? campos.icono : '▸',
       grupo: ORDEN_DE_GRUPOS.includes(campos.grupo) ? campos.grupo : 'aprendido',
       prompt: comando.prompt,
+      cuando: typeof campos.cuando === 'string' && campos.cuando ? campos.cuando : null,
+      fichero: path.join(carpeta, fichero),
     });
   }
 

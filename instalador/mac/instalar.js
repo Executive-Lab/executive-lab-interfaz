@@ -249,6 +249,16 @@ function losAjustesDelEditor() {
       claves, 'los ajustes del editor', anotar);
   }
 
+  // El control remoto de Claude, para todas las sesiones (decisión 143).
+  if (!SECO) {
+    try {
+      const { hecho } = comun('control-remoto').ponerElControlRemoto();
+      anotar(`Control remoto: ${hecho}.`);
+    } catch (error) {
+      anotar(`AVISO: el control remoto no se ha podido poner (${error.message}).`);
+    }
+  }
+
   ponerloEnElArranqueDelShell();
 }
 

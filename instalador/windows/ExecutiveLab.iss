@@ -55,6 +55,7 @@ Source: "carga\runtime\*";   DestDir: "{app}\runtime";  Flags: recursesubdirs ig
 Source: "carga\preparar.js"; DestDir: "{app}";          Flags: ignoreversion
 Source: "carga\git.js";      DestDir: "{app}";          Flags: ignoreversion
 Source: "carga\ajustes.js";  DestDir: "{app}";          Flags: ignoreversion
+Source: "carga\control-remoto.js"; DestDir: "{app}";   Flags: ignoreversion
 Source: "carga\executive-lab.vsix"; DestDir: "{app}";   Flags: ignoreversion
 Source: "carga\executivelab.ico";   DestDir: "{app}";   Flags: ignoreversion
 Source: "carga\disfraz.json";       DestDir: "{app}";   Flags: ignoreversion
@@ -81,6 +82,13 @@ Filename: "{app}\runtime\node.exe"; \
   Parameters: """{app}\preparar.js"" --asistente ""{code:AsistenteElegido}"""; \
   StatusMsg: "Poniendo las piezas que faltan. Esto tarda un par de minutos..."; \
   Flags: waituntilterminated runhidden
+
+[UninstallRun]
+; El control remoto de Claude, si lo puso la instalación y sigue puesto
+; (decisión 143). Antes de borrar los ficheros: hace falta el node y el módulo.
+Filename: "{app}\runtime\node.exe"; \
+  Parameters: """{app}\control-remoto.js"" --quitar"; \
+  RunOnceId: "QuitarControlRemoto"; Flags: runhidden waituntilterminated
 
 [Icons]
 ; Abre el editor, sin carpeta: la elige esa persona la primera vez, y el panel

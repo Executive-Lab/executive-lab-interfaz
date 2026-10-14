@@ -495,6 +495,16 @@ function pantallaSaberes(datos) {
       <p class="hiciste">Las que están puestas se piden con un clic, o escribiendo su nombre en la conversación. Las del catálogo se añaden desde aquí.</p>
     </div>
 
+    ${/* Lo que se recuerda y cuándo, y cómo dejar de recordarlo (decisión 144). */''}
+    ${(datos.recordatorios || []).length ? `
+      <h2>Recordatorios</h2>
+      ${datos.recordatorios.map((r) => `
+        <div class="fila">
+          <p class="nombre">${texto(`${r.etiqueta}: ${r.enPalabras}`)}</p>
+          ${boton({ etiqueta: 'Quitar', icono: '✕', pequeno: true, discreto: true, accion: { tipo: 'quitarRecordatorio', nombre: r.nombre } })}
+        </div>`).join('')}
+      <hr class="separador">` : ''}
+
     <h2>Instaladas</h2>
     ${instaladas.length
       ? instaladas.map(filaDeHabilidad).join('')
@@ -1656,8 +1666,9 @@ function pantallaPrincipalSencilla() {
   const enOrden = [
     estado.faltaGit ? bloqueFaltaGit() : '',
     t.sinAsistente, t.primerPaso, t.sinAjustar,
+    t.elRecordatorio,
     recargar ? t.versionNueva : '',
-    t.loNuevo, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
+    t.loNuevo, t.laCostumbre, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
     recargar ? '' : t.versionNueva,
   ].filter(Boolean);
   const tarjeta = encendida('tarjetaUnica') ? (enOrden[0] || '') : enOrden.join('');
@@ -1788,6 +1799,7 @@ function pantallaPrincipalCompleta() {
 
   const {
     versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos,
+    elRecordatorio, laCostumbre,
   } = lasTarjetas();
 
   return `
@@ -1804,7 +1816,9 @@ function pantallaPrincipalCompleta() {
     ${sinAsistente}
     ${sinAjustar}
     ${primerPaso}
+    ${elRecordatorio}
     ${loNuevo}
+    ${laCostumbre}
     ${elConsejo}
     ${loQueContaste}
     ${elAvisoQueEspera}
@@ -1961,7 +1975,27 @@ function lasTarjetas() {
     })
     : '';
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos };
+  // Lo que toca a esta hora (decisión 144). Hacerlo lo decide el alumno: puede
+  // salir de su ordenador o costar algo, y ni Claude ni Codex dejan mandarlo
+  // por él. «Ahora no» lo deja hasta la próxima vez que toque.
+  const r = estado.recordatorio;
+  const elRecordatorio = !r ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(`Toca: ${r.etiqueta} (${r.enPalabras}).`)}</p>
+      ${boton({ etiqueta: 'Hacerlo ahora', icono: '▸', principal: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNoRecordatorio', nombre: r.nombre } })}
+    </div>`;
+  // Y la costumbre que la barra acaba de convertir en recordatorio: se hizo
+  // sola (P9), así que se dice, una vez, y se puede deshacer.
+  const c = estado.costumbrePuesta;
+  const laCostumbre = !c ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(`Sueles pulsar «${c.etiqueta}» ${c.enPalabras.replace(' a las ', ' hacia las ')}, así que te lo recordaré a esa hora.`)}</p>
+      ${boton({ etiqueta: 'Entendido', icono: '✓', principal: true, accion: { tipo: 'entendidaLaCostumbre', nombre: c.nombre } })}
+      ${boton({ etiqueta: 'No hace falta', discreto: true, accion: { tipo: 'noHaceFaltaLaCostumbre', nombre: c.nombre } })}
+    </div>`;
+
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2758,7 +2792,7 @@ function atender(data) {
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
-          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra']) {
+          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }

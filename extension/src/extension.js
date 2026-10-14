@@ -26,6 +26,7 @@ const encargos = require('./encargos');
 const cerebro = require('./cerebro');
 const buscador = require('./buscar');
 const consejos = require('./consejos');
+const recordatorios = require('./recordatorios');
 const copias = require('./guardar');
 const soporte = require('./soporte');
 // Lo que falla, lo que no se entiende y lo que se echa en falta, para Jose (decisión 131).
@@ -84,6 +85,14 @@ const LO_QUE_SE_HIZO = {
 // entienda sin estar aquí, y nada que no deba salir del ordenador.
 const PEDIR_AYUDA_EN_EL_FORO = 'Quiero pedir ayuda en el foro de Executive Lab. Escríbeme el mensaje para publicarlo: qué intento hacer, qué ha pasado y qué he probado ya, en pocas líneas y en un bloque que pueda copiar de una vez. Que se entienda sin estar aquí, y sin claves, contraseñas ni datos de clientes. Si no sabes qué me pasa, pregúntamelo antes de escribirlo.';
 const CLAVE_PETICIONES = 'executiveLab.peticiones';
+// Los recordatorios (decisión 144): cuándo se pulsó cada botón, cuándo se hizo
+// o se dejó para luego cada recordatorio, de cuál se avisó ya, y las costumbres
+// que la barra convirtió en recordatorio (para decirlo una vez y no repetirlo).
+const CLAVE_USOS = 'executiveLab.usosDeBotones';
+const CLAVE_RECORDATORIOS = 'executiveLab.recordatoriosHechos';
+const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
+const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
+const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
 // La última versión de la barra que se abrió aquí, para saber si hay que decir
 // qué trae la de ahora; y cuándo se miró en GitHub lo que pasó con los avisos
@@ -374,6 +383,10 @@ ${cabecera}
       comoSeLlama: identidad.deQuien(),
       // Como mucho uno, y siempre con un botón que lo resuelve ahí mismo.
       consejo: await this.elConsejoQueToca(),
+      // Lo que toca a esta hora, con su botón; y la costumbre que la barra
+      // acaba de convertir en recordatorio, dicha una vez (decisión 144).
+      recordatorio: await this.elRecordatorioQueToca(),
+      costumbrePuesta: await this.ponerLasCostumbres(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -672,6 +685,11 @@ ${cabecera}
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
+      hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
+      ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
+      quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
+      entendidaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, false),
+      noHaceFaltaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, true),
       conversacionNueva: () => this.conversacionNueva(),
       pedirAyudaEnElForo: () => this.pedirAyudaEnElForo(),
       abrir: () => vscode.env.openExternal(vscode.Uri.parse(mensaje.url)),
@@ -812,6 +830,7 @@ ${cabecera}
     }
 
     await this.anotarLaPeticion(prompt);
+    await this.anotarElUso(prompt);
     const como = await puente.enviar(prompt, this.salida);
     // No se dice "se lo he pedido": los dos comandos de Claude dejan el texto
     // escrito en su caja y no lo envían (asistentes.js lo documenta). Decir que
@@ -850,6 +869,123 @@ ${cabecera}
     if (como === 'directo') return this.enviar({ tipo: 'aviso', texto: `Te lo he dejado escrito en la conversación: dale a enviar. ${donde}` });
     if (como === 'copiado') return this.enviar({ tipo: 'aviso', texto: donde });
     return this.enviar({ tipo: 'aviso', texto: 'No he podido hablar con el asistente. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+  }
+
+  // ── Los recordatorios (decisión 144) ──────────────────────────────────
+
+  // Cuándo se pulsó cada botón (una habilidad o un comando, `/x` o `$x`): de ahí
+  // sale la costumbre. Solo el nombre y la hora, en su ordenador.
+  async anotarElUso(prompt) {
+    const m = String(prompt || '').trim().match(/^[/$]([a-z0-9][a-z0-9-]*)$/i);
+    if (!m || !acciones.acciones().some((b) => b.nombre === m[1])) return;
+    const antes = this.almacen().get(CLAVE_USOS) || [];
+    await this.almacen().update(CLAVE_USOS, [...antes, { nombre: m[1], t: Date.now() }].slice(-200));
+  }
+
+  // Los que tocan, del más antiguo al más nuevo. La principal enseña uno; el
+  // aviso del editor sale para cada uno, una vez.
+  async losRecordatoriosQueTocan() {
+    try {
+      const hechos = { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}) };
+      const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
+      const { tocan, nuevos } = recordatorios.losQueTocan(hechos, vistos);
+      if (nuevos.length) {
+        for (const { nombre, cuando: cron } of nuevos) {
+          hechos[nombre] = Date.now();
+          vistos[nombre] = cron;
+        }
+        await this.almacen().update(CLAVE_RECORDATORIOS, hechos);
+        await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
+      }
+      return tocan.map((t) => ({ nombre: t.nombre, etiqueta: t.etiqueta, enPalabras: t.enPalabras, ultima: t.ultima }));
+    } catch (error) {
+      this.salida.appendLine(`[recordatorios] ${error.message}`); // diccionario: interno
+      return [];
+    }
+  }
+
+  async elRecordatorioQueToca() {
+    return (await this.losRecordatoriosQueTocan())[0] || null;
+  }
+
+  // P9: si un botón se pulsa con costumbre, se pone su recordatorio sin
+  // preguntar —se quita con un clic— y se dice una vez. Una costumbre que el
+  // alumno dijo que no hacía falta no vuelve a ponerse.
+  async ponerLasCostumbres() {
+    try {
+      const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+      for (const c of recordatorios.costumbres(this.almacen().get(CLAVE_USOS) || [])) {
+        if (puestas[c.nombre]) continue;
+        const hecho = recordatorios.ponerCuando(c.nombre, c.cron);
+        if (!hecho.ok) continue;
+        puestas[c.nombre] = { cron: c.cron, etiqueta: c.etiqueta, enPalabras: c.enPalabras, porDecir: true };
+        // Empieza a contar desde ahora: hoy ya lo ha hecho él.
+        await this.almacen().update(CLAVE_RECORDATORIOS, { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}), [c.nombre]: Date.now() });
+        this.salida.appendLine(`[recordatorios] puesto por costumbre: ${c.nombre} (${c.cron})`); // diccionario: interno
+      }
+      await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+      const [nombre, dicha] = Object.entries(puestas).find(([, p]) => p.porDecir) || [];
+      return nombre ? { nombre, etiqueta: dicha.etiqueta, enPalabras: dicha.enPalabras } : null;
+    } catch (error) {
+      this.salida.appendLine(`[recordatorios] ${error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  async marcarHecho(nombre) {
+    await this.almacen().update(CLAVE_RECORDATORIOS, { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}), [nombre]: Date.now() });
+  }
+
+  async hacerElRecordatorio(nombre) {
+    const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
+    await this.marcarHecho(nombre);
+    if (!uno) return this.refrescar(true);
+    await this.pedir(uno.prompt);
+    return this.refrescar(true);
+  }
+
+  async dejarElRecordatorio(nombre) {
+    await this.marcarHecho(nombre);
+    return this.refrescar(true);
+  }
+
+  async quitarRecordatorio(nombre) {
+    const hecho = recordatorios.ponerCuando(nombre, null);
+    // Lo que se quita no vuelve por costumbre, venga de donde venga; y si se
+    // vuelve a poner, empieza a contar desde entonces.
+    const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+    puestas[nombre] = { ...(puestas[nombre] || {}), quitado: true, porDecir: false };
+    await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+    const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
+    delete vistos[nombre];
+    await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
+    if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
+    else await this.refrescar(true);
+    return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
+  }
+
+  async dejarDeDecirLaCostumbre(nombre, quitarla) {
+    const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+    if (puestas[nombre]) puestas[nombre] = { ...puestas[nombre], porDecir: false };
+    await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+    if (quitarla) return this.quitarRecordatorio(nombre);
+    return this.refrescar(true);
+  }
+
+  // Cada minuto, desde `activate`: si ha llegado la hora de uno, se dice una vez
+  // aunque la barra esté cerrada, y la principal lo enseña con su botón.
+  async mirarLosRecordatorios() {
+    const avisados = { ...(this.almacen().get(CLAVE_AVISADOS) || {}) };
+    const sinAvisar = (await this.losRecordatoriosQueTocan()).filter((t) => avisados[t.nombre] !== t.ultima);
+    if (!sinAvisar.length) return;
+    for (const t of sinAvisar) avisados[t.nombre] = t.ultima;
+    await this.almacen().update(CLAVE_AVISADOS, avisados);
+    if (!this.donde || this.donde.tipo === 'principal') await this.refrescar(true);
+    // Sin esperar a uno para enseñar el siguiente: cada aviso, con su botón.
+    await Promise.all(sinAvisar.map(async (t) => {
+      const quiere = await vscode.window.showInformationMessage(`Toca: ${t.etiqueta}.`, 'Hacerlo ahora');
+      if (quiere === 'Hacerlo ahora') await this.hacerElRecordatorio(t.nombre);
+    }));
   }
 
   // Se guardan las últimas peticiones para poder ver cuál se repite y ofrecer
@@ -1062,6 +1198,8 @@ ${cabecera}
       otras: sabe.otras,
       // Las que el arnés monta para funcionar. Plegadas, pero se ven.
       deSerie: sabe.deSerie,
+      // Lo que se recuerda, y cuándo: se ve y se quita aquí (decisión 144).
+      recordatorios: recordatorios.losQueHay().map((r) => ({ nombre: r.nombre, etiqueta: r.etiqueta, enPalabras: r.enPalabras })),
       // Los comandos de antes, que son habilidades (decisión 141). Si ya hay una
       // habilidad con ese nombre, manda ella, como en Claude.
       // Y por el rótulo: el «resume-session» del arnés se llama «Seguir donde lo
@@ -2374,6 +2512,19 @@ function guardarSolo(panel, salida) {
 // El relevo vive en el almacén de la barra, fuera de la carpeta del alumno (P8).
 const dondeVaElRelevo = (contexto) => (contexto.globalStorageUri ? path.join(contexto.globalStorageUri.fsPath, 'relevo') : null);
 
+// En los ajustes de usuario de Claude, con `instalador/comun/control-remoto.js`:
+// sin tocar nada más, y respetando lo que esa persona ya hubiera decidido.
+function ponerElControlRemoto(salida) {
+  try {
+    const modulo = entorno.moduloComun('control-remoto');
+    if (!modulo) return;
+    const { hecho } = require(modulo).ponerElControlRemoto();
+    salida.appendLine(`[control remoto] ${hecho}`); // diccionario: interno
+  } catch (error) {
+    salida.appendLine(`[control remoto] ${error.message}`); // diccionario: interno
+  }
+}
+
 function activate(contexto) {
   // El canal se envuelve para que todo lo que apuntemos por dentro acabe
   // también en el informe de "Algo va mal": ver rastro.js.
@@ -2401,9 +2552,20 @@ function activate(contexto) {
     yaHabiaAsistente: Boolean(claude && claude.isActive),
   });
   salida.appendLine(`[relevo] ${elRelevo.modo}${elRelevo.carpeta ? ` en ${elRelevo.carpeta}` : ''}${elRelevo.error ? `: ${elRelevo.error}` : ''}`); // diccionario: interno
+  // El control remoto de Claude, para todas las sesiones (decisión 143), como lo
+  // ponen los instaladores: así también lo tiene quien solo instaló el .vsix.
+  if (claude) ponerElControlRemoto(salida);
   // Para poder comparar los raíles de la carpeta con los que trae la barra.
   terreno.saberDondeEstamos(contexto.extensionPath);
   const panel = new Panel(contexto, salida);
+  // Los recordatorios, cada minuto, y una vez al poco de abrir por si alguno tocó
+  // con el editor cerrado (decisión 144).
+  const mirar = () => panel.mirarLosRecordatorios().catch((error) => salida.appendLine(`[recordatorios] ${error.message}`)); // diccionario: interno
+  const relojDeRecordatorios = setInterval(mirar, 60 * 1000);
+  const primeraMirada = setTimeout(mirar, 8000);
+  // Que no sean ellos los que mantengan vivo el proceso: el editor ya lo hace.
+  for (const reloj of [relojDeRecordatorios, primeraMirada]) if (reloj && reloj.unref) reloj.unref();
+  contexto.subscriptions.push({ dispose: () => { clearInterval(relojDeRecordatorios); clearTimeout(primeraMirada); } });
   const comando = (id, fn) => vscode.commands.registerCommand(id, fn);
   const repintarModo = vigilarElModo(contexto);
 

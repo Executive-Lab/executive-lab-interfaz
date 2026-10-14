@@ -30,6 +30,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const git = require('./git');
 const { escribirAjustes } = require('./ajustes');
+const { ponerElControlRemoto } = require('./control-remoto');
 
 const APP = __dirname;
 const ES_WINDOWS = process.platform === 'win32';
@@ -171,6 +172,24 @@ function ajustesDelEditor() {
   escribirAjustes(path.join(usuario, 'settings.json'), delEditor, 'los ajustes del editor', anotar);
 }
 
+// El control remoto de Claude, para todas las sesiones (decisión 143): en sus
+// ajustes de usuario, que es el único sitio donde Claude le hace caso. Solo con
+// Claude, que es el que lo tiene; y no con --sin-editor, que es probar sin tocar
+// los ajustes de verdad de quien prueba.
+function controlRemoto(asistente) {
+  if (asistente !== 'claude') return;
+  if (process.argv.includes('--sin-editor')) {
+    anotar('Control remoto: omitido (--sin-editor).');
+    return;
+  }
+  try {
+    const { hecho } = ponerElControlRemoto();
+    anotar(`Control remoto: ${{ puesto: 'puesto para todas las sesiones', yaEstaba: 'ya lo había decidido esa persona; no lo toco', ilegible: 'AVISO: sus ajustes de Claude no se pueden leer; no los toco' }[hecho] || hecho}.`);
+  } catch (error) {
+    anotar(`AVISO: el control remoto no se ha podido poner (${error.message}).`);
+  }
+}
+
 // -------------------------------------------------------------------- main
 
 async function main() {
@@ -183,6 +202,7 @@ async function main() {
   else bien = vestirElEditor(asistente) && bien;
 
   ajustesDelEditor();
+  controlRemoto(asistente);
 
   anotar(bien
     ? 'Listo. El resto lo hace el panel cuando se abra una carpeta.'
