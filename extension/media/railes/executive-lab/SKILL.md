@@ -97,6 +97,14 @@ Dile en una línea que ya lo tiene en la barra, y cómo se pide: `/resumen-del-m
 `$resumen-del-mes` con Codex. No crees comandos nuevos (`.claude/commands/`): son el formato de antes.
 Los que ya haya siguen funcionando y no se tocan.
 
+**Si lo hace en un momento fijo** —«cada lunes», «el día 1 de cada mes», «todos los días al acabar»—,
+añade en su `metadata` un `cuando` con la hora, en el formato de cron (minuto, hora, día del mes, mes,
+día de la semana): `cuando: "0 9 * * 1"` es cada lunes a las 9, y `cuando: "0 9 1 * *"`, el día 1 a las
+9. A esa hora la barra se lo recuerda con un botón para hacerlo, también si tenía el editor cerrado.
+Díselo en una línea («Te lo recordaré cada lunes a las 9»). Para quitarlo, borra esa línea; él puede
+hacerlo desde *Habilidades (skills)*. La barra también lo pone sola cuando ve que pulsa un botón con
+costumbre: si lo ves en su `metadata`, es eso.
+
 ### 2. Cada clave, en el `.env` de su herramienta — y solo ahí
 
 **El sitio de una clave lo define RSC** y el panel lo da por hecho: `01-TOOLS/<HERRAMIENTA>/.env`,
@@ -262,6 +270,28 @@ Dos cosas que no se hacen aquí:
   la red de seguridad para lo que cae por su cuenta, no el sitio donde se ponen las cosas a mano.
 - **No lo proceses sin decírselo.** Copiar es gratis; leerlo y escribir en la wiki cambia lo que
   sabe, y eso se cuenta.
+
+## Cuando el trabajo es largo, hay que vigilar algo o tiene que pasar solo
+
+Cada asistente tiene sus herramientas para esto, y **no son las mismas**: lo de Claude no existe en
+Codex, y al revés. **Propónla tú** cuando la veas venir, que él no sabe que existen, y escríbele la
+línea exacta para que la mande, porque las pide él.
+
+- **«Cada lunes», «el día 1»: el recordatorio de la barra** (arriba, `cuando`). Es el único que sirve
+  igual con los dos, porque lo lleva la barra y no el asistente. Es lo de siempre.
+- **Un encargo largo con un final claro** —«hasta que todas las facturas estén en la hoja»—:
+  `/goal <cuándo está terminado>`. Sigues trabajando, turno tras turno, hasta que se cumple, sin que
+  tenga que decirte «sigue». **Está en los dos**, Claude y Codex, con el mismo nombre. Pon el final en
+  palabras que se puedan comprobar, y un tope si puede alargarse («o para tras 20 vueltas»). Se para
+  con `/goal clear`.
+- **Vigilar algo mientras trabaja** —«avísame si llega el correo del banco»—: `/loop 30m <qué mirar>`.
+  **Solo con Claude**, solo mientras la conversación sigue abierta, y se apaga sola a los siete días.
+  Codex no tiene nada parecido en el editor.
+- **Que pase aunque tenga el ordenador apagado**: con **Claude**, `/schedule`, que lo hace en su nube.
+  Pide que la carpeta esté en GitHub («Subir a GitHub»), no ve lo que no se haya subido, y lo que hace
+  lo deja allí, no en su ordenador: explícaselo antes, y ofrécelo solo si de verdad lo necesita. Con
+  **Codex** no se puede desde el editor: sus tareas programadas viven en la app de escritorio de
+  ChatGPT, con el ordenador encendido y la app abierta. No las prometas desde aquí.
 
 ## Cuando la barra falla o no se entiende
 

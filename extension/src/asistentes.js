@@ -64,8 +64,9 @@ const ASISTENTES = [
     enlace: null,
     parametro: null,
     abrir: ['chatgpt.openSidebar'],
-    // Ninguno conocido: se abre su barra y se dice dónde está el «+».
-    nueva: [],
+    // `chatgpt.newChat`, el que documenta Codex para su extensión (decisión 144);
+    // sin él, se abre su barra y se dice dónde está el «+».
+    nueva: ['chatgpt.newChat'],
     foco: ['chatgpt.openSidebar'],
   },
 ];

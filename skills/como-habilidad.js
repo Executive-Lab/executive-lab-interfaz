@@ -29,10 +29,24 @@ function campoDe(texto, clave) {
 // como una nuestra es nuestra (de otro día) o del alumno, y entonces no se toca.
 const descripcionDe = (texto) => campoDe(texto, 'description');
 
-function comoHabilidad(texto, nombre, quien) {
+// El recordatorio que tenga una de ellas (`cuando`, decisión 144): al ponerla al
+// día no se pierde, porque lo puso el alumno o la barra con su costumbre.
+function cuandoDe(texto) {
+  const cabecera = (String(texto).match(CABECERA) || [])[1] || '';
+  const linea = cabecera.match(/^\s+cuando:\s*(.+?)\s*$/m);
+  if (!linea) return null;
+  try {
+    return /^".*"$/.test(linea[1]) ? JSON.parse(linea[1]) : linea[1].replace(/^'|'$/g, '');
+  } catch {
+    return null;
+  }
+}
+
+function comoHabilidad(texto, nombre, quien, { cuando = null } = {}) {
   const cuerpo = String(texto).replace(CABECERA, '');
   const soloAMano = campoDe(texto, 'disable-model-invocation') === 'true';
   const meta = ['boton', 'grupo', 'icono'].filter((c) => campoDe(texto, c)).map((c) => `  ${c}: ${JSON.stringify(campoDe(texto, c))}`);
+  if (cuando) meta.push(`  cuando: ${JSON.stringify(cuando)}`);
   const lineas = [
     '---',
     `name: ${nombre}`,
@@ -48,4 +62,4 @@ function comoHabilidad(texto, nombre, quien) {
   };
 }
 
-module.exports = { comoHabilidad, descripcionDe };
+module.exports = { comoHabilidad, descripcionDe, cuandoDe };

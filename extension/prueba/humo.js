@@ -3627,6 +3627,18 @@ exec git "$@"
       assert.match(seccion, /allow_implicit_invocation: false/, 'ni con Codex');
       assert.match(seccion, /ownSkills/, 'no dice que con Claude se declara como suya');
       assert.match(seccion, /No crees comandos nuevos/, 'no dice que los comandos son lo de antes');
+      // Y el «cada lunes» (decisión 144), en su metadata y en cron.
+      assert.match(seccion, /`cuando: "0 9 \* \* 1"`/, 'no dice cómo se pone un recordatorio');
+      const desde = skill.indexOf('## Cuando el trabajo es largo');
+      assert.ok(desde > skill.indexOf('### 5. '), 'la sección de lo largo parte en dos la de la barra');
+      const largo = skill.slice(desde, skill.indexOf('\n## ', desde + 5));
+      // Cada asistente tiene las suyas, y no son las mismas (Eric, 14-10-2026).
+      for (const [que, porque] of [[/no son las mismas/, 'que cada asistente tiene las suyas'], [/igual\s+con los dos/, 'que el recordatorio vale para los dos'],
+        [/`\/goal <cuándo está terminado>`/, 'el /goal'], [/Está en los dos/, 'que /goal está en Claude y en Codex'], [/`\/goal clear`/, 'cómo se para el /goal'],
+        [/`\/loop 30m <qué mirar>`/, 'el /loop'], [/Solo con Claude/, 'que el /loop es solo de Claude'],
+        [/`\/schedule`[\s\S]*GitHub/, 'que /schedule pide GitHub'], [/Codex[\*]* no se puede desde el editor/, 'que con Codex no se programa desde el editor']]) {
+        assert.match(largo, que, `no explica ${porque}`);
+      }
       // Y la barra la lee: lo que se enseña a escribir es lo que `acciones.js` encuentra.
       const ejemplo = seccion.match(/```markdown\n([\s\S]*?)```/)[1];
       const campos = require(path.join(RAIZ, 'src', 'frontmatter.js')).analizar(ejemplo);
@@ -11953,6 +11965,19 @@ exec git "$@"
         vscode.guion.comandosDeClaude = antes.comandos;
         asistentes.elDeAhora = antes.elDeAhora;
       }
+      // Y Codex, con el suyo documentado (`chatgpt.newChat`), abre una de verdad (decisión 144).
+      const codexAntes = vscode.guion.comandosDeCodex;
+      try {
+        vscode.guion.comandosDeCodex = [...codexAntes, 'chatgpt.newChat'];
+        asistentes.elDeAhora = () => asistentes.porId('codex');
+        vscode.registrado.ejecutados.length = 0;
+        await proveedor.manejar({ tipo: 'conversacionNueva' });
+        assert.deepEqual(vscode.registrado.ejecutados.map((e) => e.id), ['chatgpt.newChat'], 'con Codex no se usa su comando de conversación nueva');
+        assert.equal(ultimoAviso().texto, 'Te he abierto una conversación nueva.');
+      } finally {
+        vscode.guion.comandosDeCodex = codexAntes;
+        asistentes.elDeAhora = antes.elDeAhora;
+      }
 
       // El foro: el encargo llega al asistente, y se dice dónde pegar lo que conteste.
       vscode.registrado.abiertos.length = 0;
@@ -12178,6 +12203,138 @@ exec git "$@"
     assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerElControlRemoto\(\)/, 'el instalador del Mac no lo pone');
     assert.match(fs.readFileSync(path.join(RAIZ, 'preparar-paquete.js'), 'utf8'), /'control-remoto\.js'/, 'la barra no lo lleva dentro');
     return 'puesto · lo suyo intacto · lo que decidió, respetado · y se quita solo lo nuestro';
+  });
+
+  await comprobar('los recordatorios: a su hora con su botón, y la costumbre se convierte en recordatorio sola', async () => {
+    // Decisión 144. El «cada lunes» vive en la habilidad (`cuando`, en cron), la
+    // barra lo recuerda a su hora, y si ve la costumbre en los botones lo pone sola (P9).
+    const cuandoM = cargar('cuando');
+    const hora = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime(); // octubre de 2026; el 12 es lunes
+    const ahora = hora(14, 10, 30);
+    assert.equal(cuandoM.ultimaVez('0 9 * * 1', ahora), hora(12, 9), 'el último lunes a las 9');
+    assert.equal(cuandoM.ultimaVez('31 10 * * *', ahora), hora(13, 10, 31), 'hoy aún no ha tocado: ayer');
+    assert.equal(cuandoM.ultimaVez('0 9 1 * *', ahora), hora(1, 9), 'el día 1');
+    assert.deepEqual(['0 9 * * 1', '0 9 * * *', '0 9 * * 1-5', '0 9 1 * *', '0 9 * * 1,3', '*/15 * * * *'].map(cuandoM.enPalabras),
+      ['cada lunes a las 9:00', 'cada día a las 9:00', 'de lunes a viernes a las 9:00', 'el día 1 de cada mes a las 9:00', 'los lunes y miércoles a las 9:00', 'varias veces al día']);
+    for (const malo of ['', '0 9 * *', '0 25 * * *', 'x 9 * * *', '0 9 * * 8', '0 9 0 * *']) assert.equal(cuandoM.valido(malo), false, `se da por bueno «${malo}»`);
+    assert.equal(cuandoM.costumbre([hora(12, 9, 10), hora(5, 8, 55), new Date(2026, 8, 28, 9, 20).getTime()], ahora), '0 9 * * 1', 'tres lunes seguidos no son costumbre');
+    assert.equal(cuandoM.costumbre([hora(12, 9), hora(5, 9)], ahora), null, 'dos lunes ya son costumbre');
+    assert.equal(cuandoM.costumbre([hora(12, 9), hora(5, 9), hora(13, 9)], ahora), null, 'dos lunes y un martes ya son costumbre');
+    // Con día del mes y día de la semana, como cron: cualquiera de los dos.
+    assert.equal(cuandoM.ultimaVez('0 9 1 * 1', ahora), hora(12, 9), 'con día del mes y de la semana, hacen falta los dos');
+    assert.equal(cuandoM.costumbre([new Date(2026, 6, 13, 9).getTime(), new Date(2026, 7, 17, 9).getTime(), hora(12, 9)], ahora), null, 'tres lunes sueltos en tres meses son costumbre');
+    assert.equal(cuandoM.costumbre([8, 9, 12, 13].map((d) => hora(d, 17)), ahora), '0 17 * * 1-5', 'cuatro días laborables seguidos no son costumbre');
+    assert.equal(cuandoM.costumbre([new Date(2026, 7, 3, 11).getTime(), new Date(2026, 8, 3, 12).getTime(), hora(3, 11)], ahora), '0 11 3 * *', 'el día 3 de tres meses no es costumbre');
+
+    // En una carpeta de Claude de verdad, con los raíles puestos.
+    const cp = require('node:child_process');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'recordatorios-'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    const aplicar = () => assert.equal(cp.spawnSync(process.execPath, [path.join(RAIZ, 'media', 'railes', 'aplicar.js'), carpeta], { encoding: 'utf8' }).status, 0);
+    aplicar();
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, refrescar: proveedor.refrescar, eleccion: vscode.guion.eleccion };
+    const claves = ['executiveLab.usosDeBotones', 'executiveLab.recordatoriosHechos', 'executiveLab.recordatoriosAvisados', 'executiveLab.costumbresPuestas'];
+    const guardado = Object.fromEntries(claves.map((k) => [k, almacen.get(k)]));
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    proveedor.refrescar = async () => {};
+    vscode.guion.raiz = carpeta;
+    const seguir = path.join(carpeta, '.claude', 'skills', 'seguir', 'SKILL.md');
+    try {
+      for (const k of claves) await almacen.update(k, undefined);
+      const rec = cargar('recordatorios');
+
+      // Ponerlo: en su metadata, y la barra lo lee.
+      assert.equal(rec.ponerCuando('seguir', '0 9 * * 1').ok, true);
+      assert.match(fs.readFileSync(seguir, 'utf8'), /\nmetadata:\n(?: {2}.*\n)* {2}cuando: "0 9 \* \* 1"\n---/, 'no queda en su metadata');
+      assert.equal(rec.ponerCuando('seguir', 'cada lunes').ok, false, 'se escribe un cuando que no se entiende');
+      assert.deepEqual(rec.losQueHay().map((r) => [r.nombre, r.enPalabras]), [['seguir', 'cada lunes a las 9:00']]);
+      // Los raíles, al ponerse al día, no lo borran ni lo dan por viejo.
+      aplicar();
+      assert.match(fs.readFileSync(seguir, 'utf8'), /cuando: "0 9 \* \* 1"/, 'ponerse al día borra el recordatorio');
+      cargar('terreno').saberDondeEstamos(RAIZ);
+      assert.ok(cargar('terreno').comoEstanLosRailes().alDia, 'con un recordatorio, los raíles son de antes para siempre');
+
+      // Uno nuevo no toca por lo que ya pasó; después, toca a su hora.
+      assert.equal(await proveedor.elRecordatorioQueToca(), null, 'uno recién puesto toca por lo que ya pasó');
+      assert.ok(Date.now() - (almacen.get('executiveLab.recordatoriosHechos') || {}).seguir < 60000, 'uno nuevo no apunta desde cuándo cuenta: no tocaría nunca');
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
+      const toca = await proveedor.elRecordatorioQueToca();
+      assert.deepEqual([toca.nombre, toca.etiqueta, toca.enPalabras], ['seguir', 'Seguir donde lo dejé', 'cada lunes a las 9:00']);
+
+      // Se avisa una vez, aunque la barra esté cerrada, y con «Hacerlo ahora» se pide.
+      vscode.registrado.mensajes.length = 0;
+      vscode.registrado.abiertos.length = 0;
+      vscode.guion.eleccion = 'Hacerlo ahora';
+      await proveedor.mirarLosRecordatorios();
+      assert.ok(vscode.registrado.mensajes.includes('INFO Toca: Seguir donde lo dejé.'), 'a su hora no se avisa');
+      assert.match(decodeURIComponent(vscode.registrado.abiertos.at(-1) || ''), /prompt=\/seguir$/, '«Hacerlo ahora» no lo pide');
+      assert.equal(await proveedor.elRecordatorioQueToca(), null, 'hecho, sigue tocando');
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.mirarLosRecordatorios();
+      assert.deepEqual(vscode.registrado.mensajes, [], 'se avisa dos veces de lo mismo');
+      // Si no se le hace caso al aviso, sigue en la barra, pero no se repite cada minuto.
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
+      await almacen.update('executiveLab.recordatoriosAvisados', {});
+      vscode.guion.eleccion = undefined;
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.mirarLosRecordatorios();
+      await proveedor.mirarLosRecordatorios();
+      assert.equal(vscode.registrado.mensajes.filter((m) => m === 'INFO Toca: Seguir donde lo dejé.').length, 1, 'el mismo aviso sale cada minuto');
+      assert.ok(await proveedor.elRecordatorioQueToca(), 'sin hacerle caso, desaparece de la barra');
+      // «Ahora no» lo deja hasta la próxima.
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
+      await proveedor.manejar({ tipo: 'ahoraNoRecordatorio', nombre: 'seguir' });
+      assert.equal(await proveedor.elRecordatorioQueToca(), null, '«Ahora no» no lo deja para luego');
+
+      // La costumbre: tres lunes pulsando «Empezar algo nuevo», y se pone sola.
+      // Los tres lunes anteriores a esta semana, a las 10: pasados, pase lo que pase hoy.
+      const lunes = [1, 2, 3].map((n) => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7 * n); d.setHours(10, 0, 0, 0); return d.getTime(); });
+      await almacen.update('executiveLab.usosDeBotones', lunes.map((t) => ({ nombre: 'empezar', t })));
+      const puesta = await proveedor.ponerLasCostumbres();
+      assert.equal(puesta && puesta.nombre, 'empezar', 'la costumbre no se pone sola');
+      assert.match(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando: "0 10 \* \* 1"/, 'no queda escrita');
+      assert.equal((await proveedor.elRecordatorioQueToca()), null, 'recién puesta por costumbre, toca ya');
+      // Se dice una vez; «No hace falta» la quita y no vuelve.
+      await proveedor.manejar({ tipo: 'noHaceFaltaLaCostumbre', nombre: 'empezar' });
+      assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, '«No hace falta» no la quita');
+      assert.equal(await proveedor.ponerLasCostumbres(), null, 'la que dijo que no hacía falta vuelve');
+      assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, 'se vuelve a poner');
+
+      // Lo que la barra apunta: un botón que existe, sí; otra cosa, no.
+      await almacen.update('executiveLab.usosDeBotones', []);
+      await proveedor.anotarElUso('/ayuda');
+      await proveedor.anotarElUso('/no-existe');
+      await proveedor.anotarElUso('Hazme un resumen');
+      assert.deepEqual((almacen.get('executiveLab.usosDeBotones') || []).map((u) => u.nombre), ['ayuda'], 'se apunta lo que no es un botón');
+
+      // En pantalla: la tarjeta, la de la costumbre, y la lista para quitarlos.
+      const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+      const base = { tipo: 'estado', estado: { listo: true }, barraCompleta: false, piezas: { tarjetaUnica: false } };
+      const conRecordatorio = pintar({ ...base, recordatorio: { nombre: 'seguir', etiqueta: 'Seguir donde lo dejé', enPalabras: 'cada lunes a las 9:00' } });
+      assert.match(conRecordatorio, /Toca: Seguir donde lo dejé \(cada lunes a las 9:00\)\./);
+      assert.match(conRecordatorio, /hacerElRecordatorio/);
+      assert.match(conRecordatorio, /ahoraNoRecordatorio/);
+      const conCostumbre = pintar({ ...base, costumbrePuesta: { nombre: 'empezar', etiqueta: 'Empezar algo nuevo', enPalabras: 'cada lunes a las 10:00' } });
+      assert.match(conCostumbre, /Sueles pulsar «Empezar algo nuevo» cada lunes hacia las 10:00, así que te lo recordaré a esa hora\./);
+      assert.match(conCostumbre, /noHaceFaltaLaCostumbre/);
+      const habilidades = pintar({ tipo: 'saberes', recordatorios: [{ nombre: 'seguir', etiqueta: 'Seguir donde lo dejé', enPalabras: 'cada lunes a las 9:00' }] });
+      assert.match(habilidades, /Recordatorios[\s\S]*Seguir donde lo dejé: cada lunes a las 9:00[\s\S]*quitarRecordatorio/, 'no se ven ni se pueden quitar');
+      // Y quitarlo desde ahí.
+      await proveedor.manejar({ tipo: 'quitarRecordatorio', nombre: 'seguir' });
+      assert.doesNotMatch(fs.readFileSync(seguir, 'utf8'), /cuando:/, 'quitarlo no lo quita');
+      assert.match(enviados.filter((m) => m.tipo === 'aviso').at(-1).texto, /Ya no te recordaré «Seguir donde lo dejé»\./);
+      return 'a su hora, una vez · hecho o para luego · la costumbre, sola y con vuelta atrás';
+    } finally {
+      for (const [k, v] of Object.entries(guardado)) await almacen.update(k, v);
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.eleccion = antes.eleccion;
+      cargar('terreno').saberDondeEstamos(null);
+    }
   });
 
   await comprobar('todo tipo que manda el panel se despacha sin excepción', async () => {
