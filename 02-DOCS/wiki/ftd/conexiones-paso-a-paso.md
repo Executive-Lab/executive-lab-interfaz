@@ -2,7 +2,7 @@
 type: ftd
 title: Conexiones, paso a paso
 date: 2026-10-14
-status: en curso
+status: hecho
 ---
 
 # Conexiones, paso a paso
@@ -35,7 +35,7 @@ Decisión 146.
   probar (si las claves cambian mientras, lo que diga no es de las nuevas); si se fue a otra pantalla
   mientras se probaba sola, no se le devuelve; y lo pasajero (sin internet, no contesta) no se recuerda
   como «falla». 3 mutantes más, tumbados. VS Code de verdad: «todo bien».
-- [ ] 6. Las máquinas de GitHub.
+- [x] 6. Las máquinas de GitHub — el-dmg, windows, vscode-de-verdad y el-exe en verde (PR #31).
 
 ## Evidence
 
