@@ -4992,6 +4992,13 @@ o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
     clave puede escribir, lo pesado fuera de git y cuándo caduca una clave.
 - **Choca con P7.** RSC 3 se pone al día sola dentro de su serie, y P7 fija una versión exacta. Se
   enmienda en el trabajo de pasar a la 3.
-- **Todavía no se comprueba.** La prueba de P9 es la primera tarea pendiente: cada arreglo que cambia
-  algo, o se hace al abrir la carpeta, o dice qué caso lo retiene. Hasta entonces, la constitución lo
-  dice tal cual.
+- **Se comprueba**, y se cumple, desde el segundo paso (rama `se-hace-solo-2`):
+  - cada arreglo que cambia algo dice `alAbrir` o `retiene`;
+  - al abrir una carpeta de confianza, la barra hace lo marcado y lo cuenta en una frase;
+  - el montaje tiene un modo sin nadie delante, que solo sigue por traer, ponerlo al día, adoptar o
+    completar sin preguntas, y que no abre ninguna ventana;
+  - dos de los siete que el repaso daba por solos se quedan con su botón, cada uno por su motivo:
+    - **el freno**, porque esa pieza solo sale en carpetas cuyo historial no creó la barra y toca sus
+      ajustes (P4, C-4);
+    - **poner copias**, porque guarda la carpeta entera, y mientras lo pesado no se quede fuera de
+      git podría meter gigas de vídeo en el historial.

@@ -392,6 +392,8 @@ async function preguntarPorUnChoque(choque) {
 // El resumen y el sí, y después los choques. Devuelve si se sigue, y lo que se
 // renombró, o el fallo.
 async function confirmarLoQueSeToca(plan) {
+  // Sin nadie delante no se monta encima de lo suyo (P4, P9).
+  if (momento.nadieDelante) return { seguir: false };
   const raiz = proyecto.raiz();
   const { tocados, choques } = ajena.resumen(plan, raiz);
 
@@ -476,6 +478,8 @@ function comoSeDiceLoQueCambia(claves) {
 async function confirmarLoQueCambia(plan, recibo) {
   const cambios = rsc.cambiosDePolitica(plan.seleccionados, recibo.decisions);
   if (!cambios || (!cambios.entran.length && !cambios.salen.length)) return true;
+  // Sin nadie delante, un plan que cambia espera a su sí (A12, P9).
+  if (momento.nadieDelante) return false;
   const partes = [
     ...(cambios.entran.length ? [`añadir ${enLista(comoSeDiceLoQueCambia(cambios.entran))}`] : []),
     ...(cambios.salen.length ? [`quitar ${enLista(comoSeDiceLoQueCambia(cambios.salen))}`] : []),
@@ -974,6 +978,26 @@ const COMO_SE_HACE = {
 // lanzarían dos montajes a la vez sobre la misma carpeta.
 let enMarcha = false;
 
+// ── Sin nadie delante (P9, decisión 142) ────────────────────────────────
+//
+// Al abrir la carpeta, la barra sigue sola lo que solo devuelve lo ya
+// decidido: traer un clon, ponerlo al día, poner lo de la barra o terminar un
+// montaje a medias con lo que ya se contestó. Lo demás —preguntas, una carpeta
+// delicada, otro proyecto encima, otro montaje, lo suyo que se toca, un plan
+// que cambia— pide el sí de esa persona, y entonces no se abre ninguna ventana:
+// se para sin tocar nada y la pieza se queda con su botón.
+const RAMAS_SIN_NADIE = ['traer', 'ponerAlDia', 'adoptar', 'completar'];
+// En un objeto, para que la prueba pueda mirar las dos confirmaciones sin
+// montar nada.
+const momento = { nadieDelante: false };
+
+function sePuedeSinNadie(plan, parte) {
+  return RAMAS_SIN_NADIE.includes(plan.rama)
+    && !plan.preguntar.length
+    && !(parte.carpeta && parte.carpeta.delicada)
+    && !parte.dentroDeOtro;
+}
+
 const CLAVE_SIN_GIT = 'executiveLab.sigueSinCopias';
 
 // Dónde se recuerda lo que esa persona ya decidió. Se pide con cuidado: un
@@ -982,13 +1006,15 @@ const CLAVE_SIN_GIT = 'executiveLab.sigueSinCopias';
 const loQueDecidio = (contexto) => (contexto && contexto.workspaceState)
   || { get: () => undefined, update: async () => {} };
 
-async function arrancar(contexto, salida) {
+async function arrancar(contexto, salida, { sinNadieDelante = false } = {}) {
   if (enMarcha) return { ok: false, cancelado: true };
   enMarcha = true;
+  momento.nadieDelante = sinNadieDelante;
   try {
     return await elCamino(contexto, salida);
   } finally {
     enMarcha = false;
+    momento.nadieDelante = false;
   }
 }
 
@@ -1000,6 +1026,11 @@ async function elCamino(contexto, salida) {
   };
   const plan = rumbo.elegirRama(parte);
   salida.appendLine(`[arrancar] ${plan.rama}: ${plan.porQue}`); // diccionario: interno
+
+  if (momento.nadieDelante && !sePuedeSinNadie(plan, parte)) {
+    salida.appendLine(`[solo] ${plan.rama}: espera a su botón`); // diccionario: interno
+    return { ok: false, esperaASuBoton: true };
+  }
 
   if (plan.rama === 'sinCarpeta') {
     return { ok: false, mensaje: 'Abre primero la carpeta que quieres preparar.' };
@@ -1360,7 +1391,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
-  arrancar, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
+  arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   loQueNoTraeLaClase, ponerComoLaDeLaClase, volverAMontarComoLaDeLaClase, prepararTambienPara, ponerElBloque,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,

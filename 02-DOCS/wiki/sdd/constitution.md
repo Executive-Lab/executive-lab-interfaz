@@ -114,9 +114,12 @@ Incluso entonces se deja todo preparado, a un clic (P1). Proactiva quiere decir 
 va a fallar pronto se arregla o se avisa antes de que falle. Por ejemplo, una clave que caduca, un
 vídeo enorme que iba a entrar en git o una conexión con más permisos de los que se pidieron.
 
-**Se comprueba**: cada arreglo de la barra que cambia algo en la carpeta, o se hace al abrirla, o dice
-cuál de los cuatro casos lo retiene. Esa prueba es la primera tarea de
-`ftd/lo-que-se-puede-se-hace-solo.md`, y **hasta que exista, esta regla todavía no se comprueba**.
+**Se comprueba**: `humo.js` barre `terreno.js` entero. Cada arreglo que la barra hace ella misma y
+que cambia algo dice `alAbrir: true` o `retiene` con uno de los cuatro casos, y lo que se hace solo
+tiene quien lo haga al abrir (`solo.js`). Otras tres pruebas cubren el resto:
+- sin confianza en la carpeta no se hace nada;
+- sin nadie delante, el montaje no abre ninguna ventana;
+- lo que falla no se cuenta como arreglado.
 
 Choca con P7 en un punto: RSC 3 se pone al día sola dentro de su serie. P7 se enmienda en el trabajo de
 pasar a la 3.

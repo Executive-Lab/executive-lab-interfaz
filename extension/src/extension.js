@@ -44,6 +44,7 @@ const papeles = require('./papeles');
 const reglas = require('./reglas');
 const ajustes = require('./ajustes');
 const donde = require('./donde');
+const solo = require('./solo');
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -230,6 +231,54 @@ ${cabecera}
 
   enviar(mensaje) {
     if (this.vista) this.vista.webview.postMessage(mensaje);
+    // Lo que se arregló solo al abrir puede llegar antes que el panel: se guarda,
+    // y sale en cuanto el panel dice que está listo (P9).
+    else if (mensaje && mensaje.tipo === 'aviso' && mensaje.alAbrir) this.avisoPendiente = mensaje;
+  }
+
+  // El panel dice que está listo: se pinta, y si esperaba un aviso, sale ahora.
+  async alEstarListo() {
+    await this.refrescar();
+    const pendiente = this.avisoPendiente;
+    this.avisoPendiente = null;
+    if (pendiente) this.enviar(pendiente);
+  }
+
+  // ── Lo que se puede hacer solo, se hace solo (P9, decisión 142) ─────────
+  //
+  // Al abrir la carpeta, lo que «Qué falta por montar» marca `alAbrir` se hace
+  // sin esperar a nadie, y se cuenta en una frase. Lo que falla se queda en su
+  // pieza, con su botón, y apuntado para «Algo va mal».
+  //
+  // Solo con la carpeta de confianza: arreglar corre el arnés, y en una sin
+  // confianza la barra hace solo lo que dice su `package.json`. El examen es a
+  // fondo —tres procesos del arnés—, y se paga una vez, al abrir.
+  async hacerSoloLoQueSePuede() {
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return [];
+    const aFondo = (await terreno.reconocer({ profundo: true })).arnes;
+    const { piezas } = await terreno.radiografia({ aFondo, sigueSinCopias: this.eligioSinCopias() });
+    const tareas = solo.queSeHaceSolo(piezas);
+    if (!tareas.length) return [];
+
+    const hechas = await solo.hacerloSolo(tareas, {
+      // `yaEstaba` es que no había nada que hacer: no se cuenta como arreglado.
+      arrancar: async () => {
+        const hecho = await arrancar.arrancar(this.contexto, this.salida, { sinNadieDelante: true });
+        return hecho.ok && !hecho.yaEstaba;
+      },
+      arreglar: async () => {
+        const { ok, detalle } = await soporte.arreglar();
+        if (detalle) this.salida.appendLine(detalle);
+        return ok;
+      },
+    }, (linea) => this.salida.appendLine(linea));
+
+    await this.refrescar(true);
+    // Lo que trae o arregla el arnés lo lee Claude al empezar una conversación.
+    const reabrir = donde.paraQuien() === 'claude' && hechas.length > 0;
+    const frase = solo.laFrase(hechas, reabrir);
+    if (frase) this.enviar({ tipo: 'aviso', texto: frase, alAbrir: true });
+    return hechas;
   }
 
   // Repinta lo que el alumno tenga delante. Lo llama el vigía del arnés.
@@ -570,7 +619,7 @@ ${cabecera}
 
   async manejar(mensaje) {
     const rutas = {
-      listo: () => this.refrescar(),
+      listo: () => this.alEstarListo(),
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
@@ -2370,14 +2419,17 @@ function activate(contexto) {
   // es decidir, así que va solo y sin preguntar (decisión 108). Callado: si
   // sale bien no hay nada que contarle a nadie, y si sale mal la lista de
   // piezas lo dice con su botón.
-  setTimeout(() => {
+  setTimeout(async () => {
     // Lo que una barra anterior dejó escrito en los enganches —la ruta del Node
     // de este ordenador, y la marca que la escondía de git— se deshace al abrir.
     // Es nuestro, y deshacerlo no es decidir (C3, decisión 119).
     arrancar.apuntarLosEnganches(salida).catch((e) => salida.appendLine(`[enganches] ${e.message}`)); // diccionario: interno
-    if (terreno.comoEstanLosRailes().alDia) return;
-    salida.appendLine('[railes] los de esta carpeta son de una versión anterior: se reponen'); // diccionario: interno
-    panel.ponerLosRailesAlDia(true).catch((e) => salida.appendLine(`[railes] ${e.message}`)); // diccionario: interno
+    if (!terreno.comoEstanLosRailes().alDia) {
+      salida.appendLine('[railes] los de esta carpeta son de una versión anterior: se reponen'); // diccionario: interno
+      await panel.ponerLosRailesAlDia(true).catch((e) => salida.appendLine(`[railes] ${e.message}`)); // diccionario: interno
+    }
+    // Y lo demás que se puede hacer solo, después de los raíles (P9).
+    await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
   }, 3000);
 }
 

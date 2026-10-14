@@ -80,21 +80,28 @@ Va en dos sitios:
 
 ### Pasa a hacerse solo
 
-Siete arreglos de `terreno.js` esperan hoy a que se pulse. Ninguno decide nada nuevo: todos devuelven
-lo que ya estaba decidido. Pasan a hacerse al abrir la carpeta, y la barra lo dice en una frase.
+En el repaso salieron siete arreglos de `terreno.js` que esperaban a que se pulsara. Al hacerlo, cinco
+pasaron a hacerse al abrir la carpeta, y la barra lo dice en una frase. Dos se quedan con su botón.
 
-| Pieza | Botón de hoy | Acción |
+| Pieza | Botón | Ahora |
 |---|---|---|
-| Lo que el arnés hace solo | Arreglarlo | `arreglarElRelevo` |
-| Copias de seguridad aquí | Ponerlas ahora | `ponerCopias` |
-| Freno ante órdenes peligrosas | Ponerlo ahora | `ponerElFreno` |
-| Lo que este proyecto traía puesto (un clon) | Traerlo ahora | `arrancar` |
-| La versión del arnés, atrasada | Ponerlo al día | `arrancar` |
-| Lo que debería estar puesto | Traerlas ahora | `arreglar` |
-| Cosas del arnés fuera de sitio | Arreglarlo ahora | `arreglar` |
+| Lo que el arnés hace solo | Arreglarlo | Solo. Ya lo hacía la activación (C2) |
+| La versión del arnés, atrasada | Ponerlo al día | Solo |
+| Lo que este proyecto traía puesto (un clon) | Traerlo ahora | Solo, si no hay nada que preguntar |
+| Lo que debería estar puesto | Traerlas ahora | Solo |
+| Cosas del arnés fuera de sitio | Arreglarlo ahora | Solo, si no hay nada que decidir |
+| Freno ante órdenes peligrosas | Ponerlo ahora | **Botón**: solo sale en carpetas cuyo historial no creó la barra, y toca sus ajustes (P4, C-4) |
+| Copias de seguridad aquí | Ponerlas ahora | **Botón**: guarda la carpeta entera. Hasta que lo pesado quede fuera de git (punto 8), podría meter gigas en el historial, y eso no se deshace. Si eligió no tenerlas, es suyo |
 
-Además, «El asistente, montado aquí» → «Terminar de prepararlo» se retoma solo y llega hasta la
-siguiente pregunta, si la hay.
+Además, se hacen solos otros dos:
+- «El asistente, montado aquí» → «Terminar de prepararlo», cuando el montaje se quedó a medias y no
+  queda nada por preguntar;
+- «Lo que pone la barra» → «Ponerlo al día», que ya lo hacía la decisión 108.
+
+«Ajustarlo ahora», el bloque de `CLAUDE.md`, se queda con su botón, porque toca un fichero suyo (C-4).
+
+`repair` sin `--yes` solo devuelve lo que estaba. Lo que hay que decidir se queda pendiente, y antes
+guarda copia (`scripts/lib/repair.js`), así que hacerlo solo no decide nada por nadie.
 
 Los demás botones con `como: 'solo'` son para ir a una pantalla (ver las conexiones, darle documentos,
 abrir la revisión o el plan) y se quedan como están. El de bajar la versión del arnés no pasa a
@@ -147,9 +154,10 @@ hacerse solo, porque no se puede deshacer.
 - [x] 2. La regla 9 del asistente, en las dos copias de `siempre.md`, y la prueba de las reglas, que pasa
   de ocho a nueve.
 - [x] 3. Decisión 142 y este repaso.
-- [ ] 4. La prueba de P9: cada arreglo que cambia algo en la carpeta, o se hace al abrirla, o dice cuál de
+- [x] 4. La prueba de P9: cada arreglo que cambia algo en la carpeta, o se hace al abrirla, o dice cuál de
   los cuatro casos lo retiene.
-- [ ] 5. Los siete arreglos, al abrir la carpeta, dicho en una frase.
+- [x] 5. Lo que se puede, al abrir la carpeta y dicho en una frase. Son cinco de los siete, y los otros
+  dos se quedan con su botón, cada uno por su motivo.
 - [ ] 6. Pasar a RSC 3.
 - [ ] 7. La prueba que dice que la clave puede escribir.
 - [ ] 8. Lo pesado, fuera de git.
@@ -168,9 +176,37 @@ hacerse solo, porque no se puede deshacer.
   - no hay nada sobre caducidad ni sobre privacidad.
 - Ensayo de la 3.0.22 en una copia: con la 2.0.15, 364 comprobaciones en verde; con la 3.0.22, 14
   fallos en la batería y 3 en el contrato.
-- Tras los puntos 1 a 3: la batería y el diccionario, en verde (ver el commit).
+- Tras los puntos 1 a 3: `humo.js` con 358 comprobaciones y el diccionario, en verde. PR #22, con las
+  cuatro de GitHub en verde.
+- Tras los puntos 4 y 5: `humo.js` con 362 comprobaciones, el diccionario en verde y cuatro pruebas
+  nuevas de P9:
+  - el barrido de `terreno.js`: 7 arreglos se hacen solos, 6 piden un sí y 5 llevan a otra pantalla;
+  - el orden, el fallo apuntado y la frase de `solo.js`;
+  - sin nadie delante, ninguna ventana: cuatro caminos, una carpeta vacía y las dos confirmaciones;
+  - el panel: nada sin confianza, nada si no sale, «ya estaba» no cuenta, y el aviso espera a que el
+    panel diga «listo».
+- **Dieciséis mutaciones, las dieciséis tumbadas**:
+  - el freno sin decir qué lo retiene;
+  - bajar la versión, hecho solo al abrir;
+  - un caso que no es de P9;
+  - no mirar la confianza;
+  - «ya estaba» contado como arreglado;
+  - el aviso sin panel, perdido;
+  - el montaje sin saber que no hay nadie delante;
+  - el montaje que sigue aunque haya que preguntar;
+  - tocar lo suyo sin nadie;
+  - firmar un plan que cambia sin nadie;
+  - seguir sin nadie aunque haya preguntas;
+  - lo que falla, contado como hecho;
+  - los raíles, repetidos;
+  - el orden al revés;
+  - la activación que no lo llama;
+  - «listo» que no suelta el aviso.
+- `contrato.js` con 14 comprobaciones, y `empresas-distintas.js` con las tres empresas enteras.
+- **Contra el arnés de verdad**: en `--con-arnes`, el clon de verdad se trae ahora sin nadie delante,
+  sin preguntar nada y sin abrir ninguna ventana. Resultado: 370 comprobaciones pasadas.
 
 ## Next
 
-Por orden: los puntos 4 y 5, que son el corazón de P9; después el 6, que es lo que hace falta antes de
-dar la barra a la comunidad; y luego del 7 al 12.
+Por orden: el 6, que es lo que hace falta antes de dar la barra a la comunidad; después el 8, que
+desbloquea poner copias solas; y luego el 7 y del 9 al 12.
