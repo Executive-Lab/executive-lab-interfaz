@@ -52,6 +52,8 @@ function comoEsLaVersion(version) {
 // Solo tres números: la carpeta escribe esto, y con un alias, una dirección o un
 // `&` decidía qué se baja de npm, y en Windows pasaba por `cmd.exe` (revisión
 // de seguridad de P9, L1).
+const vaPorDelante = () => comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva';
+
 function paquete() {
   const suya = proyecto.versionDelCatalogo();
   return `@ericrisco/rsc@${/^\d+\.\d+\.\d+$/.test(String(suya || '')) ? suya : VERSION_DE_RESPALDO}`;
@@ -67,7 +69,8 @@ function paquete() {
 // reproducido). Antes de dejarle escribir, se miran todos los nombres: los de
 // `.rsc.json` y los de cada fichero de estado. Con uno que sale de la carpeta,
 // no se corre, y el motivo queda en el informe de «Algo va mal».
-const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge']);
+const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge', 'install', 'upgrade', 'restore',
+  'main', 'isolation', 'knowledge-sync', 'git-permissions', 'agents', 'agent-model']);
 // Lo que el arnés usa como nombre de carpeta o de fichero al borrar
 // (`install-apply.js`, `repair.js`, `targets/agents.js`, `targets/commands.js`).
 const NOMBRES_DEL_ESTADO = ['skills', 'agents', 'explicitAgents', 'commands'];
@@ -118,7 +121,9 @@ let carpetaDeLaExtension = null;
 const saberDondeEstamos = (ruta) => { carpetaDeLaExtension = ruta; };
 
 async function correr(args, opciones) {
-  const escribe = QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run');
+  // Pedir el plan de `onboard` no escribe nada: lo que escribe es aceptarlo.
+  const escribe = QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run') && args[1] !== 'status'
+    && (args[0] !== 'onboard' || args.includes('--accept-plan'));
   if (escribe) {
     const malos = nombresQueSalenDeLaCarpeta();
     if (malos.length) {
@@ -126,19 +131,28 @@ async function correr(args, opciones) {
     }
   }
 
-  // Una carpeta que va por delante se trabaja con su versión, con npx (P7,
-  // decisión 145). Quien montó RSC desde el chat lo tiene, porque lo usó para
-  // montarlo; y el Node del instalador lo trae. Sin una versión de tres números
-  // no se sabe cuál es la suya, y lo que escribe no se corre.
-  if (comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') {
-    if (escribe && !/^\d+\.\d+\.\d+$/.test(String(proyecto.versionDelCatalogo()))) {
-      return { codigo: 1, salida: '', error: `no se corre ${args[0]}: la carpeta va por delante y su versión no es de tres números` }; // diccionario: interno
-    }
-    const npx = entorno.npxCli();
-    if (npx) return procesos.node([npx, '--yes', paquete(), ...args], opciones);
-    return procesos.delPath('npx', ['--yes', paquete(), ...args], opciones);
+  // Una carpeta que va por delante (P7, decisión 145). La barra no corre encima
+  // la suya para escribir, que la bajaría sin avisar: RSC no compara versiones.
+  // Y tampoco baja la de la carpeta de npm. npx lee el `.npmrc` de la carpeta,
+  // así que una preparada podía mandarlo a su registro, o meter opciones de Node
+  // que cargan un fichero suyo, y ejecutar lo que quisiera solo con abrir la barra
+  // (revisión de seguridad del paso a la 3, H1, reproducido). Mirar sin escribir
+  // se hace con la de dentro; escribir espera a que la barra se ponga al día, y
+  // mientras tanto lo hace el asistente, si se lo piden.
+  if (escribe && vaPorDelante()) {
+    return { codigo: 1, salida: '', error: `no se corre ${args[0]}: la carpeta va por delante de la barra`, porDelante: true }; // diccionario: interno
   }
 
+  // Al pasar de la 2 a la 3, o al montar, lo que la barra decide va justo antes de
+  // escribir, en un solo sitio para todos los caminos; y si la orden no sale, se
+  // quita (decisión 145, `decidir.js`).
+  const puestas = escribe ? await require('./decidir').antesDeEscribir() : null;
+  const hecho = await lanzar(args, opciones);
+  if (puestas && hecho.codigo !== 0) require('./decidir').quitar(puestas);
+  return hecho;
+}
+
+function lanzar(args, opciones) {
   const entrada = entorno.entradaDelArnes(proyecto.raiz(), carpetaDeLaExtension);
   if (entrada) return procesos.node([entrada, ...args], opciones);
 
@@ -574,5 +588,5 @@ module.exports = {
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,
-  paquete, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
+  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
 };

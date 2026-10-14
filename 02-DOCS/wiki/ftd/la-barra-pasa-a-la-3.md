@@ -86,7 +86,8 @@ Y por P9, en las carpetas de la barra:
 - [x] 5. La regla 7.
 - [x] 6. Las 14 + 3 comprobaciones del ensayo, en verde y sin bajar el listón.
 - [x] 7. Constitución (P7), decisión 145, diccionario y batería larga.
-- [ ] 8. Revisión adversaria.
+- [x] 8. Revisión adversaria: seguridad y corrección. Dos fallos altos y reproducidos, y siete más,
+  arreglados con su prueba (decisión 145).
 
 ## Evidence
 
@@ -104,9 +105,24 @@ Y por P9, en las carpetas de la barra:
 - Las marcas, la rama principal abierta y `gitPermissions: false` se comprueban en el montaje de verdad
   de la batería larga.
 
+- **La revisión adversaria encontró dos fallos altos, reproducidos:**
+  - npx, en una carpeta que va por delante, leía su `.npmrc` y ejecutaba lo que quisiera solo con
+    abrir la barra. Ya no se usa npx: ahí se mira con el arnés de dentro y no se escribe.
+  - Una 2 pasaba a la 3 por «Añadir», «Arreglar» o «cambiar de asistente» sin que la barra decidiera
+    nada, y el `repair` de la 3 perdía las decisiones del equipo. Ahora se decide en un solo sitio
+    (`decidir.js`, desde `rsc.correr`) y justo antes de escribir.
+
+  Y siete más, también arreglados:
+  - lo que sale del ordenador, apagado también en lo ajeno;
+  - `.no-auto-update` como marca;
+  - `git-permissions off` solo en lo nuevo, y dicho si falla;
+  - un «ramas y PR» del equipo, respetado;
+  - `optOuts` raros;
+  - sin seguir enlaces;
+  - fuera el dial de la plantilla del perfil.
+
 ## Next
 
-- La revisión adversaria, y después la PR.
 - Quien trabaje en la carpeta principal de este repositorio tiene que poner al día su arnés:
   `npm install --prefix extension/media/harness` y luego el `sync` del de dentro.
 - Los nombres del arnés y de la empresa viven en el perfil, que con la 3 es de cada uno y no viaja en

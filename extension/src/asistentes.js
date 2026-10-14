@@ -188,6 +188,11 @@ async function elegir(id, { montar } = {}) {
     }
     if (hecho === true) hecho = { ok: true };
     if (!hecho || typeof hecho !== 'object') hecho = { ok: false };
+    // Una carpeta que va por delante no se prepara con la versión de la barra
+    // (P7, decisión 145): espera a que la barra se ponga al día.
+    if (hecho.porDelante) {
+      return { ok: false, mensaje: 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.' };
+    }
     if (hecho.cancelado) return { ok: false, cancelado: true, mensaje: 'No he tocado nada. Cuando quieras, el botón sigue aquí.' };
     if (!hecho.ok) return { ...noSePudo, ...(hecho.mensaje ? { mensaje: hecho.mensaje } : {}), detalle: hecho.detalle };
     if (!declarados().includes(id)) return { ...noSePudo, detalle: 'el arnés terminó bien y no lo ha declarado' }; // diccionario: interno

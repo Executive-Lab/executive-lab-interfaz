@@ -82,7 +82,7 @@ async function main() {
 
   // ---------------------------------------------------- los módulos cargan
   const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar',
-    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'extension'];
+    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'extension'];
   await comprobar('todos los módulos cargan', () => {
     modulos.forEach(cargar);
     return `${modulos.length} módulos`;
@@ -3113,8 +3113,10 @@ exec git "$@"
     vscode.guion.raiz = hostil;
     try {
       assert.ok(rscM.nombresQueSalenDeLaCarpeta().some((m) => m.includes('.rsc-state.json')), 'no ve el nombre que sale de la carpeta');
-      for (const que of ['sync', 'repair', 'onboard', 'add']) {
-        const hecho = await rscM.correr([que]);
+      // Pedir el plan de `onboard` no escribe; aceptarlo, sí.
+      for (const orden of [['sync'], ['repair'], ['onboard', '--accept-plan', 'x'], ['add']]) {
+        const que = orden.join(' ');
+        const hecho = await rscM.correr(orden);
         assert.notEqual(hecho.codigo, 0, `${que} corre con un nombre que sale de la carpeta`);
         assert.match(hecho.error, /salen de la carpeta/, 'y el motivo no llega al informe');
       }
@@ -9853,14 +9855,15 @@ exec git "$@"
       assert.equal(ultimo.tipo, 'asistente', `lo último que se pinta es ${ultimo.tipo}`);
       assert.match(ultimo.aviso.texto, /habla[n]? con Claude/);
 
-      // I2, con la decisión 145: en una carpeta que va por delante se prepara
-      // igual, con su versión, que es cosa de `rsc.correr`, y no se manda a bajarla.
+      // I2, con la decisión 145: en una carpeta que va por delante no se prepara con
+      // la versión de la barra, que la bajaría; se dice, sin mandar a bajarla.
       pedidos.length = 0;
       const masNueva = nueva(['claude'], { catalogVersion: MAS_NUEVA });
       vscode.guion.raiz = masNueva.r;
       rscM.correr = conSync(masNueva.r);
       await conRespuestas({}, () => proveedor.elegirAsistente('codex'));
-      assert.ok(pedidos.some((p) => p.startsWith('sync')), `en una que va por delante no se prepara: ${pedidos.join(' · ')}`);
+      assert.ok(!pedidos.some((p) => p.startsWith('sync')), `en una que va por delante se prepara con la de la barra: ${pedidos.join(' · ')}`);
+      assert.match(enviados[enviados.length - 1].aviso.texto, /más nueva que la de la barra/);
       assert.ok(!enviados.some((m) => /de tu clase/.test(JSON.stringify(m))), 'se manda a bajarla');
 
       // I5 con Codex: el aviso de los frenos es lo último que se ve.
@@ -9891,11 +9894,10 @@ exec git "$@"
     }
   });
 
-  await comprobar('añadir en una carpeta que va por delante se hace, y sin bajarla', async () => {
-    // Revisión de F4, I2, y decisión 145. «Añadir» corría el `add` de la barra,
-    // que deja su versión en la carpeta: en una que va por delante la bajaba sin
-    // decir nada. Antes no se añadía y se mandaba a bajarla; ahora se añade, y
-    // `rsc.correr` lo hace con la versión de la carpeta (ver la prueba de abajo).
+  await comprobar('en una carpeta que va por delante, añadir y arreglar esperan y lo dicen', async () => {
+    // Revisión de F4, I2, y decisión 145. Escribir con la versión de la barra
+    // bajaría la carpeta, y bajar la suya de npm no es seguro (`rsc.correr`). Se
+    // dice, con lo que se puede hacer mientras, y no se toca nada.
     const rscM = cargar('rsc');
     const proveedor = vscode.registrado.proveedor;
     const r = conEnganches();
@@ -9909,11 +9911,14 @@ exec git "$@"
     proveedor.refrescar = async () => {};
     vscode.guion.raiz = r;
     try {
-      await proveedor.aprenderCapacidad('bookkeeping', 'Contabilidad');
-      assert.ok(pedidos.some((p) => p.startsWith('add bookkeeping')), `en una que va por delante no se añade: ${pedidos.join(' · ')}`);
-      assert.ok(!enviados.some((m) => /de tu clase/.test(m.texto || '')), 'se manda a bajarla');
+      for (const mensaje of [{ tipo: 'aprenderCapacidad', capacidad: 'bookkeeping', nombre: 'Contabilidad' }, { tipo: 'arreglar' }, { tipo: 'arrancar' }]) {
+        enviados.length = 0;
+        await proveedor.manejar(mensaje);
+        assert.ok(enviados.some((m) => /más nueva que la de la barra[\s\S]*pídeselo al asistente/.test(m.texto || '')), `${mensaje.tipo} no lo dice`);
+      }
+      assert.deepEqual(pedidos, [], `se ha corrido el arnés: ${pedidos.join(' · ')}`);
       assert.equal(JSON.parse(fs.readFileSync(path.join(r, '.rsc.json'), 'utf8')).catalogVersion, MAS_NUEVA);
-      return 'añadida, sin mandar a bajarla';
+      return 'añadir, arreglar y preparar esperan, y lo dicen';
     } finally {
       rscM.correr = antes.correr;
       proveedor.enviar = antes.enviar;
@@ -9922,97 +9927,177 @@ exec git "$@"
     }
   });
 
-  await comprobar('al montar o al pasar de la 2 a la 3, la barra deja main abierto y nada que salga solo, sin perder lo del equipo', async () => {
-    // Decisión 145. La 3 cierra main al asistente si ve CI, un despliegue o dos
-    // personas, sube la wiki sola al remoto y, en un montaje nuevo, deja guardar y
-    // subir sin preguntar. En una carpeta de la barra: main abierto, como en clase,
-    // y lo que sale del ordenador, con un sí (P9).
-    const arrancarM = cargar('arrancar');
+  await comprobar('al pasar a la 3 o al montar, justo antes de escribir: nada sale solo, main abierto en lo suyo y lo del equipo conservado', async () => {
+    // Decisión 145, con las dos revisiones del paso a la 3. Un solo sitio,
+    // `rsc.correr`, para todos los caminos por los que una 2 pasa a la 3 (corrección,
+    // 1); justo antes de escribir y quitado si no sale (2); lo que sale del ordenador,
+    // apagado también en lo ajeno (seguridad, H2 y H4); la rama principal, solo en lo
+    // suyo y nunca encima de un «ramas y PR» (corrección, 4); y sin seguir enlaces (H5).
+    const decidirM = cargar('decidir');
     const rscM = cargar('rsc');
+    const procesosM = cargar('procesos');
+    const terrenoM = cargar('terreno');
     const r = fs.mkdtempSync(path.join(os.tmpdir(), 'a-la-tres-'));
     const marcas = () => (fs.existsSync(path.join(r, '.rsc')) ? fs.readdirSync(path.join(r, '.rsc')).filter((f) => f.startsWith('.no-')).sort() : []);
+    const declarar = (extra) => fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: '2.0.15', ...extra }));
+    const limpiar = () => fs.rmSync(path.join(r, '.rsc'), { recursive: true, force: true });
+    const antes = { node: procesosM.node, nuestro: terrenoM.podemosGuardarElPuntoDePartida };
     vscode.guion.raiz = r;
     try {
-      // Un clon de una 2, con lo que el equipo apagó escrito solo en `.rsc.json`.
-      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: '2.0.15', optOuts: ['gitmoji', 'audit', '../x'] }));
-      assert.equal(arrancarM.pasaALaTres(), true, 'una 2 no se ve pasar a la 3');
-      assert.equal(arrancarM.decidirComoLaBarra(), true);
-      // Lo del equipo, primero: con `.rsc/` puesta, RSC rehace sus decisiones con
-      // estas marcas y perdería las que solo están en `.rsc.json` (pasó al subir
-      // este repositorio). Un nombre que no es un nombre no se convierte en fichero.
-      assert.deepEqual(marcas(), ['.no-audit', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard'], `marcas: ${marcas().join(' · ')}`);
-      // Lo que alguien encendió después se respeta: decidir otra vez no lo apaga si
-      // nadie lo vuelve a pedir, porque solo se decide al montar o al pasar a la 3.
-      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: rscM.VERSION_DE_RESPALDO }));
-      assert.equal(arrancarM.pasaALaTres(), false, 'una 3 se ve pasar a la 3 otra vez');
+      // Lo que el equipo apagó, primero; lo que no es un nombre, fuera.
+      declarar({ optOuts: ['gitmoji', 'audit', '../x', 1, null] });
+      assert.equal(decidirM.pasaALaTres(), true, 'una 2 no se ve pasar a la 3');
+      decidirM.decidirComoLaBarra({ principalAbierta: true });
+      assert.deepEqual(marcas(), ['.no-audit', '.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard'], `marcas: ${marcas().join(' · ')}`);
+      // Un «ramas y PR» del equipo no se abre.
+      limpiar(); declarar({ optOuts: ['trunk-open'] });
+      decidirM.decidirComoLaBarra({ principalAbierta: true });
+      assert.ok(!marcas().includes('.no-trunk-guard'), 'se abre la rama principal encima de un «ramas y PR»');
+      // Unos `optOuts` que no son una lista no dejan sin poner lo de la barra.
+      limpiar(); declarar({ optOuts: 'gitmoji' });
+      decidirM.decidirComoLaBarra({ principalAbierta: false });
+      assert.deepEqual(marcas(), ['.no-auto-update', '.no-knowledge-sync']);
 
-      // Y donde lo ejecuta el montaje: al traer una 2 se decide antes del sync; en
-      // una carpeta de alguien, no; y en una 3, tampoco.
-      const terrenoM = cargar('terreno');
-      const antes = { sincronizar: rscM.sincronizar, nuestro: terrenoM.podemosGuardarElPuntoDePartida };
-      const orden = [];
-      rscM.sincronizar = async () => { orden.push(['sync', marcas().length]); return { codigo: 0, salida: '' }; };
-      try {
-        // Una carpeta cuyo historial creó la barra.
-        terrenoM.podemosGuardarElPuntoDePartida = async () => true;
-        fs.rmSync(path.join(r, '.rsc'), { recursive: true, force: true });
-        fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: '2.0.15' }));
-        await arrancarM.COMO_SE_HACE.traerLasHabilidades({ parte: { estado: 'conArnes' } });
-        assert.deepEqual(orden.pop(), ['sync', 2], 'no se decide antes del sync');
-        // Una cuyo historial es de alguien: no se decide por nadie (P4).
-        terrenoM.podemosGuardarElPuntoDePartida = async () => false;
-        fs.rmSync(path.join(r, '.rsc'), { recursive: true, force: true });
-        await arrancarM.COMO_SE_HACE.traerLasHabilidades({ parte: { estado: 'conArnes' } });
-        assert.deepEqual(orden.pop(), ['sync', 0], 'se decide en una carpeta de alguien');
-        // Y una que ya era de la 3: tampoco, que ahí ya lo decidió quien la montó.
-        terrenoM.podemosGuardarElPuntoDePartida = async () => true;
-        fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: rscM.VERSION_DE_RESPALDO }));
-        await arrancarM.COMO_SE_HACE.traerLasHabilidades({ parte: { estado: 'conArnes' } });
-        assert.deepEqual(orden.pop(), ['sync', 0], 'se decide otra vez en una que ya era de la 3');
-      } finally {
-        rscM.sincronizar = antes.sincronizar;
-        terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
+      // Por `rsc.correr`, que es por donde pasa todo: se mira qué había al lanzar.
+      let alLanzar = null;
+      let sale = 0;
+      procesosM.node = async () => { alLanzar = marcas(); return { codigo: sale, salida: '', error: '' }; };
+      const lanzar = async (orden) => { alLanzar = null; await rscM.correr(orden); return alLanzar; };
+
+      terrenoM.podemosGuardarElPuntoDePartida = async () => true;
+      for (const orden of [['add', 'bookkeeping'], ['repair', '--yes'], ['sync', '--target', 'codex']]) {
+        limpiar(); declarar({ optOuts: ['gitmoji'] });
+        assert.deepEqual(await lanzar(orden), ['.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard'], `${orden[0]} pasa a la 3 sin decidir antes`);
       }
-      return 'main abierto y wiki sin subir, después de lo del equipo; antes del sync; ni en lo ajeno ni dos veces';
+      // Lo ajeno: lo que sale, apagado; la rama principal, como estaba.
+      terrenoM.podemosGuardarElPuntoDePartida = async () => false;
+      limpiar(); declarar({});
+      assert.deepEqual(await lanzar(['repair']), ['.no-auto-update', '.no-knowledge-sync'], 'en lo ajeno');
+      // Una que ya va en la 3, como la decidió quien la montó.
+      terrenoM.podemosGuardarElPuntoDePartida = async () => true;
+      limpiar(); declarar({ catalogVersion: rscM.VERSION_DE_RESPALDO });
+      assert.deepEqual(await lanzar(['sync']), [], 'se decide otra vez en una que ya va en la 3');
+      // Pedir el plan no escribe; aceptarlo, sí. Y sin arnés todavía cuenta como pasar a la 3.
+      limpiar(); fs.rmSync(path.join(r, '.rsc.json'));
+      assert.deepEqual(await lanzar(['onboard', '--target', 'claude']), [], 'se decide al pedir el plan, antes de que diga que sí');
+      assert.deepEqual(await lanzar(['onboard', '--target', 'claude', '--accept-plan', 'x']), ['.no-auto-update', '.no-knowledge-sync', '.no-trunk-guard'], 'al aceptar el plan no se decide');
+      // Y si la orden no sale, lo puesto se quita, y una carpeta vacía se queda vacía.
+      limpiar(); sale = 4;
+      await lanzar(['onboard', '--target', 'claude', '--accept-plan', 'x']);
+      assert.equal(fs.existsSync(path.join(r, '.rsc')), false, 'un montaje que no sale deja .rsc/ con las marcas');
+      sale = 0;
+
+      // Ni a través de un enlace.
+      const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-'));
+      limpiar(); declarar({});
+      fs.symlinkSync(fuera, path.join(r, '.rsc'));
+      assert.equal(decidirM.decidirComoLaBarra(), null, 'escribe a través de un .rsc que es un enlace');
+      assert.deepEqual(fs.readdirSync(fuera), [], 'ha escrito fuera de la carpeta');
+      fs.rmSync(path.join(r, '.rsc'));
+      fs.mkdirSync(path.join(r, '.rsc'));
+      fs.symlinkSync(path.join(fuera, 'creado'), path.join(r, '.rsc', '.no-knowledge-sync'));
+      decidirM.decidirComoLaBarra();
+      assert.ok(!fs.existsSync(path.join(fuera, 'creado')), 'sigue un enlace roto y crea su destino');
+      return 'en todos los caminos, justo antes; lo ajeno, sin abrir; la 3, quieta; el plan sin aceptar, nada; lo fallido, quitado; sin enlaces';
     } finally {
+      procesosM.node = antes.node;
+      terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
       vscode.guion.raiz = empresa;
     }
   });
 
-  await comprobar('una carpeta que va por delante se trabaja con su versión, nunca con la de la barra', async () => {
-    // Decisión 145. RSC no compara versiones: un `sync` de la barra sobre una
-    // carpeta más nueva la bajaría sin avisar. Ahí `correr` usa npx con la versión
-    // de la carpeta, que quien montó RSC desde el chat tiene. Sin una versión de
-    // tres números no se sabe cuál es la suya, y lo que escribe no se corre.
+  await comprobar('un montaje nuevo quita el permiso de subir sin preguntar, salvo si el equipo ya lo daba, y si falla lo dice', async () => {
+    // Decisión 145. RSC solo lo enciende en un proyecto nuevo; ahí sale del
+    // ordenador en su nombre y espera a un sí (P9). Si el equipo ya lo tenía
+    // declarado, es suyo (revisión de corrección del paso a la 3, 3).
+    const rscM = cargar('rsc');
+    const arrancarM = cargar('arrancar');
+    const antes = rscM.correr;
+    const HUELLA = 'f'.repeat(64);
+    let pedidos = [];
+    let fallaElPermiso = false;
+    rscM.correr = async (args) => {
+      pedidos.push(args.join(' '));
+      if (args[0] === 'git-permissions') return { codigo: fallaElPermiso ? 1 : 0, salida: '', error: fallaElPermiso ? 'no' : '' };
+      if (args[0] !== 'onboard') return { codigo: 0, salida: '' };
+      if (args.includes('--accept-plan')) return { codigo: 0, salida: `RSC_ONBOARDING_READY ${HUELLA}` };
+      return { codigo: 0, salida: `Plan id: ${HUELLA}\nAccept exactly this plan: npx @ericrisco/rsc@3.0.22 onboard --target claude --accept-plan ${HUELLA}` };
+    };
+    const respuestas = { nivel: 'non-technical', kind: 'operations', objetivo: 'Organizar el papeleo', asistente: 'claude' };
+    try {
+      vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-nueva-'));
+      let hecho = await arrancarM.COMO_SE_HACE.montarElArnes({ respuestas });
+      assert.ok(pedidos.includes('git-permissions off'), `en una nueva no se quita: ${pedidos.join(' · ')}`);
+      assert.ok(!hecho.pega, 'sin fallo, una pega');
+
+      pedidos = [];
+      const delEquipo = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-equipo-'));
+      fs.writeFileSync(path.join(delEquipo, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], catalogVersion: '3.0.22', gitPermissions: true }));
+      vscode.guion.raiz = delEquipo;
+      await arrancarM.COMO_SE_HACE.montarElArnes({ respuestas });
+      assert.ok(!pedidos.includes('git-permissions off'), 'se quita lo que el equipo ya había dado');
+
+      pedidos = [];
+      fallaElPermiso = true;
+      vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-falla-'));
+      hecho = await arrancarM.COMO_SE_HACE.montarElArnes({ respuestas });
+      assert.equal(hecho.ok, true, 'que falle el permiso tumba el montaje');
+      assert.match(hecho.pega || '', /permiso de subir sin preguntar/, 'que falle no se dice');
+
+      // Y por el montaje entero, que es lo que llega a la pantalla: la pega de un
+      // paso que sale bien también se recoge.
+      const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-git-'));
+      fs.writeFileSync(path.join(casa, '.gitconfig'), '');
+      const git = process.env.GIT_CONFIG_GLOBAL;
+      process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
+      vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-entero-'));
+      vscode.guion.respuestas = ['Llevar el día a día', 'La empresa entera', 'Solo yo', 'Organizar el papeleo', 'Lo justo', 'Ferretería Soler', ''];
+      try {
+        const entero = await arrancarM.arrancar({ extensionPath: RAIZ, workspaceState: { get: () => undefined, update: async () => {} } }, vscode.window.createOutputChannel());
+        assert.equal(entero.ok, true, entero.mensaje || 'se canceló');
+        assert.ok((entero.pegas || []).some((p) => /permiso de subir sin preguntar/.test(p)), `no llega a la pantalla: ${JSON.stringify(entero.pegas)}`);
+      } finally {
+        if (git === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+        else process.env.GIT_CONFIG_GLOBAL = git;
+        vscode.guion.respuestas = null;
+      }
+      return 'quitado en la nueva, respetado en la del equipo, y dicho si falla, hasta la pantalla';
+    } finally {
+      rscM.correr = antes;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('una carpeta que va por delante se mira con el arnés de dentro, no se escribe y no se baja nada de npm', async () => {
+    // Decisión 145. RSC no compara versiones: escribir con la de la barra la
+    // bajaría. Y bajar la suya con npx leía el `.npmrc` de la carpeta: una
+    // preparada la mandaba a su registro y ejecutaba lo que quería solo con abrir
+    // la barra (revisión de seguridad del paso a la 3, H1, reproducido). Así que
+    // se mira con el de dentro y lo que escribe espera.
     const rscM = cargar('rsc');
     const procesosM = cargar('procesos');
     const entornoM = cargar('entorno');
     const r = conEnganches();
     const d = JSON.parse(fs.readFileSync(path.join(r, '.rsc.json'), 'utf8'));
-    const declarar = (v) => fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ ...d, catalogVersion: v }));
+    fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ ...d, catalogVersion: MAS_NUEVA }));
+    fs.writeFileSync(path.join(r, '.npmrc'), '@ericrisco:registry=http://127.0.0.1:9/\n');
     const antes = { node: procesosM.node, delPath: procesosM.delPath, npxCli: entornoM.npxCli };
     const lanzados = [];
-    procesosM.node = async (args) => { lanzados.push(['node', ...args]); return { codigo: 0, salida: '', error: '' }; };
+    procesosM.node = async (args) => { lanzados.push(args); return { codigo: 0, salida: '', error: '' }; };
     procesosM.delPath = async (que, args) => { lanzados.push([que, ...args]); return { codigo: 0, salida: '', error: '' }; };
+    entornoM.npxCli = () => '/node/lib/npx-cli.js';
     vscode.guion.raiz = r;
     try {
-      declarar(MAS_NUEVA);
-      entornoM.npxCli = () => '/node/lib/npx-cli.js';
-      await rscM.correr(['sync']);
-      assert.deepEqual(lanzados.pop(), ['node', '/node/lib/npx-cli.js', '--yes', `@ericrisco/rsc@${MAS_NUEVA}`, 'sync'], 'no se corre con su versión');
-      entornoM.npxCli = () => null;
-      await rscM.correr(['doctor', '--json']);
-      assert.deepEqual(lanzados.pop(), ['npx', '--yes', `@ericrisco/rsc@${MAS_NUEVA}`, 'doctor', '--json'], 'sin el npx del Node de la barra, no se usa el del ordenador');
-      // Una que va por delante con una versión rara: lo que escribe, no.
-      declarar('9.0.0-beta.1');
-      const raro = await rscM.correr(['sync']);
-      assert.notEqual(raro.codigo, 0, 'escribe sin saber con qué versión');
-      assert.equal(lanzados.length, 0, 'se ha lanzado algo');
-      // Y la de la clase, o una que va por detrás, con el arnés que trae la barra.
-      declarar(LA_DE_LA_CLASE);
-      await rscM.correr(['sync']);
-      assert.ok(!lanzados.pop().includes('--yes'), 'la de la clase se corre con npx');
-      return 'su versión con el npx de la barra o con el del ordenador; la rara, parada; la de la clase, con la de dentro';
+      assert.equal(rscM.vaPorDelante(), true);
+      for (const orden of [['sync'], ['repair'], ['add', 'bookkeeping'], ['git-permissions', 'off'], ['knowledge-sync', 'on']]) {
+        const hecho = await rscM.correr(orden);
+        assert.equal(hecho.porDelante, true, `${orden.join(' ')} se corre en una carpeta que va por delante`);
+      }
+      assert.deepEqual(lanzados, [], 'se ha lanzado algo para escribir');
+      for (const orden of [['doctor', '--json'], ['memory', 'resume'], ['repair', '--dry-run'], ['git-permissions', 'status']]) await rscM.correr(orden);
+      assert.equal(lanzados.length, 4, 'mirar no se deja');
+      assert.ok(!lanzados.some((a) => a.some((x) => /npx|@ericrisco\/rsc@/.test(String(x)))), `se ha usado npx: ${JSON.stringify(lanzados)}`);
+      return 'cinco órdenes que escriben, paradas; cuatro que miran, con la de dentro; npx, nunca';
     } finally {
       Object.assign(procesosM, { node: antes.node, delPath: antes.delPath });
       entornoM.npxCli = antes.npxCli;
@@ -12835,10 +12920,10 @@ exec git "$@"
       assert.doesNotMatch(perfil, /^accompaniment/m, 'escribe un dial que nadie lee (decisión 145)');
       // Y como se dijo en clase: la rama principal abierta y nada que salga solo, y
       // que viaje con la carpeta (decisión 145).
-      for (const marca of ['.no-trunk-guard', '.no-knowledge-sync']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `falta ${marca}`);
+      for (const marca of ['.no-trunk-guard', '.no-knowledge-sync', '.no-auto-update']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `falta ${marca}`);
       const declarada = JSON.parse(fs.readFileSync(path.join(vacia, '.rsc.json'), 'utf8'));
       assert.equal(declarada.gitPermissions, false, 'el asistente puede subir sin preguntar');
-      for (const id of ['trunk-guard', 'knowledge-sync']) assert.ok((declarada.optOuts || []).includes(id), `${id} no viaja en .rsc.json: ${declarada.optOuts}`);
+      for (const id of ['trunk-guard', 'knowledge-sync', 'auto-update']) assert.ok((declarada.optOuts || []).includes(id), `${id} no viaja en .rsc.json: ${declarada.optOuts}`);
       assert.ok(fs.existsSync(path.join(vacia, '.claude/skills/executive-lab/SKILL.md')), 'falta la habilidad');
 
       // Y queda un punto de partida al que volver: sin esto, "Volver a como

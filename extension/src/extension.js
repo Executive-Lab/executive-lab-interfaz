@@ -52,6 +52,10 @@ const solo = require('./solo');
 const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
 const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'aprenderCapacidad']);
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
+// En una carpeta que va por delante, lo que escribe con el arnés espera a que la
+// barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
+const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacidad']);
+const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -787,6 +791,7 @@ ${cabecera}
     const accion = rutas[mensaje.tipo];
     if (!accion) return;
 
+    if (ESCRIBEN_CON_EL_ARNES.has(mensaje.tipo) && rsc.vaPorDelante()) return this.enviar({ tipo: 'aviso', texto: POR_DELANTE });
     if (LOS_DEL_ARNES.has(mensaje.tipo)) {
       // Mientras la barra arregla sola, un segundo arreglo pisaría al primero
       // sobre los mismos ficheros (revisión de corrección, 5 y 6).

@@ -670,6 +670,7 @@ async function ponerElBloque(contexto) {
 //     carpeta de alguien se enseña además lo suyo que se toca (I1);
 //   · lo que dice el arnés cuando falla vuelve en `detalle`, para el registro (I3).
 async function prepararTambienPara(id, contexto) {
+  if (rsc.vaPorDelante()) return { ok: false, porDelante: true };
   const enSeco = await rsc.correr(['sync', '--target', id, '--dry-run'], { tiempoMaximo: 300000 });
   if (enSeco.codigo !== 0) return { ok: false, detalle: loQuePaso('al mirar qué se toca', enSeco) };
   const plan = { gestionados: rsc.loQueTocaElSync(enSeco.salida, proyecto.raiz()) };
@@ -848,67 +849,32 @@ async function arreglarLoQueSePuedaSolo(salida) {
   return { ok: hecho.codigo === 0, detalle: n === 1 ? '1 arreglada' : `${n} arregladas` };
 }
 
-// ── Lo que la 3 trae encendido y en una carpeta de la barra no va ──────────
-//
-// La 3 de RSC cierra `main` al asistente si ve CI, un despliegue o dos personas,
-// y la primera vez mueve a otra rama lo que no se había subido. También sube
-// `01-TOOLS/` y la wiki solas a una rama del remoto, y en un montaje nuevo deja al
-// asistente guardar y subir sin preguntar. En las carpetas de la barra, `main` va
-// abierto, como se dijo en clase, y lo que sale del ordenador espera a un sí (P9,
-// decisión 145).
-//
-// Se decide una vez: al montar la carpeta, o al pasarla de la 2 a la 3, y siempre
-// antes del `sync`, que es el que pone los enganches que lo miran. Después es
-// suyo: si alguien lo enciende, se queda encendido. En una carpeta de alguien no
-// se decide por nadie (P4).
-const MARCAS_DE_LA_BARRA = ['.no-trunk-guard', '.no-knowledge-sync'];
-
-function decidirComoLaBarra() {
-  const raiz = proyecto.raiz();
-  if (!raiz) return false;
-  try {
-    // Lo que el equipo ya apagó, primero. Con `.rsc/` puesta, RSC no trata la
-    // carpeta como un clon: rehace sus `optOuts` con las marcas que encuentra y
-    // perdería las que solo están escritas en `.rsc.json`. Pasó al subir este
-    // repositorio a la 3: se fueron `audit`, `gitmoji` y `worktree-cleanup`.
-    const declaradas = ((proyecto.declaracion() || {}).optOuts || []).filter((id) => /^[a-z0-9-]+$/.test(String(id)));
-    fs.mkdirSync(path.join(raiz, '.rsc'), { recursive: true });
-    for (const marca of [...declaradas.map((id) => `.no-${id}`), ...MARCAS_DE_LA_BARRA]) {
-      const fichero = path.join(raiz, '.rsc', marca);
-      if (!fs.existsSync(fichero)) fs.writeFileSync(fichero, '');
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// La carpeta declara una 2 (o nada), y la barra trae una 3.
-function pasaALaTres() {
-  const mayor = (v) => Number((String(v || '').match(/^v?(\d+)\./) || [])[1]);
-  const suya = mayor(proyecto.versionDelCatalogo());
-  return !(suya >= 3) && mayor(rsc.VERSION_DE_RESPALDO) >= 3;
-}
-
 const COMO_SE_HACE = {
   ponerGit: async () => ({ ok: await prepararHistorial() }),
 
   // En una carpeta que ya era de alguien se enseña lo que se toca antes de
   // firmar (B4). Una vacía no tiene nada suyo que enseñar.
   montarElArnes: async ({ respuestas, parte }) => {
-    const decide = !(await sinSuSi(parte));
-    if (decide) decidirComoLaBarra();
+    // RSC solo deja al asistente guardar y subir sin preguntar cuando la carpeta no
+    // tenía arnés (`gitPermissions: true` en un proyecto nuevo). Eso sale del
+    // ordenador en su nombre y espera a un sí (P9, decisión 145). Si ya lo tenía
+    // decidido el equipo, se respeta (revisión de corrección del paso a la 3, 3).
+    const nueva = !proyecto.declaracion();
     const hecho = await montarElArnes(respuestas, {
       ajenaCarpeta: Boolean(parte) && ['empezada', 'otroArnes'].includes(parte.estado),
       // Si ya había un plan aceptado, el nuevo se compara con él (A12).
       reciboAnterior: (parte && parte.recibo) || null,
     });
-    // Un montaje nuevo deja al asistente guardar y subir sin preguntar: en una
-    // carpeta de la barra, eso espera a un sí (P9, decisión 145).
-    if (decide && hecho.ok) {
+    if (nueva && hecho.ok) {
       const sinPermisos = await rsc.correr(['git-permissions', 'off'], { tiempoMaximo: 300000 });
+      // Que falle no tumba el montaje, pero se dice: es un permiso que queda dado.
       if (sinPermisos.codigo !== 0) {
-        return { ...hecho, detalle: [hecho.detalle, `git-permissions off falló: ${(sinPermisos.error || sinPermisos.salida || '').trim().split('\n').pop()}`].filter(Boolean).join(' · '), imprescindible: true }; // diccionario: interno
+        return {
+          ...hecho,
+          detalle: [hecho.detalle, `git-permissions off falló: ${(sinPermisos.error || sinPermisos.salida || '').trim().split('\n').pop()}`].filter(Boolean).join(' · '), // diccionario: interno
+          pega: 'No he podido quitarle al asistente el permiso de subir sin preguntar. Pulsa «Algo va mal» y pásale el código a tu tutor.',
+          imprescindible: true,
+        };
       }
     }
     return { ...hecho, imprescindible: true };
@@ -916,9 +882,9 @@ const COMO_SE_HACE = {
 
   // Traer a esta máquina lo que el repositorio ya declaraba. No se vuelve a
   // montar nada: `sync` reconstruye desde el plan que alguien ya aceptó. Si la
-  // carpeta pasa de la 2 a la 3, antes se decide lo que la 3 trae encendido.
-  traerLasHabilidades: async ({ parte } = {}) => {
-    if (pasaALaTres() && !(await sinSuSi(parte))) decidirComoLaBarra();
+  // carpeta pasa de la 2 a la 3, `rsc.correr` decide antes lo que la 3 trae
+  // encendido (`decidir.js`).
+  traerLasHabilidades: async () => {
     const hecho = await rsc.sincronizar();
     return { ok: hecho.codigo === 0, detalle: (hecho.salida || '').trim().split('\n').pop(), imprescindible: true };
   },
@@ -1261,6 +1227,9 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
         if (hecho.renombrados) renombrados.push(...hecho.renombrados);
         if (hecho.detalle) salida.appendLine(`[arrancar] ${paso.id}: ${hecho.detalle}`); // diccionario: interno
 
+        // Una pega en un paso que sale bien también se dice: el montaje sigue, y la
+        // persona sabe qué ha quedado a medias (decisión 145, `git-permissions`).
+        if (hecho.ok && hecho.pega) pegas.push(hecho.pega);
         if (hecho.ok) continue;
 
         // Dijo que no a montar sobre lo suyo: no es un fallo, y no se toca nada.
@@ -1386,7 +1355,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
-  arrancar, decidirComoLaBarra, pasaALaTres, MARCAS_DE_LA_BARRA, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
+  arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
