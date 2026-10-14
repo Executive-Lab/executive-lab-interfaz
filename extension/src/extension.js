@@ -45,6 +45,12 @@ const reglas = require('./reglas');
 const ajustes = require('./ajustes');
 const donde = require('./donde');
 const solo = require('./solo');
+
+// P9: la carpeta que este ordenador ya conoce, los botones que corren el arnés o
+// tocan sus copias, y lo que se dice si se pulsan mientras la barra arregla sola.
+const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
+const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'ponerComoLaDeLaClase', 'elegirAsistente', 'aprenderCapacidad']);
+const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -231,17 +237,27 @@ ${cabecera}
 
   enviar(mensaje) {
     if (this.vista) this.vista.webview.postMessage(mensaje);
-    // Lo que se arregló solo al abrir puede llegar antes que el panel: se guarda,
-    // y sale en cuanto el panel dice que está listo (P9).
-    else if (mensaje && mensaje.tipo === 'aviso' && mensaje.alAbrir) this.avisoPendiente = mensaje;
   }
 
-  // El panel dice que está listo: se pinta, y si esperaba un aviso, sale ahora.
-  async alEstarListo() {
-    await this.refrescar();
-    const pendiente = this.avisoPendiente;
+  // El aviso de lo que se hizo solo al abrir sale en la principal, con la barra
+  // a la vista. Si no, espera: cada vez que se pinta la principal se mira, y se
+  // pinta al cargar el panel y al volver a mirarlo (revisión de corrección, 4 y 8).
+  soltarElAviso() {
+    if (!this.avisoPendiente || !this.vista || this.vista.visible === false || this.donde.tipo !== 'principal') return;
+    const aviso = this.avisoPendiente;
     this.avisoPendiente = null;
-    if (pendiente) this.enviar(pendiente);
+    this.enviar(aviso);
+  }
+
+  // Una carpeta que este ordenador ya conoce: alguien ha pulsado aquí un botón
+  // que corre el arnés. Va en el estado del editor para esta carpeta, que un
+  // repositorio no puede traer escrito.
+  carpetaConocida() {
+    return Boolean(this.contexto.workspaceState && this.contexto.workspaceState.get(CLAVE_CONOCIDA));
+  }
+
+  async darPorConocida() {
+    if (this.contexto.workspaceState && !this.carpetaConocida()) await this.contexto.workspaceState.update(CLAVE_CONOCIDA, true);
   }
 
   // ── Lo que se puede hacer solo, se hace solo (P9, decisión 142) ─────────
@@ -255,29 +271,61 @@ ${cabecera}
   // fondo —tres procesos del arnés—, y se paga una vez, al abrir.
   async hacerSoloLoQueSePuede() {
     if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return [];
-    const aFondo = (await terreno.reconocer({ profundo: true })).arnes;
-    const { piezas } = await terreno.radiografia({ aFondo, sigueSinCopias: this.eligioSinCopias() });
-    const tareas = solo.queSeHaceSolo(piezas);
+    // Solo en una carpeta que este ordenador ya conoce. Con el instalador, la
+    // confianza del editor va apagada y vale para todas, así que no distingue un
+    // repositorio recién traído de fuera (revisión de seguridad, H2). La primera
+    // vez, con su botón; pulsarlo la da por conocida.
+    if (!this.carpetaConocida()) {
+      this.salida.appendLine('[solo] carpeta que este ordenador no conoce todavía: espera a un clic'); // diccionario: interno
+      return [];
+    }
+    // Montada con un arnés más nuevo que el de la clase: correr encima el de la
+    // barra la bajaría sin su sí (revisión de seguridad, M1).
+    if (rsc.comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') {
+      this.salida.appendLine('[solo] carpeta de un arnés más nuevo que el de la clase: no se toca sola'); // diccionario: interno
+      return [];
+    }
+    const mirar = async () => (await terreno.radiografia({
+      aFondo: (await terreno.reconocer({ profundo: true })).arnes,
+      sigueSinCopias: this.eligioSinCopias(),
+    })).piezas;
+    const tareas = solo.queSeHaceSolo(await mirar());
     if (!tareas.length) return [];
 
-    const hechas = await solo.hacerloSolo(tareas, {
-      // `yaEstaba` es que no había nada que hacer: no se cuenta como arreglado.
-      arrancar: async () => {
-        const hecho = await arrancar.arrancar(this.contexto, this.salida, { sinNadieDelante: true });
-        return hecho.ok && !hecho.yaEstaba;
-      },
-      arreglar: async () => {
-        const { ok, detalle } = await soporte.arreglar();
-        if (detalle) this.salida.appendLine(detalle);
-        return ok;
-      },
-    }, (linea) => this.salida.appendLine(linea));
+    // Mientras dura, los botones que corren el arnés esperan (ver `manejar`).
+    this.arreglandoSolo = true;
+    let hechas = [];
+    try {
+      hechas = await solo.hacerloSolo(tareas, {
+        // `yaEstaba` es que no había nada que hacer: no se cuenta como arreglado.
+        arrancar: async () => {
+          const hecho = await arrancar.arrancar(this.contexto, this.salida, { sinNadieDelante: true });
+          return hecho.ok && !hecho.yaEstaba;
+        },
+        arreglar: async () => {
+          const { ok, detalle } = await soporte.arreglar();
+          if (detalle) this.salida.appendLine(detalle);
+          return ok;
+        },
+      }, (linea) => this.salida.appendLine(linea));
+      // Lo que se va a decir arreglado se mira otra vez: un `repair` que no
+      // encuentra nada sale bien igual, y la frase diría algo que no ha pasado
+      // (revisión de corrección, 3). Solo cuenta lo que ya no sale como pendiente.
+      if (hechas.length) {
+        const siguen = new Set((await mirar()).filter((p) => p.estado === 'no' || p.estado === 'aMedias').map((p) => p.nombre));
+        hechas = hechas.filter((nombre) => !siguen.has(nombre));
+      }
+    } finally {
+      this.arreglandoSolo = false;
+    }
 
-    await this.refrescar(true);
     // Lo que trae o arregla el arnés lo lee Claude al empezar una conversación.
-    const reabrir = donde.paraQuien() === 'claude' && hechas.length > 0;
-    const frase = solo.laFrase(hechas, reabrir);
-    if (frase) this.enviar({ tipo: 'aviso', texto: frase, alAbrir: true });
+    const frase = solo.laFrase(hechas, donde.paraQuien() === 'claude' && hechas.length > 0);
+    if (frase) this.avisoPendiente = { tipo: 'aviso', texto: frase };
+    // Sin sacar a nadie de donde está: se repinta lo que tenga delante, y la
+    // frase sale cuando esté en la principal.
+    await this.repintarLoQueHaya();
+    this.soltarElAviso();
     return hechas;
   }
 
@@ -352,6 +400,7 @@ ${cabecera}
       // pulsa «Actualizar ahora» (decisión 132).
       ...(await this.laVersionQueToca()),
     });
+    this.soltarElAviso();
     // Sin esperar: si hay algo que decir, repinta ella sola.
     this.mirarLosArregladosSiToca().catch((error) => this.salida.appendLine(`[avisos] ${error.stack || error.message}`)); // diccionario: interno
     this.ponerLaNuevaSolaSiToca().catch((error) => this.salida.appendLine(`[version] sola: ${error.stack || error.message}`)); // diccionario: interno
@@ -619,7 +668,7 @@ ${cabecera}
 
   async manejar(mensaje) {
     const rutas = {
-      listo: () => this.alEstarListo(),
+      listo: () => this.refrescar(),
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
@@ -727,6 +776,15 @@ ${cabecera}
 
     const accion = rutas[mensaje.tipo];
     if (!accion) return;
+
+    if (LOS_DEL_ARNES.has(mensaje.tipo)) {
+      // Mientras la barra arregla sola, un segundo arreglo pisaría al primero
+      // sobre los mismos ficheros (revisión de corrección, 5 y 6).
+      if (this.arreglandoSolo) return this.enviar({ tipo: 'aviso', texto: OCUPADA });
+      // Y quien pulsa uno da la carpeta por conocida: desde ahí, lo que se
+      // pueda se hace solo al abrirla (P9; revisión de seguridad, H2).
+      await this.darPorConocida();
+    }
 
     try {
       await accion();
@@ -1923,6 +1981,7 @@ ${cabecera}
     const hecho = enElPlan.length
       ? await arrancar.volverAMontarComoLaDeLaClase(this.contexto, this.salida)
       : await arrancar.ponerComoLaDeLaClase(sobran);
+    if (hecho.enMarcha) return this.enviar({ tipo: 'aviso', texto: OCUPADA });
     const { ok } = hecho;
     this.salida.appendLine(`[version] como la de la clase: ${ok}${sobran.length ? `, sin ${sobran.join(', ')}` : ''}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
     if (hecho.cancelado) {
@@ -1950,6 +2009,7 @@ ${cabecera}
 
   async arrancar() {
     const hecho = await arrancar.arrancar(this.contexto, this.salida);
+    if (hecho.enMarcha) return this.enviar({ tipo: 'aviso', texto: OCUPADA });
 
     if (hecho.cancelado) {
       // Dijo que no a montar el arnés sobre lo que ya tenía. La barra funciona
@@ -2375,7 +2435,7 @@ function activate(contexto) {
     comando('executiveLab.copiaFuera', () => panel.verCopiaFuera()),
     comando('executiveLab.documentos', () => panel.anadirDocumentos()),
     comando('executiveLab.algoVaMal', () => panel.algoVaMal()),
-    comando('executiveLab.empezarEmpresa', () => panel.arrancar()),
+    comando('executiveLab.empezarEmpresa', () => panel.manejar({ tipo: 'arrancar' })),
     comando('executiveLab.elegirCarpeta', () => panel.elegirCarpeta()),
     comando('executiveLab.ponerLaCara', () => panel.ponerLaCara()),
     comando('executiveLab.seguir', () => panel.pedir('Recuérdame en qué estábamos y sigamos por donde lo dejamos.')),

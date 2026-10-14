@@ -1052,8 +1052,9 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         estado: 'no',
         // Por sus nombres, no por lo que escribe el arnés (G3).
         detalle: `${falta.length} ${falta.length === 1 ? 'cosa declarada que no está' : 'cosas declaradas que no están'}: ${falta.slice(0, 3).map((f) => `«${require('./nombres').comoSeLlama({ habilidad: 'habilidades', agente: 'ayudantes', comando: 'comandos' }[f.que], f.id, {}).nombre}»`).join(', ')}`, // diccionario: interno
-        // `repair` sin `--yes` solo devuelve lo que estaba: lo que hay que decidir
-        // se queda pendiente, y antes guarda copia (`scripts/lib/repair.js`).
+        // `repair` sin `--yes` aplica lo que restaura y deja pendiente lo que hay
+        // que decidir, y antes guarda copia (`scripts/lib/repair.js`). Lo único
+        // que crearía de nuevo es `.rsc.json`, y esta pieza solo sale con él puesto.
         arreglo: { como: 'solo', etiqueta: 'Traerlas ahora', accion: { tipo: 'arreglar' }, alAbrir: true },
       });
     }

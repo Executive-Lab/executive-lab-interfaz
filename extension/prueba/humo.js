@@ -2836,7 +2836,9 @@ exec git "$@"
     assert.ok(objetos.length >= 12, `solo encuentro ${objetos.length} arreglos que hace la barra: la prueba no mira nada`);
 
     const cuenta = { solos: 0, retenidos: 0, deIr: 0 };
-    for (const obj of objetos) {
+    for (const conComentarios of objetos) {
+      // Un caso escrito en un comentario no cuenta como dicho.
+      const obj = conComentarios.replace(/\/\/[^\n]*/g, '');
       const tipo = (obj.match(/tipo: '(\w+)'/) || [])[1];
       assert.ok(tipo, `un arreglo sin acción: ${obj.slice(0, 80)}`);
       const alAbrir = /alAbrir: true/.test(obj);
@@ -2856,7 +2858,7 @@ exec git "$@"
     }
     // Y los que se hacen solos tienen quien los haga al abrir.
     const ext = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
-    const metodo = ext.slice(ext.indexOf('async hacerSoloLoQueSePuede()'), ext.indexOf('async hacerSoloLoQueSePuede()') + 2500);
+    const metodo = ext.slice(ext.indexOf('async hacerSoloLoQueSePuede()'), ext.indexOf('soltarElAviso();\n    return hechas;'));
     for (const tipo of solo.ORDEN) assert.match(metodo, new RegExp(`\\b${tipo}: async`), `al abrir nadie hace «${tipo}»`);
     // Y la activación lo llama, después de reponer los raíles.
     const activar = ext.slice(ext.indexOf('function activate(contexto)'));
@@ -2909,6 +2911,21 @@ exec git "$@"
     for (const rama of ['desdeCero', 'otroArnes', 'sinGit', 'comoLaDeLaClase', 'noSePrepara']) assert.ok(!sin({ rama }), rama);
     assert.ok(!sin({ rama: 'ponerAlDia' }, { carpeta: { delicada: 'documentos' } }), 'en Documentos entera');
     assert.ok(!sin({ rama: 'ponerAlDia' }, { dentroDeOtro: { nombre: 'otro' } }), 'dentro de otro proyecto');
+    // Nunca crea el historial (revisión de corrección, 1): con el camino de verdad,
+    // una carpeta con arnés y sin git lleva `ponerGit` delante.
+    assert.ok(!sin({ rama: 'ponerAlDia', pasos: [{ id: 'ponerGit' }, { id: 'traerLasHabilidades' }] }), 'con git init');
+    assert.ok(!sin({ rama: 'completar', pasos: [{ id: 'puntoDePartida' }] }), 'con el punto de partida');
+    const rumboM = cargar('rumbo');
+    const sinHistorial = {
+      estado: 'conArnes', versionAtrasada: true, git: { hay: true, repositorio: false },
+      carpeta: { vacia: false, cuantos: 9, parece: null }, suelo: { faltan: [] },
+      habilidades: { declaradas: [], enDisco: [], colgando: [] },
+      recibo: { record: { projectKind: 'operations', goal: 'x', technicalLevel: 'non-technical', accompaniment: 'L2', targets: ['claude'] } },
+      railes: { habilidadPropia: true, perfil: true, nombres: { arnes: 'X' } }, claves: null,
+    };
+    const planSinHistorial = rumboM.elegirRama(sinHistorial);
+    assert.ok(planSinHistorial.pasos.some((p) => p.id === 'ponerGit'), 'la prueba no mira el caso: el camino ya no pone git');
+    assert.ok(!arrancarM.sePuedeSinNadie(planSinHistorial, sinHistorial), 'sin nadie delante crea el historial de una carpeta sin copias');
 
     // Y de verdad, en una carpeta vacía: preparar pide respuestas, así que no
     // pregunta nada, no enseña nada y no escribe nada.
@@ -2922,6 +2939,7 @@ exec git "$@"
       assert.equal(vscode.registrado.quickPick, null, 'ha preguntado algo');
       assert.deepEqual(vscode.registrado.mensajes.slice(mensajes).filter((m) => /^(INFO|WARN) /.test(m)), [], 'ha abierto una ventana');
       assert.deepEqual(fs.readdirSync(vacia), [], 'ha escrito en la carpeta');
+      assert.equal(arrancarM.momento.nadieDelante, false, 'se queda puesto «sin nadie delante» después');
     } finally {
       vscode.guion.raiz = empresa;
     }
@@ -2936,6 +2954,12 @@ exec git "$@"
     try {
       assert.deepEqual(await arrancarM.confirmarLoQueSeToca({ gestionados: [] }), { seguir: false }, 'monta encima de lo suyo sin nadie');
       assert.equal(await arrancarM.confirmarLoQueCambia({ seleccionados: [] }, { decisions: [] }), false, 'firma un plan que cambia sin nadie');
+      // Y uno que no se puede comparar tampoco se da por bueno (revisión, 2).
+      rscM.cambiosDePolitica = () => null;
+      assert.equal(await arrancarM.confirmarLoQueCambia({ seleccionados: [] }, {}), false, 'firma sin nadie un plan que no se puede comparar');
+      rscM.cambiosDePolitica = () => ({ entran: [], salen: [] });
+      assert.equal(await arrancarM.confirmarLoQueCambia({ seleccionados: [] }, { decisions: [] }), true, 'sin cambios no firma');
+      rscM.cambiosDePolitica = () => ({ entran: ['skill/invoicing'], salen: [] });
       assert.deepEqual(vscode.registrado.mensajes.slice(antesDe).filter((m) => /^(INFO|WARN) /.test(m)), [], 'ha abierto una ventana');
       arrancarM.momento.nadieDelante = false;
       await arrancarM.confirmarLoQueCambia({ seleccionados: [] }, { decisions: [] });
@@ -2947,72 +2971,180 @@ exec git "$@"
     return 'cuatro caminos sin nadie, una carpeta vacía sin ventana ni cambios, y las dos confirmaciones';
   });
 
-  await comprobar('P9: al abrir, la barra hace sola lo marcado y lo dice en una frase; sin confianza, nada', async () => {
+  await comprobar('P9: al abrir, la barra hace sola lo marcado y lo dice en una frase; si no puede, nada', async () => {
     const proveedor = vscode.registrado.proveedor;
     const terrenoM = cargar('terreno');
     const arrancarM = cargar('arrancar');
     const soporteM = cargar('soporte');
+    const proyectoM = cargar('proyecto');
     const antes = {
       reconocer: terrenoM.reconocer, radiografia: terrenoM.radiografia, arrancar: arrancarM.arrancar,
-      arreglar: soporteM.arreglar, enviar: proveedor.enviar, refrescar: proveedor.refrescar,
-      vista: proveedor.vista, confianza: vscode.guion.confianza,
+      arreglar: soporteM.arreglar, version: proyectoM.versionDelCatalogo, enviar: proveedor.enviar,
+      refrescar: proveedor.refrescar, vista: proveedor.vista, donde: proveedor.donde,
+      confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
     };
-    const pasos = [];
-    const enviados = [];
-    terrenoM.reconocer = async () => ({ arnes: null });
-    terrenoM.radiografia = async () => ({ piezas: [
+    const ANTES = [
       { nombre: 'Lo que debería estar puesto', estado: 'no', arreglo: { como: 'solo', accion: { tipo: 'arreglar' }, alAbrir: true } },
       { nombre: 'La versión del arnés', estado: 'aMedias', arreglo: { como: 'solo', accion: { tipo: 'arrancar' }, alAbrir: true } },
       { nombre: 'Freno ante órdenes peligrosas', estado: 'no', arreglo: { como: 'solo', accion: { tipo: 'ponerElFreno' }, retiene: 'loDecide' } },
-    ] });
+    ];
+    // Lo que se ve después: por defecto, lo arreglado ya no sale como pendiente.
+    let despues = [ANTES[2]];
+    let vueltas = 0;
+    const pasos = [];
+    const enviados = [];
+    const pintadas = [];
+    terrenoM.reconocer = async () => ({ arnes: null });
+    terrenoM.radiografia = async () => { vueltas += 1; return { piezas: vueltas % 2 ? ANTES : despues }; };
     arrancarM.arrancar = async (_c, _s, opciones) => { pasos.push(['arrancar', opciones]); return { ok: true }; };
     soporteM.arreglar = async () => { pasos.push(['arreglar']); return { ok: true, mensaje: '' }; };
-    proveedor.enviar = (m) => enviados.push(m);
-    proveedor.refrescar = async () => {};
+    proyectoM.versionDelCatalogo = () => cargar('rsc').VERSION_DE_RESPALDO;
+    proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+    proveedor.refrescar = async () => { pintadas.push('principal'); proveedor.donde = { tipo: 'principal' }; proveedor.soltarElAviso(); };
+    const avisos = () => enviados.filter((m) => m.tipo === 'aviso');
+    const otraVez = () => { enviados.length = 0; pasos.length = 0; pintadas.length = 0; vueltas = 0; };
     try {
+      // Sin confianza, nada.
       vscode.guion.confianza = false;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
       assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), [], 'sin confianza ha hecho algo');
-      assert.deepEqual(pasos, [], 'sin confianza ha corrido el arnés');
-
+      // Con confianza pero en una carpeta que este ordenador no conoce: nada (H2).
       vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', undefined);
+      assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), [], 'en una carpeta recién traída ha hecho algo sola');
+      // Con una versión del arnés más nueva que la de la clase: nada (M1).
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      proyectoM.versionDelCatalogo = () => '99.0.0';
+      assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), [], 'ha corrido el arnés de la clase sobre uno más nuevo');
+      proyectoM.versionDelCatalogo = () => cargar('rsc').VERSION_DE_RESPALDO;
+      assert.deepEqual(pasos, [], 'en alguno de los tres casos ha corrido el arnés');
+
+      // En la principal: en orden, una frase, y sale.
+      proveedor.donde = { tipo: 'principal' };
       const hechas = await proveedor.hacerSoloLoQueSePuede();
       assert.deepEqual(pasos.map((p) => p[0]), ['arrancar', 'arreglar'], 'el orden');
       assert.deepEqual(pasos[0][1], { sinNadieDelante: true }, 'el montaje no sabe que no hay nadie delante');
       assert.deepEqual(hechas, ['La versión del arnés', 'Lo que debería estar puesto']);
-      const avisos = enviados.filter((m) => m.tipo === 'aviso');
-      assert.equal(avisos.length, 1, 'una frase, no una por arreglo');
-      assert.match(avisos[0].texto, /^Al abrir la carpeta he arreglado solo «La versión del arnés» y «Lo que debería estar puesto»\./);
+      assert.equal(avisos().length, 1, 'una frase, no una por arreglo');
+      assert.match(avisos()[0].texto, /^Al abrir la carpeta he arreglado solo «La versión del arnés» y «Lo que debería estar puesto»\./);
 
-      // Lo que no sale no se cuenta, y si no sale nada, no se dice nada.
-      enviados.length = 0;
-      pasos.length = 0;
-      arrancarM.arrancar = async () => ({ ok: false, esperaASuBoton: true });
+      // Lo que sigue pendiente después no se dice arreglado (revisión, 3).
+      otraVez();
+      despues = [ANTES[0], ANTES[2]];
+      assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), ['La versión del arnés'], 'dice arreglado algo que sigue igual');
+      despues = [ANTES[2]];
+
+      // Lo que no sale no se cuenta; ni «ya estaba».
+      otraVez();
+      arrancarM.arrancar = async () => ({ ok: true, yaEstaba: true });
       soporteM.arreglar = async () => ({ ok: false, mensaje: 'No he podido arreglarlo yo solo.', detalle: 'roto' });
       assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), []);
-      assert.equal(enviados.filter((m) => m.tipo === 'aviso').length, 0, 'dice que ha arreglado algo que no');
-      // Ni cuando ya estaba.
-      arrancarM.arrancar = async () => ({ ok: true, yaEstaba: true });
-      assert.deepEqual(await proveedor.hacerSoloLoQueSePuede(), [], '«ya estaba» se cuenta como arreglado');
+      assert.equal(avisos().length, 0, 'dice que ha arreglado algo que no');
 
-      // Sin panel todavía, el aviso espera a que el panel diga que está listo.
-      proveedor.enviar = antes.enviar;
-      proveedor.vista = null;
+      // En otra pantalla no se la saca de ahí: la frase espera a la principal (revisión, 4).
+      otraVez();
       arrancarM.arrancar = async () => ({ ok: true });
+      proveedor.donde = { tipo: 'quieto' };
       await proveedor.hacerSoloLoQueSePuede();
-      assert.ok(proveedor.avisoPendiente && /^Al abrir la carpeta/.test(proveedor.avisoPendiente.texto), 'sin panel, el aviso se pierde');
-      const posteados = [];
-      proveedor.vista = { webview: { postMessage: (m) => posteados.push(m) } };
-      // Por donde llega de verdad: el panel manda «listo» al cargarse.
-      await proveedor.manejar({ tipo: 'listo' });
-      assert.ok(posteados.some((m) => m.tipo === 'aviso' && /^Al abrir la carpeta/.test(m.texto)), 'al estar listo no sale');
-      assert.equal(proveedor.avisoPendiente, null, 'sale dos veces');
-      return 'en orden, una frase, nada sin confianza, nada si no sale, y espera al panel';
+      assert.deepEqual(pintadas, [], 'ha repintado encima de lo que estaba leyendo');
+      assert.equal(avisos().length, 0, 'ha soltado la frase fuera de la principal');
+      await proveedor.manejar({ tipo: 'volver' });
+      assert.equal(avisos().length, 1, 'al volver a la principal la frase no sale');
+      // Y con la barra escondida, tampoco hasta que se vea (revisión, 8).
+      otraVez();
+      proveedor.vista.visible = false;
+      await proveedor.hacerSoloLoQueSePuede();
+      assert.equal(avisos().length, 0, 'ha soltado la frase con la barra escondida');
+      proveedor.vista.visible = true;
+      await proveedor.refrescar();
+      assert.equal(avisos().length, 1, 'al volver a mirar la barra la frase no sale');
+
+      // Mientras arregla sola, un botón del arnés espera y lo dice (revisión, 5 y 6).
+      otraVez();
+      let soltar;
+      arrancarM.arrancar = () => new Promise((r) => { soltar = () => r({ ok: true }); });
+      const enCurso = proveedor.hacerSoloLoQueSePuede();
+      await new Promise((r) => setImmediate(r));
+      await proveedor.manejar({ tipo: 'arreglar' });
+      assert.ok(avisos().some((m) => m.texto === 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.'), 'un botón pisa al arreglo de al abrir');
+      assert.ok(!pasos.some((p) => p[0] === 'arreglar'), 'el segundo arreglo ha corrido a la vez');
+      soltar();
+      await enCurso;
+      assert.equal(proveedor.arreglandoSolo, false, 'se queda ocupada para siempre');
+
+      // Y pulsar un botón del arnés da la carpeta por conocida (H2).
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', undefined);
+      soporteM.arreglar = async () => ({ ok: true, mensaje: 'Arreglado.' });
+      await proveedor.manejar({ tipo: 'arreglar' });
+      assert.equal(contexto.workspaceState.get('executiveLab.carpetaConocida'), true, 'pulsar no la da por conocida');
+      return 'nada sin confianza, en una carpeta nueva o con un arnés más nuevo · en orden, una frase, mirada otra vez · espera a la principal · y no se pisa';
     } finally {
       Object.assign(terrenoM, { reconocer: antes.reconocer, radiografia: antes.radiografia });
       arrancarM.arrancar = antes.arrancar;
       soporteM.arreglar = antes.arreglar;
-      Object.assign(proveedor, { enviar: antes.enviar, refrescar: antes.refrescar, vista: antes.vista, avisoPendiente: null });
+      proyectoM.versionDelCatalogo = antes.version;
+      Object.assign(proveedor, { enviar: antes.enviar, refrescar: antes.refrescar, vista: antes.vista, donde: antes.donde, avisoPendiente: null, arreglandoSolo: false });
       vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+    }
+  });
+
+  await comprobar('el arnés no corre si sus nombres salen de la carpeta, y la versión es de tres números', async () => {
+    // Revisión de seguridad de P9, H1, reproducido: al sincronizar, el arnés borra
+    // cada nombre de su fichero de estado que el plan no tenga, sin mirar adónde
+    // apunta. Un repositorio preparado borraba carpetas del ordenador al traerlo.
+    const rscM = cargar('rsc');
+    const procesosM = cargar('procesos');
+    const hostil = fs.mkdtempSync(path.join(os.tmpdir(), 'hostil-'));
+    const victima = fs.mkdtempSync(path.join(os.tmpdir(), 'victima-'));
+    fs.writeFileSync(path.join(victima, 'importante.txt'), 'no se borra');
+    fs.mkdirSync(path.join(hostil, '.claude', 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(hostil, '.rsc.json'), JSON.stringify({ version: 1, skills: ['suggest'], targets: ['claude'] }));
+    fs.writeFileSync(path.join(hostil, '.claude', 'skills', '.rsc-state.json'), JSON.stringify({ skills: { [path.relative(path.join(hostil, '.claude', 'skills'), victima)]: {}, suggest: {} } }));
+    const antes = { node: procesosM.node, raiz: vscode.guion.raiz, version: cargar('proyecto').versionDelCatalogo };
+    const lanzados = [];
+    procesosM.node = async (args) => { lanzados.push(args.slice(1).join(' ')); return { codigo: 0, salida: '', error: '' }; };
+    vscode.guion.raiz = hostil;
+    try {
+      assert.ok(rscM.nombresQueSalenDeLaCarpeta().some((m) => m.includes('.rsc-state.json')), 'no ve el nombre que sale de la carpeta');
+      for (const que of ['sync', 'repair', 'onboard', 'add']) {
+        const hecho = await rscM.correr([que]);
+        assert.notEqual(hecho.codigo, 0, `${que} corre con un nombre que sale de la carpeta`);
+        assert.match(hecho.error, /salen de la carpeta/, 'y el motivo no llega al informe');
+      }
+      assert.deepEqual(lanzados, [], 'se ha lanzado el arnés');
+      // Mirar sin escribir sí se puede: es lo que ve qué hay.
+      await rscM.correr(['sync', '--dry-run']);
+      await rscM.correr(['doctor', '--json']);
+      assert.equal(lanzados.length, 2, 'tampoco deja mirar');
+      assert.ok(fs.existsSync(path.join(victima, 'importante.txt')));
+
+      // Un estado sano, con la forma del de verdad —que también guarda rutas—, pasa.
+      fs.writeFileSync(path.join(hostil, '.claude', 'skills', '.rsc-state.json'), JSON.stringify({
+        skills: { suggest: { files: ['.claude/skills/suggest/SKILL.md'] } }, agents: ['developer'], explicitAgents: ['developer'],
+        commands: ['checkpoint'], version: '2.0.15', memory: { mode: 'on', paths: ['.rsc/memory'] },
+        ignoreEntriesAdded: ['.claude/agents/developer.md', '.claude/commands/checkpoint.md'],
+      }));
+      assert.deepEqual(rscM.nombresQueSalenDeLaCarpeta(), [], 'un estado sano se da por malo');
+      // Un agente o un comando con ruta, sí se ve.
+      fs.writeFileSync(path.join(hostil, '.claude', 'skills', '.rsc-state.json'), JSON.stringify({ skills: {}, commands: ['../../../x'] }));
+      assert.ok(rscM.nombresQueSalenDeLaCarpeta().some((m) => m.includes('commands')), 'no ve un comando que sale de la carpeta');
+      fs.writeFileSync(path.join(hostil, '.claude', 'skills', '.rsc-state.json'), JSON.stringify({ skills: { suggest: {} } }));
+      // En `.rsc.json` también, y con `..` a secas.
+      fs.writeFileSync(path.join(hostil, '.rsc.json'), JSON.stringify({ version: 1, skills: ['suggest', '..'], targets: ['claude'] }));
+      assert.ok(rscM.nombresQueSalenDeLaCarpeta().some((m) => m.startsWith('.rsc.json')), 'no ve el de .rsc.json');
+
+      // La versión que escribe la carpeta solo decide el paquete si son tres números (L1).
+      const proyectoM = cargar('proyecto');
+      for (const [suya, sale] of [['2.0.15', '2.0.15'], ['3.0.22', '3.0.22'], ['latest', rscM.VERSION_DE_RESPALDO], ['file:../x', rscM.VERSION_DE_RESPALDO], ['1.0.0 & calc', rscM.VERSION_DE_RESPALDO]]) {
+        proyectoM.versionDelCatalogo = () => suya;
+        assert.equal(rscM.paquete(), `@ericrisco/rsc@${sale}`, suya);
+      }
+      return 'cuatro órdenes paradas, la víctima intacta, mirar sí · y la versión, de tres números';
+    } finally {
+      procesosM.node = antes.node;
+      vscode.guion.raiz = antes.raiz;
+      cargar('proyecto').versionDelCatalogo = antes.version;
     }
   });
 

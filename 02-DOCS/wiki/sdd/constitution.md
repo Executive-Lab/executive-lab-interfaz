@@ -110,16 +110,23 @@ y eso pasa en cuatro casos:
 - **cuesta dinero**;
 - **lo decide su negocio**: qué conectar, qué permisos tiene una clave o qué se queda fuera.
 
-Incluso entonces se deja todo preparado, a un clic (P1). Proactiva quiere decir que se adelanta: lo que
+Incluso entonces se deja todo preparado, a un clic (P1).
+
+Y solo en una carpeta que **este ordenador ya conoce**, porque alguien ha pulsado en ella un botón que
+corre el arnés. Una carpeta recién traída de fuera puede venir preparada para hacer daño, y con el
+instalador la confianza del editor va apagada para todas, así que no las distingue. La primera vez se
+hace con su botón. Proactiva quiere decir que se adelanta: lo que
 va a fallar pronto se arregla o se avisa antes de que falle. Por ejemplo, una clave que caduca, un
 vídeo enorme que iba a entrar en git o una conexión con más permisos de los que se pidieron.
 
 **Se comprueba**: `humo.js` barre `terreno.js` entero. Cada arreglo que la barra hace ella misma y
 que cambia algo dice `alAbrir: true` o `retiene` con uno de los cuatro casos, y lo que se hace solo
-tiene quien lo haga al abrir (`solo.js`). Otras tres pruebas cubren el resto:
-- sin confianza en la carpeta no se hace nada;
-- sin nadie delante, el montaje no abre ninguna ventana;
-- lo que falla no se cuenta como arreglado.
+tiene quien lo haga al abrir (`solo.js`). Otras pruebas cubren el resto:
+- no se hace nada solo sin confianza, en una carpeta recién traída ni sobre un arnés más nuevo que el
+  de la clase;
+- sin nadie delante, el montaje no abre ninguna ventana ni crea el historial;
+- lo que se dice arreglado se mira otra vez;
+- el arnés no corre si algún nombre suyo sale de la carpeta.
 
 Choca con P7 en un punto: RSC 3 se pone al día sola dentro de su serie. P7 se enmienda en el trabajo de
 pasar a la 3.

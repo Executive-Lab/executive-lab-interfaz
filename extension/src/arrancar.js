@@ -477,9 +477,11 @@ function comoSeDiceLoQueCambia(claves) {
 
 async function confirmarLoQueCambia(plan, recibo) {
   const cambios = rsc.cambiosDePolitica(plan.seleccionados, recibo.decisions);
+  // Sin nadie delante, solo se firma lo que se puede comparar y no cambia nada:
+  // un recibo que no se puede comparar no es un plan sin cambios (A12, P9;
+  // revisión de corrección, 2).
+  if (momento.nadieDelante) return Boolean(cambios) && !cambios.entran.length && !cambios.salen.length;
   if (!cambios || (!cambios.entran.length && !cambios.salen.length)) return true;
-  // Sin nadie delante, un plan que cambia espera a su sí (A12, P9).
-  if (momento.nadieDelante) return false;
   const partes = [
     ...(cambios.entran.length ? [`añadir ${enLista(comoSeDiceLoQueCambia(cambios.entran))}`] : []),
     ...(cambios.salen.length ? [`quitar ${enLista(comoSeDiceLoQueCambia(cambios.salen))}`] : []),
@@ -695,7 +697,7 @@ async function ponerComoLaDeLaClase(sobran = []) {
 // Con lo que sobra en el plan aceptado: volver a montar con la de la clase, por
 // el mismo camino que el arranque (`rumbo.comoLaDeLaClase`).
 async function volverAMontarComoLaDeLaClase(contexto, salida) {
-  if (enMarcha) return { ok: false, cancelado: true };
+  if (enMarcha) return { ok: false, enMarcha: true };
   enMarcha = true;
   try {
     const visto = await terreno.reconocer();
@@ -991,8 +993,14 @@ const RAMAS_SIN_NADIE = ['traer', 'ponerAlDia', 'adoptar', 'completar'];
 // montar nada.
 const momento = { nadieDelante: false };
 
+// Y nunca crear el historial: `git init` es poner copias, y poner copias es
+// suyo si eligió no tenerlas, y guardaría la carpeta entera aunque no (revisión
+// de corrección de P9, 1).
+const SIN_NADIE_NO = ['ponerGit', 'puntoDePartida'];
+
 function sePuedeSinNadie(plan, parte) {
   return RAMAS_SIN_NADIE.includes(plan.rama)
+    && !(plan.pasos || []).some((p) => SIN_NADIE_NO.includes(p.id))
     && !plan.preguntar.length
     && !(parte.carpeta && parte.carpeta.delicada)
     && !parte.dentroDeOtro;
@@ -1007,7 +1015,8 @@ const loQueDecidio = (contexto) => (contexto && contexto.workspaceState)
   || { get: () => undefined, update: async () => {} };
 
 async function arrancar(contexto, salida, { sinNadieDelante = false } = {}) {
-  if (enMarcha) return { ok: false, cancelado: true };
+  // Ya hay uno en marcha: se dice, en vez de callar (revisión de corrección, 5).
+  if (enMarcha) return { ok: false, enMarcha: true };
   enMarcha = true;
   momento.nadieDelante = sinNadieDelante;
   try {

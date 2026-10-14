@@ -206,7 +206,28 @@ hacerse solo, porque no se puede deshacer.
 - **Contra el arnés de verdad**: en `--con-arnes`, el clon de verdad se trae ahora sin nadie delante,
   sin preguntar nada y sin abrir ninguna ventana. Resultado: 370 comprobaciones pasadas.
 
+- **La revisión adversaria** (corrección y seguridad) encontró cuatro fallos que bloqueaban, y los
+  cuatro están arreglados con su prueba (decisión 142, «La revisión adversaria del segundo paso»):
+  - un repositorio preparado borraba carpetas del ordenador al traerlo (reproducido);
+  - la confianza del editor no protege con el instalador;
+  - sin nadie delante se podía crear el historial;
+  - un plan que no se podía comparar se daba por bueno.
+
+  Hay además cinco arreglos menores. Hoy lo que se hace solo, se hace solo en una carpeta que este
+  ordenador ya conoce: **la primera vez que un alumno abra con esta barra una carpeta montada antes,
+  tendrá que pulsar un botón del arnés una vez**.
+
 ## Next
 
-Por orden: el 6, que es lo que hace falta antes de dar la barra a la comunidad; después el 8, que
-desbloquea poner copias solas; y luego el 7 y del 9 al 12.
+Por orden:
+- el 6, que es lo que hace falta antes de dar la barra a la comunidad;
+- después el 8, que desbloquea poner copias solas;
+- y luego el 7 y del 9 al 12.
+
+Además, de la revisión:
+- **Contarle a Eric el fallo del borrado, en privado.** Lo decide Jose: es un fallo de seguridad de
+  RSC, y una incidencia pública enseñaría cómo aprovecharlo.
+- **Lo que la barra lanza con git, sin `core.fsmonitor` ni los ganchos de la carpeta.** Ya pasaba antes
+  de este cambio, y es poco probable, pero una carpeta traída con su `.git` podría ejecutar algo suyo.
+- **Mirar `--dry-run` antes de un `repair` solo**, por si algún día una pieza con arreglo automático
+  sale sin `.rsc.json`.
