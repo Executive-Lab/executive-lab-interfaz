@@ -4968,3 +4968,30 @@ Y lo que cambia:
 
 Queda fuera: RSC sigue escribiendo sus cuatro comandos en el formato de antes. No es nuestro; se le puede
 abrir una incidencia.
+
+## 142. Lo que se puede hacer solo, se hace solo
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** en marcha
+
+Jose, después de repasar la clase del 13-10 (la primera que se dio con RSC instalado desde el chat, sin
+la barra): *«Quiero que revisemos todo lo que puede ayudar a los alumnos con esto. Mete en las reglas y
+la constitución de este proyecto que lo que se pueda hacer automático (a través de RSC, con la extensión
+o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
+
+- **P9 en la constitución.** Si la barra, el arnés o el asistente pueden hacer algo sin la persona, lo
+  hacen en cuanto lo ven y lo dicen en una frase. Solo se pone un botón cuando hace falta su sí: cuando
+  sale de su ordenador en su nombre, cuando no se puede deshacer, cuando cuesta dinero o cuando lo
+  decide su negocio. Dos de los cuatro casos ya estaban escritos: la 131 (los avisos, con permiso) y P4
+  (lo suyo no se toca).
+- **La regla 9 del asistente**, en `siempre.md`: lo que puedas hacer tú, hazlo sin preguntar, y
+  adelántate. Va detrás de la 7 y la 8, que siguen mandando.
+- **El repaso** está en `02-DOCS/wiki/ftd/lo-que-se-puede-se-hace-solo.md`:
+  - de los dieciséis arreglos que la barra hace al pulsar, siete solo devuelven lo que ya estaba
+    decidido y pasan a hacerse al abrir la carpeta;
+  - de la clase salen nueve cosas por construir, entre ellas pasar a RSC 3, la prueba que dice que la
+    clave puede escribir, lo pesado fuera de git y cuándo caduca una clave.
+- **Choca con P7.** RSC 3 se pone al día sola dentro de su serie, y P7 fija una versión exacta. Se
+  enmienda en el trabajo de pasar a la 3.
+- **Todavía no se comprueba.** La prueba de P9 es la primera tarea pendiente: cada arreglo que cambia
+  algo, o se hace al abrir la carpeta, o dice qué caso lo retiene. Hasta entonces, la constitución lo
+  dice tal cual.

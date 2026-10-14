@@ -17,7 +17,7 @@ timestamp: 2026-09-24T15:50:00Z
 
 | Pieza | Dónde |
 | --- | --- |
-| Constitución (P1–P8) | [sdd/constitution.md](sdd/constitution.md) |
+| Constitución (P1–P9) | [sdd/constitution.md](sdd/constitution.md) |
 | Configuración de la cadena | [sdd/config.yaml](sdd/config.yaml) |
 | Decisiones tomadas construyendo | [sdd/decisions.md](sdd/decisions.md) |
 | Propuesta · todo-cuadra | [sdd/proposals/todo-cuadra.md](sdd/proposals/todo-cuadra.md) |

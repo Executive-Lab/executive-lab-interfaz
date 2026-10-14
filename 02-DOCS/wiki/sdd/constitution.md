@@ -94,3 +94,29 @@ lo que hay dentro para decidir qué es este proyecto, y no lee el `.gitignore`: 
 VS Code descargado le hizo creer que esto era un proyecto de React.
 
 **Se comprueba**: `du -sh .` y la evidencia del plan en `.rsc.json`.
+
+## P9 · Lo que se puede hacer solo, se hace solo
+
+Jose, 14-10-2026: *«lo que se pueda hacer automático (a través de RSC, con la extensión o como sea) se
+haga solo. La barra debe ser inteligente y proactiva»*. Sale de la clase del 13-10, la primera sin la
+barra: cada atasco era algo que alguien tuvo que hacer a mano.
+
+Si la barra, el arnés o el asistente pueden hacer algo sin la persona, lo hacen **en cuanto lo ven**,
+sin esperar a que nadie pulse, y lo dicen en una frase. Solo se pone un botón cuando hace falta su sí,
+y eso pasa en cuatro casos:
+
+- **sale de su ordenador en su nombre**: un aviso, una publicación, subir algo (decisión 131);
+- **no se puede deshacer**: borrar, sobrescribir lo suyo o bajar la versión del arnés (P4);
+- **cuesta dinero**;
+- **lo decide su negocio**: qué conectar, qué permisos tiene una clave o qué se queda fuera.
+
+Incluso entonces se deja todo preparado, a un clic (P1). Proactiva quiere decir que se adelanta: lo que
+va a fallar pronto se arregla o se avisa antes de que falle. Por ejemplo, una clave que caduca, un
+vídeo enorme que iba a entrar en git o una conexión con más permisos de los que se pidieron.
+
+**Se comprueba**: cada arreglo de la barra que cambia algo en la carpeta, o se hace al abrirla, o dice
+cuál de los cuatro casos lo retiene. Esa prueba es la primera tarea de
+`ftd/lo-que-se-puede-se-hace-solo.md`, y **hasta que exista, esta regla todavía no se comprueba**.
+
+Choca con P7 en un punto: RSC 3 se pone al día sola dentro de su serie. P7 se enmienda en el trabajo de
+pasar a la 3.
