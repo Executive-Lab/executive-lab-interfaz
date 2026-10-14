@@ -2265,6 +2265,19 @@ function guardarSolo(panel, salida) {
 // El relevo vive en el almacén de la barra, fuera de la carpeta del alumno (P8).
 const dondeVaElRelevo = (contexto) => (contexto.globalStorageUri ? path.join(contexto.globalStorageUri.fsPath, 'relevo') : null);
 
+// En los ajustes de usuario de Claude, con `instalador/comun/control-remoto.js`:
+// sin tocar nada más, y respetando lo que esa persona ya hubiera decidido.
+function ponerElControlRemoto(salida) {
+  try {
+    const modulo = entorno.moduloComun('control-remoto');
+    if (!modulo) return;
+    const { hecho } = require(modulo).ponerElControlRemoto();
+    salida.appendLine(`[control remoto] ${hecho}`); // diccionario: interno
+  } catch (error) {
+    salida.appendLine(`[control remoto] ${error.message}`); // diccionario: interno
+  }
+}
+
 function activate(contexto) {
   // El canal se envuelve para que todo lo que apuntemos por dentro acabe
   // también en el informe de "Algo va mal": ver rastro.js.
@@ -2292,6 +2305,9 @@ function activate(contexto) {
     yaHabiaAsistente: Boolean(claude && claude.isActive),
   });
   salida.appendLine(`[relevo] ${elRelevo.modo}${elRelevo.carpeta ? ` en ${elRelevo.carpeta}` : ''}${elRelevo.error ? `: ${elRelevo.error}` : ''}`); // diccionario: interno
+  // El control remoto de Claude, para todas las sesiones (decisión 143), como lo
+  // ponen los instaladores: así también lo tiene quien solo instaló el .vsix.
+  if (claude) ponerElControlRemoto(salida);
   // Para poder comparar los raíles de la carpeta con los que trae la barra.
   terreno.saberDondeEstamos(contexto.extensionPath);
   const panel = new Panel(contexto, salida);

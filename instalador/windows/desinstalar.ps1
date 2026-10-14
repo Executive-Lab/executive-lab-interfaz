@@ -107,6 +107,17 @@ function LimpiarAjustes($fichero, $donde) {
 
 LimpiarAjustes (Join-Path $env:APPDATA 'Code\User\settings.json') 'los ajustes del editor'
 
+# El control remoto de Claude, si lo puso la instalacion y sigue puesto
+# (decision 143). Antes de borrar la app: hace falta su node y su modulo.
+$nodeDeLaApp = Join-Path $app 'runtime\node.exe'
+$moduloControl = Join-Path $app 'control-remoto.js'
+if ((Test-Path $nodeDeLaApp) -and (Test-Path $moduloControl)) {
+  $dicho = & $nodeDeLaApp $moduloControl --quitar 2>&1
+  Nota "$dicho"
+} else {
+  Queda "No encuentro con que quitar el control remoto de Claude (si lo puso la instalacion, sigue puesto)"
+}
+
 # ------------------------------------------------------ 2. la app, como sea
 # El desinstalador de Inno si esta. Y si no, o si deja algo, a mano.
 

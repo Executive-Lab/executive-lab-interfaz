@@ -4995,3 +4995,26 @@ o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
 - **Todavía no se comprueba.** La prueba de P9 es la primera tarea pendiente: cada arreglo que cambia
   algo, o se hace al abrir la carpeta, o dice qué caso lo retiene. Hasta entonces, la constitución lo
   dice tal cual.
+
+## 143. El control remoto de Claude, puesto para todas las sesiones
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Jose: *«mete también en la extensión y en los instaladores que automáticamente se ponga el control
+remoto para todas las sesiones, igual que hemos hecho con el focus view»*. Con él, una conversación
+abierta en el ordenador se sigue desde claude.ai o desde el móvil.
+
+No es un ajuste del editor, como `claudeCode.focusView`: es de Claude Code, `remoteControlAtStartup`, y
+Claude solo le hace caso en los ajustes de la persona (`~/.claude/settings.json`): *«a project or local
+`true` is ignored»*. Es lo mismo que pone «Enable Remote Control for all sessions» en su extensión.
+Necesita un plan de pago con la cuenta de claude.ai; sin eso, Claude lo ignora.
+
+- **Una pieza común**, `instalador/comun/control-remoto.js`, que usan los dos instaladores y la barra
+  (copiada en `media/comun/`). La barra lo pone al arrancar si Claude está instalado, para quien solo
+  instaló el `.vsix`.
+- **Con cuidado**: no toca nada más del fichero, lo escribe entero o nada, con sus permisos; si ya dice
+  algo —sí o no— se respeta, porque es una decisión de esa persona; si no se entiende como JSON, no se
+  toca; y usa la carpeta que use Claude (`CLAUDE_CONFIG_DIR` si está).
+- **Al desinstalar se quita**, pero solo si lo pusimos nosotros (una marca al lado) y sigue como lo
+  dejamos: el `[UninstallRun]` de Inno, `desinstalar.ps1` y `desinstalar.command`.
+- Las pruebas trabajan en una carpeta de Claude de mentira: nunca tocan la de quien las corre.

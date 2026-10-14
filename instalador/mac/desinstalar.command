@@ -150,6 +150,15 @@ done
 
 # ─────────────────────────────────────────────────── 5. las herramientas
 
+paso "El control remoto de Claude"
+# Si lo puso la instalación y sigue puesto (decisión 143). Antes de quitar las
+# herramientas: hacen falta su node y su módulo.
+if [ -n "$NODE" ] && [ -f "$APP/control-remoto.js" ]; then
+  "$NODE" "$APP/control-remoto.js" --quitar | sed 's/^/  · /'
+else
+  nada "no encuentro con qué quitarlo; si lo puso la instalación, sigue puesto"
+fi
+
 paso "Las herramientas"
 if [ -d "$APP" ]; then
   rm -rf "$APP" && bien "fuera $(basename "$APP")"
