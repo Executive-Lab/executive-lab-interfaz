@@ -12539,11 +12539,15 @@ exec git "$@"
         assert.deepEqual([...d.targets].sort(), ['claude', 'codex'], 'lo declarado tiene que sumar a Codex sin quitar a Claude');
         assert.equal(d.catalogVersion, rscM.VERSION_DE_RESPALDO, 'la versión de la carpeta tiene que seguir siendo la de la clase');
 
-        // Las del arnés, las 32, y la nuestra, con sus raíles.
+        // Las del arnés, las 32, y la nuestra, con sus raíles. Las cuatro de botón
+        // van aparte con Codex, en `.agents/skills`, donde él las lee (decisión 141).
+        const DE_BOTON = ['ayuda', 'empezar', 'guardar', 'seguir'];
         const deCodex = habilidades(path.join(r, '.codex', 'rsc'));
         const delArnes = deCodex.filter((n) => n !== 'executive-lab');
         assert.equal(delArnes.length, 32, `las del arnés en .codex/rsc: ${delArnes.length}`);
-        assert.deepEqual(delArnes, deClaude.filter((n) => n !== 'executive-lab'), 'Codex no tiene las mismas que Claude');
+        assert.deepEqual(delArnes, deClaude.filter((n) => n !== 'executive-lab' && !DE_BOTON.includes(n)), 'Codex no tiene las mismas que Claude');
+        assert.deepEqual(DE_BOTON.filter((n) => deClaude.includes(n)), DE_BOTON, 'Claude no tiene sus botones como habilidades');
+        assert.deepEqual(habilidades(path.join(r, '.agents', 'skills')), DE_BOTON, 'Codex no tiene sus botones donde los lee');
         assert.ok(deCodex.includes('executive-lab'), 'falta la nuestra en .codex/rsc');
         assert.ok(fs.existsSync(path.join(r, '.codex', 'rsc', 'executive-lab', 'siempre.md')), 'y sin lo de siempre');
         assert.match(fs.readFileSync(path.join(r, 'AGENTS.md'), 'utf8'), /executive-lab\/siempre\.md/, 'y AGENTS.md no la nombra');
