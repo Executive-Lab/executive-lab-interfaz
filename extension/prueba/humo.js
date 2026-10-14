@@ -5484,7 +5484,7 @@ exec git "$@"
   // Con Claude, la habilidad de los raíles solo se cargaba si el asistente decidía
   // invocarla, y es la que fija el español, prohíbe la terminal y trae la regla 7.
   // Claude Code importa al empezar cada conversación lo que `CLAUDE.md` nombra con
-  // `@`, así que un bloque nuestro nombra `siempre.md`, que es corto: las ocho
+  // `@`, así que un bloque nuestro nombra `siempre.md`, que es corto: las nueve
   // innegociables y dónde está el resto.
   const BLOQUE_DE_CLAUDE = /<!-- executive-lab:start -->\n@\.claude\/skills\/executive-lab\/siempre\.md\n(?:@AGENTS\.md\n)?<!-- executive-lab:end -->/;
 
@@ -5645,11 +5645,11 @@ exec git "$@"
       const siempre = fs.readFileSync(path.join(donde, 'executive-lab', 'siempre.md'), 'utf8');
       const skill = fs.readFileSync(path.join(donde, 'executive-lab', 'SKILL.md'), 'utf8');
       const reglas = [...siempre.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) => m[1]);
-      assert.equal(reglas.length, 8, `siempre.md no trae las ocho: ${reglas.join(' · ')}`);
+      assert.equal(reglas.length, 9, `siempre.md no trae las nueve: ${reglas.join(' · ')}`);
       for (const regla of reglas) assert.ok(!skill.includes(regla), `SKILL.md copia «${regla}»`);
       assert.match(skill, /siempre\.md/, 'SKILL.md no dice dónde están');
     }
-    return 'ocho, en un solo sitio';
+    return 'nueve, en un solo sitio';
   });
 
   await comprobar('una habilidad escrita aquí no se cuenta como fontanería', () => {
