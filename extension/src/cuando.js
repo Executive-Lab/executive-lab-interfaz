@@ -78,13 +78,17 @@ function ultimaVez(cron, ahora = Date.now()) {
 }
 
 const laHora = (h, m) => `${h}:${String(m).padStart(2, '0')}`;
+// «a la 1:00», «a las 9:00».
+const aLaHora = (h, m) => `${h === 1 ? 'a la' : 'a las'} ${laHora(h, m)}`;
+// «los lunes», «los sábados».
+const enPlural = (dia) => (dia.endsWith('s') ? dia : `${dia}s`);
 
 // En palabras, para la pantalla. Lo que no sabe decir bien lo dice en general.
 function enPalabras(cron) {
   const c = leer(cron);
   if (!c) return null;
   const [mi, ho, di, me, se] = c.partes;
-  const unaHora = /^\d+$/.test(mi) && /^\d+$/.test(ho) ? ` a las ${laHora(Number(ho), Number(mi))}` : '';
+  const unaHora = /^\d+$/.test(mi) && /^\d+$/.test(ho) ? ` ${aLaHora(Number(ho), Number(mi))}` : '';
   if (!unaHora) return 'varias veces al día';
   if (me !== '*') return `en fechas fijas${unaHora}`;
   if (di === '*' && se === '*') return `cada día${unaHora}`;
@@ -92,7 +96,8 @@ function enPalabras(cron) {
   if (di === '*') {
     const dias = [...c.semana].filter((d) => d !== 7).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => DIAS[d]);
     if (dias.length === 1) return `cada ${dias[0]}${unaHora}`;
-    return `los ${dias.slice(0, -1).join(', ')} y ${dias[dias.length - 1]}${unaHora}`;
+    const plurales = dias.map(enPlural);
+    return `los ${plurales.slice(0, -1).join(', ')} y ${plurales[plurales.length - 1]}${unaHora}`;
   }
   if (se === '*' && /^\d+$/.test(di)) return `el día ${di} de cada mes${unaHora}`;
   return `en fechas fijas${unaHora}`;

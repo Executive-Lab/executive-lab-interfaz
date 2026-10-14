@@ -31,7 +31,12 @@ vale la pena proponerlo. Eric: las rutinas son de cada asistente y no son iguale
 - [x] 3. Los raíles conservan el recordatorio al ponerse al día, y «al día» no lo toma por viejo.
 - [x] 4. La regla del asistente, por asistente; y su prueba.
 - [x] 5. Mutaciones a mano — 12, las 12 tumbadas (4 tras reforzar la prueba).
-- [ ] 6. Revisión adversaria, VS Code de verdad y las máquinas de GitHub.
+- [x] 6. Revisión adversaria — cinco fallos y un detalle, arreglados: «Quitar» se deshacía solo por
+  costumbre; en un comando de los raíles se perdía al ponerse al día (ahora solo en habilidades); escribir
+  el `cuando` podía estropear el fichero (un `$`, `metadata: {}`, otra sangría, saltos de Windows); un
+  cambio de hora tocaba por lo pasado; con dos a la vez solo se avisaba de uno; y «los sábado», «a las
+  1:00». 6 mutantes más, tumbados. VS Code de verdad: «todo bien».
+- [ ] 7. Las máquinas de GitHub.
 
 ## Evidence
 

@@ -85,6 +85,7 @@ const CLAVE_USOS = 'executiveLab.usosDeBotones';
 const CLAVE_RECORDATORIOS = 'executiveLab.recordatoriosHechos';
 const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
 const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
+const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
 // La última versión de la barra que se abrió aquí, para saber si hay que decir
 // qué trae la de ahora; y cuándo se miró en GitHub lo que pasó con los avisos
@@ -774,19 +775,30 @@ ${cabecera}
     await this.almacen().update(CLAVE_USOS, [...antes, { nombre: m[1], t: Date.now() }].slice(-200));
   }
 
-  async elRecordatorioQueToca() {
+  // Los que tocan, del más antiguo al más nuevo. La principal enseña uno; el
+  // aviso del editor sale para cada uno, una vez.
+  async losRecordatoriosQueTocan() {
     try {
       const hechos = { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}) };
-      const { toca, nuevos } = recordatorios.elQueToca(hechos);
+      const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
+      const { tocan, nuevos } = recordatorios.losQueTocan(hechos, vistos);
       if (nuevos.length) {
-        for (const nombre of nuevos) hechos[nombre] = Date.now();
+        for (const { nombre, cuando: cron } of nuevos) {
+          hechos[nombre] = Date.now();
+          vistos[nombre] = cron;
+        }
         await this.almacen().update(CLAVE_RECORDATORIOS, hechos);
+        await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
       }
-      return toca ? { nombre: toca.nombre, etiqueta: toca.etiqueta, enPalabras: toca.enPalabras, ultima: toca.ultima } : null;
+      return tocan.map((t) => ({ nombre: t.nombre, etiqueta: t.etiqueta, enPalabras: t.enPalabras, ultima: t.ultima }));
     } catch (error) {
       this.salida.appendLine(`[recordatorios] ${error.message}`); // diccionario: interno
-      return null;
+      return [];
     }
+  }
+
+  async elRecordatorioQueToca() {
+    return (await this.losRecordatoriosQueTocan())[0] || null;
   }
 
   // P9: si un botón se pulsa con costumbre, se pone su recordatorio sin
@@ -832,11 +844,14 @@ ${cabecera}
 
   async quitarRecordatorio(nombre) {
     const hecho = recordatorios.ponerCuando(nombre, null);
+    // Lo que se quita no vuelve por costumbre, venga de donde venga; y si se
+    // vuelve a poner, empieza a contar desde entonces.
     const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
-    if (puestas[nombre]) {
-      puestas[nombre] = { ...puestas[nombre], porDecir: false };
-      await this.almacen().update(CLAVE_COSTUMBRES, puestas);
-    }
+    puestas[nombre] = { ...(puestas[nombre] || {}), quitado: true, porDecir: false };
+    await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+    const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
+    delete vistos[nombre];
+    await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
     if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
     else await this.refrescar(true);
     return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
@@ -853,14 +868,17 @@ ${cabecera}
   // Cada minuto, desde `activate`: si ha llegado la hora de uno, se dice una vez
   // aunque la barra esté cerrada, y la principal lo enseña con su botón.
   async mirarLosRecordatorios() {
-    const toca = await this.elRecordatorioQueToca();
-    if (!toca) return;
-    const avisados = this.almacen().get(CLAVE_AVISADOS) || {};
-    if (avisados[toca.nombre] === toca.ultima) return;
-    await this.almacen().update(CLAVE_AVISADOS, { ...avisados, [toca.nombre]: toca.ultima });
+    const avisados = { ...(this.almacen().get(CLAVE_AVISADOS) || {}) };
+    const sinAvisar = (await this.losRecordatoriosQueTocan()).filter((t) => avisados[t.nombre] !== t.ultima);
+    if (!sinAvisar.length) return;
+    for (const t of sinAvisar) avisados[t.nombre] = t.ultima;
+    await this.almacen().update(CLAVE_AVISADOS, avisados);
     if (!this.donde || this.donde.tipo === 'principal') await this.refrescar(true);
-    const quiere = await vscode.window.showInformationMessage(`Toca: ${toca.etiqueta}.`, 'Hacerlo ahora');
-    if (quiere === 'Hacerlo ahora') await this.hacerElRecordatorio(toca.nombre);
+    // Sin esperar a uno para enseñar el siguiente: cada aviso, con su botón.
+    await Promise.all(sinAvisar.map(async (t) => {
+      const quiere = await vscode.window.showInformationMessage(`Toca: ${t.etiqueta}.`, 'Hacerlo ahora');
+      if (quiere === 'Hacerlo ahora') await this.hacerElRecordatorio(t.nombre);
+    }));
   }
 
   // Se guardan las últimas peticiones para poder ver cuál se repite y ofrecer

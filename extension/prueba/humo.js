@@ -12214,8 +12214,9 @@ exec git "$@"
     assert.equal(cuandoM.ultimaVez('0 9 * * 1', ahora), hora(12, 9), 'el último lunes a las 9');
     assert.equal(cuandoM.ultimaVez('31 10 * * *', ahora), hora(13, 10, 31), 'hoy aún no ha tocado: ayer');
     assert.equal(cuandoM.ultimaVez('0 9 1 * *', ahora), hora(1, 9), 'el día 1');
-    assert.deepEqual(['0 9 * * 1', '0 9 * * *', '0 9 * * 1-5', '0 9 1 * *', '0 9 * * 1,3', '*/15 * * * *'].map(cuandoM.enPalabras),
-      ['cada lunes a las 9:00', 'cada día a las 9:00', 'de lunes a viernes a las 9:00', 'el día 1 de cada mes a las 9:00', 'los lunes y miércoles a las 9:00', 'varias veces al día']);
+    assert.deepEqual(['0 9 * * 1', '0 9 * * *', '0 9 * * 1-5', '0 9 1 * *', '0 9 * * 1,3', '*/15 * * * *', '0 1 * * 6,0', '30 13 * * 5,6,0'].map(cuandoM.enPalabras),
+      ['cada lunes a las 9:00', 'cada día a las 9:00', 'de lunes a viernes a las 9:00', 'el día 1 de cada mes a las 9:00', 'los lunes y miércoles a las 9:00', 'varias veces al día',
+        'los sábados y domingos a la 1:00', 'los viernes, sábados y domingos a las 13:30']);
     for (const malo of ['', '0 9 * *', '0 25 * * *', 'x 9 * * *', '0 9 * * 8', '0 9 0 * *']) assert.equal(cuandoM.valido(malo), false, `se da por bueno «${malo}»`);
     assert.equal(cuandoM.costumbre([hora(12, 9, 10), hora(5, 8, 55), new Date(2026, 8, 28, 9, 20).getTime()], ahora), '0 9 * * 1', 'tres lunes seguidos no son costumbre');
     assert.equal(cuandoM.costumbre([hora(12, 9), hora(5, 9)], ahora), null, 'dos lunes ya son costumbre');
@@ -12251,6 +12252,18 @@ exec git "$@"
       assert.match(fs.readFileSync(seguir, 'utf8'), /\nmetadata:\n(?: {2}.*\n)* {2}cuando: "0 9 \* \* 1"\n---/, 'no queda en su metadata');
       assert.equal(rec.ponerCuando('seguir', 'cada lunes').ok, false, 'se escribe un cuando que no se entiende');
       assert.deepEqual(rec.losQueHay().map((r) => [r.nombre, r.enPalabras]), [['seguir', 'cada lunes a las 9:00']]);
+      // Escribirlo no estropea nada de lo suyo: un `$` en su texto, `metadata: {}`,
+      // otra sangría, un comentario, o los saltos de línea de Windows.
+      const conC = (t) => rec.conCuando(t, '0 9 * * 1', true);
+      assert.equal(conC('---\ndescription: "Cobra $$ y $& y $\'"\nmetadata:\n  boton: "A"\n---\nx'), '---\ndescription: "Cobra $$ y $& y $\'"\nmetadata:\n  boton: "A"\n  cuando: "0 9 * * 1"\n---\nx', 'un $ en su texto lo estropea');
+      assert.equal(conC('---\nname: a\nmetadata: {}\n---\nx'), '---\nname: a\nmetadata:\n  cuando: "0 9 * * 1"\n---\nx', 'con metadata vacía, dos metadata');
+      assert.equal(conC('---\nname: a\nmetadata: # lo suyo\n    boton: "A"\n---\nx'), '---\nname: a\nmetadata: # lo suyo\n    boton: "A"\n    cuando: "0 9 * * 1"\n---\nx', 'otra sangría, o el comentario, se pierden');
+      assert.equal(conC('---\r\nname: a\r\nmetadata:\r\n  boton: "A"\r\n---\r\nx\r\n'), '---\r\nname: a\r\nmetadata:\r\n  boton: "A"\r\n  cuando: "0 9 * * 1"\r\n---\r\nx\r\n', 'con saltos de Windows, se mezclan');
+      // En un comando, no: ponerse al día lo pisaría sin decir nada.
+      fs.mkdirSync(path.join(carpeta, '.claude', 'commands'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'commands', 'facturas.md'), '---\ndescription: Repasar las facturas\nboton: Repasar las facturas\n---\nRepasa.\n');
+      assert.deepEqual(rec.ponerCuando('facturas', '0 9 * * 1'), { ok: false, motivo: 'esUnComando' }, 'se pone un recordatorio en un comando');
+
       // Los raíles, al ponerse al día, no lo borran ni lo dan por viejo.
       aplicar();
       assert.match(fs.readFileSync(seguir, 'utf8'), /cuando: "0 9 \* \* 1"/, 'ponerse al día borra el recordatorio');
@@ -12284,6 +12297,24 @@ exec git "$@"
       await proveedor.mirarLosRecordatorios();
       assert.equal(vscode.registrado.mensajes.filter((m) => m === 'INFO Toca: Seguir donde lo dejé.').length, 1, 'el mismo aviso sale cada minuto');
       assert.ok(await proveedor.elRecordatorioQueToca(), 'sin hacerle caso, desaparece de la barra');
+      // Si le cambian la hora, tampoco toca por lo que ya pasó con la de antes.
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
+      assert.ok(await proveedor.elRecordatorioQueToca(), 'con la hora de antes, no toca');
+      rec.ponerCuando('seguir', '0 9 * * *');
+      assert.equal(await proveedor.elRecordatorioQueToca(), null, 'con la hora cambiada, toca por lo que ya pasó');
+      rec.ponerCuando('seguir', '0 9 * * 1');
+      await proveedor.elRecordatorioQueToca();
+      // Y si tocan dos, se avisa de los dos.
+      rec.ponerCuando('ayuda', '0 9 * * 1');
+      await proveedor.elRecordatorioQueToca();
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000, ayuda: Date.now() - 8 * 86400000 });
+      await almacen.update('executiveLab.recordatoriosAvisados', {});
+      vscode.guion.eleccion = undefined;
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.mirarLosRecordatorios();
+      assert.deepEqual(vscode.registrado.mensajes.filter((m) => m.startsWith('INFO Toca:')).sort(), ['INFO Toca: No sé qué hacer ahora.', 'INFO Toca: Seguir donde lo dejé.'], 'si tocan dos, se avisa de uno');
+      rec.ponerCuando('ayuda', null);
+      await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
       // «Ahora no» lo deja hasta la próxima.
       await almacen.update('executiveLab.recordatoriosHechos', { seguir: Date.now() - 8 * 86400000 });
       await proveedor.manejar({ tipo: 'ahoraNoRecordatorio', nombre: 'seguir' });
@@ -12302,6 +12333,13 @@ exec git "$@"
       assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, '«No hace falta» no la quita');
       assert.equal(await proveedor.ponerLasCostumbres(), null, 'la que dijo que no hacía falta vuelve');
       assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, 'se vuelve a poner');
+
+      // Uno que puso el asistente y el alumno quitó no vuelve por costumbre, aunque lo pulse cada lunes.
+      rec.ponerCuando('ayuda', '0 10 * * 1');
+      await almacen.update('executiveLab.usosDeBotones', lunes.map((t) => ({ nombre: 'ayuda', t })));
+      await proveedor.manejar({ tipo: 'quitarRecordatorio', nombre: 'ayuda' });
+      assert.equal(await proveedor.ponerLasCostumbres(), null, 'lo que quitó vuelve por costumbre');
+      assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'ayuda', 'SKILL.md'), 'utf8'), /cuando:/, 'lo que quitó se vuelve a poner');
 
       // Lo que la barra apunta: un botón que existe, sí; otra cosa, no.
       await almacen.update('executiveLab.usosDeBotones', []);
