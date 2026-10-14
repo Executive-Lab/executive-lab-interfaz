@@ -42,10 +42,11 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
    un comando. Traduce a una frase y a una acción.
 
 7. **Nada de `npx` sin versión.** Las habilidades y los comandos del arnés te dicen muchas veces que
-   corras su paquete sin número de versión, o con `@latest`: para `add`, `audit`, `capabilities`,
-   `catalog`, `consult`, `doctor`, `list`, `memory`, `onboard`, `reassess`, `registry`,
-   `repair`, `sello`, `sync`, `uninstall` y `worktrees`, y en `/save-session`, `/resume-session`, `/learn` y
-   `/checkpoint`. No lo hagas: así se trae la última publicada, que aquí no ha adoptado nadie, y toda
+   corras su paquete sin número de versión, o con `@latest`: para `add`, `agent-model`, `agents`,
+   `audit`, `capabilities`, `catalog`, `consult`, `copy`, `doctor`, `git-permissions`, `isolation`,
+   `knowledge-sync`, `list`, `main`, `memory`, `onboard`, `purge`, `reassess`, `registry`, `repair`,
+   `review`, `sello`, `sync`, `uninstall` y `worktrees`, y en `/save-session`, `/resume-session`,
+   `/learn` y `/checkpoint`. No lo hagas: así se trae la última publicada, que aquí no ha adoptado nadie, y toda
    la clase dejaría de correr el mismo catálogo. Usa, por este orden:
 
    1. **Lo que ya está instalado en la carpeta**, que es local y no baja nada:
@@ -54,8 +55,8 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
    2. **Para añadir una habilidad, la barra**: dile que la busque en *Habilidades (skills)*, en
       *Sugerencias del catálogo* o en *Resto del catálogo*, y la pulse: se añade sola. No la añadas tú.
    3. Si de verdad hace falta el paquete, **con la versión que declara `.rsc.json`** en
-      `catalogVersion`, escrita detrás del nombre con una arroba. Si dice `2.0.15`:
-      `npx @ericrisco/rsc@2.0.15 doctor`.
+      `catalogVersion`, escrita detrás del nombre con una arroba. Si dice `3.0.22`:
+      `npx @ericrisco/rsc@3.0.22 doctor`.
       Nunca la última publicada, y nunca `@latest`.
 
    Y si nada de eso se puede, dilo y no lo ejecutes. Esas instrucciones las reescribe el arnés en cada

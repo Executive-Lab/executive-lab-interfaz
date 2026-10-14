@@ -50,7 +50,7 @@ const solo = require('./solo');
 // P9: la carpeta que este ordenador ya conoce, los botones que corren el arnés o
 // tocan sus copias, y lo que se dice si se pulsan mientras la barra arregla sola.
 const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
-const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'ponerComoLaDeLaClase', 'elegirAsistente', 'aprenderCapacidad']);
+const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'aprenderCapacidad']);
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 const nombres = require('./nombres');
 const pulso = require('./pulso');
@@ -662,14 +662,8 @@ ${cabecera}
   // invoca, que con Claude es escribir `/su-identificador`.
   async aprenderCapacidad(id, nombre) {
     this.enviar({ tipo: 'esperando', que: `Añadiendo ${nombre}…` });
-    const { ok, masNueva } = await rsc.anadir(id);
+    const { ok } = await rsc.anadir(id);
     await this.refrescar(true);
-    if (masNueva) {
-      return this.enviar({
-        tipo: 'aviso',
-        texto: 'Esta carpeta se montó con una versión del arnés más nueva que la de tu clase. Antes de añadir nada, pulsa «Ponerla como la de la clase» en Qué falta por montar.',
-      });
-    }
     this.enviar({
       tipo: 'aviso',
       texto: ok
@@ -739,7 +733,6 @@ ${cabecera}
       arreglarElRelevo: () => this.arreglarElRelevo(),
       ponerElFreno: () => this.ponerElFreno(),
       ponerElBloque: () => this.ponerElBloque(),
-      ponerComoLaDeLaClase: () => this.ponerComoLaDeLaClase(),
       conectarGitHub: () => this.conectarGitHub(),
       verCopiaFuera: () => this.verCopiaFuera(),
       verRadiografia: () => this.verRadiografia(),
@@ -775,7 +768,6 @@ ${cabecera}
       verDiario: () => this.verDiario(),
       verSesion: () => this.verSesion(mensaje.fichero),
       verTrato: () => this.verTrato(),
-      ponerTrato: () => this.ponerTrato(mensaje.cual),
       ponerPalabras: () => this.ponerPalabras(mensaje.cual),
       abrirSalida: () => this.abrirSalida(mensaje.herramienta, mensaje.fichero),
       guardarSalida: () => this.guardarSalida(mensaje.herramienta, mensaje.fichero),
@@ -1574,11 +1566,8 @@ ${cabecera}
     const como = trato.comoEstamos();
     this.enviar({
       tipo: 'trato',
-      escalones: como.escalones,
       vocabularios: como.vocabularios,
-      trato: como.trato,
       palabras: como.palabras,
-      elegido: como.elegido,
       aprendido: lecciones.queHaAprendido(10),
       comoAprende: donde.paraQuien() === 'claude'
         ? '/learn'
@@ -1593,8 +1582,6 @@ ${cabecera}
       ? { texto: 'Hecho. Se nota en la próxima cosa que le pidas.', malo: false }
       : { texto: mensaje, malo: true });
   }
-
-  ponerTrato(cual) { return this.cambiarElTrato(trato.ponerTrato, cual); }
 
   ponerPalabras(cual) { return this.cambiarElTrato(trato.ponerPalabras, cual); }
 
@@ -2087,49 +2074,6 @@ ${cabecera}
     return this.enviar(ok
       ? { tipo: 'aviso', texto: conClaude ? 'Ya está. Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : 'Ya está.' }
       : { tipo: 'aviso', texto: 'No he podido ponerlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
-  }
-
-  // Una carpeta montada con un arnés más nuevo que el de la clase (B5, C-10). No
-  // se baja sin pulsar, y antes se nombra lo que la de la clase no trae.
-  async ponerComoLaDeLaClase() {
-    const noSePudo = { tipo: 'aviso', texto: 'No he podido ponerla como la de la clase. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true };
-    // Sin poder leer el catálogo de la clase no se sabe qué se quita, y sin
-    // nombrarlo no se quita nada (C-10; revisión de F4, m9).
-    const queSobra = arrancar.loQueNoTraeLaClase();
-    if (!queSobra) {
-      this.salida.appendLine('[version] no se puede leer el catálogo de la clase'); // diccionario: interno
-      return this.enviar(noSePudo);
-    }
-    const { sobran, enElPlan } = queSobra;
-    if (sobran.length) {
-      const lista = sobran.map((id) => `«${nombres.comoSeLlama('habilidades', id, {}).nombre}»`);
-      const dicha = lista.length < 2 ? lista.join('') : `${lista.slice(0, -1).join(', ')} y ${lista[lista.length - 1]}`;
-      const si = 'Ponerla como la de la clase';
-      const elegido = await vscode.window.showWarningMessage(
-        `Se quitarán estas habilidades, que la versión de tu clase no trae: ${dicha}.`,
-        { modal: true },
-        si,
-      );
-      if (elegido !== si) return this.enviar({ tipo: 'aviso', texto: 'No he tocado nada. Cuando quieras, el botón sigue aquí.' });
-    }
-    this.enviar({ tipo: 'esperando', que: 'Poniéndola como la de la clase…' });
-    // Con lo que sobra en el plan aceptado, su `sync` no puede: se vuelve a
-    // montar con la de la clase, y lo que cambia en el plan se enseña antes de
-    // firmarlo (revisión de F4, I1).
-    const hecho = enElPlan.length
-      ? await arrancar.volverAMontarComoLaDeLaClase(this.contexto, this.salida)
-      : await arrancar.ponerComoLaDeLaClase(sobran);
-    if (hecho.enMarcha) return this.enviar({ tipo: 'aviso', texto: OCUPADA });
-    const { ok } = hecho;
-    this.salida.appendLine(`[version] como la de la clase: ${ok}${sobran.length ? `, sin ${sobran.join(', ')}` : ''}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
-    if (hecho.cancelado) {
-      await this.refrescar(true);
-      return this.enviar({ tipo: 'aviso', texto: 'No he tocado nada. Cuando quieras, el botón sigue aquí.' });
-    }
-    await this.refrescar(true);
-    return this.enviar(ok
-      ? { tipo: 'aviso', texto: donde.paraQuien() === 'claude' ? 'Ya está. Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : 'Ya está.' }
-      : noSePudo);
   }
 
   // Las copias de una carpeta que se montó sin ellas. Si falta git, se pone

@@ -5008,7 +5008,8 @@ o como sea) se haga solo. La barra debe ser inteligente y proactiva.»*
     sincronizar cada nombre de su fichero de estado, que viaja en git, sin mirar adónde apunta. Se
     reprodujo con la 2.0.15: `../../victim` desapareció. Ya pasaba con el botón. Ahora la barra no deja
     escribir al arnés si algún nombre de `.rsc.json` o de un `.rsc-state.json` sale de la carpeta. Es un
-    fallo de RSC y conviene contárselo a Eric en privado, no en una incidencia pública.
+    fallo de RSC, pero solo de la 2.0.x: desde la 2.1.0 se para solo, y la barra pasa a la 3 (decisión
+    145), así que no se le cuenta a Eric.
   - **Con el instalador, la confianza del editor está apagada y vale para todas las carpetas.** Lo que
     se hace solo pasa a hacerse solo en una carpeta que este ordenador ya conoce, porque alguien pulsó
     en ella un botón del arnés.
@@ -5085,3 +5086,49 @@ Así que lo que vale igual para todos lo lleva la barra:
 
 Queda fuera, como propuesta: que se haga del todo solo, sin el clic. Pediría ejecutar el asistente por
 debajo, sin nadie delante, o la app de escritorio de cada uno.
+
+## 145. La barra pasa a la 3, y P7 pasa a ser la serie de la clase
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 6 de la decisión 142. En la clase del 13-10 los alumnos montaron RSC desde el chat con la
+3.0.22, que se pone al día sola dentro de su serie. La barra seguía fijada en la 2.0.15 y, ante una
+carpeta más nueva, ofrecía «Ponerla como la de la clase», que la bajaba: lo contrario de lo que había
+hecho la clase.
+
+- **La barra trae la 3.0.22.** La versión está en los mismos sitios de siempre, y la copia fijada del
+  freno es la de la 3.0.22, con el `shell-unwrap.mjs` que carga para mirar dentro de `bash -c`.
+- **P7, enmendada: la serie de la clase, y la lleva la barra.**
+  - Lo que va por detrás, sea una 3 más vieja o una 2, se pone al día, y solo (P9).
+  - Lo que va por delante está al día. `rsc.correr` corre ahí la versión de la carpeta con npx: el del
+    Node de la barra si lo trae, y si no, el del ordenador, que tiene quien montó RSC desde el chat.
+    Nunca corre la de la barra, que la bajaría sin avisar, porque RSC no compara versiones.
+  - Sin una versión de tres números en una carpeta que va por delante, lo que escribe no se corre.
+  - Ya no se ofrece bajarla. El código que lo hacía sigue, probado, por si vuelve a hacer falta.
+- **El dial ya no existe.** RSC lo retiró en la 2.1.0 porque pocos sabían contestarlo, y su `orient`
+  dice que se ignore. La barra deja de preguntarlo, así que el montaje pasa de 8–12 preguntas a 7–11.
+  También deja de mandarlo y quita «Cuánto te explica» de «Cómo te habla», donde queda «Con qué
+  palabras», que es lo que la 3 lee. Lo que el asistente deba hacer distinto con una persona, lo
+  aprende de ella. Los raíles calibran por el nivel técnico.
+- **En las carpetas de la barra, como se dijo en clase:**
+  - Con algo que construir, el montaje manda `--workflow main`.
+  - Al montar, o al pasar una carpeta de la 2 a la 3, y siempre antes del `sync`: la rama principal
+    queda abierta (`.no-trunk-guard`) y la wiki no se sube sola (`.no-knowledge-sync`). En un montaje
+    nuevo, además, el asistente no puede subir sin preguntar (`git-permissions off`).
+  - Se decide una vez. En una carpeta de alguien no se decide por nadie (P4).
+  - Antes de poner sus marcas, la barra pone las que el equipo ya tenía en `.rsc.json`. Con `.rsc/`
+    puesta, RSC rehace sus decisiones con lo que encuentra y perdería las que solo estaban escritas
+    ahí. Pasó al subir este repositorio a la 3: se perdieron `audit`, `gitmoji` y `worktree-cleanup`.
+- **Lo nuevo y lo retirado:**
+  - `connect-tool` es «Conectar una herramienta», de serie, y se ofrece en el catálogo.
+  - `bro`, `eli5` y `show-me` salen de lo que se ofrece, y siguen con nombre para las carpetas viejas.
+  - Los guardianes `branch-guard` («Freno a guardar en lo principal») y `copy-guard` («Frases que no
+    se dicen») tienen nombre.
+  - La regla 7 nombra los verbos nuevos: `agents`, `agent-model`, `copy`, `git-permissions`,
+    `isolation`, `knowledge-sync`, `main`, `purge` y `review`.
+- **Este repositorio también va en la 3.0.22.** Con `auto-update` y `knowledge-sync` apagados, porque
+  aquí no está la barra para impedirlos. Quien trabaje en la carpeta principal tiene que poner al día
+  su arnés: `npm install --prefix extension/media/harness` y luego `sync` con el de dentro.
+
+Queda fuera: quitar el rodeo del freno, que con la 3 RSC ya pone a quien no es técnico, y quitar el
+código de bajar la versión.

@@ -30,11 +30,15 @@
 // La prueba de contrato (`prueba/contrato.js`) compara estos conjuntos con los
 // del paquete de RSC. Aquí estuvo un cuarto tamaño que RSC no acepta, y quien
 // elegía «Va para largo» no llegaba a tener arnés.
+//
+// El dial ya no está: RSC lo retiró en la 2.1.0 porque pocos sabían contestarlo,
+// y su `orient` dice que se ignore (decisión 145). Y `workflow` no se pregunta:
+// en las carpetas de la barra va siempre `main`, como se dijo en clase.
 const VALORES = {
   nivel: ['non-technical', 'mixed', 'technical'],
-  dial: ['L0', 'L1', 'L2', 'L3'],
   deQueVa: ['software', 'operations', 'research', 'content', 'mixed'],
   tamano: ['small', 'growing', 'complex'],
+  workflow: ['main', 'branches'],
 };
 
 // Los tipos de proyecto para los que RSC exige el tamaño del software: los que
@@ -65,7 +69,6 @@ const PREGUNTAS = [
   },
   { id: 'objetivo', delRecibo: (r) => r.goal },
   { id: 'nivel', delRecibo: (r) => r.technicalLevel, valores: VALORES.nivel },
-  { id: 'dial', delRecibo: (r) => r.accompaniment, valores: VALORES.dial },
 ];
 
 const vale = (pregunta, valor) => typeof valor === 'string' && valor.trim()
@@ -290,22 +293,6 @@ function laRama(parte) {
   };
 }
 
-// Una carpeta montada con un arnés más nuevo que el de la clase, con algo en el
-// plan aceptado que la de la clase no trae (B5; revisión de F4, I1). Su `sync`
-// no puede con ello: lo vuelve a pedir a su catálogo y falla a medias, después
-// de borrar su base. Así que se vuelve a montar con la de la clase y las
-// respuestas de entonces, y lo que cambia en el plan se enseña antes de
-// firmarlo (A12). Medido con el paquete: queda la de la clase, se va lo que solo
-// trae la nueva, y lo añadido después que la clase sí trae se conserva.
-function comoLaDeLaClase(parte) {
-  return {
-    rama: 'comoLaDeLaClase',
-    preguntar: loQueFaltaPorPreguntar(parte).filter((id) => id !== 'nombres'),
-    pasos: pasos('montarElArnes', ...loNuestro),
-    porQue: 'la carpeta se montó con un arnés más nuevo, y su plan lleva lo que el de la clase no trae', // diccionario: interno
-  };
-}
-
 // Cuántas veces se le pregunta algo a la persona al preparar la carpeta, como
 // mínimo y como máximo (A8). La brújula prometía «una sola cosa», y el arranque
 // pregunta más, y según las respuestas: el asistente, solo con los dos
@@ -317,7 +304,7 @@ function comoLaDeLaClase(parte) {
 // mira que dé esto (revisión de F8, I1: contaba dos nombres siempre).
 const CUANTAS_VECES = {
   asistente: [0, 1], deQueVa: [1, 1], alcance: [1, 1], personas: [1, 1], queConstruir: [0, 1],
-  objetivo: [1, 2], nivel: [1, 1], dial: [1, 1], nombres: [1, 2], web: [1, 1],
+  objetivo: [1, 2], nivel: [1, 1], nombres: [1, 2], web: [1, 1],
   laCarpeta: [1, 1], dentroDeOtro: [1, 1],
 };
 
@@ -334,4 +321,4 @@ function cuantasPreguntas(parte) {
   }, { min: 0, max: 0 });
 }
 
-module.exports = { elegirRama, comoLaDeLaClase, loQueFaltaPorPreguntar, cuantasPreguntas, PASOS, PREGUNTAS, VALORES, CON_TAMANO };
+module.exports = { elegirRama, loQueFaltaPorPreguntar, cuantasPreguntas, PASOS, PREGUNTAS, VALORES, CON_TAMANO };

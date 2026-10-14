@@ -88,13 +88,6 @@ const COMO_TE_MANEJAS = [
   { etiqueta: 'Programo, o he programado', detalle: 'He escrito código alguna vez', nivel: 'technical' },
 ];
 
-// Los cuatro escalones de «Cómo te habla», con sus mismos nombres y frases: un
-// dial, un nombre (C-6, decisión 98). Antes eran tres, con otros nombres, y
-// faltaba «Al grano», que RSC también ofrece (A4). Van del más acompañado al
-// que menos, que es por donde empieza a leer quien empieza.
-const CUANTO_TE_EXPLICO = [...trato.ESCALONES].reverse()
-  .map((escalon) => ({ etiqueta: escalon.nombre, detalle: escalon.frase, dial: escalon.id }));
-
 const OBJETIVOS_POR_TIPO = {
   operations: ['Poner orden en mis facturas', 'Atender mejor a mis clientes', 'Organizar el papeleo', 'Vender más y hacer seguimiento', 'Quitarme tareas repetitivas'],
   content: ['Escribir para mi web o mi blog', 'Llevar las redes sociales', 'Preparar presentaciones', 'Hacer vídeos'],
@@ -278,13 +271,15 @@ function loQuePaso(cuando, intento) {
 function flagsDelMontaje(respuestas) {
   const flags = [
     '--technical-level', respuestas.nivel,
-    '--accompaniment', respuestas.dial,
     '--project-kind', respuestas.kind,
     '--goal-base64', Buffer.from(String(respuestas.objetivo || ''), 'utf8').toString('base64url'),
     '--target', respuestas.asistente,
   ];
-  // RSC pide el tamaño cuando se trata de construir algo, del todo o en parte.
-  if (rumbo.CON_TAMANO.includes(respuestas.kind)) flags.push('--software-scope', respuestas.tamano || 'small');
+  // RSC pide el tamaño cuando se trata de construir algo, del todo o en parte, y
+  // con él cómo entran los cambios: en las carpetas de la barra, siempre a `main`,
+  // como se dijo en clase. Si no se le dice, con «Una plataforma completa» elige
+  // ramas y cierra `main` al asistente (decisión 145).
+  if (rumbo.CON_TAMANO.includes(respuestas.kind)) flags.push('--software-scope', respuestas.tamano || 'small', '--workflow', 'main');
   return flags;
 }
 
@@ -655,63 +650,6 @@ async function apuntarLosEnganches(salida) {
   }
 }
 
-// Una carpeta montada con un arnés más nuevo que el de la clase, puesta como la
-// de la clase (B5, C-10). Lo que la de la clase no trae se nombra en la pantalla
-// y solo se quita con el sí. Se mira lo declarado y el plan aceptado, que es de
-// donde `sync` saca la lista (revisión de F4, I1), y `null` si no se puede leer
-// el catálogo de la clase: sin saber qué se quita, no se quita nada (m9). Los
-// agentes no: uno que la de la clase no conoce no rompe su `sync` (medido).
-function loQueNoTraeLaClase() {
-  const deLaClase = rsc.habilidadesDeLaClase();
-  if (!deLaClase) return null;
-  const declaracion = proyecto.declaracion() || {};
-  const delPlan = (((declaracion.onboarding || {}).plan || {}).policy || {}).skills || [];
-  const sobran = [...new Set([...(declaracion.skills || []), ...delPlan])].filter((id) => !deLaClase.has(id)).sort();
-  return { sobran, enElPlan: sobran.filter((id) => delPlan.includes(id)) };
-}
-
-// Con lo que sobra solo en lo declarado: se quita de ahí y `sync` con el de
-// dentro. Si falla, la declaración vuelve a como estaba, y lo que dijo RSC va al
-// registro (m10).
-async function ponerComoLaDeLaClase(sobran = []) {
-  const ruta = proyecto.ruta('.rsc.json');
-  let comoEstaba;
-  try {
-    comoEstaba = fs.readFileSync(ruta, 'utf8');
-    if (sobran.length) {
-      const declaracion = JSON.parse(comoEstaba);
-      declaracion.skills = (declaracion.skills || []).filter((id) => !sobran.includes(id));
-      fs.writeFileSync(ruta, `${JSON.stringify(declaracion, null, 2)}\n`);
-    }
-  } catch (error) {
-    return { ok: false, detalle: error.message };
-  }
-  const hecho = await rsc.sincronizar();
-  if (hecho.codigo === 0) return { ok: true };
-  try {
-    fs.writeFileSync(ruta, comoEstaba);
-  } catch { /* lo que se pueda: el fallo ya se cuenta */ }
-  return { ok: false, detalle: String(hecho.salida || '').trim().split('\n').slice(-3).join(' · ') };
-}
-
-// Con lo que sobra en el plan aceptado: volver a montar con la de la clase, por
-// el mismo camino que el arranque (`rumbo.comoLaDeLaClase`).
-async function volverAMontarComoLaDeLaClase(contexto, salida) {
-  if (enMarcha) return { ok: false, enMarcha: true };
-  enMarcha = true;
-  try {
-    const visto = await terreno.reconocer();
-    const parte = { ...visto, git: { ...visto.git, sigueSinCopias: Boolean(loQueDecidio(contexto).get(CLAVE_SIN_GIT)) } };
-    const plan = rumbo.comoLaDeLaClase(parte);
-    salida.appendLine(`[arrancar] ${plan.rama}: ${plan.porQue}`); // diccionario: interno
-    const respuestas = await entrevistar(plan, parte);
-    if (!respuestas) return { ok: false, cancelado: true };
-    return await hacerLosPasos(plan, parte, respuestas, contexto, salida);
-  } finally {
-    enMarcha = false;
-  }
-}
-
 // Lo de siempre, pedido con su botón (C-4): el sí ya se ha dado, y se trata como
 // carpeta de alguien solo si lo es. Se pasaba siempre como de alguien, y el
 // freno se quedaba esperando también en una nuestra (revisión de F4, m5).
@@ -725,15 +663,13 @@ async function ponerElBloque(contexto) {
 // y las de Claude donde estaban), y después los raíles, que se ponen para todos.
 //
 // Con tres cuidados que faltaban (revisión de F5):
-//   · en una carpeta montada con un arnés más nuevo que el de la clase no se
-//     prepara nada: el `sync` de la clase le bajaría la versión (I2);
+//   · en una carpeta que va por delante, `rsc.correr` usa su versión y no la de
+//     la barra, que se la bajaría (I2; P7, decisión 145);
 //   · antes, en seco, se mira qué tocaría. Una habilidad, un comando o un agente
 //     suyo que se llama como uno del arnés se pregunta como al montar, y en una
 //     carpeta de alguien se enseña además lo suyo que se toca (I1);
 //   · lo que dice el arnés cuando falla vuelve en `detalle`, para el registro (I3).
 async function prepararTambienPara(id, contexto) {
-  if (rsc.comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') return { ok: false, masNueva: true };
-
   const enSeco = await rsc.correr(['sync', '--target', id, '--dry-run'], { tiempoMaximo: 300000 });
   if (enSeco.codigo !== 0) return { ok: false, detalle: loQuePaso('al mirar qué se toca', enSeco) };
   const plan = { gestionados: rsc.loQueTocaElSync(enSeco.salida, proyecto.raiz()) };
@@ -809,7 +745,6 @@ const COMO_SE_PREGUNTA = {
     QUE_VAS_A_CONSTRUIR.filter((o) => !o.soloCon || o.soloCon === yaDicho.kind)),
   objetivo: (yaDicho, parte) => preguntarObjetivo(yaDicho.kind, { empezada: esDeAlguien(parte) }),
   nivel: () => elegir('Sobre ti', '¿Qué tal te manejas con el ordenador?', COMO_TE_MANEJAS),
-  dial: () => elegir('Sobre ti', '¿Cuánto quieres que te explique?', CUANTO_TE_EXPLICO),
   nombres: (yaDicho) => preguntarNombres(yaDicho.objetivo, yaDicho.alcance),
 };
 
@@ -820,7 +755,6 @@ const LO_QUE_SE_GUARDA = {
   personas: (r, o) => { r.personas = o.personas; },
   queConstruir: (r, o) => { r.tamano = o.tamano; },
   nivel: (r, o) => { r.nivel = o.nivel; },
-  dial: (r, o) => { r.dial = o.dial; },
   nombres: (r, o) => { r.nombres = o; },
 };
 
@@ -834,7 +768,6 @@ function loQueYaSeSabe(recibo) {
     objetivo: r.goal,
     tamano: r.softwareScope,
     nivel: r.technicalLevel,
-    dial: r.accompaniment,
   };
 }
 
@@ -843,12 +776,11 @@ async function entrevistar(plan, parte) {
   const sabido = loQueYaSeSabe(parte.recibo);
 
   // Lo de hoy manda sobre el recibo, que es lo que se firmó el primer día
-  // (B11): el dial y las palabras que la persona cambió después en «Cómo te
-  // habla», y los asistentes que tiene declarados ahora. Lo que se conteste en
-  // este mismo montaje manda sobre todo, porque se escribe después.
+  // (B11): las palabras que la persona cambió después en «Cómo te habla», y los
+  // asistentes que tiene declarados ahora. Lo que se conteste en este mismo
+  // montaje manda sobre todo, porque se escribe después.
   if (parte.recibo) {
     const hoy = trato.leer();
-    if (hoy.trato) sabido.dial = hoy.trato;
     if (hoy.palabras) sabido.nivel = hoy.palabras;
     const declarados = ((proyecto.declaracion() || {}).targets || []).filter((t) => typeof t === 'string' && t);
     if (declarados.length) sabido.asistente = declarados.join(',');
@@ -916,23 +848,77 @@ async function arreglarLoQueSePuedaSolo(salida) {
   return { ok: hecho.codigo === 0, detalle: n === 1 ? '1 arreglada' : `${n} arregladas` };
 }
 
+// ── Lo que la 3 trae encendido y en una carpeta de la barra no va ──────────
+//
+// La 3 de RSC cierra `main` al asistente si ve CI, un despliegue o dos personas,
+// y la primera vez mueve a otra rama lo que no se había subido. También sube
+// `01-TOOLS/` y la wiki solas a una rama del remoto, y en un montaje nuevo deja al
+// asistente guardar y subir sin preguntar. En las carpetas de la barra, `main` va
+// abierto, como se dijo en clase, y lo que sale del ordenador espera a un sí (P9,
+// decisión 145).
+//
+// Se decide una vez: al montar la carpeta, o al pasarla de la 2 a la 3, y siempre
+// antes del `sync`, que es el que pone los enganches que lo miran. Después es
+// suyo: si alguien lo enciende, se queda encendido. En una carpeta de alguien no
+// se decide por nadie (P4).
+const MARCAS_DE_LA_BARRA = ['.no-trunk-guard', '.no-knowledge-sync'];
+
+function decidirComoLaBarra() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return false;
+  try {
+    // Lo que el equipo ya apagó, primero. Con `.rsc/` puesta, RSC no trata la
+    // carpeta como un clon: rehace sus `optOuts` con las marcas que encuentra y
+    // perdería las que solo están escritas en `.rsc.json`. Pasó al subir este
+    // repositorio a la 3: se fueron `audit`, `gitmoji` y `worktree-cleanup`.
+    const declaradas = ((proyecto.declaracion() || {}).optOuts || []).filter((id) => /^[a-z0-9-]+$/.test(String(id)));
+    fs.mkdirSync(path.join(raiz, '.rsc'), { recursive: true });
+    for (const marca of [...declaradas.map((id) => `.no-${id}`), ...MARCAS_DE_LA_BARRA]) {
+      const fichero = path.join(raiz, '.rsc', marca);
+      if (!fs.existsSync(fichero)) fs.writeFileSync(fichero, '');
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// La carpeta declara una 2 (o nada), y la barra trae una 3.
+function pasaALaTres() {
+  const mayor = (v) => Number((String(v || '').match(/^v?(\d+)\./) || [])[1]);
+  const suya = mayor(proyecto.versionDelCatalogo());
+  return !(suya >= 3) && mayor(rsc.VERSION_DE_RESPALDO) >= 3;
+}
+
 const COMO_SE_HACE = {
   ponerGit: async () => ({ ok: await prepararHistorial() }),
 
   // En una carpeta que ya era de alguien se enseña lo que se toca antes de
   // firmar (B4). Una vacía no tiene nada suyo que enseñar.
-  montarElArnes: async ({ respuestas, parte }) => ({
-    ...(await montarElArnes(respuestas, {
+  montarElArnes: async ({ respuestas, parte }) => {
+    const decide = !(await sinSuSi(parte));
+    if (decide) decidirComoLaBarra();
+    const hecho = await montarElArnes(respuestas, {
       ajenaCarpeta: Boolean(parte) && ['empezada', 'otroArnes'].includes(parte.estado),
       // Si ya había un plan aceptado, el nuevo se compara con él (A12).
       reciboAnterior: (parte && parte.recibo) || null,
-    })),
-    imprescindible: true,
-  }),
+    });
+    // Un montaje nuevo deja al asistente guardar y subir sin preguntar: en una
+    // carpeta de la barra, eso espera a un sí (P9, decisión 145).
+    if (decide && hecho.ok) {
+      const sinPermisos = await rsc.correr(['git-permissions', 'off'], { tiempoMaximo: 300000 });
+      if (sinPermisos.codigo !== 0) {
+        return { ...hecho, detalle: [hecho.detalle, `git-permissions off falló: ${(sinPermisos.error || sinPermisos.salida || '').trim().split('\n').pop()}`].filter(Boolean).join(' · '), imprescindible: true }; // diccionario: interno
+      }
+    }
+    return { ...hecho, imprescindible: true };
+  },
 
   // Traer a esta máquina lo que el repositorio ya declaraba. No se vuelve a
-  // montar nada: `sync` reconstruye desde el plan que alguien ya aceptó.
-  traerLasHabilidades: async () => {
+  // montar nada: `sync` reconstruye desde el plan que alguien ya aceptó. Si la
+  // carpeta pasa de la 2 a la 3, antes se decide lo que la 3 trae encendido.
+  traerLasHabilidades: async ({ parte } = {}) => {
+    if (pasaALaTres() && !(await sinSuSi(parte))) decidirComoLaBarra();
     const hecho = await rsc.sincronizar();
     return { ok: hecho.codigo === 0, detalle: (hecho.salida || '').trim().split('\n').pop(), imprescindible: true };
   },
@@ -1400,10 +1386,10 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
-  arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
+  arrancar, decidirComoLaBarra, pasaALaTres, MARCAS_DE_LA_BARRA, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
-  loQueNoTraeLaClase, ponerComoLaDeLaClase, volverAMontarComoLaDeLaClase, prepararTambienPara, ponerElBloque,
+  prepararTambienPara, ponerElBloque,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
   COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
-  COMO_TE_MANEJAS, CUANTO_TE_EXPLICO, OBJETIVOS_POR_TIPO,
+  COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO,
 };

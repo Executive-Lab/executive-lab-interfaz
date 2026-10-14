@@ -1,42 +1,20 @@
-// Cuánto te explica el asistente, y con qué palabras.
+// Con qué palabras te habla el asistente.
 //
 // ── Qué es esto ──────────────────────────────────────────────────────────
 //
-// Es el ajuste más importante del arnés y no había manera de tocarlo. RSC lo
-// guarda en `02-DOCS/wiki/harness/user-profile.md` y **todas** sus habilidades
-// lo leen antes de abrir la boca: cuánto se explica, cuántas preguntas hace y
-// con qué vocabulario. La habilidad `orient` lo dice con todas las letras: L0
-// es casi mudo, L3 explica cada paso.
+// El nivel técnico del perfil del arnés (`02-DOCS/wiki/harness/user-profile.md`,
+// `technical_level`). Desde la 3 es lo único que mira `orient` para el registro:
+// el dial de «cuánto te explica» (L0–L3) lo retiró RSC en la 2.1.0 porque pocos
+// sabían contestarlo, y su `orient` dice que se ignore (decisión 145). Un perfil
+// viejo puede traerlo todavía; no se lee ni se escribe.
 //
-// Hasta ahora eso solo se cambiaba diciéndoselo al asistente por escrito, y
-// quien no sabe que existe no lo dice nunca. Alguien que se siente perdido no
-// tiene forma de pedir más mano; alguien que ya va suelto se come párrafos que
-// no quiere. Dos botones lo arreglan.
-//
-// ── Dónde vive, y por qué hay dos sitios ─────────────────────────────────
-//
-// El mismo dato aparece de dos formas según quién escribiera el fichero:
-//
-//   · en la cabecera:      accompaniment: L1
-//   · en el cuerpo:        - accompaniment_level: L3   <!-- L0 | L1 | L2 | L3 -->
-//
-// Las dos son legítimas —la primera la deja el montaje, la segunda es la de la
-// plantilla del arnés— así que se leen las dos y se escribe donde ya estaba.
-// Escribir donde no estaba dejaría el valor viejo debajo, y el asistente leería
-// el que no toca.
+// Antes solo se cambiaba diciéndoselo al asistente, y quien no sabe que existe
+// no lo dice nunca. Aquí se cambia con un botón. Lo demás —que te explique más,
+// o menos— se le dice, y si quieres que dure, lo aprende de ti.
 
 const fs = require('node:fs');
 const proyecto = require('./proyecto');
 const identidad = require('./identidad');
-
-// Los cuatro escalones, dichos como se dicen. El identificador es de RSC; la
-// frase es lo único que se ve.
-const ESCALONES = [
-  { id: 'L0', nombre: 'Al grano', frase: 'Hace lo que le pides y calla. Para cuando ya te manejas.' },
-  { id: 'L1', nombre: 'Corto', frase: 'Te dice dónde estás y qué sigue, en dos líneas.' },
-  { id: 'L2', nombre: 'Te explica por qué', frase: 'Además te cuenta por qué ha hecho las cosas así y te da a elegir.' },
-  { id: 'L3', nombre: 'De la mano', frase: 'Te lo explica todo, paso a paso, y te pregunta mucho. Para empezar.' },
-];
 
 const VOCABULARIOS = [
   { id: 'non-technical', nombre: 'En cristiano', frase: 'Nada de palabras raras. Comparaciones con cosas de siempre.' },
@@ -44,7 +22,6 @@ const VOCABULARIOS = [
   { id: 'technical', nombre: 'Sin rodeos', frase: 'Da por sabido lo básico y no se para a explicarlo.' },
 ];
 
-const CLAVES_TRATO = ['accompaniment_level', 'accompaniment'];
 const CLAVES_PALABRAS = ['technical_level'];
 
 function rutaDelPerfil() {
@@ -73,18 +50,10 @@ function buscar(texto, claves) {
 
 function leer() {
   const texto = crudo();
-  if (texto === null) return { hay: false, trato: null, palabras: null };
+  if (texto === null) return { hay: false, palabras: null };
 
-  const trato = buscar(texto, CLAVES_TRATO);
   const palabras = buscar(texto, CLAVES_PALABRAS);
-
-  const valido = (cual, lista) => (cual && lista.some((e) => e.id === cual.valor) ? cual.valor : null);
-
-  return {
-    hay: true,
-    trato: valido(trato, ESCALONES),
-    palabras: valido(palabras, VOCABULARIOS),
-  };
+  return { hay: true, palabras: palabras && VOCABULARIOS.some((v) => v.id === palabras.valor) ? palabras.valor : null };
 }
 
 // Cambia una de las dos cosas dejando el resto del fichero como estaba. Si la
@@ -127,11 +96,6 @@ function escribir(claves, valor) {
   return { ok: true };
 }
 
-function ponerTrato(cual) {
-  if (!ESCALONES.some((e) => e.id === cual)) return { ok: false, mensaje: 'Eso no es una de las opciones.' };
-  return escribir(CLAVES_TRATO, cual);
-}
-
 function ponerPalabras(cual) {
   if (!VOCABULARIOS.some((v) => v.id === cual)) return { ok: false, mensaje: 'Eso no es una de las opciones.' };
   return escribir(CLAVES_PALABRAS, cual);
@@ -139,18 +103,14 @@ function ponerPalabras(cual) {
 
 // Lo que se le manda al panel: las opciones y cuál está puesta.
 function comoEstamos() {
-  const { hay, trato, palabras } = leer();
+  const { hay, palabras } = leer();
   return {
     hay,
-    escalones: ESCALONES,
     vocabularios: VOCABULARIOS,
-    // Sin perfil escrito, RSC da por hecho lo más acompañado. Se enseña eso
+    // Sin perfil escrito, RSC da por hecho lo menos técnico. Se enseña eso
     // mismo: no se inventa nada, es lo que va a pasar de verdad.
-    trato: trato || 'L3',
     palabras: palabras || 'non-technical',
-    // Para decirlo en pantalla cuando aún nadie lo ha elegido.
-    elegido: Boolean(trato),
   };
 }
 
-module.exports = { leer, comoEstamos, ponerTrato, ponerPalabras, ESCALONES, VOCABULARIOS };
+module.exports = { leer, comoEstamos, ponerPalabras, VOCABULARIOS };

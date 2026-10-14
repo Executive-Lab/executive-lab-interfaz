@@ -1,9 +1,10 @@
 // Hablar con el arnés RSC.
 //
-// Siempre con la versión fijada, nunca con @latest: toda la cohorte tiene que
-// correr exactamente el mismo catálogo, o dejan de servir las instrucciones de
-// clase. Y siempre a través de node + el punto de entrada del paquete: sin npx
-// por medio, que en Windows es un .cmd y en cualquier sitio tarda segundos.
+// Nunca con @latest. La barra trae una versión de la serie de la clase (P7,
+// decisión 145) y la corre con node y el punto de entrada del paquete, sin npx
+// por medio, que en Windows es un .cmd y en cualquier sitio tarda segundos. La
+// excepción es una carpeta que va por delante: ahí se corre la suya (ver
+// `correr`).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,11 +12,21 @@ const procesos = require('./procesos');
 const proyecto = require('./proyecto');
 const entorno = require('./entorno');
 
-// Último recurso si .rsc.json no dice versión. Se actualiza a mano, a
-// propósito: subir de versión es una decisión, no un efecto secundario.
-const VERSION_DE_RESPALDO = '2.0.15';
+// La versión que trae la barra, y el último recurso si .rsc.json no dice ninguna.
+// Se actualiza a mano, a propósito: subir de versión es una decisión, no un
+// efecto secundario.
+const VERSION_DE_RESPALDO = '3.0.22';
 
-// Cómo es una versión frente a la de la clase: 'igual', 'vieja' o 'nueva'. Por
+// Cómo es una versión frente a la que trae la barra (P7, decisión 145: la serie
+// de la clase, y la lleva la barra):
+//
+//   · 'vieja' — va por detrás, sea una 3 más vieja o una 2: se pone al día, y
+//     al abrir la carpeta se hace solo (P9);
+//   · 'nueva' — va por delante: está al día. La barra nunca corre encima la suya,
+//     que la bajaría sin decirlo (RSC no compara versiones), ni ofrece bajarla;
+//   · 'igual'.
+//
+// Por
 // sus números y no como texto (B5): comparada como texto, la 2.0.13 salía
 // distinta de la 2.0.5 y se tomaba por anterior, y el arranque la bajaba.
 //
@@ -107,12 +118,27 @@ let carpetaDeLaExtension = null;
 const saberDondeEstamos = (ruta) => { carpetaDeLaExtension = ruta; };
 
 async function correr(args, opciones) {
-  if (QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run')) {
+  const escribe = QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run');
+  if (escribe) {
     const malos = nombresQueSalenDeLaCarpeta();
     if (malos.length) {
       return { codigo: 1, salida: '', error: `no se corre ${args[0]}: hay nombres que salen de la carpeta (${malos.slice(0, 3).join(' · ')})` }; // diccionario: interno
     }
   }
+
+  // Una carpeta que va por delante se trabaja con su versión, con npx (P7,
+  // decisión 145). Quien montó RSC desde el chat lo tiene, porque lo usó para
+  // montarlo; y el Node del instalador lo trae. Sin una versión de tres números
+  // no se sabe cuál es la suya, y lo que escribe no se corre.
+  if (comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') {
+    if (escribe && !/^\d+\.\d+\.\d+$/.test(String(proyecto.versionDelCatalogo()))) {
+      return { codigo: 1, salida: '', error: `no se corre ${args[0]}: la carpeta va por delante y su versión no es de tres números` }; // diccionario: interno
+    }
+    const npx = entorno.npxCli();
+    if (npx) return procesos.node([npx, '--yes', paquete(), ...args], opciones);
+    return procesos.delPath('npx', ['--yes', paquete(), ...args], opciones);
+  }
+
   const entrada = entorno.entradaDelArnes(proyecto.raiz(), carpetaDeLaExtension);
   if (entrada) return procesos.node([entrada, ...args], opciones);
 
@@ -173,13 +199,10 @@ async function retomar() {
 // eso no se cree a su código de salida: se mira si la habilidad ha aparecido
 // de verdad en el disco.
 //
-// En una carpeta montada con un arnés más nuevo que el de la clase no se añade
-// nada (revisión de F4, I2): el `add` de la clase deja su versión en la carpeta,
-// y la bajaría sin decirlo; con una habilidad que solo trae la nueva, falla y
-// borra su base. Primero se pone como la de la clase, con su botón.
+// En una carpeta que va por delante, el `add` de la barra dejaría su versión y la
+// bajaría sin decirlo (revisión de F4, I2). Por eso `correr` usa ahí la suya.
 async function anadir(id) {
   if (!/^[a-z0-9-]{2,40}$/.test(id)) return { ok: false };
-  if (comoEsLaVersion(proyecto.versionDelCatalogo()) === 'nueva') return { ok: false, masNueva: true };
 
   // Para todos los asistentes declarados que sabemos dónde miran, a la vez (`--target
   // claude,codex`, medido con el paquete): con uno solo, el otro se quedaba con una
@@ -300,7 +323,7 @@ function queHayQueArreglar({ codigo, salida }) {
 //
 // `gitmoji` tiene además su propio campo, porque se puede apagar y el informe
 // dice si lo está. Los otros dos se apagan igual, con su fichero en `.rsc/`.
-const LOS_GUARDIANES = ['danger-guard', 'gitmoji-guard', 'ship-guard'];
+const LOS_GUARDIANES = ['danger-guard', 'gitmoji-guard', 'ship-guard', 'branch-guard'];
 
 function queGuardianes(informe) {
   if (!informe) return null;

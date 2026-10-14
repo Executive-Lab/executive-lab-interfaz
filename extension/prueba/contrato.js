@@ -176,7 +176,7 @@ async function main() {
   await comprobar('cada valor que la barra da por bueno, RSC también lo acepta', () => {
     const CAMPOS = [
       ['nivel', 'technicalLevel', 'nivel'],
-      ['dial', 'accompaniment', 'escalón'],
+      ['workflow', 'workflow', 'forma de guardar los cambios'],
       ['deQueVa', 'projectKind', 'tipo de proyecto'],
       ['tamano', 'softwareScope', 'tamaño'],
     ];
@@ -192,7 +192,8 @@ async function main() {
   await comprobar('todo lo que RSC acepta se puede elegir en el arranque', () => {
     const OFRECE = {
       technicalLevel: arrancar.COMO_TE_MANEJAS.map((o) => o.nivel),
-      accompaniment: arrancar.CUANTO_TE_EXPLICO.map((o) => o.dial),
+      // Ni el dial, que RSC retiró, ni `workflow`, que en las carpetas de la barra va
+      // siempre a `main` a propósito (decisión 145).
       projectKind: arrancar.DE_QUE_VA.map((o) => o.kind),
       softwareScope: arrancar.QUE_VAS_A_CONSTRUIR.map((o) => o.tamano),
     };
@@ -296,7 +297,7 @@ async function main() {
   //
   // La barra leía los dos como un fallo. Aquí se aplica de verdad, porque el
   // primero solo sale al aplicar.
-  const MONTAJE = { nivel: 'mixed', dial: 'L2', asistente: 'claude' };
+  const MONTAJE = { nivel: 'mixed', asistente: 'claude' };
   const INNEGOCIABLES = '02-DOCS/wiki/sdd/constitution.md';
 
   await comprobar('sin la cadena SDD, el montaje queda listo', async () => {
@@ -307,7 +308,9 @@ async function main() {
     return 'operaciones';
   });
 
-  await comprobar('un plan que practica SDD queda montado, aunque RSC diga que falta el suelo', async () => {
+  await comprobar('un plan que practica SDD queda montado y listo, con el borrador de los innegociables', async () => {
+    // Con la 2, RSC dejaba los innegociables por escribir y el montaje quedaba con
+    // el suelo a medias (A3). La 3 deja un borrador, y el arnés queda listo.
     const CASOS = [
       { como: 'algo que irá sumando piezas', kind: 'software', tamano: 'growing', objetivo: 'Montar una web sencilla' },
       { como: 'una plataforma completa', kind: 'software', tamano: 'complex', objetivo: 'Montar una web sencilla' },
@@ -321,11 +324,14 @@ async function main() {
 
       if (!fs.existsSync(path.join(carpeta, '.rsc.json'))) mal.push(`${como}: RSC no lo ha aplicado`);
       else if (!hecho.ok) mal.push(`${como}: RSC lo ha aplicado y la barra lo da por fallo`);
-      else if (hecho.forma !== 'SueloAMedias') mal.push(`${como}: se ha leído como «${hecho.forma}»`);
-      else if (!(hecho.faltan || []).includes(INNEGOCIABLES)) mal.push(`${como}: no dice que faltan los innegociables (${(hecho.faltan || []).join(', ') || 'nada'})`);
+      else if (!['Listo', 'SueloAMedias'].includes(hecho.forma)) mal.push(`${como}: se ha leído como «${hecho.forma}»`);
+      else if (hecho.forma === 'Listo' && !fs.existsSync(path.join(carpeta, INNEGOCIABLES))) mal.push(`${como}: «Listo» sin los innegociables`);
+      else if (hecho.forma === 'SueloAMedias' && !(hecho.faltan || []).includes(INNEGOCIABLES)) mal.push(`${como}: a medias y no dice qué falta (${(hecho.faltan || []).join(', ') || 'nada'})`);
+      // Y con algo que construir, la rama principal abierta, como en clase.
+      else if (!fs.existsSync(path.join(carpeta, '.rsc', '.no-trunk-guard'))) mal.push(`${como}: la rama principal queda cerrada al asistente`);
     }
     assert.ok(!mal.length, mal.join('\n    '));
-    return `${CASOS.length} montajes, los tres con el suelo a medias`;
+    return `${CASOS.length} montajes, listos y con la rama principal abierta`;
   });
 
   await comprobar('si RSC deshace el montaje, la barra dice que no se ha podido', async () => {
@@ -394,43 +400,57 @@ async function main() {
   // RSC quita todo lo que lleva esa aguja cuando reescribe los suyos. Se monta
   // de verdad una carpeta de operaciones, que no trae el freno de RSC, se ponen
   // los raíles y se corre `sync`.
-  await comprobar('un sync de RSC no quita el freno propio', async () => {
+  await comprobar('con la 3, el freno lo pone RSC y el nuestro se aparta; y un sync no lo quita', async () => {
+    // C1 y #273: con la 2, RSC no ponía su freno en una carpeta de operaciones y
+    // lo ponían los raíles. La 3 lo pone a quien no es técnico. El nuestro sigue
+    // enganchado, para las carpetas donde RSC no lo pone, y cuando el de RSC está
+    // se aparta sin decir nada: un solo freno, nunca dos.
+    const cp = require('node:child_process');
     const carpeta = carpetaConGit('contrato-freno-');
     vscode.guion.raiz = carpeta;
-    const montado = await arrancar.COMO_SE_HACE.montarElArnes({ respuestas: { ...MONTAJE, kind: 'operations', objetivo: 'Organizar el papeleo' } });
+    const montado = await arrancar.COMO_SE_HACE.montarElArnes({ respuestas: { ...MONTAJE, nivel: 'non-technical', kind: 'operations', objetivo: 'Organizar el papeleo' } });
     assert.equal(montado.ok, true, montado.detalle);
-    assert.ok(!fs.existsSync(path.join(carpeta, '.rsc', 'danger-guard.mjs')), 'RSC ha puesto su freno en operations: la prueba no mira el caso');
+    const suyo = path.join(carpeta, '.rsc', 'danger-guard.mjs');
+    assert.ok(fs.existsSync(suyo), 'RSC no ha puesto su freno a quien no es técnico (#273)');
     assert.ok(await arrancar.ponerLosRailes({ extensionPath: RAIZ }), 'los raíles no se ponen');
     const conFreno = () => fs.readFileSync(path.join(carpeta, '.claude', 'settings.json'), 'utf8').includes('.claude/skills/executive-lab/freno.mjs');
     assert.ok(conFreno(), 'los raíles no enganchan el freno');
+
+    const orden = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'rm -rf ~/Documents' } });
+    const elSuyo = cp.spawnSync(process.execPath, [suyo, carpeta], { input: orden, encoding: 'utf8' });
+    assert.match(elSuyo.stdout, /"deny"/, `el freno de RSC no para un rm -rf: ${elSuyo.stdout.slice(0, 120)}`);
+    const nuestro = path.join(carpeta, '.claude', 'skills', 'executive-lab', 'freno.mjs');
+    const elNuestro = cp.spawnSync(process.execPath, [nuestro, carpeta], { input: orden, encoding: 'utf8' });
+    assert.equal(elNuestro.status, 0);
+    assert.doesNotMatch(elNuestro.stdout, /"deny"/, 'frenan los dos: el nuestro no se aparta');
+
     const sincronizado = await rscM.sincronizar();
     assert.equal(sincronizado.codigo, 0, loQueDijo(sincronizado));
     assert.ok(conFreno(), 'el sync de RSC ha quitado el freno');
-    return 'montado, con raíles, sincronizado, y el freno sigue';
+    return 'el de RSC frena, el nuestro se aparta, y el sync no lo quita';
   });
 
-  // ── Arreglar no decide los frenos ───────────────────────────────────────
-  //
-  // C6, medido con el paquete: con algo roto, `repair --yes` vuelve a instalar
-  // sin la política del plan y engancha los cuatro frenos de RSC en una carpeta
-  // de operaciones, que el plan no pide; el siguiente `sync` los quitaba. Qué
-  // frenos había dependía de qué orden de RSC corrió la barra la última vez.
-  await comprobar('tras arreglar en una carpeta operations no quedan frenos de RSC', async () => {
+  await comprobar('arreglar no cambia los frenos que pide el plan', async () => {
+    // C6 y #274: con la 2, `repair` volvía a instalar sin la política del plan y
+    // enganchaba frenos que el plan no pedía. Ahora se mira que arreglar deje los
+    // mismos frenos que había al montar, sean los que sean en la 3.
     const carpeta = carpetaConGit('contrato-arreglar-');
     vscode.guion.raiz = carpeta;
     const montado = await arrancar.COMO_SE_HACE.montarElArnes({ respuestas: { ...MONTAJE, kind: 'operations', objetivo: 'Organizar el papeleo' } });
     assert.equal(montado.ok, true, montado.detalle);
-    fs.rmSync(path.join(carpeta, '.claude', 'skills', 'bro'), { recursive: true, force: true });
+    const frenos = () => fs.readdirSync(path.join(carpeta, '.rsc')).filter((n) => /-(guard|gate)\.mjs$/.test(n)).sort();
+    const enganchados = () => (fs.readFileSync(path.join(carpeta, '.claude', 'settings.json'), 'utf8').match(/\.rsc\/[a-z-]+-(guard|gate)\.mjs/g) || []).sort();
+    const antes = { frenos: frenos(), enganchados: enganchados() };
+    fs.rmSync(path.join(carpeta, '.claude', 'skills', 'unslop'), { recursive: true, force: true });
     const hecho = await arrancar.COMO_SE_HACE.arreglarLoRoto({ salida: { appendLine() {} } });
     assert.equal(hecho.ok, true, hecho.detalle);
-    assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'skills', 'bro')), 'no se ha arreglado lo roto: la prueba no mira nada');
-    const frenos = fs.readdirSync(path.join(carpeta, '.rsc')).filter((n) => /-(guard|gate)\.mjs$/.test(n));
-    assert.deepEqual(frenos, [], `quedan frenos de RSC que el plan no pide: ${frenos.join(', ')}`);
-    assert.ok(!fs.readFileSync(path.join(carpeta, '.claude', 'settings.json'), 'utf8').includes('.rsc/danger-guard.'), 'y quedan enganchados');
-    return 'arreglado, y con los frenos que dice el plan';
+    assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'skills', 'unslop')), 'no se ha arreglado lo roto: la prueba no mira nada');
+    assert.deepEqual(frenos(), antes.frenos, 'arreglar ha cambiado los frenos');
+    assert.deepEqual(enganchados(), antes.enganchados, 'arreglar ha cambiado lo que se engancha');
+    return `arreglado, y los mismos frenos: ${antes.frenos.join(', ') || 'ninguno'}`;
   });
 
-  await comprobar('instalar una habilidad desde la barra deja catalogVersion en 2.0.5', async () => {
+  await comprobar('instalar una habilidad desde la barra deja la carpeta en la versión de la barra', async () => {
     // G4, D2 y T062, con el arnés de verdad: «Añadir» usa el de la clase, la pone
     // en disco, y la carpeta sigue en la versión de la clase.
     const carpeta = carpetaConGit('contrato-anadir-');

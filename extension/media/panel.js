@@ -1340,13 +1340,15 @@ function pantallaDiario({ sesiones = [], decisiones = [], aprendido = [] }) {
   `;
 }
 
-// ------------------------------------------------- cuánto te quiere explicar
+// ------------------------------------------------------------ cómo te habla
 
-// El ajuste que más cambia el día a día y que solo se podía tocar escribiéndolo
-// en la conversación, cosa que no hace quien no sabe que existe. Lo guarda el
-// arnés en su perfil y lo lee **todo** lo demás antes de contestar.
+// Con qué palabras te habla, que solo se podía cambiar escribiéndolo en la
+// conversación, cosa que no hace quien no sabe que existe. Lo guarda el arnés en
+// su perfil y lo lee antes de contestar. El dial de «cuánto te explica» ya no
+// está: RSC lo retiró (decisión 145). Lo que quieras que haga distinto, lo aprende
+// de ti, aquí debajo.
 function pantallaTrato({
-  escalones = [], vocabularios = [], trato, palabras, elegido, aprendido = [], comoAprende = '', aviso: avisoLocal,
+  vocabularios = [], palabras, aprendido = [], comoAprende = '', aviso: avisoLocal,
 }) {
   const fila = (opcion, puesta, accion) => `
     <div class="capacidad${opcion.id === puesta ? ' puesta' : ''}">
@@ -1363,13 +1365,8 @@ function pantallaTrato({
     <div class="brujula">
       <h2>Cómo te habla</h2>
       <p class="hiciste">Se lo aplica a todo lo que te conteste, no solo aquí.</p>
-      ${elegido ? '' : '<p class="detalle">Nadie lo ha elegido todavía, así que va por lo más acompañado.</p>'}
     </div>
 
-    <h2>Cuánto te explica</h2>
-    ${escalones.map((e) => fila(e, trato, { tipo: 'ponerTrato' })).join('')}
-
-    <hr class="separador">
     <h2>Con qué palabras</h2>
     ${vocabularios.map((v) => fila(v, palabras, { tipo: 'ponerPalabras' })).join('')}
 

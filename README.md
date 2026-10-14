@@ -169,28 +169,36 @@ pulse **Preparar esta carpeta** en la barra de la izquierda. El asistente de la 
 preguntas en lenguaje llano, de una en una, y monta el arnés con sus respuestas. Es el camino probado.
 
 Solo si te pide expresamente que lo hagas tú, pregúntale lo que RSC necesita —una cosa cada vez, sin
-sugerir la respuesta—: qué tal se maneja, cuánto quiere que le expliquen, de qué va la carpeta, qué
-quiere conseguir, con qué asistente trabaja y, si va a construir algo (`software` o `mixed`), de qué
+sugerir la respuesta—: qué tal se maneja, de qué va la carpeta, qué quiere conseguir, con qué asistente trabaja y, si va a construir algo (`software` o `mixed`), de qué
 tamaño. Luego:
 
 ```bash
 cd "<su carpeta de trabajo>"
 
-npx @ericrisco/rsc@2.0.15 onboard \
+npx @ericrisco/rsc@3.0.22 onboard \
   --technical-level <non-technical|mixed|technical> \
-  --accompaniment <L0|L1|L2|L3> \
   --project-kind <software|operations|research|content|mixed> \
   --goal "<lo que quiera conseguir, en sus palabras>" \
-  --software-scope <small|growing|complex> \
+  --software-scope <small|growing|complex> --workflow main \
   --target <claude|codex>
 ```
 
-El tamaño solo lo usa RSC con `software` y `mixed`, y con esos dos es obligatorio; con los demás tipos
-no cambia nada. Ese comando **imprime un plan y una huella, y no monta nada todavía**. Enséñale el plan. Solo cuando
+El tamaño y `--workflow main` solo los usa RSC con `software` y `mixed`, y con esos dos son
+obligatorios; con los demás tipos no cambian nada. `main`, porque así se dijo en clase: sin decírselo,
+con un tamaño `complex` RSC cierra la rama principal al asistente. Ese comando **imprime un plan y una huella, y no monta nada todavía**. Enséñale el plan. Solo cuando
 lo acepte, repite el mismo comando con los mismos flags y añade la huella **tal cual la imprimió**:
 
 ```bash
-npx @ericrisco/rsc@2.0.15 onboard ...los mismos flags... --accept-plan <huella>
+npx @ericrisco/rsc@3.0.22 onboard ...los mismos flags... --accept-plan <huella>
+```
+
+Y deja la carpeta como la deja la barra (decisión 145): la rama principal abierta, y nada que salga
+del ordenador sin preguntar.
+
+```bash
+npx @ericrisco/rsc@3.0.22 main unlock
+npx @ericrisco/rsc@3.0.22 knowledge-sync off
+npx @ericrisco/rsc@3.0.22 git-permissions off
 ```
 
 Por último, los raíles de Executive Lab (idioma y vocabulario), que viajan dentro de la extensión:
@@ -212,11 +220,11 @@ ls .claude/skills/executive-lab/SKILL.md              # los raíles
 - **No enciendas la vista sencilla por tu cuenta.** Es un ajuste **por carpeta**
   (`executiveLab.vistaSencilla`) que reconfigura todo el editor. Lo decide esa persona, desde el
   botón de la barra o cuando el asistente se lo pregunte al terminar. Su editor es suyo.
-- **No uses `@latest` para RSC.** Va fijada la **2.0.15** a propósito: toda una cohorte tiene que
-  correr el mismo catálogo o dejan de servir las instrucciones de clase. Subir de versión es una
-  decisión que se toma, se contrasta y se escribe — nunca un efecto secundario de un `npm install`.
-- **No inventes las respuestas del onboarding.** Definen el tono, el idioma y cuánto le explica el
-  asistente a esa persona durante meses.
+- **No uses `@latest` para RSC.** La barra trae la **3.0.22**, de la serie de la clase (decisión 145).
+  Subir de versión es una decisión que se toma, se contrasta y se escribe, nunca un efecto
+  secundario de un `npm install`. Una carpeta que va por delante se trabaja con su versión, no se baja.
+- **No inventes las respuestas del onboarding.** Definen el tono, el idioma y las palabras con que el
+  asistente le habla a esa persona durante meses.
 - **No toques sus ajustes de usuario de VS Code.** La extensión escribe en `.vscode/settings.json`
   de la carpeta, precisamente para no alterar las demás ventanas.
 
@@ -250,7 +258,7 @@ Las tres llevan lo mismo, porque el arnés viaja en un solo sitio: dentro del `.
 |---|---|---|---|
 | Versión del panel | la de la release | la misma, dentro | la misma, dentro |
 | Tamaño | 6 MB | **6,8 MB** | **29 MB** |
-| Arnés RSC 2.0.15 | ✅ dentro del paquete | ✅ (dentro del `.vsix`) | ✅ (dentro del `.vsix`) |
+| Arnés RSC 3.0.22 | ✅ dentro del paquete | ✅ (dentro del `.vsix`) | ✅ (dentro del `.vsix`) |
 | Raíles | ✅ `media/railes/` | ✅ (dentro del `.vsix`) | ✅ (dentro del `.vsix`) |
 | Módulos compartidos | ✅ `media/comun/` | ✅ | ✅ |
 | Disfraz (`disfraz.json`) | ✅ | ✅ | ✅ |
@@ -306,7 +314,7 @@ git clone git@github.com:minarkap/executive-lab-interfaz.git
 cd executive-lab-interfaz
 
 # El arnés que viaja dentro de la extensión NO está versionado. Antes de empaquetar:
-npm install --prefix extension/media/harness @ericrisco/rsc@2.0.15
+npm install --prefix extension/media/harness @ericrisco/rsc@3.0.22
 ```
 
 ### Probarlo
@@ -379,7 +387,7 @@ agentes); lo que monta RSC está en `.gitignore`. Lo que el equipo apagó (el fo
 otros) viaja en `.rsc.json`, y RSC lo vuelve a poner al montarlo en otra máquina. Para retomarlo:
 
 ```bash
-npx @ericrisco/rsc@2.0.15 sync
+npx @ericrisco/rsc@3.0.22 sync
 ```
 
 > La versión va fijada exacta a propósito, y está escrita en varios sitios —el paquete de la barra,
@@ -388,7 +396,8 @@ npx @ericrisco/rsc@2.0.15 sync
 > dos enteras: las tres tablas de `targets/` que copiamos estaban idénticas byte a byte y ningún
 > marcador que la barra lee había cambiado. Lo que sí cambió está en la decisión 91. Y de la 2.0.5 a la
 > 2.0.15 el 28 de septiembre, con las habilidades idénticas byte a byte: por qué, y lo que cambió, en la
-> decisión 127.
+> decisión 127. Y de la 2.0.15 a la 3.0.22 el 14 de octubre, porque la clase ya iba en la 3: P7 pasó a
+> ser «la serie de la clase», y lo que cambió está en la decisión 145.
 
 ---
 

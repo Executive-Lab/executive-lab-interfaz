@@ -188,11 +188,6 @@ async function elegir(id, { montar } = {}) {
     }
     if (hecho === true) hecho = { ok: true };
     if (!hecho || typeof hecho !== 'object') hecho = { ok: false };
-    // Con una versión del arnés más nueva que la de la clase no se prepara nada
-    // (revisión de F5, I2), y sin su sí, nada se toca.
-    if (hecho.masNueva) {
-      return { ok: false, mensaje: 'Esta carpeta se montó con una versión del arnés más nueva que la de tu clase. Antes de cambiar de asistente, pulsa «Ponerla como la de la clase» en Qué falta por montar.' };
-    }
     if (hecho.cancelado) return { ok: false, cancelado: true, mensaje: 'No he tocado nada. Cuando quieras, el botón sigue aquí.' };
     if (!hecho.ok) return { ...noSePudo, ...(hecho.mensaje ? { mensaje: hecho.mensaje } : {}), detalle: hecho.detalle };
     if (!declarados().includes(id)) return { ...noSePudo, detalle: 'el arnés terminó bien y no lo ha declarado' }; // diccionario: interno
