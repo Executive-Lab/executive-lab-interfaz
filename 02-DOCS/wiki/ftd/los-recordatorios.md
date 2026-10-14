@@ -2,7 +2,7 @@
 type: ftd
 title: Los recordatorios, y lo que cada asistente sabe hacer solo
 date: 2026-10-14
-status: en curso
+status: hecho
 ---
 
 # Los recordatorios, y lo que cada asistente sabe hacer solo
@@ -36,7 +36,7 @@ vale la pena proponerlo. Eric: las rutinas son de cada asistente y no son iguale
   el `cuando` podía estropear el fichero (un `$`, `metadata: {}`, otra sangría, saltos de Windows); un
   cambio de hora tocaba por lo pasado; con dos a la vez solo se avisaba de uno; y «los sábado», «a las
   1:00». 6 mutantes más, tumbados. VS Code de verdad: «todo bien».
-- [ ] 7. Las máquinas de GitHub.
+- [x] 7. Las máquinas de GitHub — el-dmg, windows, vscode-de-verdad y el-exe en verde (PR #25).
 
 ## Evidence
 
