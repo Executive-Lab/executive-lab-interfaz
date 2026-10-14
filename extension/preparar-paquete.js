@@ -22,9 +22,9 @@ const AQUI = __dirname;
 const DE = path.join(AQUI, '..', 'instalador', 'comun');
 const A = path.join(AQUI, 'media', 'comun');
 
-// Los tres que la barra usa. `preparar.js` y `ajustes.js` se quedan fuera: son
+// Los que la barra usa. `preparar.js` y `ajustes.js` se quedan fuera: son
 // del instalador, y la extensión escribe sus ajustes a su manera.
-const MODULOS = ['historial.js', 'git.js', 'enganches.js'];
+const MODULOS = ['historial.js', 'git.js', 'enganches.js', 'control-remoto.js'];
 
 if (!fs.existsSync(DE)) {
   console.error(`No encuentro los módulos comunes en:\n  ${DE}`);

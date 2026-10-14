@@ -24,6 +24,11 @@ const vscode = require('./vscode-falso');
 const { montar, montarMarca } = require('./empresa-falsa');
 
 const RAIZ = path.join(__dirname, '..');
+
+// Los ajustes de Claude de quien corre esto no se tocan: la barra pone el
+// control remoto al arrancar (decisión 143), y aquí lo pone en una de mentira.
+const CLAUDE_DE_MENTIRA = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-de-mentira-'));
+process.env.CLAUDE_CONFIG_DIR = CLAUDE_DE_MENTIRA;
 // Los ficheros de la plantilla de conexiones, como los deja RSC: el suelo los
 // pide todos, no solo la carpeta (G7). Salen del paquete que viaja dentro.
 // Sin el paquete —`node_modules` no va en git— la batería reventaba aquí,
@@ -12097,6 +12102,82 @@ exec git "$@"
       vscode.guion.raiz = empresa;
       vscode.guion.extensionesInstaladas = antes.extensiones;
     }
+  });
+
+  await comprobar('el control remoto de Claude se pone para todas las sesiones, sin pisar nada', () => {
+    // Decisión 143. Claude solo le hace caso en los ajustes de la persona.
+    const cr = require(path.join(RAIZ, '..', 'instalador', 'comun', 'control-remoto.js'));
+    // Al arrancar, la barra lo ha puesto (con Claude instalado), y en la carpeta de mentira.
+    assert.equal(cr.carpetaDeClaude(), CLAUDE_DE_MENTIRA, 'no se usa CLAUDE_CONFIG_DIR, como Claude');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(CLAUDE_DE_MENTIRA, 'settings.json'), 'utf8')).remoteControlAtStartup, true, 'al arrancar, la barra no lo pone');
+
+    const nueva = () => fs.mkdtempSync(path.join(os.tmpdir(), 'claude-ajustes-'));
+    const leer = (c) => JSON.parse(fs.readFileSync(path.join(c, 'settings.json'), 'utf8'));
+    const marca = (c) => fs.existsSync(path.join(c, cr.MARCA));
+
+    // Sin nada: se pone, y se deja la marca.
+    const vacia = nueva();
+    assert.equal(cr.ponerElControlRemoto({ carpeta: vacia }).hecho, 'puesto');
+    assert.deepEqual(leer(vacia), { remoteControlAtStartup: true });
+    assert.ok(marca(vacia), 'sin la marca, desinstalar no sabría que lo pusimos');
+
+    // Con sus ajustes: lo suyo intacto, y los permisos del fichero, también.
+    const suya = nueva();
+    const SUYOS = { model: 'opus', permissions: { allow: ['Bash(git status)'] }, hooks: { Stop: [] } };
+    fs.writeFileSync(path.join(suya, 'settings.json'), JSON.stringify(SUYOS));
+    fs.chmodSync(path.join(suya, 'settings.json'), 0o600);
+    assert.equal(cr.ponerElControlRemoto({ carpeta: suya }).hecho, 'puesto');
+    assert.deepEqual(leer(suya), { ...SUYOS, remoteControlAtStartup: true }, 'se pisa algo suyo');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(suya, 'settings.json')).mode & 0o777, 0o600, 'cambian los permisos de sus ajustes');
+    assert.deepEqual(fs.readdirSync(suya).filter((f) => f.startsWith('settings.json.')), [], 'queda un fichero a medias');
+
+    // Si ya lo decidió, sí o no, se respeta; y no se deja marca.
+    for (const valor of [false, true]) {
+      const decidida = nueva();
+      fs.writeFileSync(path.join(decidida, 'settings.json'), JSON.stringify({ remoteControlAtStartup: valor }));
+      assert.equal(cr.ponerElControlRemoto({ carpeta: decidida }).hecho, 'yaEstaba');
+      assert.equal(leer(decidida).remoteControlAtStartup, valor, 'se pisa lo que decidió');
+      assert.ok(!marca(decidida), 'se marca como nuestro algo que es suyo');
+      assert.equal(cr.quitarElControlRemoto({ carpeta: decidida }).hecho, 'noEraNuestro');
+      assert.equal(leer(decidida).remoteControlAtStartup, valor, 'desinstalar quita lo que decidió');
+    }
+
+    // Si no se puede leer, no se toca.
+    const rota = nueva();
+    fs.writeFileSync(path.join(rota, 'settings.json'), '{ "model": "opus", // un comentario\n}');
+    assert.equal(cr.ponerElControlRemoto({ carpeta: rota }).hecho, 'ilegible');
+    assert.equal(fs.readFileSync(path.join(rota, 'settings.json'), 'utf8'), '{ "model": "opus", // un comentario\n}', 'se toca un fichero que no se entiende');
+
+    // Desinstalar: quita lo nuestro y nada más; y si después lo apagó, es suyo.
+    assert.equal(cr.quitarElControlRemoto({ carpeta: suya }).hecho, 'quitado');
+    assert.deepEqual(leer(suya), SUYOS, 'desinstalar se lleva algo suyo');
+    assert.ok(!marca(suya), 'la marca se queda');
+    const apagada = nueva();
+    cr.ponerElControlRemoto({ carpeta: apagada });
+    fs.writeFileSync(path.join(apagada, 'settings.json'), JSON.stringify({ remoteControlAtStartup: false }));
+    assert.equal(cr.quitarElControlRemoto({ carpeta: apagada }).hecho, 'yaNoEstaba');
+    assert.equal(leer(apagada).remoteControlAtStartup, false, 'desinstalar quita lo que apagó después');
+
+    // Y suelto, que es como lo llaman los desinstaladores.
+    const cp = require('node:child_process');
+    const suelta = nueva();
+    const correr = (...args) => cp.spawnSync(process.execPath, [path.join(RAIZ, '..', 'instalador', 'comun', 'control-remoto.js'), ...args], { encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: suelta } }).stdout.trim();
+    assert.equal(correr(), 'control remoto: puesto');
+    assert.equal(correr('--quitar'), 'control remoto: quitado');
+    assert.deepEqual(leer(suelta), {}, 'suelto, no se quita');
+
+    // Y viaja: en los dos instaladores, en el desinstalador de Windows, y en la barra.
+    const leerTexto = (...p) => fs.readFileSync(path.join(RAIZ, '..', ...p), 'utf8');
+    assert.match(leerTexto('instalador', 'mac', 'construir.sh'), /for modulo in [^;]*control-remoto\.js/, 'el .dmg no lo lleva');
+    assert.match(leerTexto('instalador', 'windows', 'preparar-carga.sh'), /for modulo in [^;]*control-remoto\.js/, 'el .exe no lo lleva');
+    assert.match(leerTexto('instalador', 'windows', 'ExecutiveLab.iss'), /Source: "carga\\control-remoto\.js"/, 'el .exe no lo instala');
+    assert.match(leerTexto('instalador', 'windows', 'ExecutiveLab.iss'), /\[UninstallRun\][\s\S]*control-remoto\.js"" --quitar/, 'desinstalar en Windows no lo quita');
+    assert.match(leerTexto('instalador', 'windows', 'desinstalar.ps1'), /control-remoto\.js[\s\S]*--quitar/, 'el desinstalador a mano de Windows no lo quita');
+    assert.match(leerTexto('instalador', 'mac', 'desinstalar.command'), /control-remoto\.js" --quitar/, 'el desinstalador del Mac no lo quita');
+    assert.match(leerTexto('instalador', 'comun', 'preparar.js'), /controlRemoto\(asistente\)/, 'preparar.js no lo pone');
+    assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerElControlRemoto\(\)/, 'el instalador del Mac no lo pone');
+    assert.match(fs.readFileSync(path.join(RAIZ, 'preparar-paquete.js'), 'utf8'), /'control-remoto\.js'/, 'la barra no lo lleva dentro');
+    return 'puesto · lo suyo intacto · lo que decidió, respetado · y se quita solo lo nuestro';
   });
 
   await comprobar('todo tipo que manda el panel se despacha sin excepción', async () => {

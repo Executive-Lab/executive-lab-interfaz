@@ -108,6 +108,8 @@ async function main() {
         EXECUTIVE_LAB_PRUEBA_SIN_NODE: '1',
         EXECUTIVE_LAB_PRUEBA_PAQUETE: paquete,
         EXECUTIVE_LAB_PRUEBA_EXTENSIONES: extensiones,
+        // Los ajustes de Claude de quien prueba no se tocan (decisión 143).
+        CLAUDE_CONFIG_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'claude-de-mentira-')),
       },
       // La carpeta de mentira, como URI y no como ruta suelta: pasada a pelo,
       // el proceso de pruebas se la queda como si fuera su punto de entrada e
