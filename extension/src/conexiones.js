@@ -568,7 +568,7 @@ async function probar(proveedorId) {
   if (/missing .*\.env/i.test(error)) return { ok: false, mensaje: 'Todavía no has puesto ninguna clave para esta conexión.' };
   if (/not set/i.test(error)) return { ok: false, mensaje: 'Falta alguna clave por rellenar.' };
   // Lo paró el reloj: `procesos.js` lo dice con estas palabras.
-  if (/tardado demasiado/i.test(error)) return { ok: false, mensaje: 'La herramienta no contesta. Prueba dentro de un rato.' };
+  if (/tardado demasiado/i.test(error)) return { ok: false, mensaje: 'La herramienta no contesta. Prueba dentro de un rato.', pasajero: true };
 
   const porque = PORQUE_FALLA.find(([senal]) => senal.test(error));
   // «Está rota», «no vale» o no se sabe, solo si sus claves se leen bien: si no,
@@ -576,7 +576,8 @@ async function probar(proveedorId) {
   if ((porque === ESTA_ROTA || porque === NO_VALE || !porque) && hayUnaClaveQueSeLeeMal(carpeta)) {
     return { ok: false, mensaje: 'Una clave de esta conexión tiene caracteres que la prueba lee mal. Pégala otra vez y guárdala: ahora la guardo bien.' };
   }
-  if (porque) return { ok: false, mensaje: porque[1] };
+  // Sin internet no dice nada de la conexión: es pasajero, y no se recuerda (decisión 146).
+  if (porque) return { ok: false, mensaje: porque[1], pasajero: porque === PORQUE_FALLA[0] };
 
   // Y si no se reconoce, no se señala a la clave: se dice lo que se sabe.
   return { ok: false, mensaje: 'No conecta, y no sé decirte por qué. Pídeselo al asistente, que puede mirar el detalle.' };
@@ -783,4 +784,25 @@ async function ejecutar(proveedorId, fichero) {
   };
 }
 
-module.exports = { proveedores, claves, escribir, probar, scripts, loQueSePuedeMirar, ejecutar, etiquetaDeClave, enmascarar, leerEnv, taparClaves, valoresDeClaves, quePython };
+// La huella de sus claves (decisión 146): si cambian, lo que dijo la última
+// prueba ya no vale. Se hace del fichero entero, sin guardar ni enseñar nada.
+function huella(proveedorId) {
+  const carpeta = carpetaDe(proveedorId);
+  if (!carpeta) return null;
+  let texto = '';
+  try {
+    texto = fs.readFileSync(path.join(carpeta, '.env'), 'utf8');
+  } catch { /* sin claves todavía */ }
+  return require('node:crypto').createHash('sha256').update(texto).digest('hex').slice(0, 16);
+}
+
+const tienePrueba = (proveedorId) => {
+  const carpeta = carpetaDe(proveedorId);
+  try {
+    return Boolean(carpeta) && fs.readdirSync(carpeta).some((f) => /^test_connection\.(sh|py|js|mjs)$/.test(f));
+  } catch {
+    return false;
+  }
+};
+
+module.exports = { huella, tienePrueba, proveedores, claves, escribir, probar, scripts, loQueSePuedeMirar, ejecutar, etiquetaDeClave, enmascarar, leerEnv, taparClaves, valoresDeClaves, quePython };

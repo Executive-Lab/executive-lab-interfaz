@@ -5146,3 +5146,26 @@ hecho la clase.
 Queda fuera: quitar el rodeo del freno, que con la 3 RSC ya pone a quien no es técnico. Y trabajar
 con la versión de una carpeta que va por delante: haría falta bajarla del registro oficial sin npx y
 comprobar su huella.
+
+## 146. Conexiones, paso a paso
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho (F4 del plan de simplificar la barra)
+
+Jose, desde el principio del plan: *«lo que más fricción da es conectar las conexiones y tools»*. Y P9: lo
+que se puede hacer solo, se hace solo.
+
+- **Al guardar la última clave, se prueba sola.** Lo siguiente que haría el alumno es pulsar «Probar», y
+  lo que necesita saber es si funciona: «Guardada. Conectado. Funciona.», o por qué no, en una frase.
+  Si aún faltan, «Guardada. Falta 1 por poner.». «Probar la conexión» se queda para cuando se quiera.
+- **La lista dice cómo fue la última prueba**: «Holded — conectada · probada hoy», «Stripe — falla: la
+  clave no vale». La barra la recuerda con la huella de sus claves: si cambian, ya no vale y no se dice.
+- **La guía, de uno en uno.** Una lista de diez pasos con los campos debajo era una pared. Ahora:
+  «Paso 2 de 5», con «Hecho, siguiente», «Atrás», «Abrir su página» y **«No lo encuentro»**, que le pasa
+  al asistente la herramienta y el paso para que lo busque en su ayuda de hoy y corrija el README si ya
+  no es así. La lista entera sigue a un clic («Ver todos los pasos»). En el paso donde se saca la clave,
+  se dice dónde pegarla. Los campos no se esconden: quien ya tiene la clave, la pega y listo.
+- **«Conectar algo nuevo»** le pide al asistente su habilidad de RSC 3 para esto (`connect-tool`), y que
+  deje los pasos y de dónde sale cada clave donde la barra los lee.
+
+Queda para F5: las clases de acceso (clave, usuario y contraseña, fichero, entrar con tu cuenta) y
+«Pídeselo a tu informático».

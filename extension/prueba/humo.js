@@ -12809,6 +12809,117 @@ exec git "$@"
     }
   });
 
+  await comprobar('conexiones paso a paso: se prueba sola al guardar, la lista dice cómo fue, y la guía va de uno en uno', async () => {
+    // Decisión 146 (F4 del plan de simplificar la barra).
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'conexiones-'));
+    const suya = path.join(carpeta, '01-TOOLS', 'Facturas');
+    fs.mkdirSync(suya, { recursive: true });
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_API_KEY=\n');
+    // Una prueba de verdad: con la clave buena conecta; con otra, la herramienta dice 401.
+    fs.writeFileSync(path.join(suya, 'test_connection.js'), [
+      "const fs = require('node:fs'); const path = require('node:path');",
+      "const env = fs.existsSync(path.join(__dirname, '.env')) ? fs.readFileSync(path.join(__dirname, '.env'), 'utf8') : '';",
+      "if (/FACTURAS_API_KEY=buena/.test(env)) { console.log('ok'); process.exit(0); }",
+      "console.error('HTTP 401 Unauthorized'); process.exit(1);",
+    ].join('\n'));
+    fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Cómo conectarla\n\n1. Entra en tu cuenta de Facturas.\n2. Ve a Ajustes y luego a Desarrolladores.\n3. Copia la clave de la API.\n');
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, pruebas: almacen.get('executiveLab.pruebasDeConexion'), guias: proveedor.guias };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    vscode.guion.raiz = carpeta;
+    try {
+      await almacen.update('executiveLab.pruebasDeConexion', {});
+      // La clave mala: se guarda, se prueba sola y se dice por qué falla. Desde su pantalla, como el alumno.
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Facturas' });
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Facturas', clave: 'FACTURAS_API_KEY', valor: 'mala' });
+      assert.match(ultimo('conexion').aviso.texto, /^Guardada\. La clave no vale/, 'al guardar no se prueba sola');
+      assert.equal(ultimo('conexion').aviso.malo, true);
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const mala = ultimo('conexiones').proveedores.find((p) => p.id === 'Facturas');
+      assert.equal(mala.prueba && mala.prueba.ok, false, 'la lista no sabe que falla');
+      // La buena: conectada, y la lista lo dice con cuándo.
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Facturas' });
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Facturas', clave: 'FACTURAS_API_KEY', valor: 'buena' });
+      assert.equal(ultimo('conexion').aviso.texto, 'Guardada. Conectado. Funciona.');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const buena = ultimo('conexiones').proveedores.find((p) => p.id === 'Facturas');
+      assert.deepEqual([buena.prueba.ok, buena.prueba.cuando], [true, 'hoy']);
+      // Si sus claves cambian por otro lado, lo que dijo la prueba ya no vale.
+      fs.writeFileSync(path.join(suya, '.env'), 'FACTURAS_API_KEY=otra\n');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.equal(ultimo('conexiones').proveedores.find((p) => p.id === 'Facturas').prueba, null, 'con otras claves, se sigue diciendo lo de antes');
+
+      // Lo pasajero no se recuerda; si sus claves cambian mientras se prueba, lo que diga no es de las nuevas;
+      // y si se fue a otra pantalla mientras se probaba sola, no se le devuelve.
+      const conexionesM = cargar('conexiones');
+      const probarDeVerdad = conexionesM.probar;
+      try {
+        fs.writeFileSync(path.join(suya, '.env'), 'FACTURAS_API_KEY=buena\n');
+        await proveedor.manejar({ tipo: 'probar', proveedor: 'Facturas' });
+        conexionesM.probar = async () => ({ ok: false, mensaje: 'No he podido salir a internet. Mira que tengas conexión y vuelve a probar.', pasajero: true });
+        await proveedor.manejar({ tipo: 'probar', proveedor: 'Facturas' });
+        assert.equal(proveedor.laUltimaPrueba('Facturas').ok, true, 'sin internet, se recuerda que falla');
+        conexionesM.probar = async () => { fs.writeFileSync(path.join(suya, '.env'), 'FACTURAS_API_KEY=cambiada\n'); return { ok: true, mensaje: 'Conectado. Funciona.' }; };
+        await proveedor.manejar({ tipo: 'probar', proveedor: 'Facturas' });
+        assert.equal(proveedor.laUltimaPrueba('Facturas'), null, 'con las claves cambiadas durante la prueba, se dice de las nuevas');
+        fs.writeFileSync(path.join(suya, '.env'), '');
+        await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Facturas' });
+        const cuantas = enviados.filter((m) => m.tipo === 'conexion').length;
+        conexionesM.probar = async () => { proveedor.donde = { tipo: 'principal' }; return { ok: true, mensaje: 'Conectado. Funciona.' }; };
+        await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Facturas', clave: 'FACTURAS_API_KEY', valor: 'buena' });
+        assert.equal(enviados.filter((m) => m.tipo === 'conexion').length, cuantas, 'se le devuelve a la conexión aunque se haya ido');
+      } finally {
+        conexionesM.probar = probarDeVerdad;
+      }
+
+      // En pantalla: la lista, con una palabra y por qué.
+      const panel = require('./panel-falso').montarPanel();
+      const lista = panel.mandar({ tipo: 'conexiones', proveedores: [
+        { id: 'A', etiqueta: 'Holded', faltan: 0, prueba: { ok: true, mensaje: 'Conectado. Funciona.', cuando: 'hoy' } },
+        { id: 'B', etiqueta: 'Stripe', faltan: 0, prueba: { ok: false, mensaje: 'La clave no vale. Sácala otra vez donde te la dieron y pégala entera.', cuando: 'ayer' } },
+      ] });
+      assert.match(lista, /Holded — conectada · probada hoy/);
+      assert.match(lista, /Stripe — falla: la clave no vale/);
+
+      // La guía, de uno en uno: con su paso, siguiente, atrás, y «No lo encuentro».
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Facturas' });
+      fs.rmSync(path.join(suya, '.env'));
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 0 });
+      const primero = panel.mandar(ultimo('conexion'));
+      assert.match(primero, /Paso 1 de 3/);
+      assert.match(primero, /Entra en tu cuenta de Facturas\./);
+      assert.doesNotMatch(primero, /Ve a Ajustes/, 'sale la lista entera, no un paso');
+      assert.match(primero, /&quot;tipo&quot;:&quot;pasoDeLaGuia&quot;,&quot;proveedor&quot;:&quot;Facturas&quot;,&quot;paso&quot;:1/, '«Hecho, siguiente» no lleva al paso 2');
+      assert.match(primero, /me he atascado en el paso 1 de 3: «Entra en tu cuenta de Facturas\.»/, '«No lo encuentro» no le pasa el paso');
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 2 });
+      const tercero = panel.mandar(ultimo('conexion'));
+      assert.match(tercero, /Paso 3 de 3/);
+      assert.match(tercero, /pégala abajo y pulsa «Guardar»: la pruebo yo/, 'en el paso de la clave no se dice dónde va');
+      assert.doesNotMatch(tercero, /Hecho, siguiente/, 'en el último, siguiente');
+      assert.match(tercero, />\s*Atrás\s*</);
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 99 });
+      assert.equal(ultimo('conexion').paso, 2, 'un paso que no existe');
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 1, todos: true });
+      const todos = panel.mandar(ultimo('conexion'));
+      assert.match(todos, /<ol class="guia">[\s\S]*Ve a Ajustes[\s\S]*Copia la clave/, '«Ver todos los pasos» no los enseña');
+
+      // Y «Conectar algo nuevo» le pide al asistente su habilidad para esto, y los pasos donde los lee la barra.
+      const sencilla = panel.mandar({ tipo: 'estado', estado: { listo: true }, barraCompleta: false, piezas: { acciones: true } });
+      assert.match(sencilla, /Si tienes la habilidad connect-tool, úsala\./);
+      assert.match(sencilla, /«Cómo conectarla», uno por línea/);
+      return 'probada al guardar · la lista lo dice · de uno en uno';
+    } finally {
+      await almacen.update('executiveLab.pruebasDeConexion', antes.pruebas);
+      proveedor.enviar = antes.enviar;
+      proveedor.guias = antes.guias;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
   await comprobar('todo tipo que manda el panel se despacha sin excepción', async () => {
     // G1 e I2. «Resolver una incidencia» reventaba siempre: `encargos` se usaba y
     // no se importaba, y ninguna prueba pasaba por los manejadores del panel. La
