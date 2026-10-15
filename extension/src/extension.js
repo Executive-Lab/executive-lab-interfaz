@@ -70,6 +70,7 @@ const web = require('./web');
 const rastro = require('./rastro');
 const entorno = require('./entorno');
 const relevo = require('./relevo');
+const clientes = require('./clientes');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -412,6 +413,8 @@ ${cabecera}
       // acaba de convertir en recordatorio, dicha una vez (decisión 144).
       recordatorio: await this.elRecordatorioQueToca(),
       costumbrePuesta: await this.ponerLasCostumbres(),
+      // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
+      datosDeClientes: this.laTarjetaDeLosDatos(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -772,6 +775,8 @@ ${cabecera}
       abrirPapel: () => this.abrirPapel(mensaje.ruta),
       quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre),
       verAyuda: () => this.verAyuda(),
+      verDatosDeClientes: () => this.verDatosDeClientes(),
+      entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
@@ -1466,6 +1471,56 @@ ${cabecera}
         sola: version.actualizarSola(),
       },
     });
+  }
+
+  // ── Los datos de clientes (decisión 153) ──────────────────────────────
+  //
+  // Para leer, en Ayuda; y dicho a tiempo, una vez por carpeta. El texto sale de su
+  // tabla (`clientes.js`).
+
+  // La tabla, o null si no se puede leer. Se apunta: un fallo no se calla (P3).
+  laTablaDeLosDatos() {
+    try {
+      return clientes.laTabla(this.contexto.extensionPath);
+    } catch (error) {
+      this.salida.appendLine(`[clientes] ${error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // La tarjeta: hasta que se lee o se pulsa «Entendido», y solo si ya entran datos
+  // de verdad, por una conexión puesta o por los documentos que le ha dado.
+  laTarjetaDeLosDatos() {
+    try {
+      if (this.almacen().get(clientes.CLAVE)) return null;
+      const porDonde = clientes.porDondeEntran({
+        conexiones: conexiones.proveedores().map((p) => ({ ...p, claves: (conexiones.claves(p.id) || {}).claves || [] })),
+        documentos: cerebro.esperandoLectura() + cerebro.yaLeidos() + cerebro.originales(),
+      });
+      return porDonde ? clientes.laTarjeta(this.laTablaDeLosDatos(), porDonde) : null;
+    } catch (error) {
+      // Es un aviso de más: si falla, la barra sigue igual, y queda apuntado.
+      this.salida.appendLine(`[clientes] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  async yaSeDijoLoDeLosDatos() {
+    await this.almacen().update(clientes.CLAVE, Date.now());
+  }
+
+  // Leerlo, venga de Ayuda o de la tarjeta, cuenta como dicho.
+  async verDatosDeClientes() {
+    const tabla = this.laTablaDeLosDatos();
+    if (!tabla) return this.enviar({ tipo: 'aviso', texto: 'No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    this.donde = { tipo: 'quieto' };
+    await this.yaSeDijoLoDeLosDatos();
+    return this.enviar({ tipo: 'datosDeClientes', tabla: clientes.paraLeer(tabla) });
+  }
+
+  async entendidoLoDeLosDatos() {
+    await this.yaSeDijoLoDeLosDatos();
+    return this.refrescar(true);
   }
 
   // ── Resolver una incidencia ────────────────────────────────────────────

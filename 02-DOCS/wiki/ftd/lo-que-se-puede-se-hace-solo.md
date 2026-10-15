@@ -164,7 +164,7 @@ hacerse solo, porque no se puede deshacer.
 - [x] 9. Cuándo caduca una clave: decisión 149.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
 - [ ] 11. La foto del cerebro.
-- [ ] 12. Los datos de clientes, en Ayuda.
+- [x] 12. Los datos de clientes, en Ayuda: `ftd/los-datos-de-clientes.md`, decisión 153.
 
 ## Evidence
 
@@ -255,6 +255,11 @@ hacerse solo, porque no se puede deshacer.
     - lo de caducar tapaba en la lista la pregunta de la clave que puede escribir;
     - una conexión a medio hacer preguntaba.
   - Cinco mutaciones vivas, y una más que salió después porque un paso nuevo vaciaba la prueba: 24 de 24.
+
+- **Punto 12** (decisión 153, 15-10): en Ayuda, «Si trabajas con datos de clientes», para leer: licencia de
+  empresa, dónde se apaga en Claude y en Codex, y lo que no se pega nunca. Sale de su tabla, comprobada ese día en
+  las páginas de Anthropic y OpenAI. La tarjeta lo dice una vez por carpeta, con la primera conexión puesta o el
+  primer documento, detrás de lo urgente. `humo.js` 375, contrato 14, diccionario, y 20 de 20 mutaciones.
 
 ## Next
 

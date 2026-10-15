@@ -5266,3 +5266,78 @@ lo demás lo hace sola (P9).
 
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
+
+## 153. Los datos de clientes, en Ayuda y a tiempo
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 12 de la decisión 142. En la clase del 13-10, Eric: con datos de clientes, licencia de empresa, y
+dónde se apaga que se usen tus datos. Eso no lo puede hacer la barra por nadie: una licencia cuesta dinero, y los
+ajustes son de su cuenta (P9). Lo que sí hace sola es decirlo a tiempo.
+
+- **En Ayuda, «Si trabajas con datos de clientes»**, entre Sugerencias y Más ayuda; y en Más ayuda, en Guías.
+  Es una pantalla para leer, con tres cosas:
+  - **una licencia de empresa**. Con ella, de fábrica, Anthropic y OpenAI no entrenan con lo que se les da: en
+    Claude, Team o Enterprise; en ChatGPT, Business, Enterprise o Edu. Tampoco si se paga por uso, con una
+    clave de acceso. Con un plan personal depende de un ajuste;
+  - **dónde se apaga** en cada asistente de la barra, con el camino de menús y un botón a su página de ajustes;
+  - **lo que no se pega nunca**: claves y contraseñas, el banco, la salud y los documentos de identidad. Y que
+    valorar con el pulgar o mandar un fallo puede mandar la conversación entera a entrenar, aunque esté apagado.
+- **El texto vive en `extension/media/datos-de-clientes.json`** (P5), con la fecha en que se comprobó, y pasa
+  por el diccionario como las otras tablas. Lleva también los dos enlaces a lo que dicen Anthropic y OpenAI,
+  porque esto cambia.
+- **La tarjeta sale una vez por carpeta**, cuando empiezan a entrar datos de verdad. Pasa con la primera
+  conexión con todas sus claves puestas, lo mismo que pide la 149 para preguntar cuándo caduca. O con el
+  primer documento entregado, sin leer, leído u original. Son las dos puertas por las que entran los datos del
+  negocio, y lo siguiente es hablar de ellos con el asistente, que es cuando salen del ordenador. Con «Leerlo» o
+  «Entendido» no vuelve en esa carpeta, y leerlo desde Ayuda también cuenta. Una carpeta que ya tenía algo
+  conectado la ve una vez, al abrir la versión que trae esto.
+- **El orden de la tarjeta que toca:** detrás de lo que impide trabajar (sin git, sin asistente, sin cuenta,
+  sin ajustar), del recordatorio que tiene su hora y de «Recargar ahora». Delante de lo nuevo de la versión, la
+  costumbre, el consejo, los avisos y la versión nueva. No impide trabajar, pero es lo que hay que saber antes
+  de pegar nada.
+
+**Comprobado el 15 de octubre de 2026, en las páginas oficiales.** De Anthropic, leídas directamente:
+
+- [Cómo cambio mi configuración de privacidad de mejora del modelo](https://privacy.claude.com/es/articles/12109829-como-cambio-mi-configuracion-de-privacidad-de-mejora-del-modelo)
+  (actualizada el 3-8-2026). Configuración › Privacidad › «Ayudar a mejorar nuestros modelos de IA». Vale para
+  Free, Pro y Max, también cuando esas cuentas usan Claude Code. Los ajustes están en
+  `https://claude.ai/settings/data-privacy-controls`.
+- [Is my data used for model training? (consumo)](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
+  (16-3-2026). En los planes personales se entrena si lo permites. El pulgar guarda la conversación entera
+  hasta cinco años.
+- [Is my data used for model training? (empresa)](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training)
+  (18-8-2026). *«By default, we will not use your inputs or outputs from our commercial products (e.g. Claude for
+  Work, Anthropic API, Claude Gov, etc.) to train our models»*, salvo lo que se manda con el pulgar o como fallo.
+- [Precios](https://claude.com/pricing). Team, *«No model training on your content by default»*; Team y
+  Enterprise, *«None by default»*; los personales, *«Opt-out»*.
+- [Updates to our consumer terms](https://www.anthropic.com/news/updates-to-our-consumer-terms) (28-8-2025).
+  Claude for Work son los planes Team y Enterprise.
+
+De OpenAI:
+
+- [Pricing de Codex](https://learn.chatgpt.com/docs/pricing). Es la documentación de OpenAI, y
+  `developers.openai.com/codex/pricing` lleva aquí. Business, *«No training on your business data by
+  default»*. En la tabla, *«No training on API or business data by default»* en Business, Enterprise y clave de
+  acceso, y no en Plus ni Pro.
+- [ChatGPT Work cloud security](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-cloud-security). Business,
+  Enterprise y Edu, *«not used to train OpenAI models by default»*.
+- [Your data](https://developers.openai.com/api/docs/guides/your-data). Lo que llega por la API no se usa para
+  entrenar desde el 1-3-2023, salvo si te apuntas.
+- [Browser](https://learn.chatgpt.com/docs/browser) y [Use ChatGPT](https://learn.chatgpt.com/docs/use-chatgpt).
+  *«Settings > Data controls»*, y el enlace oficial a esa pantalla, `https://chatgpt.com/#settings/DataControls`.
+- [Preguntas frecuentes sobre los controles de datos](https://help.openai.com/es-es/articles/7730893-preguntas-frecuentes-sobre-los-controles-de-datos)
+  y [su versión en inglés](https://help.openai.com/en/articles/7730893-data-controls-faq). Configuración ›
+  Controles de datos › «Mejorar el modelo para todos». Con un plan personal vale también para las tareas de
+  Codex. Aunque esté apagado, lo que se valora se puede usar para entrenar. **Esta página no se deja leer con
+  una petición automática (403)**: se leyó con el buscador, que la tenía al día (actualizada entre 3 y 22 días
+  antes). Lo que dice coincide con las páginas de OpenAI de arriba.
+
+**Lo que se queda fuera:**
+
+- Los menús como salen en el ordenador de cada uno, que dependen del idioma: se ponen como los da la ayuda de
+  cada uno en español.
+- «Include environments», el ajuste de Codex en la nube: la barra trabaja con Codex en el editor.
+- Cuánto se guardan las conversaciones (30 días o cinco años en Claude): no cambia lo que hay que hacer.
+- La transcripción de la clase no está en este repositorio. Las palabras de Eric son las que apuntó el repaso de
+  la 142.
