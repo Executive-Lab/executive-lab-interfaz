@@ -162,6 +162,12 @@ const esFontaneria = (id) => tabla().fontaneria.includes(id);
 // decir nada. La comprobación es de andar por casa —palabras funcionales del
 // español— y es la misma para comandos, habilidades y agentes, que antes cada
 // uno la hacía a su manera y los agentes ni la hacían.
-const enEspanol = (frase) => /\b(el|la|los|las|un|una|de|del|que|para|con|por|cuando|siempre|tu|tus|se|y)\b/i.test(String(frase || ''));
+//
+// Con los botones como habilidades (decisión 141) llegaron frases cortas que no
+// llevaban ninguna: «Guardar en git», «Seguir donde lo dejé», «No sé qué hacer
+// ahora». Van también `en`, `mi`, `lo`, `algo` y `donde`, que en inglés no son
+// palabras sueltas, y «qué», que `\b` no sabe cortar por la tilde: se mira que no
+// haya una letra ni un número a cada lado («a11y» no lleva una «y»).
+const enEspanol = (frase) => /(?<![\p{L}\p{N}])(el|la|los|las|un|una|de|del|que|qué|para|con|por|cuando|siempre|tu|tus|se|y|en|mi|mis|lo|algo|donde)(?![\p{L}\p{N}])/iu.test(String(frase || ''));
 
 module.exports = { comoSeLlama, humanizar, loQueTraduce, esFontaneria, enEspanol, FICHERO };
