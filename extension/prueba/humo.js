@@ -6011,7 +6011,12 @@ exec git "$@"
     vscode.guion.raiz = empresa;
 
     assert.ok(suyo.suyas.some((c) => c.id === 'texto-de-la-barra'), 'la de este repositorio sale por su nombre');
-    assert.ok(suyo.suyas.every((c) => c.frase), 'y con para qué sirve, de su propia cabecera');
+    assert.ok(suyo.suyas.every((c) => c.frase), `y con para qué sirve, de su propia cabecera: sin frase ${suyo.suyas.filter((c) => !c.frase).map((c) => c.id)}`);
+    // Las frases cortas de los botones como habilidades (decisión 141), en español,
+    // y lo escrito para el asistente en inglés, no: ni la «y» de «a11y».
+    const { enEspanol } = cargar('nombres');
+    for (const frase of ['No sé qué hacer ahora', 'Empezar algo nuevo en mi empresa', 'Guardar en git', 'Seguir donde lo dejé']) assert.ok(enEspanol(frase), `«${frase}» no se lee como español`);
+    for (const frase of ['Use when fixing a11y violations', 'Write tests for the module', 'Deploy to production']) assert.ok(!enEspanol(frase), `«${frase}» se lee como español`);
     return suyo.suyas.map((c) => c.nombre).join(' · ');
   });
 
