@@ -46,7 +46,7 @@ function carpetaDeIncidencias(carpetaAparte) {
 }
 
 // Revisa, intenta entender qué pasa y deja el informe escrito.
-async function revisar({ lineas = [], carpetaAparte = null } = {}) {
+async function revisar({ lineas = [], carpetaAparte = null, barra = null } = {}) {
   const codigo = codigoDeIncidencia();
   const suelo = proyecto.sueloDelArnes();
 
@@ -77,6 +77,9 @@ async function revisar({ lineas = [], carpetaAparte = null } = {}) {
     `Incidencia ${codigo}`,
     `Fecha: ${new Date().toISOString()}`,
     `Sistema: ${process.platform} ${process.arch}`,
+    // Qué barra corre. Sin esto, una que se quedó atrás se confunde con un
+    // fallo de la de hoy (GR4ZCV: corría la 0.46.0 y no lo decía en ningún sitio).
+    `Barra: ${barra || '(no se sabe)'}`, // diccionario: interno
     `Catálogo: ${rsc.paquete()}`,
     // Qué arnés y qué módulos comunes corren de verdad: los de un instalador de
     // antes ya no mandan (G2), y si algo raro pasa, aquí se ve.

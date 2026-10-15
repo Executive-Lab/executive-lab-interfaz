@@ -1761,6 +1761,7 @@ ${cabecera}
     const informe = await soporte.revisar({
       lineas: this.salida.ultimas ? this.salida.ultimas() : [],
       carpetaAparte: this.contexto.globalStorageUri && this.contexto.globalStorageUri.fsPath,
+      barra: this.versionDeLaBarra(),
     });
     (this.salida.sinGuardar || this.salida.appendLine).call(this.salida, informe.informe);
     this.ultimoInforme = informe.fichero;

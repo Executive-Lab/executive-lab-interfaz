@@ -1326,7 +1326,10 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     const { informe, fichero, codigo } = await soporte.revisar({
       lineas: ['10:11:12 [arrancar] al pedir el plan: el arnés terminó con el código 2'],
       carpetaAparte: aparte,
+      barra: '0.46.0',
     });
+    assert.match(informe, /^Barra: 0\.46\.0$/m, 'sin decir qué barra corre, una que se quedó atrás parece un fallo de la de hoy (GR4ZCV)');
+    assert.match((await soporte.revisar({ carpetaAparte: aparte })).informe, /^Barra: \(no se sabe\)$/m);
     assert.match(informe, /--- lo que fue pasando ---/);
     assert.match(informe, /al pedir el plan: el arnés terminó con el código 2/,
       'sin esto, el código que el alumno dicta no lleva dentro el motivo');
@@ -1547,14 +1550,14 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     // El nuestro se queda, antes y después del traslado (decisión 140); el de
     // cualquier otro, aunque se le parezca, se tapa.
     assert.equal(avisosM.limpiar('está en github.com/Executive-Lab/executive-lab-interfaz.'), 'está en github.com/Executive-Lab/executive-lab-interfaz.', 'con un punto detrás, tapa nuestro sitio');
-    for (const nuestro of ['github.com/minarkap/executive-lab-interfaz/issues/3', 'github.com/Executive-Lab/executive-lab-interfaz/releases', 'git@github.com:minarkap/executive-lab-interfaz.git']) {
-      assert.match(avisosM.limpiar(`mira ${nuestro}`), /executive-lab-interfaz/, `tapa nuestro sitio: ${nuestro}`);
+    for (const nuestro of ['github.com/minarkap/executive-lab-interfaz/issues/3', 'github.com/Executive-Lab/executive-lab-interfaz/releases', 'git@github.com:minarkap/executive-lab-interfaz.git', 'github.com/Executive-Lab/executive-vscode-interfaz/issues/9']) {
+      assert.match(avisosM.limpiar(`mira ${nuestro}`), /executive-(lab|vscode)-interfaz/, `tapa nuestro sitio: ${nuestro}`);
     }
     for (const suyo of ['github.com/Executive-Lab/ferreteria-soler', 'github.com/minarkap/executive-lab-interfaz-de-maria', 'github.com/maria/executive-lab-interfaz']) {
       assert.match(avisosM.limpiar(`mira ${suyo}`), /^mira github\.com\/<su sitio>/, `deja ver uno que no es el nuestro: ${suyo}`);
     }
     // Y una incidencia del sitio nuevo cuenta como nuestra.
-    assert.deepEqual(['https://github.com/minarkap/executive-lab-interfaz/issues/4', 'https://github.com/Executive-Lab/executive-lab-interfaz/issues/5', 'https://github.com/otra/executive-lab-interfaz/issues/6'].map(avisosM.numeroDe), [4, 5, null]);
+    assert.deepEqual(['https://github.com/minarkap/executive-lab-interfaz/issues/4', 'https://github.com/Executive-Lab/executive-lab-interfaz/issues/5', 'https://github.com/otra/executive-lab-interfaz/issues/6', 'https://github.com/Executive-Lab/executive-vscode-interfaz/issues/7'].map(avisosM.numeroDe), [4, 5, null, 7]);
     return 'limpio y se entiende';
   });
 
@@ -1727,7 +1730,7 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
       };
       assert.deepEqual(await avisosM.mandar({ titulo: 'Un título', cuerpo: 'Un cuerpo' }, 'clave-de-prueba'),
         { ok: true, numero: 7, url: 'https://github.com/minarkap/executive-lab-interfaz/issues/7' });
-      assert.equal(pedidas[0].url, 'https://api.github.com/repos/Executive-Lab/executive-lab-interfaz/issues');
+      assert.equal(pedidas[0].url, 'https://api.github.com/repos/Executive-Lab/executive-vscode-interfaz/issues');
       assert.equal(pedidas[0].opciones.method, 'POST');
       assert.equal(pedidas[0].opciones.headers.Authorization, 'Bearer clave-de-prueba');
       assert.deepEqual(JSON.parse(pedidas[0].opciones.body), { title: 'Un título', body: 'Un cuerpo' }, 'le pone etiquetas o algo más');
@@ -11889,6 +11892,38 @@ exec git "$@"
     return 'ocho formas de no ser de fiar, y el traslado a la organización';
   });
 
+  await comprobar('si el repositorio cambia de nombre, la barra sigue poniéndose al día (GR4ZCV)', () => {
+    // Decisión 148. Ya en la organización, el repositorio pasó a llamarse
+    // `executive-vscode-interfaz`; GitHub contesta con el nombre nuevo, y
+    // ninguna barra puesta daba por bueno el paquete: «No he podido ponerla».
+    const bytes = Buffer.from('un vsix de mentira');
+    const enUnSitio = (sitio, delPaquete = sitio, v = '0.51.0') => ({
+      ...unPaquete(bytes, v, { browser_download_url: `https://github.com/${delPaquete}/releases/download/v${v}/executive-lab-${v}.vsix` }),
+      html_url: `https://github.com/${sitio}/releases/tag/v${v}`,
+    });
+    // Tal cual la contestó GitHub el 15 de octubre de 2026.
+    const deHoy = versionM.deUnaRelease(enUnSitio('Executive-Lab/executive-vscode-interfaz'));
+    assert.ok(deHoy.paquete, 'con el nombre de hoy, no se pone');
+    assert.ok(versionM.paqueteDeFiar(deHoy.paquete, '0.51.0'), 'al ir a ponerla, lo que se recordó ya no vale');
+    // Y con el próximo nombre, sin tocar la barra: es el repositorio de su release.
+    assert.ok(versionM.deUnaRelease(enUnSitio('Executive-Lab/la-barra')).paquete, 'con otro nombre en la organización, no se pone');
+    assert.ok(versionM.deUnaRelease(enUnSitio('minarkap/la-barra')).paquete, 'con otro nombre en la cuenta de Jose, no se pone');
+    assert.ok(versionM.deUnaRelease(enUnSitio('executive-lab/La-Barra', 'Executive-Lab/la-barra')).paquete, 'con otras mayúsculas, no se pone');
+    // Lo que no cuela: en la organización también están los de los alumnos.
+    for (const [porQue, sitio, delPaquete] of [
+      ['de un alumno, aunque esté en la organización', 'Executive-Lab/executive-vscode-interfaz', 'Executive-Lab/ferreteria-soler'],
+      ['de otra cuenta, aunque sea el de su release', 'otra-cuenta/la-barra', 'otra-cuenta/la-barra'],
+      ['de una cuenta que se parece', 'Executive-Lab-falsa/la-barra', 'Executive-Lab-falsa/la-barra'],
+    ]) {
+      assert.equal(versionM.deUnaRelease(enUnSitio(sitio, delPaquete)).paquete, null, `se da por bueno un paquete ${porQue}`);
+    }
+    // Sin saber de qué repositorio es la release, solo vale un nombre de la lista.
+    assert.equal(versionM.deUnaRelease(unPaquete(bytes, '0.51.0', { browser_download_url: 'https://github.com/Executive-Lab/la-barra/releases/download/v0.51.0/executive-lab-0.51.0.vsix' })).paquete, null,
+      'sin la dirección de la release, se da por bueno un nombre que no está en la lista');
+    assert.equal(versionM.REPO, 'Executive-Lab/executive-vscode-interfaz', 'se sigue preguntando por el nombre viejo');
+    return 'el nombre de hoy y el próximo valen; el de un alumno, no';
+  });
+
   await comprobar('ponerla baja, comprueba e instala; y lo cortado, lo cambiado o lo viejo no se instala', async () => {
     const bytes = Buffer.from('PK un vsix de mentira, entero');
     const almacen = fs.mkdtempSync(path.join(os.tmpdir(), 'almacen-'));
@@ -12278,7 +12313,7 @@ exec git "$@"
       for (let i = 0; i < 20 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       await new Promise((listo) => setTimeout(listo, 50));
       assert.equal(pedidas.length, 1, `una pregunta por aviso, o ninguna al pintar: ${pedidas.length}`);
-      assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/Executive-Lab\/executive-lab-interfaz\/issues\?state=closed&since=/);
+      assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/Executive-Lab\/executive-vscode-interfaz\/issues\?state=closed&since=/);
 
       // Una vez al día.
       await proveedor.refrescar(true);
