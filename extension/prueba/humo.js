@@ -29,6 +29,10 @@ const RAIZ = path.join(__dirname, '..');
 // control remoto al arrancar (decisión 143), y aquí lo pone en una de mentira.
 const CLAUDE_DE_MENTIRA = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-de-mentira-'));
 process.env.CLAUDE_CONFIG_DIR = CLAUDE_DE_MENTIRA;
+// Y los de Codex (decisión 157): al abrir, la barra quita de su `config.toml` una
+// versión que ya no existe, y aquí lo hace en uno de mentira.
+const CODEX_DE_MENTIRA = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-codex-de-mentira-'));
+process.env.CODEX_HOME = CODEX_DE_MENTIRA;
 // Los ficheros de la plantilla de conexiones, como los deja RSC: el suelo los
 // pide todos, no solo la carpeta (G7). Salen del paquete que viaja dentro.
 // Sin el paquete —`node_modules` no va en git— la batería reventaba aquí,
@@ -82,7 +86,7 @@ async function main() {
 
   // ---------------------------------------------------- los módulos cargan
   const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar',
-    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'extension'];
+    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'ajustes-locales', 'retirados', 'extension'];
   await comprobar('todos los módulos cargan', () => {
     modulos.forEach(cargar);
     return `${modulos.length} módulos`;
@@ -10168,15 +10172,15 @@ exec git "$@"
       // Lo que el equipo apagó, primero; lo que no es un nombre, fuera.
       declarar({ optOuts: ['gitmoji', 'audit', '../x', 1, null] });
       assert.equal(decidirM.pasaALaTres(), true, 'una 2 no se ve pasar a la 3');
-      decidirM.decidirComoLaBarra({ principalAbierta: true });
-      assert.deepEqual(marcas(), ['.no-audit', '.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard'], `marcas: ${marcas().join(' · ')}`);
+      decidirM.decidirComoLaBarra({ nuestra: true });
+      assert.deepEqual(marcas(), ['.no-audit', '.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard', '.no-worktree-isolation'], `marcas: ${marcas().join(' · ')}`);
       // Un «ramas y PR» del equipo no se abre.
       limpiar(); declarar({ optOuts: ['trunk-open'] });
-      decidirM.decidirComoLaBarra({ principalAbierta: true });
+      decidirM.decidirComoLaBarra({ nuestra: true });
       assert.ok(!marcas().includes('.no-trunk-guard'), 'se abre la rama principal encima de un «ramas y PR»');
       // Unos `optOuts` que no son una lista no dejan sin poner lo de la barra.
       limpiar(); declarar({ optOuts: 'gitmoji' });
-      decidirM.decidirComoLaBarra({ principalAbierta: false });
+      decidirM.decidirComoLaBarra({ nuestra: false });
       assert.deepEqual(marcas(), ['.no-auto-update', '.no-knowledge-sync']);
 
       // Por `rsc.correr`, que es por donde pasa todo: se mira qué había al lanzar.
@@ -10188,7 +10192,7 @@ exec git "$@"
       terrenoM.podemosGuardarElPuntoDePartida = async () => true;
       for (const orden of [['add', 'bookkeeping'], ['repair', '--yes'], ['sync', '--target', 'codex']]) {
         limpiar(); declarar({ optOuts: ['gitmoji'] });
-        assert.deepEqual(await lanzar(orden), ['.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard'], `${orden[0]} pasa a la 3 sin decidir antes`);
+        assert.deepEqual(await lanzar(orden), ['.no-auto-update', '.no-gitmoji', '.no-knowledge-sync', '.no-trunk-guard', '.no-worktree-isolation'], `${orden[0]} pasa a la 3 sin decidir antes`);
       }
       // Lo ajeno: lo que sale, apagado; la rama principal, como estaba.
       terrenoM.podemosGuardarElPuntoDePartida = async () => false;
@@ -10201,7 +10205,7 @@ exec git "$@"
       // Pedir el plan no escribe; aceptarlo, sí. Y sin arnés todavía cuenta como pasar a la 3.
       limpiar(); fs.rmSync(path.join(r, '.rsc.json'));
       assert.deepEqual(await lanzar(['onboard', '--target', 'claude']), [], 'se decide al pedir el plan, antes de que diga que sí');
-      assert.deepEqual(await lanzar(['onboard', '--target', 'claude', '--accept-plan', 'x']), ['.no-auto-update', '.no-knowledge-sync', '.no-trunk-guard'], 'al aceptar el plan no se decide');
+      assert.deepEqual(await lanzar(['onboard', '--target', 'claude', '--accept-plan', 'x']), ['.no-auto-update', '.no-knowledge-sync', '.no-trunk-guard', '.no-worktree-isolation'], 'al aceptar el plan no se decide');
       // Y si la orden no sale, lo puesto se quita, y una carpeta vacía se queda vacía.
       limpiar(); sale = 4;
       await lanzar(['onboard', '--target', 'claude', '--accept-plan', 'x']);
@@ -10223,6 +10227,480 @@ exec git "$@"
     } finally {
       procesosM.node = antes.node;
       terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  // ------------------------------------- lo que traen los asistentes (decisión 157)
+
+  await comprobar('el diagnóstico del arnés que sale con 1 se lee: «Algo va mal» y «Qué falta por montar» ven lo que falta', async () => {
+    // Decisión 157. Desde la 2.0.19, `doctor --json` sale con 1 cuando falta algo y
+    // aun así imprime el informe entero, con `healthy` (#277 de RSC). La barra lo
+    // tiraba por el código, y se quedaba ciega justo con el arnés roto.
+    const rscM = cargar('rsc');
+    const ROTO = {
+      healthy: false, hookWired: true, missingAgents: [], missingCommands: [],
+      missing: [{ id: 'bookkeeping', path: '/x/.claude/skills/bookkeeping/SKILL.md', action: 'Run sync' }],
+      backups: { exists: true, count: 2, latest: '2026-10-15' },
+    };
+    const SANO = { healthy: true, hookWired: true, missing: [], missingAgents: [], missingCommands: [] };
+    const leido = (codigo, informe) => rscM.comoEstaDeSalud({ codigo, salida: typeof informe === 'string' ? informe : JSON.stringify(informe) });
+    assert.deepEqual(leido(1, ROTO), ROTO, 'con código 1 el informe se tira');
+    assert.equal(rscM.estaEntero(leido(1, ROTO)), false);
+    assert.equal(rscM.estaEntero(leido(0, SANO)), true);
+    assert.equal(leido(1, 'no se corre doctor: hay nombres que salen de la carpeta'), null, 'un 1 sin informe se toma por un informe');
+    assert.equal(leido(2, SANO), null, 'otro código se toma por un informe');
+    assert.equal(leido(1, '[]'), null, 'una lista se toma por un informe');
+    // `healthy` manda, también por lo que la barra no mira; y sin él, como antes.
+    assert.equal(rscM.estaEntero({ ...SANO, healthy: false, opencodePluginsOutdated: ['rsc-memory.js'] }), false, 'se da por entero lo que el arnés dice que no lo está');
+    assert.equal(rscM.estaEntero({ missing: [], hookWired: true }), true, 'un informe de antes, sin `healthy`, ya no se lee');
+    assert.equal(rscM.estaEntero({ missing: [], hookWired: false }), false);
+
+    // Por donde va de verdad, con un `correr` fingido.
+    const antes = { correr: rscM.correr, arreglarEnSeco: rscM.arreglarEnSeco, reevaluar: rscM.reevaluar };
+    let doctor = null;
+    const pedidos = [];
+    rscM.correr = async (args) => {
+      pedidos.push(args.join(' '));
+      if (args[0] !== 'doctor') return { codigo: 0, salida: '', error: '' };
+      return { codigo: doctor.codigo, salida: args.includes('--json') ? doctor.salida : 'el informe en texto', error: '' };
+    };
+    rscM.arreglarEnSeco = async () => ({ codigo: 0, salida: 'Nothing to repair' });
+    rscM.reevaluar = async () => ({ codigo: 0, salida: 'RSC_REASSESSMENT_NO_CHANGE' });
+    const terrenoM = cargar('terreno');
+    const radiografia = async () => (await terrenoM.radiografia({ aFondo: (await terrenoM.reconocer({ profundo: true })).arnes })).piezas;
+    const aparte = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-incidencias-'));
+    try {
+      doctor = { codigo: 1, salida: JSON.stringify(ROTO) };
+      const roto = await cargar('soporte').revisar({ carpetaAparte: aparte });
+      assert.ok(pedidos.some((p) => p.startsWith('doctor --json')), 'no se pregunta al arnés por el `correr` fingido');
+      assert.equal(roto.desconocido, false, 'con el arnés roto dice «No he podido revisarlo entero.»');
+      assert.equal(roto.sano, false, 'con el arnés roto dice que está bien');
+      const piezas = await radiografia();
+      const falta = piezas.find((p) => p.nombre === 'Lo que debería estar puesto');
+      assert.ok(falta && falta.estado === 'no' && /Contabilidad|bookkeeping|1 cosa declarada/.test(falta.detalle), 'Qué falta por montar no ve lo que el arnés dice que falta');
+      assert.ok(piezas.some((p) => p.nombre === 'Copias que guarda el arnés' && p.estado === 'si'), 'ni las copias que guarda');
+
+      doctor = { codigo: 0, salida: JSON.stringify(SANO) };
+      assert.equal((await cargar('soporte').revisar({ carpetaAparte: aparte })).desconocido, false);
+      assert.ok(!(await radiografia()).some((p) => p.nombre === 'Lo que debería estar puesto'), 'con el arnés sano dice que falta algo');
+      return 'con 1, el informe y lo que falta; con 0, sano; lo que no es un informe, sin saberse';
+    } finally {
+      Object.assign(rscM, antes);
+    }
+  });
+
+  await comprobar('en una carpeta de la barra no se trabaja aparte con dos conversaciones ni sale el aviso de la 3, y se quita si la orden no sale', async () => {
+    // Decisión 157. Las dos, como la rama principal abierta: solo en lo nuestro (P4).
+    // Y lo que dicen hacer, comprobado con el código del paquete.
+    const decidirM = cargar('decidir');
+    const rscM = cargar('rsc');
+    const procesosM = cargar('procesos');
+    const terrenoM = cargar('terreno');
+    const NUEVAS = ['.no-worktree-isolation', '.team-safe-3'];
+    const r = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-decidir-'));
+    const enRsc = () => (fs.existsSync(path.join(r, '.rsc')) ? fs.readdirSync(path.join(r, '.rsc')).sort() : []);
+    const limpiar = () => fs.rmSync(path.join(r, '.rsc'), { recursive: true, force: true });
+    fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: '2.0.15' }));
+    const antes = { node: procesosM.node, nuestro: terrenoM.podemosGuardarElPuntoDePartida };
+    vscode.guion.raiz = r;
+    try {
+      decidirM.decidirComoLaBarra({ nuestra: true });
+      for (const marca of NUEVAS) assert.ok(enRsc().includes(marca), `en una carpeta de la barra falta ${marca}`);
+      assert.match(fs.readFileSync(path.join(r, '.rsc', '.team-safe-3'), 'utf8'), /Executive Lab/, 'no dice quién la puso');
+      limpiar();
+      decidirM.decidirComoLaBarra({ nuestra: false });
+      for (const marca of NUEVAS) assert.ok(!enRsc().includes(marca), `en la carpeta de alguien se pone ${marca}`);
+
+      // La que ya dejó el arnés no se pisa, ni se quita como si fuera nuestra.
+      limpiar();
+      fs.mkdirSync(path.join(r, '.rsc'));
+      fs.writeFileSync(path.join(r, '.rsc', '.team-safe-3'), '2026-10-13T09:00:00.000Z\n');
+      decidirM.quitar(decidirM.decidirComoLaBarra({ nuestra: true }));
+      assert.equal(fs.readFileSync(path.join(r, '.rsc', '.team-safe-3'), 'utf8'), '2026-10-13T09:00:00.000Z\n', 'se pisa o se quita la marca que dejó el arnés');
+      assert.ok(!enRsc().includes('.no-worktree-isolation'), 'quitar no se lleva lo que puso');
+
+      // Por `rsc.correr`, que es por donde pasa todo: si no sale, se van con lo demás.
+      limpiar();
+      terrenoM.podemosGuardarElPuntoDePartida = async () => true;
+      procesosM.node = async () => ({ codigo: 4, salida: '', error: '' });
+      await rscM.correr(['sync']);
+      assert.equal(fs.existsSync(path.join(r, '.rsc')), false, 'una orden que no sale deja las marcas');
+      procesosM.node = async () => ({ codigo: 0, salida: '', error: '' });
+      await rscM.correr(['sync']);
+      for (const marca of NUEVAS) assert.ok(enRsc().includes(marca), `por rsc.correr no se pone ${marca}`);
+      // En Las reglas, apagado y con su porqué.
+      const aparte = cargar('reglas').losAutomatismos().find((a) => a.id === 'worktree-isolation');
+      assert.deepEqual(aparte && [aparte.estado, aparte.porQue], ['apagado', 'Apagado a propósito: todo se hace en esta carpeta'], 'Las reglas no dicen por qué está apagado');
+    } finally {
+      procesosM.node = antes.node;
+      terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
+      vscode.guion.raiz = empresa;
+    }
+
+    // Lo que hacen, en el paquete. El aviso de la 3 sale sin la marca y calla con ella.
+    const { pathToFileURL } = require('node:url');
+    const DEL_PAQUETE = path.join(RAIZ, 'media', 'harness', 'node_modules', '@ericrisco', 'rsc');
+    const { teamSafeAnnouncement } = await import(pathToFileURL(path.join(DEL_PAQUETE, 'targets', 'team-safe-start.mjs')).href);
+    const sinMarca = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-la-3-'));
+    assert.match(teamSafeAnnouncement(sinMarca, { LANG: 'es_ES.UTF-8' }), /rsc\/knowledge/, 'sin la marca no sale el aviso: la prueba no prueba nada');
+    assert.equal(teamSafeAnnouncement(r, { LANG: 'es_ES.UTF-8' }), '', 'con la marca de la barra, el aviso de la 3 sale igual');
+    // El trabajo aparte, como lo cuenta el propio arnés.
+    const cp = require('node:child_process');
+    const aislamiento = (donde) => JSON.parse(cp.execFileSync(process.execPath, [path.join(DEL_PAQUETE, 'scripts', 'rsc.js'), 'isolation', 'status'], {
+      cwd: donde, encoding: 'utf8', env: { ...process.env, RSC_NO_UPDATE_CHECK: '1' },
+    })).isolation;
+    assert.equal(aislamiento(sinMarca), 'on');
+    assert.equal(aislamiento(r), 'off', 'con la marca de la barra, el arnés sigue mandando a trabajar aparte');
+    // Los dos interruptores de RSC son decisiones del proyecto: viajan en `.rsc.json`,
+    // y en un clon se rehacen. La marca del aviso es de esta máquina y no viaja.
+    const { projectOptOuts } = await import(pathToFileURL(path.join(DEL_PAQUETE, 'targets', 'opt-outs.js')).href);
+    assert.deepEqual(projectOptOuts(['worktree-isolation', 'audit', 'team-safe-3']), ['audit', 'worktree-isolation']);
+    // Y la revisión periódica ya la apagan los raíles, en todas las carpetas: no se repite.
+    assert.match(fs.readFileSync(path.join(RAIZ, '..', 'skills', 'aplicar.js'), 'utf8'), /\['no-audit', /, 'los raíles ya no apagan la revisión periódica: hay que ponerla en decidir.js');
+    assert.ok(!decidirM.MARCAS_DE_LA_BARRA.includes('.no-audit'), 'la revisión periódica se apaga en dos sitios');
+    return 'en lo nuestro, puestas antes de escribir y quitadas si no sale; y el arnés las respeta';
+  });
+
+  await comprobar('los ajustes de Claude de esta persona: en español y preguntando antes de subir a GitHub, sin pisar nada', async () => {
+    // Decisión 157. `.claude/settings.local.json`, como el control remoto (143).
+    const al = cargar('ajustes-locales');
+    const nueva = (targets = ['claude']) => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-local-'));
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets }));
+      fs.mkdirSync(path.join(r, '.claude'));
+      fs.mkdirSync(path.join(r, '.rsc'));
+      return r;
+    };
+    const claude = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-claude-'));
+    const fuera = () => false;
+    const poner = (r, extra = {}) => al.ponerLosDeLaBarra({ raiz: r, claude, estaEnGit: fuera, ...extra });
+    const local = (r) => JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.local.json'), 'utf8'));
+    const constancia = (r) => path.join(r, ...al.CONSTANCIA);
+    const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
+
+    // Una carpeta que no es para Claude no se toca.
+    const deCodex = nueva(['codex']);
+    assert.equal((await poner(deCodex)).hecho, 'noEsParaClaude');
+    assert.ok(!fs.existsSync(path.join(deCodex, '.claude', 'settings.local.json')));
+
+    // Sin nada: las dos cosas, la constancia y la frase.
+    const vacia = nueva();
+    const hecho = await poner(vacia);
+    assert.equal(hecho.hecho, 'puesto');
+    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR } });
+    assert.ok(fs.existsSync(constancia(vacia)), 'sin constancia no se puede quitar');
+    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.');
+    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
+
+    // Con lo suyo (lo que deja la memoria de RSC): intacto, con sus permisos, y sin fichero a medias.
+    const suya = nueva();
+    const SUYOS = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'node .rsc/session-memory-adapter.mjs claude start' }] }] }, permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)'] } };
+    fs.writeFileSync(path.join(suya, '.claude', 'settings.local.json'), JSON.stringify(SUYOS));
+    fs.chmodSync(path.join(suya, '.claude', 'settings.local.json'), 0o600);
+    assert.equal((await poner(suya)).hecho, 'puesto');
+    assert.deepEqual(local(suya), { ...SUYOS, language: 'español', permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)', ...PREGUNTAR] } }, 'se pisa algo suyo');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(suya, '.claude', 'settings.local.json')).mode & 0o777, 0o600, 'cambian los permisos del fichero');
+    assert.deepEqual(fs.readdirSync(path.join(suya, '.claude')).filter((f) => f !== 'settings.local.json'), [], 'queda un fichero a medias');
+
+    // Un idioma ya dicho, en cualquiera de los tres sitios, manda; y si uno no se entiende, tampoco se pone.
+    for (const [donde, escribir] of [
+      ['aquí', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.local.json'), JSON.stringify({ language: 'english' }))],
+      ['en los de la carpeta', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ language: 'català' }))],
+      ['en los de la carpeta, que no se entienden', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), '{ "language": "català", }')],
+    ]) {
+      const r = nueva();
+      escribir(r);
+      await poner(r);
+      const puesto = fs.existsSync(path.join(r, '.claude', 'settings.local.json')) ? local(r) : {};
+      assert.notEqual(puesto.language, 'español', `se pisa el idioma dicho ${donde}`);
+      assert.deepEqual(puesto.permissions && puesto.permissions.ask, PREGUNTAR, `${donde}, no se pone lo de subir`);
+    }
+    const suyo = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-claude-'));
+    fs.writeFileSync(path.join(suyo, 'settings.json'), JSON.stringify({ language: 'english', permissions: { deny: ['Bash(gh pr create *)'] } }));
+    const conElSuyo = nueva();
+    await al.ponerLosDeLaBarra({ raiz: conElSuyo, claude: suyo, estaEnGit: fuera });
+    assert.deepEqual(local(conElSuyo), { permissions: { ask: ['Bash(git push *)'] } }, 'se pisa lo que dicen sus ajustes de usuario');
+
+    // Una regla que ya dijo, aquí, con la otra forma de escribirla: se respeta.
+    const permitida = nueva();
+    fs.writeFileSync(path.join(permitida, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { allow: ['Bash(git push:*)'] } }));
+    await poner(permitida);
+    assert.deepEqual(local(permitida).permissions, { allow: ['Bash(git push:*)'], ask: ['Bash(gh pr create *)'] }, 'se le pone delante una pregunta a lo que ya permitió');
+
+    // Lo que no se entiende, lo que está en git, lo que no se sabe y los enlaces: no se tocan.
+    const rara = nueva();
+    fs.writeFileSync(path.join(rara, '.claude', 'settings.local.json'), JSON.stringify({ permissions: { ask: 'Bash(rm *)' } }));
+    await poner(rara);
+    assert.deepEqual(local(rara).permissions, { ask: 'Bash(rm *)' }, 'se tocan unos permisos que no se entienden');
+    const rota = nueva();
+    fs.writeFileSync(path.join(rota, '.claude', 'settings.local.json'), '{ "hooks": {}, // un comentario\n}');
+    assert.equal((await poner(rota)).hecho, 'ilegible');
+    assert.equal(fs.readFileSync(path.join(rota, '.claude', 'settings.local.json'), 'utf8'), '{ "hooks": {}, // un comentario\n}');
+    for (const [que, respuesta] of [['enGit', true], ['sinSaber', null]]) {
+      const r = nueva();
+      assert.equal((await poner(r, { estaEnGit: () => respuesta })).hecho, que);
+      assert.ok(!fs.existsSync(path.join(r, '.claude', 'settings.local.json')), `${que}: se escribe`);
+    }
+    const otroSitio = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-fuera-'));
+    fs.writeFileSync(path.join(otroSitio, 'ajustes.json'), '{}');
+    const enlazada = nueva();
+    fs.symlinkSync(path.join(otroSitio, 'ajustes.json'), path.join(enlazada, '.claude', 'settings.local.json'));
+    assert.equal((await poner(enlazada)).hecho, 'enlace');
+    assert.equal(fs.readFileSync(path.join(otroSitio, 'ajustes.json'), 'utf8'), '{}', 'se escribe a través de un enlace');
+    const sinRsc = nueva();
+    fs.rmSync(path.join(sinRsc, '.rsc'), { recursive: true });
+    fs.symlinkSync(otroSitio, path.join(sinRsc, '.rsc'));
+    assert.equal((await poner(sinRsc)).hecho, 'enlace');
+    assert.deepEqual(fs.readdirSync(otroSitio), ['ajustes.json'], 'la constancia sale de la carpeta por un enlace');
+
+    // De verdad en git: el git a secas lo ve, y no se toca.
+    const cp = require('node:child_process');
+    const enGit = nueva();
+    cp.execFileSync('git', ['init', '-q', enGit]);
+    fs.writeFileSync(path.join(enGit, '.claude', 'settings.local.json'), '{}\n');
+    cp.execFileSync('git', ['-C', enGit, 'add', '-f', '.claude/settings.local.json']);
+    assert.equal((await al.ponerLosDeLaBarra({ raiz: enGit, claude })).hecho, 'enGit');
+    assert.equal(fs.readFileSync(path.join(enGit, '.claude', 'settings.local.json'), 'utf8'), '{}\n');
+
+    // Quitar: solo lo nuestro, y lo que cambió después es suyo.
+    assert.equal(al.quitarLosDeLaBarra({ raiz: suya }).hecho, 'quitado');
+    assert.deepEqual(local(suya), SUYOS, 'quitar se lleva algo suyo');
+    assert.ok(!fs.existsSync(constancia(suya)), 'la constancia se queda');
+    assert.equal(al.quitarLosDeLaBarra({ raiz: suya }).hecho, 'noEraNuestro');
+    const cambiada = nueva();
+    await poner(cambiada);
+    fs.writeFileSync(path.join(cambiada, '.claude', 'settings.local.json'), JSON.stringify({ language: 'english', permissions: { ask: ['Bash(gh pr create *)'] } }));
+    assert.equal(al.quitarLosDeLaBarra({ raiz: cambiada }).hecho, 'quitado');
+    assert.deepEqual(local(cambiada), { language: 'english' }, 'quitar se lleva el idioma que cambió después');
+    // Y suelto, para quien lo quiera quitar a mano.
+    const suelta = nueva();
+    await poner(suelta);
+    const correr = (...args) => cp.spawnSync(process.execPath, [path.join(RAIZ, 'src', 'ajustes-locales.js'), ...args], { encoding: 'utf8' }).stdout.trim();
+    assert.equal(correr('--quitar', suelta), 'ajustes de Claude de esta carpeta: quitado');
+    assert.deepEqual(local(suelta), {}, 'suelto, no se quita');
+    return 'puesto sin pisar; lo dicho, lo raro, lo de git y los enlaces, quietos; y se quita solo lo nuestro';
+  });
+
+  await comprobar('los ajustes de Claude se ponen al montar y al abrir, solo en lo nuestro, y no entran en git', async () => {
+    // Decisión 157. Al montar con los raíles; al abrir, como lo que se hace solo
+    // (P9): con confianza y en una carpeta conocida. Solo donde la barra creó el
+    // historial (P4). Y el fichero no entra en las copias aunque no hubiera git al montar.
+    const arrancarM = cargar('arrancar');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const nueva = () => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-montada-'));
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: cargar('rsc').VERSION_DE_RESPALDO }));
+      fs.mkdirSync(path.join(r, '.claude'));
+      fs.mkdirSync(path.join(r, '.rsc'));
+      return r;
+    };
+    const tieneLoDeClaude = (r) => {
+      try { return JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.local.json'), 'utf8')).language === 'español'; } catch { return false; }
+    };
+    const antes = {
+      nuestro: terrenoM.podemosGuardarElPuntoDePartida, confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+      vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente,
+    };
+    let nuestra = true;
+    terrenoM.podemosGuardarElPuntoDePartida = async () => nuestra;
+    const enviados = [];
+    try {
+      // Al montar, en el paso de los raíles.
+      const montada = nueva();
+      vscode.guion.raiz = montada;
+      const paso = await arrancarM.COMO_SE_HACE.ponerLosRailes({ contexto, parte: null });
+      assert.equal(paso.ok, true, 'los raíles no se ponen');
+      assert.match(paso.detalle, /ajustes de Claude de esta carpeta: puesto/);
+      assert.ok(tieneLoDeClaude(montada), 'al montar no se pone');
+      // En la de alguien, no.
+      nuestra = false;
+      const deAlguien = nueva();
+      vscode.guion.raiz = deAlguien;
+      assert.match((await arrancarM.COMO_SE_HACE.ponerLosRailes({ contexto, parte: null })).detalle, /deAlguien/);
+      assert.ok(!tieneLoDeClaude(deAlguien), 'se pone en la carpeta de alguien');
+
+      // Y no entra en git: la lista de lo que no entra lo deja fuera, sin el git de nadie.
+      const cp = require('node:child_process');
+      cp.execFileSync('git', ['init', '-q', montada]);
+      const vacio = path.join(montada, '.rsc', 'sin-exclusiones');
+      fs.writeFileSync(vacio, '');
+      const ignorado = (rel) => cp.spawnSync('git', ['-C', montada, '-c', `core.excludesFile=${vacio}`, 'check-ignore', '-q', rel]).status === 0;
+      assert.ok(ignorado('.claude/settings.local.json'), 'los ajustes de esta persona entran en la copia');
+      assert.ok(!ignorado('.claude/settings.json') && !ignorado('.claude/skills/executive-lab/SKILL.md'), 'se queda fuera lo que sí viaja');
+
+      // Al abrir: sin confianza o en una carpeta que no conoce, nada; si no, se pone y se dice.
+      nuestra = true;
+      const abierta = nueva();
+      vscode.guion.raiz = abierta;
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      proveedor.donde = { tipo: 'principal' };
+      proveedor.avisoPendiente = null;
+      vscode.guion.confianza = false;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      assert.equal(await proveedor.ponerLoDeClaudeAlAbrir(), null, 'sin confianza se hace algo');
+      vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', undefined);
+      assert.equal(await proveedor.ponerLoDeClaudeAlAbrir(), null, 'en una carpeta recién traída se hace algo');
+      assert.ok(!tieneLoDeClaude(abierta));
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      assert.equal((await proveedor.ponerLoDeClaudeAlAbrir()).hecho, 'puesto');
+      assert.ok(tieneLoDeClaude(abierta), 'al abrir no se pone');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.texto === 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.'), 'no se dice');
+      enviados.length = 0;
+      assert.equal((await proveedor.ponerLoDeClaudeAlAbrir()).hecho, 'yaEstaba');
+      assert.deepEqual(enviados, [], 'se dice dos veces');
+
+      // Dos frases de lo hecho al abrir se suman, no se tapan.
+      proveedor.vista = { visible: false, webview: { postMessage: (m) => enviados.push(m) } };
+      proveedor.dejarElAviso('Primera.');
+      proveedor.dejarElAviso('Segunda.');
+      assert.equal(proveedor.avisoPendiente.texto, 'Primera. Segunda.', 'una frase tapa a la otra');
+
+      // Y al abrir va después de los raíles y antes de lo demás que se hace solo.
+      const activar = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8').split('function activate(contexto)')[1];
+      const enOrden = ['panel.ponerLosRailesAlDia(true)', 'panel.ponerLoDeClaudeAlAbrir()', 'panel.arreglarCodex()', 'panel.hacerSoloLoQueSePuede()'].map((t) => activar.indexOf(t));
+      assert.ok(enOrden.every((i, n) => i > 0 && (n === 0 || i > enOrden[n - 1])), `al abrir, fuera de orden: ${enOrden.join(' · ')}`);
+      return 'al montar y al abrir, en lo nuestro, dicho una vez; y fuera de las copias';
+    } finally {
+      terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
+      vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('Codex con una versión que ya no existe se arregla solo: solo esa línea, con copia, y lo que no se entiende no se toca', () => {
+    // Decisión 157. La tabla, con su fecha y su fuente (P5).
+    const ret = cargar('retirados');
+    const tabla = ret.leerLaTabla();
+    assert.ok(tabla && tabla.codex.length >= 4, 'no se lee la tabla de retirados');
+    for (const fila of tabla.codex) {
+      assert.ok(fila.id && fila.nombre && !Number.isNaN(Date.parse(fila.desde)) && /^https:\/\//.test(fila.fuente), `una fila sin id, nombre, fecha o fuente: ${fila.id}`);
+    }
+    const hoy = new Date('2026-10-15T10:00:00Z');
+    assert.deepEqual([...ret.losRetirados(hoy).keys()].sort(), ['gpt-5.3-codex-spark', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5']);
+    assert.ok(!ret.losRetirados(new Date('2026-10-14T18:00:00Z')).has('gpt-5.5'), 'se quita antes de su hora');
+
+    const carpeta = () => fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-codex-'));
+    const conConfig = (texto) => {
+      const c = carpeta();
+      fs.writeFileSync(path.join(c, 'config.toml'), texto);
+      return c;
+    };
+    const leer = (c) => fs.readFileSync(path.join(c, 'config.toml'), 'utf8');
+    const copias = (c) => fs.readdirSync(c).filter((f) => f.startsWith('config.toml.copia-executive-lab-'));
+
+    // Solo esa línea: lo demás, sus saltos de Windows y sus permisos, igual; y la copia, entera.
+    const SUYO = '# mi Codex\r\nmodel = "gpt-5.5"   # el de siempre\r\nmodel_reasoning_effort = "high"\r\n\r\n[projects."/Users/ana/Facturas"]\r\ntrust_level = "trusted"\r\n';
+    const c1 = conConfig(SUYO);
+    fs.chmodSync(path.join(c1, 'config.toml'), 0o600);
+    const hechos = ret.arreglar({ codex: c1, ahora: hoy });
+    assert.deepEqual(hechos.map((h) => h.hecho), ['arreglado']);
+    assert.equal(leer(c1), '# mi Codex\r\nmodel_reasoning_effort = "high"\r\n\r\n[projects."/Users/ana/Facturas"]\r\ntrust_level = "trusted"\r\n', 'se toca algo más que la línea');
+    assert.equal(copias(c1).length, 1, 'no deja copia');
+    assert.equal(fs.readFileSync(path.join(c1, copias(c1)[0]), 'utf8'), SUYO, 'la copia no es como estaba');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(c1, 'config.toml')).mode & 0o777, 0o600, 'cambian los permisos');
+    assert.deepEqual(fs.readdirSync(c1).sort(), ['config.toml', copias(c1)[0]].sort(), 'queda un fichero a medias');
+    assert.equal(ret.laFrase(hechos), 'He arreglado Codex: tenía elegida una versión que ya no existe (GPT-5.5). Empieza una conversación nueva para que lo coja.');
+    assert.deepEqual(ret.arreglar({ codex: c1, ahora: hoy }).map((h) => h.hecho), ['nada'], 'se arregla dos veces');
+
+    // Con comillas simples; y el perfil activo de antes, pero no los demás perfiles ni otras tablas.
+    const c2 = conConfig("model = 'gpt-5.4' # comentario\nprofile = \"rapido\"\n[profiles.rapido]\nmodel = \"gpt-5.4-mini\"\n[profiles.otro]\nmodel = \"gpt-5.5\"\n[agents.revisor]\nmodel = \"gpt-5.5\"\n");
+    const h2 = ret.arreglar({ codex: c2, ahora: hoy });
+    assert.equal(leer(c2), 'profile = "rapido"\n[profiles.rapido]\n[profiles.otro]\nmodel = "gpt-5.5"\n[agents.revisor]\nmodel = "gpt-5.5"\n', 'el perfil activo, o se toca lo que no manda');
+    assert.equal(ret.laFrase(h2), 'He arreglado Codex: tenía elegida una versión que ya no existe (GPT-5.4 y GPT-5.4 mini). Empieza una conversación nueva para que lo coja.');
+
+    // Lo que no está retirado, o no se entiende, o entra con clave de la API, o es un enlace: quieto.
+    for (const [que, texto, hecho] of [
+      ['uno que sigue', 'model = "gpt-6.1-sol"\n', 'nada'],
+      // Dentro de un texto de varias líneas, lo que parece la línea no lo es.
+      ['un texto de varias líneas', 'instructions = """\nmodel = "gpt-5.5"\n"""\n', 'raro'],
+      ['dos arriba', 'model = "gpt-5.5"\nmodel = "gpt-6.1-sol"\n', 'raro'],
+      ['con clave de la API', 'forced_login_method = "api"\nmodel = "gpt-5.5"\n', 'conClave'],
+    ]) {
+      const c = conConfig(texto);
+      assert.deepEqual(ret.arreglar({ codex: c, ahora: hoy }).map((h) => h.hecho), [hecho], que);
+      assert.equal(leer(c), texto, `${que}: se toca`);
+      assert.deepEqual(copias(c), [], `${que}: deja copia`);
+    }
+    const otroSitio = carpeta();
+    fs.writeFileSync(path.join(otroSitio, 'de-verdad.toml'), 'model = "gpt-5.5"\n');
+    const enlazada = carpeta();
+    fs.symlinkSync(path.join(otroSitio, 'de-verdad.toml'), path.join(enlazada, 'config.toml'));
+    assert.deepEqual(ret.arreglar({ codex: enlazada, ahora: hoy }).map((h) => h.hecho), ['enlace']);
+    assert.equal(fs.readFileSync(path.join(otroSitio, 'de-verdad.toml'), 'utf8'), 'model = "gpt-5.5"\n', 'se escribe a través de un enlace');
+
+    // El de la carpeta, si se da: la línea de arriba, y sus perfiles no cuentan (Codex no los lee ahí).
+    const raiz = carpeta();
+    fs.mkdirSync(path.join(raiz, '.codex'));
+    fs.writeFileSync(path.join(raiz, '.codex', 'config.toml'), 'model = "gpt-5.3-codex-spark"\nprofile = "a"\n[profiles.a]\nmodel = "gpt-5.5"\n');
+    const h3 = ret.arreglar({ codex: carpeta(), raiz, ahora: hoy });
+    assert.deepEqual(h3.map((h) => h.hecho), ['noHay', 'arreglado']);
+    assert.equal(fs.readFileSync(path.join(raiz, '.codex', 'config.toml'), 'utf8'), 'profile = "a"\n[profiles.a]\nmodel = "gpt-5.5"\n');
+    const raizEnlazada = carpeta();
+    fs.mkdirSync(path.join(otroSitio, 'codex'));
+    fs.writeFileSync(path.join(otroSitio, 'codex', 'config.toml'), 'model = "gpt-5.5"\n');
+    fs.symlinkSync(path.join(otroSitio, 'codex'), path.join(raizEnlazada, '.codex'));
+    assert.deepEqual(ret.arreglar({ codex: carpeta(), raiz: raizEnlazada, ahora: hoy }).map((h) => h.hecho), ['noHay', 'enlace']);
+    assert.equal(fs.readFileSync(path.join(otroSitio, 'codex', 'config.toml'), 'utf8'), 'model = "gpt-5.5"\n', 'sale de la carpeta por un enlace');
+    return 'solo la línea, con copia; y lo raro, lo de clave, lo vigente y los enlaces, quietos';
+  });
+
+  await comprobar('la barra arregla Codex al abrir si la persona lo usa; el de la carpeta, solo en lo nuestro y conocido', async () => {
+    // Decisión 157. El de usuario, como el control remoto; el de la carpeta, como lo
+    // que se hace solo (P9) y solo en lo nuestro (P4). Y se dice con un aviso del editor.
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const RETIRADO = 'model = "gpt-5.4"\n';
+    const suyo = path.join(CODEX_DE_MENTIRA, 'config.toml');
+    const r = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-con-codex-'));
+    fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    fs.mkdirSync(path.join(r, '.codex'));
+    const deLaCarpeta = path.join(r, '.codex', 'config.toml');
+    const antes = {
+      nuestro: terrenoM.podemosGuardarElPuntoDePartida, confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+      extensiones: vscode.guion.extensionesInstaladas,
+    };
+    const dichos = () => vscode.registrado.mensajes.filter((m) => /^INFO He arreglado Codex/.test(m));
+    terrenoM.podemosGuardarElPuntoDePartida = async () => true;
+    vscode.guion.raiz = r;
+    try {
+      // Sin Codex, nada.
+      fs.writeFileSync(suyo, RETIRADO);
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      assert.deepEqual(await proveedor.arreglarCodex(), []);
+      assert.equal(fs.readFileSync(suyo, 'utf8'), RETIRADO, 'se toca Codex sin usarlo');
+      // Con Codex en el editor: el suyo, y se dice; el de la carpeta espera a que sea conocida.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', undefined);
+      fs.writeFileSync(deLaCarpeta, RETIRADO);
+      const antesDeDecirlo = dichos().length;
+      await proveedor.arreglarCodex();
+      assert.equal(fs.readFileSync(suyo, 'utf8'), '', 'el de usuario no se arregla');
+      assert.equal(fs.readFileSync(deLaCarpeta, 'utf8'), RETIRADO, 'el de una carpeta que no conoce se toca');
+      assert.equal(dichos().length, antesDeDecirlo + 1, 'no se dice');
+      // Conocida, con confianza y nuestra: también el de la carpeta. Declarado basta, sin la extensión.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude', 'codex'] }));
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      terrenoM.podemosGuardarElPuntoDePartida = async () => false;
+      await proveedor.arreglarCodex();
+      assert.equal(fs.readFileSync(deLaCarpeta, 'utf8'), RETIRADO, 'el de la carpeta de alguien se toca');
+      terrenoM.podemosGuardarElPuntoDePartida = async () => true;
+      await proveedor.arreglarCodex();
+      assert.equal(fs.readFileSync(deLaCarpeta, 'utf8'), '', 'con Codex declarado, el de la carpeta no se arregla');
+      return 'con Codex, al abrir; el de la carpeta, en lo nuestro y conocido';
+    } finally {
+      terrenoM.podemosGuardarElPuntoDePartida = antes.nuestro;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+      fs.rmSync(suyo, { force: true });
+      for (const f of fs.readdirSync(CODEX_DE_MENTIRA)) fs.rmSync(path.join(CODEX_DE_MENTIRA, f), { force: true });
       vscode.guion.raiz = empresa;
     }
   });
@@ -13570,10 +14048,14 @@ exec git "$@"
       assert.doesNotMatch(perfil, /^accompaniment/m, 'escribe un dial que nadie lee (decisión 145)');
       // Y como se dijo en clase: la rama principal abierta y nada que salga solo, y
       // que viaje con la carpeta (decisión 145).
-      for (const marca of ['.no-trunk-guard', '.no-knowledge-sync', '.no-auto-update']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `falta ${marca}`);
+      for (const marca of ['.no-trunk-guard', '.no-knowledge-sync', '.no-auto-update', '.no-worktree-isolation', '.team-safe-3']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `falta ${marca}`);
+      // Y en los ajustes de Claude de esta persona, en español y preguntando antes de subir (decisión 157).
+      const deClaude = JSON.parse(fs.readFileSync(path.join(vacia, '.claude', 'settings.local.json'), 'utf8'));
+      assert.equal(deClaude.language, 'español', 'al montar, Claude no queda en español');
+      assert.ok((deClaude.permissions.ask || []).includes('Bash(git push *)'), 'al montar, sube sin preguntar');
       const declarada = JSON.parse(fs.readFileSync(path.join(vacia, '.rsc.json'), 'utf8'));
       assert.equal(declarada.gitPermissions, false, 'el asistente puede subir sin preguntar');
-      for (const id of ['trunk-guard', 'knowledge-sync', 'auto-update']) assert.ok((declarada.optOuts || []).includes(id), `${id} no viaja en .rsc.json: ${declarada.optOuts}`);
+      for (const id of ['trunk-guard', 'knowledge-sync', 'auto-update', 'worktree-isolation']) assert.ok((declarada.optOuts || []).includes(id), `${id} no viaja en .rsc.json: ${declarada.optOuts}`);
       assert.ok(fs.existsSync(path.join(vacia, '.claude/skills/executive-lab/SKILL.md')), 'falta la habilidad');
 
       // Y queda un punto de partida al que volver: sin esto, "Volver a como

@@ -26,6 +26,7 @@ const rumbo = require('./rumbo');
 const trato = require('./trato');
 const ajena = require('./ajena');
 const encargosDelAsistente = require('./encargos');
+const ajustesLocales = require('./ajustes-locales');
 
 // Las preguntas que hace RSC, en cristiano. Antes se daban por supuestas tres
 // —siempre operaciones, siempre no técnico, siempre L3— y eso está mal: un
@@ -510,6 +511,28 @@ async function ponerLosRailes(contexto, { ajena = false, ponerFreno = false, pon
   return codigo === 0;
 }
 
+// Lo de esta persona en los ajustes de Claude de esta carpeta (decisión 157): que
+// le hable en español y que le pregunte antes de subir a GitHub. Al montar y, en
+// las carpetas que ya estaban montadas, al abrir. Solo en una carpeta cuyo
+// historial creó la barra, como la rama principal abierta (P4): en la de alguien,
+// sus ajustes y su forma de trabajar son suyos. Si el fichero está en git, lo mira
+// el git de la barra, y solo si se puede usar (en un Mac sin las herramientas de
+// Apple, `git` a secas abre su diálogo).
+async function ponerLoDeClaude() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return { hecho: 'sinCarpeta' };
+  if (!(await terreno.podemosGuardarElPuntoDePartida())) return { hecho: 'deAlguien' };
+  return ajustesLocales.ponerLosDeLaBarra({
+    raiz,
+    estaEnGit: async (donde, relativo) => {
+      if (!fs.existsSync(path.join(donde, '.git'))) return false;
+      if (!(await git.hay())) return null;
+      const { codigo, salida } = await procesos.git('ls-files', '--', relativo);
+      return codigo === 0 ? Boolean(salida.trim()) : null;
+    },
+  });
+}
+
 // Si lo que toca ficheros de esta persona tiene que esperar a su sí (C-4): el
 // historial no lo creó la barra, y en este montaje no se enseñó qué se tocaba.
 // Al montar encima de lo que había, ese sí ya se dio con el resumen (B4).
@@ -890,7 +913,13 @@ const COMO_SE_HACE = {
   },
 
   arreglarLoRoto: ({ salida }) => arreglarLoQueSePuedaSolo(salida),
-  ponerLosRailes: async ({ contexto, parte }) => ({ ok: await ponerLosRailes(contexto, { ajena: await sinSuSi(parte) }) }),
+  // Y con ellos, lo de esta persona en los ajustes de Claude (decisión 157). Que
+  // no salga no tumba los raíles: se apunta, y al abrir se vuelve a intentar.
+  ponerLosRailes: async ({ contexto, parte }) => {
+    const ok = await ponerLosRailes(contexto, { ajena: await sinSuSi(parte) });
+    const deClaude = await ponerLoDeClaude().catch((error) => ({ hecho: 'fallo', error: error.message }));
+    return { ok, detalle: `ajustes de Claude de esta carpeta: ${deClaude.hecho}${deClaude.error ? ` (${deClaude.error})` : ''}` }; // diccionario: interno
+  },
   ponerLosNombres: ({ respuestas }) => {
     const campos = { ...(respuestas.nombres || {}), alcance: respuestas.alcance, personas: respuestas.personas };
     return { ok: Object.values(campos).some(Boolean) ? ponerEnElPerfil(campos) : true };
@@ -1365,6 +1394,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
+  ponerLoDeClaude,
   arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque,

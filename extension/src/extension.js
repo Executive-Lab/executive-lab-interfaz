@@ -70,6 +70,8 @@ const web = require('./web');
 const rastro = require('./rastro');
 const entorno = require('./entorno');
 const relevo = require('./relevo');
+const ajustesLocales = require('./ajustes-locales');
+const retirados = require('./retirados');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -275,6 +277,15 @@ ${cabecera}
     this.enviar(aviso);
   }
 
+  // Lo que se hizo solo al abrir, en una sola frase aunque lo hagan dos sitios: el
+  // segundo se suma al primero si todavía no ha salido, en vez de taparlo.
+  dejarElAviso(texto) {
+    if (!texto) return;
+    this.avisoPendiente = this.avisoPendiente && this.avisoPendiente.tipo === 'aviso'
+      ? { ...this.avisoPendiente, texto: `${this.avisoPendiente.texto} ${texto}` }
+      : { tipo: 'aviso', texto };
+  }
+
   // Una carpeta que este ordenador ya conoce: alguien ha pulsado aquí un botón
   // que corre el arnés. Va en el estado del editor para esta carpeta, que un
   // repositorio no puede traer escrito.
@@ -355,12 +366,45 @@ ${cabecera}
 
     // Lo que trae o arregla el arnés lo lee Claude al empezar una conversación.
     const frase = solo.laFrase(hechas, donde.paraQuien() === 'claude' && hechas.length > 0);
-    if (frase) this.avisoPendiente = { tipo: 'aviso', texto: frase };
+    this.dejarElAviso(frase);
     // Sin sacar a nadie de donde está: se repinta lo que tenga delante, y la
     // frase sale cuando esté en la principal.
     await this.repintarLoQueHaya();
     this.soltarElAviso();
     return hechas;
+  }
+
+  // Lo de esta persona en los ajustes de Claude (decisión 157), en las carpetas que
+  // ya estaban montadas: en las nuevas lo pone el montaje. Como lo que se hace
+  // solo (P9): con confianza, en una carpeta que este ordenador ya conoce, y se
+  // dice en una frase. Qué carpeta y qué se pone, en `arrancar.ponerLoDeClaude`.
+  async ponerLoDeClaudeAlAbrir() {
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz() || !this.carpetaConocida()) return null;
+    const hecho = await arrancar.ponerLoDeClaude();
+    this.salida.appendLine(`[claude] ajustes de esta carpeta: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
+    if (hecho.hecho !== 'puesto') return hecho;
+    this.dejarElAviso(ajustesLocales.laFrase(hecho));
+    this.soltarElAviso();
+    return hecho;
+  }
+
+  // Codex con una versión retirada (decisión 157), arreglado solo si la persona
+  // usa Codex: lo tiene en el editor o la carpeta está montada para él. El suyo de
+  // usuario, como el control remoto, al abrir; el de la carpeta, como lo demás que
+  // se hace solo: con confianza, en una carpeta conocida y cuyo historial creó la
+  // barra (P4). Se dice con un aviso del editor, que sale aunque no se vea la barra.
+  async arreglarCodex() {
+    const codex = asistentes.porId('codex');
+    if (!asistentes.estaInstalado(codex) && !asistentes.losDelArnes().includes(codex)) return [];
+    const laCarpeta = vscode.workspace.isTrusted !== false && Boolean(proyecto.raiz()) && this.carpetaConocida()
+      && await terreno.podemosGuardarElPuntoDePartida();
+    const hechos = retirados.arreglar({ raiz: laCarpeta ? proyecto.raiz() : null });
+    for (const h of hechos) {
+      this.salida.appendLine(`[codex] ${h.hecho} ${h.fichero}${h.copia ? ` · copia en ${h.copia}` : ''}${h.error ? ` (${h.error})` : ''}`); // diccionario: interno
+    }
+    const frase = retirados.laFrase(hechos);
+    if (frase) vscode.window.showInformationMessage(frase);
+    return hechos;
   }
 
   // Repinta lo que el alumno tenga delante. Lo llama el vigía del arnés.
@@ -2809,6 +2853,10 @@ function activate(contexto) {
       salida.appendLine('[railes] los de esta carpeta son de una versión anterior: se reponen'); // diccionario: interno
       await panel.ponerLosRailesAlDia(true).catch((e) => salida.appendLine(`[railes] ${e.message}`)); // diccionario: interno
     }
+    // Lo de esta persona en los ajustes de Claude, y Codex con una versión que ya
+    // no existe (decisión 157).
+    await panel.ponerLoDeClaudeAlAbrir().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
+    await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y lo demás que se puede hacer solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
   }, 3000);
