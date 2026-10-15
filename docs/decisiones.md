@@ -5267,6 +5267,56 @@ lo demás lo hace sola (P9).
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
 
+## 150. El asistente le pide la habilidad a la barra
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 10 de la decisión 142. La regla 7 de los raíles decía «dile que la busque en *Habilidades
+(skills)* y la pulse»: el alumno, que estaba hablando con el asistente, tenía que irse a otra pantalla a buscar
+un botón. Y el asistente no puede añadirla él con `npx`, que traería la última versión publicada y no la de la
+clase (decisión 145).
+
+- **El asistente pregunta, y con el sí deja un pedido**: un fichero vacío
+  `02-DOCS/raw/pedidos/<id>.habilidad`, con el identificador del catálogo. Lo dice la regla 7 en las dos copias
+  de `siempre.md`.
+- **La barra lo ve** por el vigía de la carpeta, y por el reloj de cada minuto por si el vigía no lo vio, y la
+  añade como el botón: con su arnés, la versión de la clase y lo que el equipo apagó (`rsc.anadir`). Lo cuenta
+  en una frase («He añadido Facturación, que te ha pedido el asistente. Se pide con /invoicing.») y **contesta
+  siempre** en `<id>.hecho`, que el asistente lee y le dice en una línea.
+- **Sola, con las guardas de P9**: carpeta de confianza, que este ordenador conoce y con el arnés entero. Si
+  no, pregunta a la persona («El asistente quiere añadir Facturación. ¿La añado?») y «Añadirla» pasa por el
+  botón de siempre. Si cierra la pregunta, se le contesta al asistente que ahora no, para que no se quede
+  esperando.
+- **Con el arnés de la carpeta por delante** la barra no puede (P7), y lo contesta sin preguntar a nadie. Sin
+  darle al asistente ninguna orden que correr: `npx` en esa carpeta leería su `.npmrc`, que es justo por lo que
+  la barra tampoco lo usa ahí.
+- **Si el nombre no está en el catálogo**, la respuesta trae las que más se parecen, por el identificador o por
+  sus palabras en español («facturas» → invoicing).
+- **Tres por vez, y cinco sin preguntar en cada sesión.** Uno que llega mientras se atiende otro no espera al
+  minuto siguiente, y lo que espera a que la persona conteste no ocupa sitio.
+- `02-DOCS/raw/pedidos/` no entra en git (`no-entra-en-git.js`).
+
+**Sin seguir enlaces.** La carpeta viene en el repositorio. Con el borrador, un `<id>.hecho` que fuera un
+enlace a un fichero de la persona se sobrescribía solo con abrir la carpeta, antes de ninguna guarda, y una
+carpeta `pedidos` enlazada a otra parte hacía borrar allí. Ahora cada trozo del camino tiene que ser una carpeta
+de verdad, el pedido un fichero de verdad, y la respuesta se escribe nueva (`pedidos.js`). La prueba lo hace con
+enlaces de verdad.
+
+**La revisión adversaria** (seguridad y corrección) no encontró nada alto. Lo que encontró, arreglado y con su
+prueba:
+
+- Seguridad: la respuesta con el arnés por delante mandaba correr `npx` (arriba); el nombre del fichero salía tal
+  cual en la respuesta, que el asistente lee con la voz de la barra, y ahora solo sale si es un identificador;
+  sin confianza se preguntaba, y «Añadirla» daba la carpeta por conocida: ahora sin confianza no se pregunta y se
+  dice por qué, y la pregunta no da nada por conocido; y el tope de tres no paraba una cadena de pedidos, que
+  ahora para el de cinco por sesión.
+- Corrección: la respuesta de la vez anterior se leía como la nueva (la barra la quita al ver el pedido, y la
+  regla 7 le dice al asistente que la borre antes); con la pregunta abierta, el reloj la añadía sola y luego se
+  contestaba dos veces; «Añadirla» con el arnés ocupado contestaba «no se ha podido» (ahora espera, y con el sí
+  dado no se vuelve a preguntar); un pedido podía pisar un botón que corre el arnés (los botones lo marcan
+  ocupado, y lo que la barra arregla sola al abrir espera a que quede libre); si el arnés reventaba, el pedido se
+  repetía cada minuto; con Codex la frase de cómo se pide salía rota; y el vigía no veía las rutas de Windows.
+
 ## 151. Documentos en una pantalla, y la foto del cerebro
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F7 del plan de simplificar la barra y punto 11 de la
@@ -5471,3 +5521,104 @@ Dos sobrevivieron a la primera pasada y se cerraron con una prueba más: un enla
 ficheros que solo cambian en mayúsculas, y la foto que no dice que no está entera. Con el ordenador cargado
 por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
 mutar. La batería entera se pasó al final, sin mutar.
+
+## 153. Los datos de clientes, en Ayuda y a tiempo
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 12 de la decisión 142. En la clase del 13-10, Eric: con datos de clientes, licencia de empresa, y
+dónde se apaga que se usen tus datos. Eso no lo puede hacer la barra por nadie: una licencia cuesta dinero, y los
+ajustes son de su cuenta (P9). Lo que sí hace sola es decirlo a tiempo.
+
+- **En Ayuda, «Si trabajas con datos de clientes»**, entre Sugerencias y Más ayuda; y en Más ayuda, en Guías.
+  Es una pantalla para leer, con tres cosas:
+  - **una licencia de empresa**. Con ella, de fábrica, Anthropic y OpenAI no entrenan con lo que se les da: en
+    Claude, Team, Enterprise o Education; en ChatGPT, Business, Enterprise o Edu. Tampoco si se paga por uso, con una
+    clave de acceso. Con un plan personal depende de un ajuste;
+  - **dónde se apaga** en cada asistente de la barra, con el camino de menús y un botón a su página de ajustes;
+  - **lo que no se pega nunca**: claves y contraseñas, el banco, la salud y los documentos de identidad. Y que
+    valorar con el pulgar o mandar un fallo puede mandar la conversación entera a entrenar, aunque esté apagado.
+- **El texto vive en `extension/media/datos-de-clientes.json`** (P5), con la fecha en que se comprobó, y pasa
+  por el diccionario como las otras tablas. Lleva también los dos enlaces a lo que dicen Anthropic y OpenAI,
+  porque esto cambia.
+- **La tarjeta sale una vez por carpeta**, cuando empiezan a entrar datos de verdad. Pasa con la primera
+  conexión con todas sus claves puestas, lo mismo que pide la 149 para preguntar cuándo caduca. O con el
+  primer documento entregado, sin leer, leído u original. Son las dos puertas por las que entran los datos del
+  negocio, y lo siguiente es hablar de ellos con el asistente, que es cuando salen del ordenador. Con «Leerlo» o
+  «Entendido» no vuelve en esa carpeta. Leerlo desde Ayuda cuenta solo si ya entran datos: leído antes, la
+  tarjeta sale igual cuando entren, porque lo que importa es el momento, y semanas antes no se tiene delante.
+  Una carpeta que ya tenía algo conectado la ve una vez, al abrir la versión que trae esto.
+- **El orden de la tarjeta que toca:** detrás de lo que impide trabajar (sin git, sin asistente, sin cuenta,
+  sin ajustar), del recordatorio que tiene su hora y de «Recargar ahora». Delante de lo nuevo de la versión, la
+  costumbre, el consejo, los avisos y la versión nueva. No impide trabajar, pero es lo que hay que saber antes
+  de pegar nada.
+
+**Comprobado el 15 de octubre de 2026, en las páginas oficiales.** De Anthropic, leídas directamente:
+
+- [Cómo cambio mi configuración de privacidad de mejora del modelo](https://privacy.claude.com/es/articles/12109829-como-cambio-mi-configuracion-de-privacidad-de-mejora-del-modelo)
+  (actualizada el 3-8-2026). Configuración › Privacidad › «Ayudar a mejorar nuestros modelos de IA». Vale para
+  Free, Pro y Max, también cuando esas cuentas usan Claude Code. Los ajustes están en
+  `https://claude.ai/settings/data-privacy-controls`.
+- [Is my data used for model training? (consumo)](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
+  (16-3-2026). En los planes personales se entrena si lo permites. El pulgar guarda la conversación entera
+  hasta cinco años.
+- [Is my data used for model training? (empresa)](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training)
+  (18-8-2026). *«By default, we will not use your inputs or outputs from our commercial products (e.g. Claude for
+  Work, Anthropic API, Claude Gov, etc.) to train our models»*, salvo lo que se manda con el pulgar o como fallo.
+- [Precios](https://claude.com/pricing). Team, *«No model training on your content by default»*; Team y
+  Enterprise, *«None by default»*; los personales, *«Opt-out»*.
+- [Updates to our consumer terms](https://www.anthropic.com/news/updates-to-our-consumer-terms) (28-8-2025).
+  Claude for Work son los planes Team y Enterprise.
+
+De OpenAI:
+
+- [Pricing de Codex](https://learn.chatgpt.com/docs/pricing). Es la documentación de OpenAI, y
+  `developers.openai.com/codex/pricing` lleva aquí. Business, *«No training on your business data by
+  default»*. En la tabla, *«No training on API or business data by default»* en Business, Enterprise y clave de
+  acceso, y no en Plus ni Pro.
+- [ChatGPT Work cloud security](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-cloud-security). Business,
+  Enterprise y Edu, *«not used to train OpenAI models by default»*.
+- [Your data](https://developers.openai.com/api/docs/guides/your-data). Lo que llega por la API no se usa para
+  entrenar desde el 1-3-2023, salvo si te apuntas.
+- [Browser](https://learn.chatgpt.com/docs/browser) y [Use ChatGPT](https://learn.chatgpt.com/docs/use-chatgpt).
+  *«Settings > Data controls»*, y el enlace oficial a esa pantalla, `https://chatgpt.com/#settings/DataControls`.
+- [Preguntas frecuentes sobre los controles de datos](https://help.openai.com/es-es/articles/7730893-preguntas-frecuentes-sobre-los-controles-de-datos)
+  y [su versión en inglés](https://help.openai.com/en/articles/7730893-data-controls-faq). Configuración ›
+  Controles de datos › «Mejorar el modelo para todos». Con un plan personal vale también para las tareas de
+  Codex. Aunque esté apagado, lo que se valora se puede usar para entrenar. **Esta página no se deja leer con
+  una petición automática (403)**: se leyó con el buscador, que la tenía al día (actualizada entre 3 y 22 días
+  antes). Lo que dice coincide con las páginas de OpenAI de arriba.
+
+**Lo que se queda fuera:**
+
+- Los menús como salen en el ordenador de cada uno, que dependen del idioma. Los de Claude, como los da su ayuda
+  en español, que se leyó. Los de ChatGPT, en inglés como los da la fuente, con la traducción al lado y «Si lo
+  tienes en español, salen traducidos»: su ayuda en español no se deja leer, y su nombre en español no está
+  comprobado.
+- «Include environments», el ajuste de Codex en la nube: la barra trabaja con Codex en el editor. Por eso dice
+  «Vale también para las tareas de Codex», que es lo que dice la fuente, y no «para Codex».
+- Cuánto se guardan las conversaciones (30 días o cinco años en Claude): no cambia lo que hay que hacer.
+- La transcripción de la clase no está en este repositorio. Las palabras de Eric son las que apuntó el repaso de
+  la 142.
+
+**La revisión adversaria** (corrección, datos y seguridad) encontró esto, y está arreglado con su prueba:
+
+- **Corrección.**
+  - Lo que deja la barra en `02-DOCS/raw/` (los avisos para Executive Lab, los pedidos, los informes de «Algo va
+    mal» y «Qué falta por montar» por escrito) contaba como un documento entregado. Hacía salir «Ya le has dado
+    documentos…» sin ninguno, y como sale una vez, la gastaba. También salía en «Documentos entregados». Ahora
+    las dos cosas se saltan lo mismo, de la misma lista (`papeles.js`), y solo arriba de `raw/`: una carpeta
+    suya que se llame «avisos» más abajo, cuenta.
+  - Leerlo desde Ayuda antes de que entrara nada la gastaba. Ahora no (ver arriba).
+  - Cuatro mutantes vivían: una conexión con solo su fichero de acceso; un `.env.example` vacío contado como
+    puesto; dos conexiones, una puesta y otra a medias; y «Entendido» sin repintar, que dejaba la tarjeta en
+    pantalla. Los cuatro caen ahora.
+- **Datos.** «Mejorar el modelo para todos» no estaba comprobado en una página oficial que se pudiera leer:
+  ahora va en inglés, como la fuente, con la traducción al lado. «Vale también para Codex» pasa a «para las
+  tareas de Codex». Y Education entra en las licencias de empresa de Claude.
+- **Seguridad, de antes de esta decisión.** La ruta `abrir` del panel abría cualquier cosa, con cualquier
+  esquema y de cualquier sitio. La página de una conexión sale de su CREDENTIALS.md, así que una plantilla podía
+  poner una página falsa en «Abrir su página para sacar la clave». Ahora solo se abre lo que va por https. Lo
+  que es la barra en GitHub (`sitio.js`) o una página de Anthropic u OpenAI de la tabla se abre directo. Lo
+  demás se pregunta antes, con el sitio a la vista: «Voy a abrir app.holded.com. ¿Lo abro?». Lo que no es https
+  no se abre: «No abro esa página: no es segura. Díselo a tu tutor.»

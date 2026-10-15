@@ -26,8 +26,14 @@ const INBOX = ['02-DOCS', 'inbox'];
 const CRUDO = ['02-DOCS', 'raw'];
 
 // El diario que el arnés se escribe solo cuelga de `raw/` y no es un papel que
-// haya entregado nadie. Se ve en su sitio, que es el histórico.
-const NO_SON_PAPELES = ['worklog'];
+// haya entregado nadie. Se ve en su sitio, que es el histórico. Tampoco lo que
+// deja ahí la barra: los avisos para Executive Lab, los pedidos y los informes de
+// «Algo va mal». Un aviso salía como documento entregado, y hacía saltar la
+// tarjeta de los datos de clientes sin que hubiera ninguno (revisión de la 153).
+// Son carpetas de arriba de `raw/`: una suya que se llame igual más abajo, cuenta.
+const NO_SON_PAPELES = ['worklog', 'avisos', 'pedidos', 'incidencias'];
+// Y lo que la barra deja suelto en `raw/`: «Qué falta por montar», por escrito.
+const NO_ES_UN_PAPEL = /^que-hay-montado-.*\.md$/;
 
 // Suficientes para hacerse una idea. Quien tenga más de esto no los va a
 // repasar en una barra lateral de todos modos.
@@ -47,9 +53,10 @@ function listar(partes, { saltar = [], hondo = true } = {}) {
     }
     for (const entrada of entradas) {
       if (entrada.name.startsWith('.') || entrada.name === 'README.md') continue;
+      if (donde === carpeta && NO_ES_UN_PAPEL.test(entrada.name)) continue;
       const completa = path.join(donde, entrada.name);
       if (entrada.isDirectory()) {
-        if (saltar.includes(entrada.name)) continue;
+        if (donde === carpeta && saltar.includes(entrada.name)) continue;
         if (hondo) recorrer(completa);
         continue;
       }
@@ -244,4 +251,4 @@ function quitar(rutaRelativa) {
   return { ok: true, mensaje: `Quitado ${path.basename(completa)}.` };
 }
 
-module.exports = { queHay, sinLeerTodavia, donde, abrir, abrirFichero, quitar, sinLeer, LAS_PINTA_EL_EDITOR };
+module.exports = { queHay, sinLeerTodavia, donde, abrir, abrirFichero, quitar, sinLeer, LAS_PINTA_EL_EDITOR, NO_SON_PAPELES, NO_ES_UN_PAPEL };

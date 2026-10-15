@@ -375,7 +375,8 @@ const abrirPanel = () => vscode.env.openExternal(vscode.Uri.file(proyecto.ruta(.
 
 // -------------------------------------------------- darle documentos
 
-function contar(partes, saltar = []) {
+// `saltar` y `noCuentan` miran solo arriba del todo, como en «Documentos entregados».
+function contar(partes, saltar = [], noCuentan = null) {
   const carpeta = proyecto.ruta(...partes);
   if (!carpeta || !fs.existsSync(carpeta)) return 0;
 
@@ -383,8 +384,9 @@ function contar(partes, saltar = []) {
   const recorrer = (donde) => {
     for (const entrada of fs.readdirSync(donde, { withFileTypes: true })) {
       if (entrada.name.startsWith('.') || entrada.name === 'README.md') continue;
+      if (noCuentan && donde === carpeta && noCuentan.test(entrada.name)) continue;
       if (entrada.isDirectory()) {
-        if (saltar.includes(entrada.name)) continue;
+        if (donde === carpeta && saltar.includes(entrada.name)) continue;
         recorrer(path.join(donde, entrada.name));
       } else cuenta += 1;
     }
@@ -420,8 +422,13 @@ function esperandoDesdeHace() {
 const yaLeidos = () => contar([...INBOX, '_processed']);
 // `raw/worklog/` también cuelga de `raw/`, pero no es un documento que nadie
 // haya dado: es el diario que el arnés se escribe solo. Contarlo ahí le diría
-// al alumno que ha entregado papeles que no ha entregado.
-const originales = () => contar(['02-DOCS', 'raw'], ['worklog']);
+// al alumno que ha entregado papeles que no ha entregado. Lo mismo lo que deja
+// la barra (los avisos, los informes): se salta lo mismo que en «Documentos
+// entregados», de la misma lista (revisión de la 153).
+const originales = () => {
+  const { NO_SON_PAPELES, NO_ES_UN_PAPEL } = require('./papeles');
+  return contar(['02-DOCS', 'raw'], NO_SON_PAPELES, NO_ES_UN_PAPEL);
+};
 
 // Copia lo que elija el alumno a `inbox/`. No se procesa aquí: el barrido de
 // la bandeja lo hace el asistente, que sabe extraer, clasificar y enlazar.
