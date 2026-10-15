@@ -26,6 +26,8 @@ const encargos = require('./encargos');
 const cerebro = require('./cerebro');
 const buscador = require('./buscar');
 const consejos = require('./consejos');
+// Se adapta y da ideas (F6, decisión 152): «Esto parece …» y las ideas de lo que hay.
+const ideas = require('./ideas');
 const recordatorios = require('./recordatorios');
 const rutinas = require('./rutinas');
 const cuando = require('./cuando');
@@ -121,6 +123,9 @@ const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
 const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
 const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
+// Si ya se dijo «Esto parece …» en esta carpeta, o si la primera vez no había
+// nada que decir (decisión 152).
+const CLAVE_LO_QUE_PARECE = 'executiveLab.loQueParece';
 // La última versión de la barra que se abrió aquí, para saber si hay que decir
 // qué trae la de ahora; y cuándo se miró en GitHub lo que pasó con los avisos
 // mandados de esta carpeta (decisión 134).
@@ -429,6 +434,8 @@ ${cabecera}
       comoSeLlama: identidad.deQuien(),
       // Como mucho uno, y siempre con un botón que lo resuelve ahí mismo.
       consejo: await this.elConsejoQueToca(),
+      // «Esto parece …» la primera vez, y la idea que toca (decisión 152).
+      seAdapta: await this.loQueSeAdapta(),
       // Lo que toca a esta hora, con su botón; y la costumbre que la barra
       // acaba de convertir en recordatorio, dicha una vez (decisión 144).
       recordatorio: await this.elRecordatorioQueToca(),
@@ -705,6 +712,44 @@ ${cabecera}
     return this.refrescar(true);
   }
 
+  // ── Se adapta y da ideas (decisión 152) ──────────────────────────────
+
+  // «Esto parece …», la primera vez, y la idea que toca. Si la primera vez no
+  // hay nada —una carpeta nueva—, ya no se dirá: lo que crezca aquí después lo
+  // ha hecho ella, y «esto parece» le contaría lo que ya sabe. Pero si hay algo
+  // suyo que la barra todavía no sabe decir, se espera (revisión de corrección, 8).
+  async loQueSeAdapta() {
+    try {
+      if (!proyecto.arnesCompleto()) return null;
+      const visto = ideas.queSeVe({
+        carpetaDeLaExtension: this.contexto.extensionPath,
+        corpus: this.corpus(),
+        silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
+      });
+      const yaSeDijo = this.almacen().get(CLAVE_LO_QUE_PARECE);
+      if (!yaSeDijo && !visto.parece && !visto.hayAlgoSuyo) await this.almacen().update(CLAVE_LO_QUE_PARECE, 'nada');
+      return { parece: yaSeDijo ? null : visto.parece, idea: visto.idea };
+    } catch (error) {
+      // Como el consejo: es un extra, y si falla la barra sigue igual.
+      this.salida.appendLine(`[ideas] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  async entendidoLoQueParece() {
+    await this.almacen().update(CLAVE_LO_QUE_PARECE, Date.now());
+    return this.refrescar(true);
+  }
+
+  // La copia que guardó el arnés al montarse, en una ventana del sistema. La
+  // ruta no viene del panel: se vuelve a buscar en el disco.
+  async verLaCopiaDelMontaje() {
+    const copia = ideas.laCopiaDelMontaje(proyecto.raiz());
+    if (!copia) return this.enviar({ tipo: 'aviso', texto: 'Esa copia ya no está.', malo: true });
+    await vscode.env.openExternal(vscode.Uri.file(copia.carpeta));
+    return undefined;
+  }
+
   // ── Lo que pide el asistente (decisión 150) ──────────────────────────
   //
   // La regla 7 decía «dile que la busque en la barra y la pulse»: el alumno, que
@@ -958,6 +1003,8 @@ ${cabecera}
       crearCarpeta: () => arrancar.crearUnaCarpetaDentro(os.homedir(), this.salida),
       abrirAsistente: () => puente.abrirConversacion(),
       ahoraNo: () => this.ahoraNo(mensaje.id),
+      entendidoLoQueParece: () => this.entendidoLoQueParece(),
+      verLaCopiaDelMontaje: () => this.verLaCopiaDelMontaje(),
       aprenderCapacidad: () => this.aprenderCapacidad(mensaje.capacidad, mensaje.nombre),
       verEditorCompleto: () => this.verEditorCompleto(),
       modoSencillo: () => this.modoSencillo(),
@@ -1679,7 +1726,8 @@ ${cabecera}
   // ----------------------------------------------------------- copias
 
   async verCopias() {
-    this.enviar({ tipo: 'copias', copias: await copias.copias(8) });
+    // Y la copia que guardó el arnés al montarse, si guardó algo suyo (decisión 152).
+    this.enviar({ tipo: 'copias', copias: await copias.copias(8), delMontaje: ideas.laCopiaEnPantalla(ideas.laCopiaDelMontaje(proyecto.raiz())) });
   }
 
   // La pantalla de la copia de fuera. Enseña en qué punto está esto —si ha
@@ -2023,6 +2071,13 @@ ${cabecera}
     let ahora = [];
     try {
       ahora = consejos.consejos(await this.queVeoYo());
+      // Y las ideas de lo que hay aquí, todas (decisión 152), sin repetir ninguna.
+      const visto = ideas.queSeVe({
+        carpetaDeLaExtension: this.contexto.extensionPath,
+        corpus: this.corpus(),
+        silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
+      });
+      ahora = [...ahora, ...visto.ideas.filter((idea) => !ahora.some((c) => c.id === idea.id))];
     } catch (error) {
       this.salida.appendLine(`[sugerencias] ${error.stack || error.message}`);
     }

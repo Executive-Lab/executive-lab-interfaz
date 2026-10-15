@@ -1813,8 +1813,9 @@ function pantallaPrincipalSencilla() {
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
     t.losDatos,
-    t.loNuevo, t.laCostumbre, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
+    t.loNuevo, t.laCostumbre, t.loQueParece, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
     recargar ? '' : t.versionNueva,
+    t.laIdea,
   ].filter(Boolean);
   const tarjeta = encendida('tarjetaUnica') ? (enOrden[0] || '') : enOrden.join('');
   // Tras «Actualizar ahora» llegan el aviso y la tarjeta, los dos con «Recargar
@@ -2158,6 +2159,28 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'No hace falta', discreto: true, accion: { tipo: 'noHaceFaltaLaCostumbre', nombre: c.nombre } })}
     </div>`;
 
+  // Se adapta y da ideas (decisión 152). La primera vez, en una carpeta que ya
+  // tenía cosas, lo que la barra sabe leer de ella y, si el arnés guardó una
+  // copia de lo suyo al montarse, eso y el botón para verla. Las acciones,
+  // tal cual vienen (P6).
+  const p = estado.seAdapta && estado.seAdapta.parece;
+  const loQueParece = !p ? '' : `
+    <div class="consejo">
+      ${p.texto ? `<p class="que">${texto(p.texto)}</p>` : ''}
+      ${p.copia ? `<p class="detalle">${texto(p.copia.texto)}</p>` : ''}
+      ${p.copia ? boton({ etiqueta: 'Ver la copia', icono: '🗂️', principal: true, accion: p.copia.accion }) : ''}
+      ${boton({ etiqueta: 'Entendido', icono: p.copia ? '' : '✓', principal: !p.copia, discreto: Boolean(p.copia), accion: p.entendido })}
+    </div>`;
+  // Y después, de una en una, las ideas de lo que hay: la última de la fila,
+  // con su botón y su «Ahora no».
+  const idea = estado.seAdapta && estado.seAdapta.idea;
+  const laIdea = !idea ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(idea.texto)}</p>
+      ${boton({ etiqueta: idea.boton, icono: '💡', principal: true, accion: idea.accion })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: idea.id } })}
+    </div>`;
+
   // Los datos de clientes, dichos a tiempo y una vez (decisión 153): al entrar los
   // primeros datos de verdad. Lleva al texto de Ayuda, y leerlo o «Entendido» no
   // la deja volver en esta carpeta. La frase sale de su tabla.
@@ -2170,7 +2193,7 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, losDatos };
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2999,9 +3022,17 @@ function pantallaArticulo({ titulo, cuerpo, tema, enlaces, hermanos, desde }) {
 
 // ----------------------------------------------------------------- resto
 
-function pantallaCopias({ copias }) {
+function pantallaCopias({ copias, delMontaje = null }) {
+  // Y la que guardó el arnés de lo suyo al montarse, que no es de git y no se
+  // veía por ningún lado (decisión 152).
+  const delArnes = delMontaje ? `
+    <hr class="separador">
+    <h2>Copias que guarda el arnés</h2>
+    <p class="detalle">${texto(delMontaje.texto)}</p>
+    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}` : '';
+
   if (!copias.length) {
-    return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${volver()}`;
+    return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${delArnes}${volver()}`;
   }
 
   return `
@@ -3009,6 +3040,7 @@ function pantallaCopias({ copias }) {
     <p class="titulo">Volver atrás</p>
     <p class="detalle">Antes de mover nada guardo una copia de lo de ahora, así que esto también se puede deshacer.</p>
     ${copias.map((c) => boton({ etiqueta: c.etiqueta, icono: '↩️', accion: { tipo: 'volverA', id: c.id } })).join('')}
+    ${delArnes}
   `;
 }
 
@@ -3242,7 +3274,8 @@ function atender(data) {
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
-          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes']) {
+          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
+          'seAdapta']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }

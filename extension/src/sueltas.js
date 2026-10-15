@@ -607,4 +607,6 @@ module.exports = {
   deLasAppsEnLasCopias,
   buscar, resumen, reparto, aQuien, prefijoDe, herramientas, enCristiano, enElOrdenador, nombresDeClaves, nombresEsperados,
   ficherosDeAcceso, tieneSuFichero, queEs, paraProteger, DE_UNA_APP,
+  // Para no ofrecer «Conectar» a lo que no es un programa (decisión 152).
+  SUENA_A_SECRETO,
 };

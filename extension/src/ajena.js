@@ -185,4 +185,4 @@ function resolver(choques, elecciones, raiz) {
   return { ok: true, renombrados };
 }
 
-module.exports = { resumen, resolver, comoSeDice };
+module.exports = { resumen, resolver, comoSeDice, DE_RSC };
