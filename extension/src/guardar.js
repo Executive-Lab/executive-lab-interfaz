@@ -20,6 +20,7 @@ const entorno = require('./entorno');
 const git = require('./git');
 const github = require('./github');
 const conexiones = require('./conexiones');
+const procesos = require('./procesos');
 
 // Se busca una vez y se recuerda, aunque no esté: si no hay módulo no lo va a
 // haber más tarde, y no tiene sentido tocar el disco en cada pulsación.
@@ -128,6 +129,107 @@ function dichoDeLoQueNoEntro(excluidos) {
   };
 }
 
+// ── Lo pesado no entra en las copias (decisión 147) ─────────────────────
+//
+// Un alumno de la clase del 13-10 quería meter «unos 100 gigas» de fotos y vídeos
+// en su carpeta, y con «guardar solo» encendido entraban todos en el historial,
+// que no se deshace. Dos reglas, y las dos se aplican solas (P9):
+//
+//   · un fichero que pesa más de 20 MB no entra: se queda en la carpeta, fuera de
+//     la copia, y se dice. Los vídeos y las imágenes de disco ni llegan aquí: los
+//     deja fuera el `.gitignore` de los raíles, también cuando guarda el asistente;
+//   · si lo que entraría en una copia pasa de 200 MB en total, no se guarda: son
+//     muchos ficheros pequeños, como cien gigas de fotos, o uno que ya estaba en
+//     git y ha crecido, y cuáles se guardan lo decide la persona. Se dice, con un
+//     botón que se lo pide al asistente.
+//
+// Lo que ya estaba en git sigue en git, por mucho que pese: sacarlo lo decide la
+// persona. Pero cuenta para el total, porque entra en la copia (revisión de la 147:
+// una base de datos de 5 GB que cambia entraba entera en cada copia, sin tope).
+const LIMITE_FICHERO = 20 * 1024 * 1024;
+const LIMITE_TOTAL = 200 * 1024 * 1024;
+
+// Lo que cambia o es nuevo, con lo que pesa. `-z` y sin citar, para que un nombre
+// con espacios o tildes llegue tal cual; de un renombrado vale el nombre nuevo, en
+// el índice (`R `) o en la carpeta (` R`), y el viejo viene detrás. `nuevo` es lo
+// que no estaba en la última copia, que es lo que `historial.guardar` puede dejar
+// fuera. Con
+// `--untracked-files=all` git abre todas las carpetas nuevas menos una: la que es
+// un repositorio, que sale entera y con barra al final.
+async function loPendiente(donde) {
+  const r = await procesos.git('-c', 'core.quotepath=off', 'status', '--porcelain', '-z', '--untracked-files=all');
+  if (r.codigo !== 0) return null;
+  const partes = r.salida.split('\0');
+  const pendiente = [];
+  for (let i = 0; i < partes.length; i += 1) {
+    const entrada = partes[i];
+    if (!entrada || entrada.length < 4) continue;
+    const xy = entrada.slice(0, 2);
+    const rel = entrada.slice(3);
+    if (/[RC]/.test(xy)) i += 1;
+    if (xy.includes('D')) continue;
+    const nuevo = xy === '??' || /[ARC]/.test(xy[0]);
+    if (xy === '??' && rel.endsWith('/')) { pendiente.push({ rel: rel.slice(0, -1), pesa: 0, nuevo, anidado: true }); continue; }
+    // Sin seguir enlaces: de un enlace, git guarda el enlace y no lo que apunta.
+    try {
+      const datos = fs.lstatSync(path.join(donde, rel));
+      if (datos.isFile()) pendiente.push({ rel, pesa: datos.size, nuevo });
+    } catch { /* se ha ido entre medias */ }
+  }
+  return pendiente;
+}
+
+// «1,2 GB», «350 MB»: como se dice, con coma.
+function cuantoPesa(bytes) {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1).replace('.', ',')} GB` : `${Math.round(mb)} MB`;
+}
+
+const ORDENAR_LO_PESADO = 'En esta carpeta hay muchos archivos nuevos o cambiados que pesan mucho, como fotos, vídeos o una base de datos, y no caben en las copias. '
+  + 'Ayúdame a decidir cuáles se guardan en las copias y cuáles se quedan solo en la carpeta, y deja fuera de las copias los que no, '
+  + 'apuntándolos en el .gitignore; si alguno ya estaba en las copias, sácalo de ellas sin quitarlo de la carpeta. No borres ni muevas ninguno.'; // diccionario: interno
+
+// Lo que se queda fuera de una copia: las claves, lo pesado y lo que ya tiene sus
+// propias copias —un repositorio dentro de la carpeta, que en la copia sería solo
+// una referencia y además haría que git corriera su configuración—. O que es
+// demasiado.
+async function loQueSeQuedaFuera(donde) {
+  let claves = [];
+  try {
+    claves = loQueNoEntra();
+  } catch { /* sin inventario se guarda como siempre: el .gitignore de los raíles sigue ahí */ }
+  // Sin saber qué hay, no se guarda: guardaría sin tope (revisión de la 147).
+  const pendiente = await loPendiente(donde);
+  if (!pendiente) return null;
+  const anidados = pendiente.filter((p) => p.anidado).map((p) => p.rel);
+  const pesados = pendiente.filter((p) => p.nuevo && p.pesa > LIMITE_FICHERO).map((p) => p.rel);
+  const entra = (p) => !p.nuevo || (p.pesa <= LIMITE_FICHERO && !claves.includes(p.rel));
+  const total = pendiente.filter(entra).reduce((suma, p) => suma + p.pesa, 0);
+  return { claves, pesados, anidados, excluir: [...new Set([...claves, ...pesados, ...anidados])], demasiado: total > LIMITE_TOTAL ? total : 0 };
+}
+
+// «a», «a y b», «a, b y c», y con más, los tres primeros y cuántos más: con miles
+// de vídeos en bruto, el aviso los nombraba todos.
+const enLista = (fuera) => {
+  const nombres = fuera.slice(0, 3).map((d) => `«${path.basename(d)}»`);
+  if (fuera.length > 3) return `${nombres.join(', ')} y ${(fuera.length - 3).toLocaleString('es-ES')} más`;
+  return nombres.length < 2 ? nombres.join('') : `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+};
+
+function dichoDeLoPesado(fuera) {
+  if (!fuera.length) return '';
+  return fuera.length === 1
+    ? `No he metido ${enLista(fuera)} en la copia: pesa mucho y la haría enorme. Sigue en tu carpeta.`
+    : `No he metido ${enLista(fuera)} en la copia: pesan mucho y la harían enorme. Siguen en tu carpeta.`;
+}
+
+function dichoDeLoAnidado(fuera) {
+  if (!fuera.length) return '';
+  return fuera.length === 1
+    ? `No he metido ${enLista(fuera)} en la copia: tiene sus propias copias. Sigue en tu carpeta.`
+    : `No he metido ${enLista(fuera)} en la copia: tienen sus propias copias. Siguen en tu carpeta.`;
+}
+
 async function guardar(mensaje) {
   const h = historial();
   if (!h || !(await hayGit())) return { ok: false, faltaGit: true, mensaje: SIN_PIEZA };
@@ -135,14 +237,23 @@ async function guardar(mensaje) {
   const donde = proyecto.raiz();
   if (!donde) return { ok: false, mensaje: NO_PUEDO };
 
-  let excluir = [];
-  try {
-    excluir = loQueNoEntra();
-  } catch { /* sin inventario se guarda como siempre: el .gitignore de los raíles sigue ahí */ }
+  const fuera = await loQueSeQuedaFuera(donde);
+  if (!fuera) return { ok: false, mensaje: NO_PUEDO };
+  if (fuera.demasiado) {
+    return {
+      ok: false,
+      demasiado: true,
+      mensaje: `No he guardado la copia: hay ${cuantoPesa(fuera.demasiado)} de archivos nuevos o cambiados y la copia se haría enorme. Tus archivos siguen en la carpeta.`,
+      boton: { etiqueta: 'Que el asistente los ordene', accion: { tipo: 'pedir', prompt: ORDENAR_LO_PESADO } },
+    };
+  }
 
-  const hecho = await h.guardar(donde, mensaje || `Copia de seguridad — ${fechaLarga()}`, { ...comoLlamar(), excluir });
+  const hecho = await h.guardar(donde, mensaje || `Copia de seguridad — ${fechaLarga()}`, { ...comoLlamar(), excluir: fuera.excluir });
   if (!hecho.ok) return { ok: false, mensaje: NO_PUEDO };
-  const fuera = dichoDeLoQueNoEntro(hecho.excluidos || []);
+  const excluidos = hecho.excluidos || [];
+  const deClaves = dichoDeLoQueNoEntro(excluidos.filter((e) => fuera.claves.includes(e)));
+  const dePeso = dichoDeLoPesado(excluidos.filter((e) => fuera.pesados.includes(e) && !fuera.claves.includes(e)));
+  const deAnidados = dichoDeLoAnidado(excluidos.filter((e) => fuera.anidados.includes(e)));
   if (hecho.sinCambios) {
     return { ok: true, sinCambios: true, mensaje: 'No ha cambiado nada desde la última copia. No hace falta guardar.' };
   }
@@ -150,9 +261,9 @@ async function guardar(mensaje) {
   const guardada = hecho.cuantos === 1 ? 'Copia guardada. Había un cambio.' : `Copia guardada. Había ${hecho.cuantos} cambios.`;
   return {
     ok: true,
-    mensaje: fuera.texto ? `${guardada} ${fuera.texto}` : guardada,
-    ...(fuera.boton ? { boton: fuera.boton } : {}),
-    excluidos: hecho.excluidos || [],
+    mensaje: [guardada, deClaves.texto, dePeso, deAnidados].filter(Boolean).join(' '),
+    ...(deClaves.boton ? { boton: deClaves.boton } : {}),
+    excluidos,
   };
 }
 
@@ -185,7 +296,10 @@ async function volverA(id) {
   }
 
   const etiqueta = movido.cuando ? haceCuanto(movido.cuando) : 'entonces';
-  await h.guardar(donde, `Vuelta a como estaba ${etiqueta}`, comoLlamar());
+  // Con lo que se queda fuera, como cualquier copia: se guardaba sin la lista, y
+  // metía las claves que la copia de antes había dejado fuera (decisión 147).
+  const despues = await loQueSeQuedaFuera(donde);
+  if (despues && !despues.demasiado) await h.guardar(donde, `Vuelta a como estaba ${etiqueta}`, { ...comoLlamar(), excluir: despues.excluir });
 
   // ── Decir lo que le acaba de pasar a lo que tenía sin guardar ──────────
   //
@@ -323,4 +437,4 @@ async function cambiosSinGuardar() {
   return h.cuantosCambios(donde, comoLlamar());
 }
 
-module.exports = { iniciar, guardar, copias, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };
+module.exports = { LIMITE_FICHERO, LIMITE_TOTAL, cuantoPesa, iniciar, guardar, copias, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };

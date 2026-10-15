@@ -5169,3 +5169,47 @@ que se puede hacer solo, se hace solo.
 
 Queda para F5: las clases de acceso (clave, usuario y contraseña, fichero, entrar con tu cuenta) y
 «Pídeselo a tu informático».
+
+## 147. Lo pesado no entra en las copias
+
+**Fecha:** 14 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 8 de la decisión 142. En la clase del 13-10, un alumno quería meter «unos 100 gigas» de
+fotos y vídeos en su carpeta. La barra guardaba con `git add -A`, y con «guardar solo» encendido todo
+eso entraba en el historial, que no se deshace. Por eso poner copias seguía con su botón.
+
+- **Los vídeos y las imágenes de disco** van al bloque del `.gitignore` que ponen los raíles (`.mp4`,
+  `.mov`, `.webm`, `.dmg`…), con las dos formas de cada letra, porque el iPhone escribe `.MOV`. Ahí
+  valen también cuando guarda el asistente, con git a pelo.
+- **Un fichero de más de 20 MB** que git todavía no seguía se queda fuera de la copia, en la carpeta, y
+  se dice. Lo que ya estaba en git sigue: sacarlo lo decide la persona.
+- **Si lo nuevo de una copia pasa de 200 MB en total**, no se guarda: son muchos ficheros pequeños,
+  como cien gigas de fotos, y cuáles se guardan lo decide la persona (P9). Se dice, con un botón que se
+  lo pide al asistente sin borrar ni mover nada. Vale para el botón, para «guardar solo», para el punto
+  de partida, que ahora dice el motivo de verdad, y para «Volver a como estaba», que no vuelve sin una
+  copia de antes.
+- **La habilidad «guardar» del asistente** lo dice igual.
+- **Poner copias pasa a hacerse solo** al abrir la carpeta, salvo si la persona eligió no tenerlas.
+- **Un fallo que ya estaba:** después de «Volver a como estaba», la copia de la vuelta se guardaba sin
+  la lista de lo que no entra, y metía las claves que la copia de antes había dejado fuera. Ahora las
+  dos copias calculan lo que se queda fuera en el mismo sitio (`loQueSeQuedaFuera`).
+
+**Lo que encontró la revisión adversaria** (PR #30), reproducido y arreglado, con su prueba:
+
+- **Un repositorio dentro de la carpeta** (una plantilla clonada, por ejemplo) entraba en la copia como
+  una referencia, sin sus ficheros. Desde entonces, cada vistazo de la barra a git corría el
+  `core.fsmonitor` y los filtros `clean` de ese repositorio, que son órdenes de quien lo hizo. Con las
+  copias puestas solas al abrir, bastaba con abrir la carpeta. Ahora no entra, y se dice («tiene sus
+  propias copias»). Además, la barra llama a git con `core.fsmonitor=false` y
+  `diff.ignoreSubmodules=all`, y no le pasa al `add` el que ya estaba en la copia.
+- **Lo que ya estaba en git y crece** entraba entero en cada copia, sin tope: una base de datos de
+  5 GB que cambia, por ejemplo. Sigue entrando, pero cuenta para los 200 MB. El botón le pide al
+  asistente que, si la persona quiere, lo saque de las copias sin quitarlo de la carpeta.
+- **Con miles de ficheros pesados la copia fallaba**: la lista no cabía en la orden (E2BIG; en
+  Windows, con unos cientos). Ahora va por la entrada, y literal, porque un `[1]` en un nombre sacaba
+  de la copia a otro fichero que se le parecía. El aviso nombra los tres primeros y cuántos más.
+- **Poner copias sola, con demasiado peso,** dejaba git sin ninguna copia, y la pieza decía «Listas».
+  Ahora quita el historial vacío que acaba de crear, y la pieza sigue con su botón.
+- **Si `git status` fallaba, se guardaba sin tope.** Ahora no se guarda.
+- **Leer `git status`:** el nombre viejo de un renombrado se tomaba por un cambio más, y un enlace a un
+  fichero grande contaba como pesado aunque git solo guarde el enlace. Las dos cosas, arregladas.

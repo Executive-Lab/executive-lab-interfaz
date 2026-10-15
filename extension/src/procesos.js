@@ -82,7 +82,9 @@ function ejecutar(programa, args, opciones = {}) {
   });
 }
 
-const git = (...args) => ejecutar(entorno.git(), args);
+// Sin mirar dentro de un repositorio anidado ni correr el `fsmonitor` de nadie:
+// ver SIN_MIRAR_DENTRO en instalador/comun/historial.js.
+const git = (...args) => ejecutar(entorno.git(), ['-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=all', ...args]);
 const node = (args, opciones) => ejecutar(entorno.node(), args, opciones);
 const bash = (script, opciones) => ejecutar(entorno.bash(), [script], opciones);
 

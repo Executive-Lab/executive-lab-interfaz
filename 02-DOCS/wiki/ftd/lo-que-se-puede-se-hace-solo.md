@@ -91,7 +91,7 @@ pasaron a hacerse al abrir la carpeta, y la barra lo dice en una frase. Dos se q
 | Lo que debería estar puesto | Traerlas ahora | Solo |
 | Cosas del arnés fuera de sitio | Arreglarlo ahora | Solo, si no hay nada que decidir |
 | Freno ante órdenes peligrosas | Ponerlo ahora | **Botón**: solo sale en carpetas cuyo historial no creó la barra, y toca sus ajustes (P4, C-4) |
-| Copias de seguridad aquí | Ponerlas ahora | **Botón**: guarda la carpeta entera. Hasta que lo pesado quede fuera de git (punto 8), podría meter gigas en el historial, y eso no se deshace. Si eligió no tenerlas, es suyo |
+| Copias de seguridad aquí | Ponerlas ahora | Solo, desde el punto 8: lo pesado queda fuera y con demasiado peso no se guarda. Si eligió no tenerlas, **botón**: es suyo |
 
 Además, se hacen solos otros dos:
 - «El asistente, montado aquí» → «Terminar de prepararlo», cuando el montaje se quedó a medias y no
@@ -160,7 +160,7 @@ hacerse solo, porque no se puede deshacer.
   dos se quedan con su botón, cada uno por su motivo.
 - [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
 - [ ] 7. La prueba que dice que la clave puede escribir.
-- [ ] 8. Lo pesado, fuera de git.
+- [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [ ] 9. Cuándo caduca una clave.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
 - [ ] 11. La foto del cerebro.
@@ -217,12 +217,25 @@ hacerse solo, porque no se puede deshacer.
   ordenador ya conoce: **la primera vez que un alumno abra con esta barra una carpeta montada antes,
   tendrá que pulsar un botón del arnés una vez**.
 
+- **Punto 8** (decisión 147): `humo.js` 370, contrato 14 y diccionario en verde. Al escribirlo salió un
+  fallo que ya estaba: la copia de «Volver a como estaba» metía las claves que la de antes había dejado
+  fuera.
+- **La revisión adversaria del punto 8** encontró siete fallos, reproducidos y arreglados con su prueba.
+  - El más serio, de seguridad: un repositorio de git dentro de la carpeta entraba en la copia, y desde
+    entonces cada vistazo de la barra corría órdenes de quien lo hizo (`fsmonitor`, filtros `clean`).
+    Con las copias puestas solas, bastaba con abrir la carpeta.
+  - Los otros seis, de corrección: lo que ya estaba en git y crecía, sin tope; E2BIG con miles de
+    pesados; comodines al sacar del índice; un historial vacío al poner copias con demasiado peso; sin
+    tope si `git status` fallaba; y los renombrados.
+  - La prueba nueva usa git de verdad y comprueba que la trampa salta con git a pelo. Las mutaciones
+    caen 12 de 12, también la del renombrado que antes vivía.
+
 ## Next
 
-Por orden:
-- el 6, que es lo que hace falta antes de dar la barra a la comunidad;
-- después el 8, que desbloquea poner copias solas;
-- y luego el 7 y del 9 al 12.
+Del 1 al 6 y el 8, hechos. Por orden:
+- el 7, la prueba que dice que la clave puede escribir;
+- el 9, cuándo caduca una clave;
+- y del 10 al 12.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la

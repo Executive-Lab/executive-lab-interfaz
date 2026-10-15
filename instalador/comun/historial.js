@@ -30,18 +30,35 @@ const QUIEN = { name: 'Executive Lab', email: 'alumno@executivelab.local' };
 const SIN_IDENTIDAD = /user\.email|user\.name|unable to auto-detect email|tell me who you are/i;
 const RAMA = 'main';
 
+// ── Un repositorio dentro de la carpeta no se mira por dentro ──────────────
+//
+// Con un repositorio anidado en la copia, cada `status` y cada `add` lanzaban un git
+// dentro de él, con su configuración: su `core.fsmonitor` y sus filtros `clean`
+// corrían órdenes de quien hiciera esa carpeta. Y desde la decisión 147 las copias
+// se ponen solas al abrir (revisión de seguridad, reproducido con git 2.46).
+// `diff.ignoreSubmodules=all` hace que `status` no entre; `core.fsmonitor=false`,
+// que el de la propia carpeta tampoco corra. El `add` entra igual, así que lo anidado
+// se excluye además a mano (ver `guardar`).
+const SIN_MIRAR_DENTRO = ['-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=all'];
+
 // ───────────────────────────── el motor binario ───────────────────────────────
 
 function motorBinario(ejecutable) {
-  function correr(dir, args, entorno = null) {
+  // `entrada` va por la entrada estándar: una lista de rutas no cabe en la orden
+  // (E2BIG en macOS con miles; en Windows, con unos cientos).
+  function correr(dir, args, entorno = null, entrada = null) {
     return new Promise((resolver) => {
-      execFile(ejecutable, ['-C', dir, ...args], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, ...(entorno ? { env: { ...process.env, ...entorno } } : {}) },
+      const hijo = execFile(ejecutable, ['-C', dir, ...SIN_MIRAR_DENTRO, ...args], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, ...(entorno ? { env: { ...process.env, ...entorno } } : {}) },
         (error, salida, err) => resolver({ codigo: error ? (error.code ?? 1) : 0, salida: salida || '', error: err || '' }));
+      if (hijo.stdin) {
+        hijo.stdin.on('error', () => { /* git ya se fue: lo dice su código */ });
+        hijo.stdin.end(entrada === null ? '' : entrada);
+      }
     });
   }
 
-  const exigir = async (dir, args, entorno = null) => {
-    const r = await correr(dir, args, entorno);
+  const exigir = async (dir, args, entorno = null, entrada = null) => {
+    const r = await correr(dir, args, entorno, entrada);
     if (r.codigo !== 0) throw new Error(`git ${args[0]}: ${r.error.trim() || r.codigo}`);
     return r.salida;
   };
@@ -78,8 +95,19 @@ function motorBinario(ejecutable) {
       const enLaCopia = await correr(dir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
       const seguidos = new Set(enLaCopia.codigo === 0 ? enLaCopia.salida.split('\0').filter(Boolean) : []);
       const fuera = excluir.filter((rel) => fs.existsSync(path.join(dir, rel)) && !seguidos.has(rel));
-      if (fuera.length) await exigir(dir, ['rm', '--cached', '-q', '--ignore-unmatch', '--', ...fuera]);
-      await exigir(dir, ['add', '-A', '--', '.', ...fuera.map((rel) => `:(exclude,literal)${rel}`)]);
+      // Las rutas, literales y por la entrada: un `*`, un `?` o un `[` en un nombre
+      // no son comodines, y miles de rutas no caben en la orden (revisión de la 147).
+      // Para sacar del índice, `update-index`, que las lee tal cual en cualquier git
+      // (`rm --pathspec-from-file` pide la 2.26); `add` la pide la 2.25.
+      const juntas = (rutas) => rutas.map((r) => `${r}\0`).join('');
+      if (fuera.length) await exigir(dir, ['update-index', '-z', '--force-remove', '--stdin'], null, juntas(fuera));
+      // Lo anidado que ya estaba en la copia se queda como estaba, sin mirarlo:
+      // `add` entraría en él aunque `status` no lo haga.
+      const indice = await correr(dir, ['ls-files', '-s', '-z']);
+      const anidados = indice.codigo === 0
+        ? indice.salida.split('\0').filter((linea) => linea.startsWith('160000 ')).map((linea) => linea.slice(linea.indexOf('\t') + 1))
+        : [];
+      await exigir(dir, ['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], null, juntas(['.', ...[...fuera, ...anidados].map((rel) => `:(exclude,literal)${rel}`)]));
 
       // Se cuenta lo que va a entrar, no lo que cambió: si solo cambió lo que se
       // queda fuera, no hay copia que hacer.

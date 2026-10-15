@@ -28,7 +28,7 @@ const YA_AL_ACTIVAR = new Set(['arreglarElRelevo', 'ponerLosRailesAlDia']);
 // El orden: primero lo que trae lo que falta, después lo que lo ordena. Es
 // también la lista cerrada de lo que este módulo sabe mandar hacer: un
 // `alAbrir` con otro tipo lo caza la prueba.
-const ORDEN = ['arrancar', 'arreglar'];
+const ORDEN = ['arrancar', 'arreglar', 'ponerCopias'];
 
 // Las piezas de la radiografía → [{ tipo, nombres }], una vez por tipo y en
 // orden: dos piezas que se arreglan con lo mismo se arreglan una vez.
