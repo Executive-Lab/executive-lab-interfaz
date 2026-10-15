@@ -161,7 +161,7 @@ hacerse solo, porque no se puede deshacer.
 - [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
 - [x] 7. La prueba que dice que la clave puede escribir: conecta, se dice y se pregunta una vez.
 - [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
-- [ ] 9. Cuándo caduca una clave.
+- [x] 9. Cuándo caduca una clave: decisión 149.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
 - [ ] 11. La foto del cerebro.
 - [ ] 12. Los datos de clientes, en Ayuda.
@@ -240,12 +240,14 @@ hacerse solo, porque no se puede deshacer.
   y nunca si la salida dice que la clave no vale: 24 de 24 frases de la revisión bien. Además, «Dejarla así»
   apunta la clave que se probó; la pregunta sigue en su pantalla si se fue mientras probaba; y la huella
   mira también los ficheros de `keys/`, que mejora la última prueba de la 146. 18 de 18 mutaciones.
+- **Punto 9** (decisión 149, 15-10): con las claves puestas, la pantalla de la conexión pregunta una vez cuándo
+  caduca la clave, con cinco opciones. Una semana antes avisa el editor, una vez por fecha, con «Ver la conexión», y
+  la lista lo dice. Si la prueba dice que no vale, dice que puede haber caducado, y la fecha si ya pasó.
+  `humo.js` 374, contrato 14, diccionario, y 17 de 17 mutaciones.
 
 ## Next
 
-Del 1 al 8, hechos. Por orden:
-- el 9, cuándo caduca una clave;
-- y del 10 al 12.
+Del 1 al 9, hechos. Quedan del 10 al 12.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la

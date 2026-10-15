@@ -2290,15 +2290,16 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
             ? `${p.etiqueta} — puesta, pero fuera de su sitio`
             // Lo que dijo su última prueba, mientras sus claves sigan igual
             // (decisión 146): «conectada», o por qué falla, en una frase.
-            : (p.prueba
+            // Una clave que caduca esta semana, o que ya caducó (decisión 149).
+            : (p.caduca ? `${p.etiqueta} — ${p.caduca.texto}` : (p.prueba
               ? (p.prueba.ok
                 // Conecta con una clave que puede escribir, y no ha dicho qué hace con ella.
                 ? (p.prueba.puedeEscribir ? `${p.etiqueta} — conecta, pero puede cambiar y borrar` : `${p.etiqueta} — conectada · probada ${p.prueba.cuando}`)
                 : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
               // Se autentica con un fichero y no con claves: decir su nombre a
               // secas dejaría pensando que no tiene nada puesto (decisión 105).
-              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta)))),
-      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.fueraDeSitio || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●'))),
+              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta))))),
+      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.caduca && p.caduca.caducada ? '✕' : (p.fueraDeSitio || p.caduca || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●')))),
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}
     ${porMontar}
@@ -2321,7 +2322,20 @@ const laPrimeraFrase = (t) => {
 };
 
 // Una herramienta: cómo se conecta, sus claves, su prueba y sus cositas.
-function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false }) {
+// Cuándo caduca su clave (decisión 149): con las claves puestas, la pregunta con
+// sus opciones, una vez por clave; después, lo apuntado, con «Cambiar».
+const CUANDO_CADUCA = [['nunca', 'No caduca'], ['30', 'En 30 días'], ['90', 'En 90 días'], ['365', 'En un año'], ['noSe', 'No lo sé']];
+function bloqueCaduca(caduca, proveedor) {
+  if (!caduca) return '';
+  if (caduca.pregunta) {
+    return `<p class="detalle">${texto('¿Cuándo caduca esta clave? Así te aviso antes.')}</p>`
+      + CUANDO_CADUCA.map(([en, etiqueta]) => boton({ etiqueta, icono: '▸', pequeno: true, accion: { tipo: 'cuandoCaduca', proveedor: proveedor.id, en, huella: caduca.huella } })).join('');
+  }
+  return `<p class="detalle">${texto(caduca.texto)}</p>`
+    + boton({ etiqueta: 'Cambiar', icono: '✎', pequeno: true, discreto: true, accion: { tipo: 'cuandoCaduca', proveedor: proveedor.id, en: 'otraVez' } });
+}
+
+function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null }) {
   const faltaAlguna = claves.some((c) => !c.puesta);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
 
@@ -2397,6 +2411,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${algunaFuera && ordenar ? boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: ordenar } }) : ''}
     ${claves.length ? '<p class="detalle">Pega la clave entera. Los espacios y las comillas los quito yo.</p>' : ''}
     ${formularios}
+    ${bloqueCaduca(caduca, proveedor)}
     ${proveedor.ayuda && !faltaAlguna ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${!proveedor.pasos.length ? boton({ etiqueta: 'Explícame cómo conectarla', icono: '💬', accion: { tipo: 'pedir', prompt: `Explícame paso a paso cómo conectar ${proveedor.etiqueta}: dónde entro, dónde saco cada clave y qué pego dónde. Y deja los pasos escritos para la próxima vez.` } }) : ''}
     ${boton({ etiqueta: 'Probar la conexión', icono: '🔎', accion: { tipo: 'probar', proveedor: proveedor.id } })}

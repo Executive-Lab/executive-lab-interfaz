@@ -5246,3 +5246,23 @@ servido para barras que no hay. Los README pasan también a `executive-vscode-in
 **La revisión de seguridad** no encontró nada que bloquee. Para todo lo que probó siguen haciendo falta
 el autor, quien sube el fichero y la huella. Una nota: las cuentas salen de `SITIOS`, así que un sitio
 que se añada en otra cuenta la da por nuestra.
+
+## 149. Cuándo caduca una clave
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 9 de la decisión 142. En la clase del 13-10, Eric avisó de que las claves caducan, y cuando caduca
+una, la conexión deja de funcionar sin decir por qué. La barra no puede saber la fecha, así que la pregunta, y
+lo demás lo hace sola (P9).
+
+- **Se pregunta una vez por clave**, en la pantalla de la conexión y con las claves puestas: «¿Cuándo caduca
+  esta clave? Así te aviso antes.», con No caduca · En 30 días · En 90 días · En un año · No lo sé. Se apunta
+  con la huella de las claves, así que con otra clave se pregunta otra vez; y no sale mientras haya otra
+  pregunta en pantalla (la de la clave que puede escribir). «Cambiar» la vuelve a hacer.
+- **Una semana antes, la barra avisa**, con el reloj de los recordatorios (decisión 144): un aviso del editor
+  con «Ver la conexión», una vez por fecha, y la lista lo dice («Holded — caduca el 21 de octubre»).
+- **Si la prueba dice que la clave no vale**, ahora dice que puede haber caducado. Si la fecha apuntada ya
+  pasó, la dice: «La clave no vale: caducó el 21 de octubre. Saca una nueva…».
+
+Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
+conexión (decisión 146).
