@@ -3760,10 +3760,12 @@ exec git "$@"
     const sinCubrir = [...verbos.keys()].filter((v) => !regla.includes(`\`${v}\``));
     assert.deepEqual(sinCubrir, [], `la regla 7 no nombra: ${sinCubrir.map((v) => `${v} (${[...verbos.get(v)].join(', ')})`).join(' · ')}`);
     assert.match(regla, /@latest/, 'la regla no dice nada de @latest');
-    // Y para añadir una, lo que hay en la pantalla (revisión de F4, m4): no hay
-    // ningún botón «Añadir», sino las sugerencias del catálogo, que se pulsan.
+    // Y para añadir una, ni un botón que no existe (revisión de F4, m4) ni mandar
+    // al alumno a buscarlo: se le pide a la barra con un pedido (decisión 150).
     assert.doesNotMatch(regla, /\*Añadir\*/, 'manda pulsar un botón que no existe');
-    assert.match(regla, /\*Sugerencias del catálogo\*/, 'no dice dónde está lo que se pulsa');
+    assert.match(regla, /`02-DOCS\/raw\/pedidos\/<id>\.habilidad`/, 'no dice cómo se le pide a la barra');
+    assert.match(regla, /`02-DOCS\/raw\/pedidos\/<id>\.hecho`/, 'no dice dónde contesta');
+    assert.doesNotMatch(regla, /y la pulse/, 'manda al alumno a buscar el botón');
     return `${verbos.size} verbos en ${ficheros.length} ficheros, todos en la regla`;
   });
 
@@ -13525,6 +13527,208 @@ exec git "$@"
       arrancarM.crearUnaCarpetaDentro = crearAntes;
       proveedor.enviar = enviarAntes;
       vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('lo que pide el asistente: la carpeta, sin seguir enlaces, y qué se contesta', () => {
+    // Decisión 150. Los pedidos vienen en la carpeta, y la carpeta la trae el
+    // repositorio: un enlace en el camino o en la respuesta haría escribir y borrar
+    // a la barra fuera, solo con abrirla.
+    const pedidosM = cargar('pedidos');
+    const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'pedidos-'));
+    const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'pedidos-fuera-'));
+    const suyo = path.join(fuera, 'suyo.txt');
+    fs.writeFileSync(suyo, 'MIO');
+    const donde = path.join(raiz, ...pedidosM.CARPETA);
+    try {
+      assert.equal(pedidosM.carpeta(raiz), null, 'sin carpeta, una carpeta');
+      assert.deepEqual(pedidosM.losQueHay(raiz), []);
+      // `pedidos`, o `raw`, como enlace a otra parte: no hay carpeta.
+      fs.mkdirSync(path.join(raiz, '02-DOCS', 'raw'), { recursive: true });
+      fs.symlinkSync(fuera, donde);
+      fs.writeFileSync(path.join(fuera, 'invoicing.habilidad'), '');
+      assert.equal(pedidosM.carpeta(raiz), null, 'sigue un enlace en el camino');
+      assert.deepEqual(pedidosM.losQueHay(raiz), []);
+      assert.equal(pedidosM.contestar(raiz, 'invoicing', 'x'), false);
+      assert.ok(fs.existsSync(path.join(fuera, 'invoicing.habilidad')) && !fs.existsSync(path.join(fuera, 'invoicing.hecho')), 'ha tocado fuera');
+      fs.unlinkSync(donde);
+      fs.rmSync(path.join(raiz, '02-DOCS', 'raw'), { recursive: true });
+      fs.mkdirSync(path.join(raiz, '02-DOCS'), { recursive: true });
+      fs.symlinkSync(fuera, path.join(raiz, '02-DOCS', 'raw'));
+      assert.equal(pedidosM.carpeta(raiz), null, 'sigue un enlace más arriba');
+      fs.unlinkSync(path.join(raiz, '02-DOCS', 'raw'));
+
+      // De verdad: los `.habilidad` que son ficheros, en orden y tres como mucho.
+      fs.mkdirSync(donde, { recursive: true });
+      assert.equal(pedidosM.carpeta(raiz), donde);
+      for (const n of ['e', 'd', 'c', 'b', 'a']) fs.writeFileSync(path.join(donde, `${n}${n}.habilidad`), '');
+      fs.writeFileSync(path.join(donde, 'otra.hecho'), '');
+      fs.writeFileSync(path.join(donde, '.habilidad'), '');
+      fs.symlinkSync(suyo, path.join(donde, 'aaa.habilidad'));
+      assert.deepEqual(pedidosM.losQueHay(raiz), ['aa', 'bb', 'cc'], 'no son los tres primeros pedidos de verdad');
+
+      // La respuesta, aunque ya hubiera un `.hecho` que es un enlace a algo suyo.
+      fs.symlinkSync(suyo, path.join(donde, 'aa.hecho'));
+      assert.equal(pedidosM.contestar(raiz, 'aa', 'Añadida.'), true);
+      assert.equal(fs.readFileSync(suyo, 'utf8'), 'MIO', 'ha escrito a través del enlace');
+      assert.ok(!fs.lstatSync(path.join(donde, 'aa.hecho')).isSymbolicLink());
+      assert.equal(fs.readFileSync(path.join(donde, 'aa.hecho'), 'utf8'), 'Añadida.\n');
+      assert.ok(!fs.existsSync(path.join(donde, 'aa.habilidad')), 'el pedido sigue ahí');
+      // Si no se puede escribir, el pedido se quita igual: no se repite cada minuto.
+      fs.mkdirSync(path.join(donde, 'bb.hecho'));
+      assert.equal(pedidosM.contestar(raiz, 'bb', 'x'), false);
+      assert.ok(!fs.existsSync(path.join(donde, 'bb.habilidad')), 'un pedido sin respuesta posible se queda para siempre');
+      assert.equal(pedidosM.contestar(raiz, '../fuera', 'x'), false, 'contesta fuera de la carpeta');
+
+      // Qué hacer con cada uno.
+      const catalogo = cargar('consejos').capacidades(RAIZ);
+      assert.equal(pedidosM.queHacer('invoicing', { catalogo, enDisco: [], sola: true }).que, 'anadir');
+      assert.equal(pedidosM.queHacer('invoicing', { catalogo, enDisco: [], sola: false }).que, 'preguntar');
+      assert.equal(pedidosM.queHacer('invoicing', { catalogo, enDisco: ['invoicing'], sola: true }).que, 'yaEstaba');
+      assert.equal(pedidosM.queHacer('invoicing', { catalogo }).nombre, 'Facturación');
+      for (const raro of ['Invoicing', '../invoicing', 'i', 'no-existe-en-el-catalogo']) {
+        assert.equal(pedidosM.queHacer(raro, { catalogo, sola: true }).que, 'noEsta', `«${raro}» se da por del catálogo`);
+      }
+      // Lo que no está, con las que se parecen: por sus palabras en español.
+      const facturas = pedidosM.queHacer('facturas', { catalogo });
+      assert.ok(facturas.parecidas.includes('invoicing'), `para «facturas» no sale Facturación: ${facturas.parecidas}`);
+      assert.ok(facturas.parecidas.length <= 3);
+      assert.deepEqual(pedidosM.lasQueSeParecen('go-no', catalogo), [], 'con dos letras se busca parecido');
+
+      // Lo que se contesta.
+      assert.equal(pedidosM.respuesta('anadida', { id: 'invoicing', comoSePide: '/invoicing' }), 'Añadida. Se pide con /invoicing.');
+      assert.match(pedidosM.respuesta('noEsta', { id: 'facturas', parecidas: ['invoicing'] }), /^«facturas» no está en el catálogo de la clase\. Las que más se parecen: invoicing\./);
+      assert.match(pedidosM.respuesta('porDelante', { id: 'invoicing', version: '3.1.0' }), /npx @ericrisco\/rsc@3\.1\.0 add invoicing$/);
+      // Una versión rara de `.rsc.json` no llega a una orden que el asistente correría.
+      assert.doesNotMatch(pedidosM.respuesta('porDelante', { id: 'invoicing', version: 'latest; rm -rf ~' }), /npx|rm -rf/);
+      assert.match(pedidosM.respuesta('noQuiere'), /ahora no/);
+      return 'sin enlaces en el camino ni en la respuesta; tres por vez; las que se parecen';
+    } finally {
+      fs.rmSync(raiz, { recursive: true, force: true });
+      fs.rmSync(fuera, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('lo que pide el asistente: la barra la añade sola, pregunta si no puede, y siempre contesta', async () => {
+    // Decisión 150, el punto 10 de la 142. El asistente pregunta, y con el sí deja
+    // `02-DOCS/raw/pedidos/<id>.habilidad`. La barra lo ve (el vigía, y el reloj
+    // de cada minuto por si acaso), la añade y contesta en `<id>.hecho`.
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'pedido-'));
+    for (const d of [['01-TOOLS', '_TEMPLATE'], ['02-DOCS', 'wiki', 'harness'], ['02-DOCS', 'raw', 'pedidos']]) fs.mkdirSync(path.join(carpeta, ...d), { recursive: true });
+    const declarar = (version) => fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], catalogVersion: version }));
+    const rscM = cargar('rsc');
+    declarar(rscM.VERSION_DE_RESPALDO);
+    const pedidosDir = path.join(carpeta, '02-DOCS', 'raw', 'pedidos');
+    const pedir = (id) => fs.writeFileSync(path.join(pedidosDir, `${id}.habilidad`), '');
+    const contestado = (id) => (fs.existsSync(path.join(pedidosDir, `${id}.hecho`)) ? fs.readFileSync(path.join(pedidosDir, `${id}.hecho`), 'utf8').trim() : null);
+    const proveedor = vscode.registrado.proveedor;
+    const estado = proveedor.contexto.workspaceState;
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza, eleccion: vscode.guion.eleccion, anadir: rscM.anadir, enviar: proveedor.enviar, conocida: estado.get('executiveLab.carpetaConocida') };
+    const anadidas = [];
+    rscM.anadir = async (id) => {
+      anadidas.push(id);
+      fs.mkdirSync(path.join(carpeta, '.claude', 'skills', id), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'skills', id, 'SKILL.md'), `---\nname: ${id}\n---\n`);
+      return { ok: true };
+    };
+    proveedor.enviar = () => {};
+    // Hasta que contesta y la pregunta, si la hubo, ha terminado.
+    const esperar = async (id) => {
+      for (let i = 0; i < 50 && (contestado(id) === null || (proveedor.preguntados && proveedor.preguntados.size)); i += 1) await new Promise((r) => setTimeout(r, 10));
+    };
+    const mensajes = () => vscode.registrado.mensajes.filter((m) => /^INFO (He añadido|El asistente quiere)/.test(m));
+    vscode.guion.raiz = carpeta;
+    vscode.registrado.mensajes.length = 0;
+    try {
+      // Con confianza y conocida: sola, sin preguntar, y dicho en una frase.
+      vscode.guion.confianza = true;
+      await estado.update('executiveLab.carpetaConocida', true);
+      pedir('invoicing');
+      pedir('facturas');
+      await proveedor.atenderLosPedidos();
+      assert.deepEqual(anadidas, ['invoicing']);
+      assert.equal(contestado('invoicing'), 'Añadida. Se pide con /invoicing.');
+      assert.match(contestado('facturas'), /^«facturas» no está en el catálogo de la clase\. Las que más se parecen: .*invoicing/);
+      assert.ok(!fs.existsSync(path.join(pedidosDir, 'invoicing.habilidad')), 'el pedido sigue ahí');
+      assert.deepEqual(mensajes(), ['INFO He añadido Facturación, que te ha pedido el asistente. Se pide con /invoicing.']);
+      // Otra vez la misma: ya estaba, y no se vuelve a añadir.
+      pedir('invoicing');
+      await proveedor.atenderLosPedidos();
+      assert.deepEqual(anadidas, ['invoicing'], 'se añade dos veces');
+      assert.equal(contestado('invoicing'), 'Ya estaba puesta. Se pide con /invoicing.');
+
+      // Por el reloj de cada minuto, y por el vigía.
+      pedir('bookkeeping');
+      await proveedor.mirarLosRecordatorios();
+      assert.deepEqual(anadidas, ['invoicing', 'bookkeeping'], 'el reloj no atiende los pedidos');
+      assert.ok(vscode.registrado.vigia.patron.includes('02-DOCS/raw/pedidos/*'), 'la barra no vigila los pedidos');
+      pedir('connect-tool');
+      vscode.registrado.vigia.disparar(path.join(pedidosDir, 'connect-tool.habilidad'));
+      await esperar('connect-tool');
+      assert.equal(contestado('connect-tool'), 'Añadida. Se pide con /connect-tool.', 'el vigía no atiende el pedido');
+      // Uno que llega mientras se atiende otro no espera al minuto siguiente.
+      assert.equal(proveedor.atendiendo, true, 'la prueba no pilla la barra atendiendo');
+      pedir('lo-que-llega-mientras');
+      await proveedor.atenderLosPedidos();
+      for (let i = 0; i < 50 && proveedor.atendiendo; i += 1) await new Promise((r) => setTimeout(r, 10));
+      assert.match(contestado('lo-que-llega-mientras') || '', /no está en el catálogo/, 'lo que llega mientras espera al minuto');
+      for (const id of ['bookkeeping', 'connect-tool']) fs.rmSync(path.join(carpeta, '.claude', 'skills', id), { recursive: true });
+      anadidas.length = 0;
+
+      // Una carpeta que este ordenador no conoce: se pregunta. Si cierra la pregunta, se contesta.
+      await estado.update('executiveLab.carpetaConocida', false);
+      vscode.registrado.mensajes.length = 0;
+      vscode.guion.eleccion = undefined;
+      pedir('bookkeeping');
+      await proveedor.atenderLosPedidos();
+      await esperar('bookkeeping');
+      assert.deepEqual(anadidas, [], 'sin conocerla, se añade sin preguntar');
+      assert.ok(mensajes().some((m) => /^INFO El asistente quiere añadir .+\. ¿La añado\?$/.test(m)), 'no se pregunta');
+      assert.match(contestado('bookkeeping'), /ahora no/, 'el asistente se queda esperando');
+      // Sin confianza, igual; con «Añadirla», por el botón de siempre.
+      vscode.guion.confianza = false;
+      await estado.update('executiveLab.carpetaConocida', true);
+      vscode.registrado.mensajes.length = 0;
+      vscode.guion.eleccion = 'Añadirla';
+      pedir('bookkeeping');
+      fs.rmSync(path.join(pedidosDir, 'bookkeeping.hecho'));
+      await proveedor.atenderLosPedidos();
+      await esperar('bookkeeping');
+      assert.deepEqual(anadidas, ['bookkeeping'], 'con «Añadirla» no se añade');
+      assert.ok(mensajes().some((m) => /^INFO El asistente quiere añadir/.test(m)), 'sin confianza, se añade sin preguntar');
+      assert.equal(contestado('bookkeeping'), 'Añadida. Se pide con /bookkeeping.');
+      vscode.guion.confianza = true;
+
+      // Con el arnés por delante, la barra no puede: se le dice al asistente cómo, sin preguntar.
+      anadidas.length = 0;
+      vscode.registrado.mensajes.length = 0;
+      declarar('99.0.0');
+      pedir('connect-tool');
+      await proveedor.atenderLosPedidos();
+      assert.deepEqual(anadidas, [], 'con el arnés por delante la añade la barra');
+      assert.deepEqual(mensajes(), [], 'con el arnés por delante se le pregunta a la persona');
+      assert.match(contestado('connect-tool'), /npx @ericrisco\/rsc@99\.0\.0 add connect-tool$/);
+      declarar(rscM.VERSION_DE_RESPALDO);
+
+      // Mientras arregla sola, se espera al minuto siguiente.
+      proveedor.arreglandoSolo = true;
+      pedir('connect-tool');
+      fs.rmSync(path.join(pedidosDir, 'connect-tool.hecho'));
+      await proveedor.atenderLosPedidos();
+      assert.equal(contestado('connect-tool'), null, 'pisa un arreglo en marcha');
+      proveedor.arreglandoSolo = false;
+      await proveedor.atenderLosPedidos();
+      assert.equal(contestado('connect-tool'), 'Añadida. Se pide con /connect-tool.');
+      return 'sola, por el reloj y por el vigía; preguntada, y contestada siempre';
+    } finally {
+      rscM.anadir = antes.anadir;
+      proveedor.enviar = antes.enviar;
+      proveedor.arreglandoSolo = false;
+      await estado.update('executiveLab.carpetaConocida', antes.conocida);
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.eleccion = antes.eleccion;
+      fs.rmSync(carpeta, { recursive: true, force: true });
     }
   });
 

@@ -56,6 +56,8 @@ const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
 const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacidad']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
+// Lo que el asistente le pide a la barra (decisión 150).
+const pedidos = require('./pedidos');
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -682,6 +684,88 @@ ${cabecera}
     return this.refrescar(true);
   }
 
+  // ── Lo que pide el asistente (decisión 150) ──────────────────────────
+  //
+  // La regla 7 decía «dile que la busque en la barra y la pulse»: el alumno, que
+  // estaba hablando con el asistente, tenía que irse a otra pantalla a buscar un
+  // botón. Ahora el asistente le pregunta, y con su sí deja el pedido escrito; la
+  // barra lo ve (el vigía, y el reloj de los recordatorios por si acaso) y la añade
+  // como el botón: con su arnés, la versión de la clase, sin npx y con lo que el
+  // equipo apagó (`rsc.correr`). Solo del catálogo de la clase.
+  //
+  // Sola, con las guardas de lo que se hace solo (P9): carpeta de confianza, que
+  // este ordenador conoce y con un arnés que no va por delante. Si no, no se
+  // queda esperando: se pregunta a la persona, con su botón, una vez por pedido.
+  //
+  // Si el arnés de la carpeta va por delante, la barra no puede (P7): se le dice al
+  // asistente, que sí puede, con la versión que la carpeta declara. Dónde está la
+  // carpeta, qué pedidos hay y cómo se contesta sin seguir enlaces: `pedidos.js`.
+  //
+  // Un pedido que llega mientras se atiende otro no espera al minuto: se da otra
+  // vuelta al terminar.
+  async atenderLosPedidos() {
+    if (this.atendiendo) {
+      this.otraVuelta = true;
+      return;
+    }
+    this.atendiendo = true;
+    try {
+      do {
+        this.otraVuelta = false;
+        await this.unaVueltaDePedidos();
+      } while (this.otraVuelta);
+    } finally {
+      this.atendiendo = false;
+    }
+  }
+
+  async unaVueltaDePedidos() {
+    const raiz = proyecto.raiz();
+    const hay = pedidos.losQueHay(raiz);
+    if (!hay.length) return;
+    const catalogo = consejos.capacidades(this.contexto.extensionPath);
+    const contestar = (id, que, mas = {}) => pedidos.contestar(raiz, id, pedidos.respuesta(que, { id, comoSePide: saberes.comoSePide(id), ...mas }));
+    const porDelante = rsc.vaPorDelante();
+    const sola = vscode.workspace.isTrusted !== false && this.carpetaConocida() && proyecto.arnesCompleto() && !porDelante;
+    let anadidas = 0;
+    for (const id of hay) {
+      const { que, nombre, parecidas } = pedidos.queHacer(id, { catalogo, enDisco: rsc.habilidadesEnDisco(), sola });
+      if (que === 'noEsta' || que === 'yaEstaba') { contestar(id, que, { parecidas }); continue; }
+      if (porDelante) { contestar(id, 'porDelante', { version: proyecto.versionDelCatalogo() }); continue; }
+      if (que === 'preguntar') { this.preguntarElPedido(id, nombre, contestar); continue; }
+      if (this.arreglandoSolo) break; // al minuto siguiente
+      this.arreglandoSolo = true;
+      let ok = false;
+      try {
+        ({ ok } = await rsc.anadir(id));
+      } finally {
+        this.arreglandoSolo = false;
+      }
+      contestar(id, ok ? 'anadida' : 'noSePudo');
+      this.salida.appendLine(`[pedidos] ${id}: ${ok}`); // diccionario: interno
+      if (ok) {
+        anadidas += 1;
+        vscode.window.showInformationMessage(`He añadido ${nombre}, que te ha pedido el asistente. Se pide con ${saberes.comoSePide(id)}.`);
+      }
+    }
+    if (anadidas) await this.refrescar(true);
+  }
+
+  // Sin poder hacerlo solo, se pregunta, una vez por pedido. «Añadirla» pasa por
+  // el botón de siempre, que da la carpeta por conocida. Si cierra la pregunta,
+  // se le dice al asistente, que si no se quedaría esperando.
+  preguntarElPedido(id, nombre, contestar) {
+    this.preguntados = this.preguntados || new Set();
+    if (this.preguntados.has(id)) return;
+    this.preguntados.add(id);
+    Promise.resolve(vscode.window.showInformationMessage(`El asistente quiere añadir ${nombre}. ¿La añado?`, 'Añadirla')).then(async (quiere) => {
+      if (quiere !== 'Añadirla') return contestar(id, 'noQuiere');
+      await this.manejar({ tipo: 'aprenderCapacidad', capacidad: id, nombre });
+      return contestar(id, rsc.habilidadesEnDisco().includes(id) ? 'anadida' : 'noSePudo');
+    }).catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)) // diccionario: interno
+      .finally(() => this.preguntados.delete(id));
+  }
+
   // Añadir una habilidad del catálogo (`rsc add`), sin que el alumno vea nada
   // de esto. Se nombra por su nombre —«Facturación»— y se le dice cómo se
   // invoca, que con Claude es escribir `/su-identificador`.
@@ -996,6 +1080,8 @@ ${cabecera}
   // Cada minuto, desde `activate`: si ha llegado la hora de uno, se dice una vez
   // aunque la barra esté cerrada, y la principal lo enseña con su botón.
   async mirarLosRecordatorios() {
+    // Los pedidos del asistente, por si el vigía no los vio (decisión 150).
+    await this.atenderLosPedidos().catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
     await this.mirarLasCaducidades().catch((error) => this.salida.appendLine(`[caducidades] ${error.message}`)); // diccionario: interno
     const avisados = { ...(this.almacen().get(CLAVE_AVISADOS) || {}) };
     const sinAvisar = (await this.losRecordatoriosQueTocan()).filter((t) => avisados[t.nombre] !== t.ultima);
@@ -2521,7 +2607,7 @@ async function vestir(contexto, salida) {
 // Así que las carpetas del asistente se preguntan, no se escriben. Lo fijo es
 // lo que no depende de él: la declaración, las herramientas y la wiki.
 // Y los avisos para Executive Lab, que deja el asistente y la barra enseña.
-const LO_FIJO = ['.rsc.json', '01-TOOLS/**', '02-DOCS/wiki/**', '02-DOCS/inbox/*', '02-DOCS/raw/avisos/*'];
+const LO_FIJO = ['.rsc.json', '01-TOOLS/**', '02-DOCS/wiki/**', '02-DOCS/inbox/*', '02-DOCS/raw/avisos/*', '02-DOCS/raw/pedidos/*'];
 
 // Relativa a la raíz, que es lo que quiere `RelativePattern`.
 function suCarpeta(completa) {
@@ -2558,6 +2644,8 @@ function vigilarElArnes(contexto, panel) {
   // Una tanda de cambios (RSC escribe muchos ficheros de golpe) es un solo
   // repintado, no veinte.
   const alCambiar = (uri) => {
+    // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
+    if (/[\\/]02-DOCS[\\/]raw[\\/]pedidos[\\/][^\\/]+\.habilidad$/.test(uri.fsPath)) panel.atenderLosPedidos().catch(() => {});
     const esMarca = uri.fsPath.includes(`${marca.CARPETA.join('/')}/`) || uri.fsPath.includes(marca.FICHERO);
     // El índice del buscador se hizo con lo que había antes de este cambio.
     buscador.olvidar();

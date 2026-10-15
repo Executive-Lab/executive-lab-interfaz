@@ -52,8 +52,13 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
    1. **Lo que ya está instalado en la carpeta**, que es local y no baja nada:
       `node .rsc/session-memory.mjs resume` (o `capture`, `learn`, `status`) para todo lo de la
       memoria entre conversaciones.
-   2. **Para añadir una habilidad, la barra**: dile que la busque en *Habilidades (skills)*, en
-      *Sugerencias del catálogo* o en *Resto del catálogo*, y la pulse: se añade sola. No la añadas tú.
+   2. **Para añadir una habilidad, pídesela a la barra.** Pregunta antes, y con su sí escribe un
+      fichero vacío `02-DOCS/raw/pedidos/<id>.habilidad`, con el identificador del catálogo (por
+      ejemplo `connect-tool.habilidad`). La barra la añade sola en unos segundos, con la versión de la
+      clase, y deja la respuesta en `02-DOCS/raw/pedidos/<id>.hecho`: léela y díselo en una línea.
+      Si el nombre no existe, la respuesta trae los que más se parecen. Si al minuto no hay
+      respuesta, la barra no está abierta: dile que la abra. No la añadas tú, salvo que la respuesta
+      te diga cómo.
    3. Si de verdad hace falta el paquete, **con la versión que declara `.rsc.json`** en
       `catalogVersion`, escrita detrás del nombre con una arroba. Si dice `3.0.22`:
       `npx @ericrisco/rsc@3.0.22 doctor`.
