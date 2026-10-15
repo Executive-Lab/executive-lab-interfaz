@@ -11,7 +11,7 @@ espacio de trabajo es el arnés [RSC](https://github.com/ericrisco/rsc-harness).
 > Salta directo a **[Para agentes: instrucciones ejecutables](#-para-agentes-instrucciones-ejecutables)**.
 > Está escrito para que lo sigas sin interpretar nada.
 
-**Última release:** en [Releases](https://github.com/Executive-Lab/executive-lab-interfaz/releases/latest), con su
+**Última release:** en [Releases](https://github.com/Executive-Lab/executive-vscode-interfaz/releases/latest), con su
 `.vsix`. La versión de la barra es la de `extension/package.json`.
 
 ---
@@ -58,7 +58,7 @@ Tres caminos. **El primero es el bueno**; los otros dos existen para casos concr
 Sirve para quien ya tiene VS Code y una cuenta de pago de Claude Code o de Codex.
 
 1. Descarga `executive-lab-<version>.vsix` de
-   [la última release](https://github.com/Executive-Lab/executive-lab-interfaz/releases/latest).
+   [la última release](https://github.com/Executive-Lab/executive-vscode-interfaz/releases/latest).
 2. Arrástralo sobre la ventana de VS Code. (O `Ctrl+Shift+P` → *Extensions: Install from VSIX…*)
 3. Abre la carpeta con la que quieras trabajar y pulsa **Preparar esta carpeta** en la barra de la
    izquierda. Te hará unas preguntas en lenguaje llano, de una en una, y montará el arnés con tus respuestas. Cuántas,
@@ -138,7 +138,7 @@ pantalla de inicio de sesión.
 
 ```bash
 # Descarga el .vsix de la última release
-gh release download --repo Executive-Lab/executive-lab-interfaz \
+gh release download --repo Executive-Lab/executive-vscode-interfaz \
   --pattern '*.vsix' --dir /tmp --clobber
 
 # Instálalo
@@ -149,7 +149,7 @@ Sin `gh`:
 
 ```bash
 curl -fL -o /tmp/executive-lab.vsix \
-  "$(curl -fsSL https://api.github.com/repos/Executive-Lab/executive-lab-interfaz/releases/latest \
+  "$(curl -fsSL https://api.github.com/repos/Executive-Lab/executive-vscode-interfaz/releases/latest \
      | grep -o 'https://[^"]*\.vsix')"
 code --install-extension /tmp/executive-lab.vsix --force
 ```
@@ -310,8 +310,8 @@ Todas las decisiones, con lo que se descartó y por qué, están en
 ## Trabajar en esto
 
 ```bash
-git clone git@github.com:Executive-Lab/executive-lab-interfaz.git
-cd executive-lab-interfaz
+git clone git@github.com:Executive-Lab/executive-vscode-interfaz.git
+cd executive-vscode-interfaz
 
 # El arnés que viaja dentro de la extensión NO está versionado. Antes de empaquetar:
 npm install --prefix extension/media/harness @ericrisco/rsc@3.0.22

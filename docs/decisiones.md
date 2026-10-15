@@ -5238,8 +5238,10 @@ quería evitar, esta vez por el nombre y no por la cuenta.
 
 Lo que no arregla: las barras puestas llevan la regla vieja dentro. Las 0.47–0.51 no se pondrán al día
 solas hasta que alguien les instale a mano una que lleve esta, o hasta que el repositorio vuelva a
-llamarse `executive-lab-interfaz`. La 0.46.0 y anteriores, ni así: solo aceptan la cuenta de Jose. El
-nombre lo decide Jose. La regla vale para los dos casos.
+llamarse `executive-lab-interfaz`. La 0.46.0 y anteriores, ni así: solo aceptan la cuenta de Jose.
+
+**El nombre se queda el nuevo.** Jose: *«aún no tiene nadie la barra»*. Volver al viejo solo habría
+servido para barras que no hay. Los README pasan también a `executive-vscode-interfaz`.
 
 **La revisión de seguridad** no encontró nada que bloquee. Para todo lo que probó siguen haciendo falta
 el autor, quien sube el fichero y la huella. Una nota: las cuentas salen de `SITIOS`, así que un sitio

@@ -17,11 +17,11 @@ el paquete llegaba con un nombre que la barra no daba por suyo (`sinPaquete`). D
 
 **Dentro**
 - Dar por bueno el paquete del repositorio de su propia release, si está en una de nuestras cuentas.
-- `REPO` y `SITIOS` con el nombre nuevo.
+- `REPO` y `SITIOS` con el nombre nuevo, y los README también.
 - El informe de «Algo va mal» dice qué barra corre.
 
 **Fuera**
-- El nombre del repositorio (volver a `executive-lab-interfaz` o no): lo decide Jose.
+- El nombre del repositorio: Jose elige quedarse con el nuevo («aún no tiene nadie la barra»).
 - Publicar la 0.52.0: la saca la sesión que lleva esa versión.
 
 ## Checklist
@@ -46,5 +46,5 @@ el paquete llegaba con un nombre que la barra no daba por suyo (`sinPaquete`). D
 
 ## Next
 
-- Que Jose decida el nombre del repositorio. Las barras 0.47–0.51 que ya hay puestas solo se arreglan
-  solas si vuelve a `executive-lab-interfaz`. Si no, hay que instalarlas a mano una vez.
+- Sacar la 0.52.0 con esto dentro. La saca la sesión que lleva esa versión.
+- Una barra 0.47–0.51 que aparezca por ahí hay que ponerla a mano una vez, porque lleva la regla vieja.
