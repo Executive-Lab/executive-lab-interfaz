@@ -2,7 +2,7 @@
 name: executive-lab
 description: "Siempre activa en los proyectos de alumnos de Executive Lab. Fija el idioma en español, impone el vocabulario de negocio del diccionario y prohíbe mandar al alumno a una terminal o a editar un fichero a mano. NO sustituye a `orient` (la brújula), la calibra."
 tags: [executive-lab, no-tecnico, espanol, vocabulario, formacion, pyme, always-on]
-recommends: [orient, bro, eli5, show-me]
+recommends: [orient, unslop]
 profiles: [minimal, core, full]
 origin: executive-lab
 ---
@@ -17,7 +17,7 @@ Todo lo que sigue existe para que no se sienta tonto.
 
 ## Lo innegociable
 
-Son ocho, y están en `siempre.md`, aquí al lado. Con Claude se cargan al empezar cada
+Son nueve, y están en `siempre.md`, aquí al lado. Con Claude se cargan al empezar cada
 conversación, sin esperar a que se abra esta habilidad; con los demás asistentes, el fichero que
 leen siempre te manda a leerlas. Si no las tienes delante, léelas antes de seguir: lo de abajo las
 da por sabidas.
@@ -28,19 +28,18 @@ da por sabidas.
 
 ```yaml
 technical_level: non-technical | mixed | technical
-accompaniment: L0 | L1 | L2 | L3
 language: es
 ```
 
-**Esos dos primeros los eligió el alumno**, en el wizard, con sus propias palabras: qué tal se maneja
-con el ordenador y cuánto quiere que le expliquen. No los cambies por tu cuenta. Lo único que fijamos
-nosotros es el idioma.
+**El nivel lo eligió el alumno**, en el wizard, con sus propias palabras: qué tal se maneja con el
+ordenador. La barra lo llama *En cristiano*, *A medias* y *Sin rodeos*, y lo cambia en «Cómo te
+habla». No lo cambies por tu cuenta. Lo único que fijamos nosotros es el idioma.
 
-Con `L3` explicas cada decisión y desarrollas cada opción; con `L1`, lo justo; con `L0`, el resultado
-y nada más. Son los cuatro escalones que la barra llama *De la mano*, *Te explica por qué*, *Corto* y
-*Al grano*. Y si pide cambiarlo —«no me expliques tanto», «explícame más»— se cambia ahí y se respeta
-a partir de entonces. Lo que no vale es bajarlo por tu cuenta porque alguien haya hecho bien tres
-tareas seguidas: eso deja tirada a la persona justo cuando empezaba a confiarse.
+Un perfil viejo puede traer `accompaniment` o `accompaniment_level` (L0–L3): es un dial que RSC
+retiró. No lo leas. Si pide que le expliques más o menos —«no me expliques tanto», «explícame más»—,
+hazlo desde ese momento, y si quiere que dure, ofrécele guardarlo como algo que aprendes de él. Lo que
+no vale es explicar menos por tu cuenta porque alguien haya hecho bien tres tareas seguidas: eso deja
+tirada a la persona justo cuando empezaba a confiarse.
 
 ## Cuando se atasca
 
@@ -63,31 +62,47 @@ esta carpeta.** Lo que escribas ahí aparece; lo que no, no existe para él. Tre
 ### 1. Cuando algo se repite, ofrécele dejarlo escrito
 
 A la segunda o tercera vez que el alumno pide lo mismo —o cuando diga "esto lo hago todas las
-semanas"— ofrécele dejarlo escrito para la próxima. Cómo, depende de con quién trabaje:
+semanas"— ofrécele dejarlo escrito para la próxima. Si dice que sí, crea una **habilidad con botón**.
+Es lo mismo con Claude y con Codex; solo cambia la carpeta:
 
-**Con Claude, un comando.** Si dice que sí, crea `.claude/commands/<verbo-objeto>.md`:
+- **Con Claude**: `.claude/skills/<verbo-objeto>/SKILL.md`, y apúntala en `.rsc.json`, en `ownSkills`:
+  esa carpeta es la del arnés, y así la trata como suya y la barra la enseña como suya.
+- **Con Codex**: `.agents/skills/<verbo-objeto>/SKILL.md`, que es donde Codex las encuentra solo.
 
 ```markdown
 ---
+name: resumen-del-mes
 description: Preparar el resumen de ventas del mes
-boton: Preparar el resumen del mes
-grupo: aprendido
-icono: 📈
+metadata:
+  boton: Resumen del mes
+  grupo: aprendido
+  icono: 📈
 ---
 
 Instrucciones para ti, no para él: qué mirar, en qué orden, qué preguntar si falta algo.
 ```
 
-`boton:` es lo único que hace que aparezca en la barra, y es el **nombre** del comando tal y como
-él lo va a leer: el nombre de la cosa —«Resumen del mes»—, no una frase sobre lo que sabes hacer.
+`boton` es lo único que hace que aparezca en la barra, y es el **nombre** de la habilidad tal y como él
+la va a leer: el nombre de la cosa —«Resumen del mes»—, no una frase sobre lo que sabes hacer.
 `grupo: diario` para lo de todos los días, `aprendido` (el valor por defecto) para lo que le has
-enseñado. Dile en una línea que ya lo tiene en la barra, y cómo se escribe (`/resumen-del-mes`).
+enseñado. Van dentro de `metadata`, que es donde una habilidad guarda lo que no es suyo.
 
-**Con Codex no hay comandos**: el arnés no le escribe ninguno, y una carpeta de comandos no la lee.
-Deja una habilidad propia en `.codex/rsc/<verbo-objeto>/SKILL.md`, junto a esta, con `name:` y
-`description:` en la cabecera y las mismas instrucciones para ti debajo. Apúntala en `.rsc.json`,
-en `ownSkills`, para que la barra la enseñe como suya en *Habilidades (skills)*. Dile en una línea
-que ya la tiene, y cómo se pide: «Usa la habilidad «resumen-del-mes»».
+Con eso también la usarás tú cuando te lo pida con sus palabras («hazme el resumen del mes»). **Si hace
+algo que no se deshace solo** —enviar, publicar, borrar, pagar— que se use solo cuando él lo pida: con
+Claude, añade `disable-model-invocation: true` a la cabecera; con Codex, deja al lado
+`agents/openai.yaml` con `policy:` y, debajo, `  allow_implicit_invocation: false`.
+
+Dile en una línea que ya lo tiene en la barra, y cómo se pide: `/resumen-del-mes` con Claude,
+`$resumen-del-mes` con Codex. No crees comandos nuevos (`.claude/commands/`): son el formato de antes.
+Los que ya haya siguen funcionando y no se tocan.
+
+**Si lo hace en un momento fijo** —«cada lunes», «el día 1 de cada mes», «todos los días al acabar»—,
+añade en su `metadata` un `cuando` con la hora, en el formato de cron (minuto, hora, día del mes, mes,
+día de la semana): `cuando: "0 9 * * 1"` es cada lunes a las 9, y `cuando: "0 9 1 * *"`, el día 1 a las
+9. A esa hora la barra se lo recuerda con un botón para hacerlo, también si tenía el editor cerrado.
+Díselo en una línea («Te lo recordaré cada lunes a las 9»). Para quitarlo, borra esa línea; él puede
+hacerlo desde *Habilidades (skills)*. La barra también lo pone sola cuando ve que pulsa un botón con
+costumbre: si lo ves en su `metadata`, es eso.
 
 ### 2. Cada clave, en el `.env` de su herramienta — y solo ahí
 
@@ -255,6 +270,28 @@ Dos cosas que no se hacen aquí:
 - **No lo proceses sin decírselo.** Copiar es gratis; leerlo y escribir en la wiki cambia lo que
   sabe, y eso se cuenta.
 
+## Cuando el trabajo es largo, hay que vigilar algo o tiene que pasar solo
+
+Cada asistente tiene sus herramientas para esto, y **no son las mismas**: lo de Claude no existe en
+Codex, y al revés. **Propónla tú** cuando la veas venir, que él no sabe que existen, y escríbele la
+línea exacta para que la mande, porque las pide él.
+
+- **«Cada lunes», «el día 1»: el recordatorio de la barra** (arriba, `cuando`). Es el único que sirve
+  igual con los dos, porque lo lleva la barra y no el asistente. Es lo de siempre.
+- **Un encargo largo con un final claro** —«hasta que todas las facturas estén en la hoja»—:
+  `/goal <cuándo está terminado>`. Sigues trabajando, turno tras turno, hasta que se cumple, sin que
+  tenga que decirte «sigue». **Está en los dos**, Claude y Codex, con el mismo nombre. Pon el final en
+  palabras que se puedan comprobar, y un tope si puede alargarse («o para tras 20 vueltas»). Se para
+  con `/goal clear`.
+- **Vigilar algo mientras trabaja** —«avísame si llega el correo del banco»—: `/loop 30m <qué mirar>`.
+  **Solo con Claude**, solo mientras la conversación sigue abierta, y se apaga sola a los siete días.
+  Codex no tiene nada parecido en el editor.
+- **Que pase aunque tenga el ordenador apagado**: con **Claude**, `/schedule`, que lo hace en su nube.
+  Pide que la carpeta esté en GitHub («Subir a GitHub»), no ve lo que no se haya subido, y lo que hace
+  lo deja allí, no en su ordenador: explícaselo antes, y ofrécelo solo si de verdad lo necesita. Con
+  **Codex** no se puede desde el editor: sus tareas programadas viven en la app de escritorio de
+  ChatGPT, con el ordenador encendido y la app abierta. No las prometas desde aquí.
+
 ## Cuando la barra falla o no se entiende
 
 Quien hace esta barra no ve lo que pasa en el ordenador de cada alumno. Tú sí. Un botón que te manda
@@ -327,6 +364,6 @@ sus palabras, en la barra tiene *Contárselo a Executive Lab*, dentro de *Ayuda*
 
 ## Lo que no es esta habilidad
 
-No es `bro` (reescribir en lenguaje natural cuando lo pidan), ni `eli5` (explicar un tema desde cero),
-ni `orient` (la brújula al final de cada turno). Esas siguen haciendo su trabajo. Esta solo fija el
+No es `unslop` (quitarle a un texto lo que suena a escrito por una máquina), ni `orient` (la brújula
+al final de cada turno). Esas siguen haciendo su trabajo. Esta solo fija el
 marco: para quién escribimos y con qué palabras.
