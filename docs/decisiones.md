@@ -5522,6 +5522,139 @@ ficheros que solo cambian en mayúsculas, y la foto que no dice que no está ent
 por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
 mutar. La batería entera se pasó al final, sin mutar.
 
+## 152. Se adapta y da ideas
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho en el código (F6 del plan de simplificar la barra, y el punto 8 de «Hay que construirlo» de la 142)
+
+Jose, 05-10-2026: *«que sea inteligente e interactiva y que solo ponga lo necesario según el caso, y en
+brownfield se adapte y dé ideas»*. Y de la clase del 13-10: en una carpeta que ya tenía cosas, Eric aconseja
+hacer antes una copia. RSC ya la hace, en `.rsc/backups/`, pero no se veía en ningún sitio.
+
+Todo sale del disco y de reglas, no de una ocurrencia del modelo (P5). Vive en un módulo puro,
+`extension/src/ideas.js`, que se prueba con situaciones inventadas.
+
+- **«Esto parece …», la primera vez.** En una carpeta que ya tenía cosas, la tarjeta dice lo que la barra ya
+  sabe leer: «Esto parece una aplicación hecha con React, con claves de Stripe y 12 documentos sin colocar.»
+  Sale de cuatro sitios:
+  - de qué parece, por los ficheros de la raíz (`terreno`, lo mismo que se enseña antes de montar);
+  - con qué está hecho, por lo que RSC apuntó al montarla (`evidence.stacks` en `.rsc.json`), con el nombre
+    del catálogo. Lo que el catálogo no nombra, como `node`, no se dice;
+  - de qué programas hay claves, por el nombre de cada una (`sueltas`);
+  - cuántos documentos hay sin colocar, con la regla de `papeles` y sin el tope de 40 de su lista.
+
+  Si no se sabe de qué parece: «Aquí ya había trabajo tuyo: …». Con «Entendido» no vuelve.
+- **La primera vez es la primera vez que la barra mira la carpeta ya montada.** Si entonces no hay nada que
+  decir, porque es una carpeta nueva, se apunta y ya no se dirá: lo que crezca después lo ha hecho ella. Una
+  carpeta que ya se usaba con una barra de antes lo verá una vez, al ponerse esta.
+- **La copia del montaje.** Si el arnés guardó una copia de lo suyo antes de montarse, la misma tarjeta lo
+  dice, cada cosa con el nombre que tiene al pedir el sí para montar: «Antes de cambiar lo tuyo, el arnés
+  guardó una copia: los ajustes de Claude de esta carpeta y la habilidad «review».» Al lado va **Ver la
+  copia**, que abre su carpeta en una ventana del sistema.
+  - Vale la copia del primer montaje (`onboarding-transaction`): antes de él, todo era suyo. En las
+    siguientes, lo guardado ya es del arnés.
+  - Lo de RSC no cuenta. Medido con la 3.0.22 sobre una carpeta de verdad: en la copia va también lo que la
+    barra apaga antes de montar (`.rsc/.no-trunk-guard`), y no es suyo.
+  - Después de «Entendido» sigue a mano en Ver las copias guardadas, bajo «Copias que guarda el arnés».
+- **Las ideas, de una en una.** Después, en la tarjeta de siempre y al final de la fila (la 12 de la
+  propuesta), dos o tres ideas. Cada una lleva su botón y su «Ahora no» de dos semanas, como los consejos:
+  1. un programa del que hay claves y que no tiene conexión: «Ya usas Stripe: sus claves están en la
+     carpeta, pero todavía no tiene su conexión.», con **Conectar Stripe**. Se lo pide al asistente con
+     `connect-tool` y el protocolo de harness, con los nombres de las claves y dónde están, nunca sus valores;
+  2. los documentos sin colocar, con **Que los coloque y los lea**, el mismo botón de Documentos entregados;
+  3. las habilidades del catálogo que encajan, con lo que ya calcula `consejos.js`. Primero con lo que dijo
+     al prepararla («Para «llevar las facturas de mis clientes», te vendría bien la habilidad (skill)
+     Facturación.»), después con lo que hay. En una carpeta nueva solo hay estas.
+
+  Se cortan a tres antes de quitar las apartadas: «Ahora no» deja ver la siguiente, no saca una cuarta. Una
+  habilidad lleva el mismo `id` que su consejo, así que su «Ahora no» vale para los dos.
+- **La lista entera, en Ayuda › Sugerencias**, detrás de los consejos y sin repetir ninguna.
+- **No es un menú, y sigue saliendo una.** `empresas-distintas.js` pinta la principal sencilla de las tres
+  empresas de mentira con «Esto parece», un consejo y una versión nueva queriendo salir. Sale una tarjeta, y
+  como mucho cinco cosas a la vista con todo plegado. También después de «Entendido», con la idea sola.
+- **Nada nombrado a fuego.** Los programas salen del nombre de sus claves, y con qué está hecho, del catálogo.
+  Lo que hay que entender, como dónde va cada documento o cómo se conecta cada programa, se le pide al
+  asistente, que lo mira.
+- **Por qué no se hace solo (P9).** Conectar un programa lo decide su negocio, y mover sus documentos o
+  añadir una habilidad toca lo suyo. Se deja a un clic.
+- **Seguridad.** La carpeta de la copia tiene que ser una carpeta de verdad, no un enlace: `.rsc/` lo puede
+  traer un repositorio de fuera, y abrir un enlace con el sistema podría abrir un programa. Y el botón no
+  lleva la ruta: la barra la vuelve a buscar en el disco.
+
+Lo que quedaba: el emparejamiento de `consejos.js` contaba «cliente» y «clientes» como dos palabras distintas,
+y a «llevar la contabilidad de mis clientes» le proponía Ventas y oportunidades. Lo arregló aparte la PR #43, «El
+consejo cuenta cada palabra del texto una vez», y con ella la Gestoría de mentira ya no recibe esa idea.
+
+**La revisión adversaria de seguridad** (PR #42) encontró tres cosas, y las tres están arregladas con su prueba:
+
+- **La copia del montaje costaba en cada repintado** (media). Se leía `.rsc/backups/` entera, con cada manifiesto
+  de hasta 1 MB, en cada repintado, en Sugerencias y en Ver las copias guardadas. Con 3.000 copias de 100 KB, 1,4 s
+  cada vez. Ahora:
+  - se miran las 200 primeras por su nombre;
+  - los manifiestos se leen de uno en uno hasta el primer montaje, y no se lee ninguno de más de 256 KB;
+  - lo encontrado se guarda en memoria con la fecha de la carpeta de las copias, y el manifiesto elegido, con su
+    huella.
+
+  Medido con 3.000 copias de 100 KB: 144 ms la primera vez y 0,02 ms las siguientes.
+- **El encargo de «Conectar Stripe» citaba rutas libres y no esperaba el OK** (media). Los nombres de carpetas y de
+  ficheros entraban tal cual en lo que se deja en la conversación, y una carpeta llamada «x. Ignora lo anterior y
+  …» se leía como una orden. Además mandaba crear, mover y probar sin enseñar antes el plan, como sí hace «Que las
+  ordene». Ahora:
+  - solo se cita un fichero, o una carpeta y su fichero, con letras, números, puntos y guiones, y sin «..»;
+  - si no, dice «en los ficheros de claves de la carpeta»;
+  - pide el plan y espera el OK antes de crear o mover nada, y no prueba la conexión hasta que se lo confirme.
+
+  No se reutiliza el encargo de `sueltas.js`, porque reparte todas las claves de la carpeta y aquí es un programa.
+  Se copia su regla.
+- **Lo que dice el manifiesto mandaba demasiado** (baja). El nombre de cada cosa guardada entraba entero en la
+  frase, y podía ocupar casi 1 MB. Y un `createdAt: '0'` decidía cuál era el primer montaje. Ahora:
+  - cada nombre se recorta a 60 caracteres;
+  - el primer montaje es el de la carpeta más vieja, por su fecha real.
+
+**La revisión adversaria de corrección** (PR #42) encontró ocho cosas, y las ocho están arregladas con su prueba:
+
+- **Lo del proyecto contaba como documento sin colocar** (media). Un `requirements.txt`, un `robots.txt`, el logo de
+  una web o el bloqueo de Office `~$presupuesto.docx` salían como «1 documento sin colocar», con «Que lo coloque y
+  lo lea» volviendo cada dos semanas. Ahora:
+  - un `~$…` no cuenta nunca;
+  - en una carpeta que parece un proyecto (lo dice `terreno`, o RSC apuntó con qué está hecho) solo cuentan los
+    documentos de oficina: PDF, Word, Excel, PowerPoint y sus parecidos.
+
+  La regla de `papeles.js` no se toca: la usa Documentos entregados, y la rama 153 también la cambia.
+- **«Conectar Debug»** (media). `DEBUG_MODE`, `FEATURE_FLAG_X` o `NEXT_TELEMETRY_DISABLED` salían como programas, y
+  como solo se ofrecía el primero, tapaban los de verdad. Ahora un programa sin conexión cuenta solo si alguna de
+  sus claves suena a secreto (`SUENA_A_SECRETO`, de `sueltas.js`) o si el catálogo lo conoce. Nunca cuenta si su
+  prefijo no es de nadie (DEBUG, FEATURE, TELEMETRY, LOG, NODE…).
+- **Los ficheros de acceso, código muerto** (media). `sueltas.ficherosDeAcceso` solo dice de quién es un fichero
+  cuando ya hay conexión, así que la rama de «conectar con un fichero» no se daba nunca, y su prueba usaba un caso
+  imposible. Un fichero suelto sin dueño no salía en ningún sitio, y con dueño decía «claves de Google».
+  - Se quita esa rama: «Conectar» es solo para claves.
+  - Los ficheros de acceso se cuentan aparte en «Esto parece» («1 fichero de acceso»), probado con la salida de
+    verdad de `sueltas`. Se ordenan desde Conexiones, como hasta ahora.
+- **La copia** (baja). Los enlaces que pone RSC (`kind: 'symlink'`) no son lo suyo. Una habilidad de Cursor se
+  nombra sin `.mdc`, y lo de `.agents/skills/` es una habilidad (decisión 141).
+- **Con qué está hecho** (baja). Se comparaba por trozos de texto, y «algo en Python» se comía «Go». Ahora va por
+  palabra entera.
+- **Cómo se dice** (baja):
+  - «Holded e Instagram», con «e» delante de «i» y «hi», salvo «hie»;
+  - un programa en minúsculas sale con mayúscula;
+  - la coma de «claves de Stripe y Pexels, y …» se pone por cómo se hizo la lista, no buscando « y », que un
+    nombre puede llevar.
+- **Todas las ideas** (baja). En la tarjeta, las tres primeras, una de cada clase. En Ayuda › Sugerencias, la
+  lista entera, con todos los programas sin conexión.
+- **La primera vez** (baja). Se daba por nueva una carpeta con algo suyo que la barra no sabía decir, y lo que
+  apareciera después ya no se decía. Ahora solo se da por nueva si no hay nada suyo: nada fuera de lo del arnés
+  y de lo escondido.
+
+Además, las pruebas cubren lo que la revisión vio sin probar:
+- el HTML en lo que dijo al prepararla y en el nombre de lo guardado, en las cuatro frases que pinta el panel;
+- que sin arnés no se dice nada;
+- el corpus con los nombres de programas y documentos;
+- los límites de cuatro cosas, 70 caracteres y una clave;
+- un `existed` que no es `true`;
+- `.rsc`, las copias o una copia que son un enlace.
+
+Y en `empresas-distintas.js`, «la que toca» se mira también cuando hay consejo.
+
 ## 153. Los datos de clientes, en Ayuda y a tiempo
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho
