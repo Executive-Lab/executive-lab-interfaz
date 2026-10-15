@@ -440,7 +440,7 @@ estado, como hoy.
 | F4 ✅ | Conexiones I: el estado en la lista, la guía de un paso cada vez y probar al guardar | M |
 | F5 ✅ | Conexiones II: las clases de acceso, «Pídeselo a tu informático» y el raíl | M-L |
 | F6 | Se adapta y da ideas | M |
-| F7 | Documentos en una pantalla | S |
+| F7 ✅ | Documentos en una pantalla (decisión 151, con la foto del cerebro) | S |
 | F8 | La versión, con un «Qué trae» que explique el cambio: «Ahora la barra es más sencilla: arriba lo que más cuesta, y lo demás en Más». | S |
 
 Orden recomendado:

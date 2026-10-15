@@ -593,5 +593,5 @@ module.exports = {
   lasCerradas, numeroDe, enlaceDe,
   apuntarUnFallo, firmaDe, limpiar, datos, componer, mandar, tituloDe,
 };
-// Las formas de clave, para tapar también lo que sale en el mensaje para el informático (decisión 154).
+// Las formas de clave, para tapar también lo que sale en el mensaje para el informático (decisión 156).
 module.exports.FORMAS_DE_CLAVE = FORMAS_DE_CLAVE;

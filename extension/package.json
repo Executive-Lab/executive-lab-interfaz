@@ -110,6 +110,10 @@
         "title": "Executive Lab: Habilidades (skills)"
       },
       {
+        "command": "executiveLab.rutinas",
+        "title": "Executive Lab: Rutinas y horarios"
+      },
+      {
         "command": "executiveLab.salidas",
         "title": "Executive Lab: Resultados"
       },
@@ -218,7 +222,7 @@
   },
   "scripts": {
     "empaquetar": "node preparar-paquete.js && npx --yes @vscode/vsce package --out executive-lab.vsix --allow-missing-repository --skip-license",
-    "probar": "node prueba/humo.js && node prueba/contrato.js && node prueba/empresas-distintas.js",
+    "probar": "node prueba/humo.js && node prueba/contrato.js && node prueba/empresas-distintas.js && node prueba/mapeos-codex.js",
     "probar-en-vscode": "npm install --no-save --silent @vscode/test-electron && node prueba/en-vscode/correr.js"
   },
   "capabilities": {

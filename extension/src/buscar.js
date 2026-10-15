@@ -97,6 +97,13 @@ function armarElIndice() {
       const dentro = path.join(wiki, entrada.name);
       const mirar = (completa) => {
         if (!completa.endsWith('.md')) return;
+        // Un enlace del disco no es un concepto: su texto salía en lo que se
+        // encuentra, aunque apuntara fuera de la wiki (revisión de seguridad, B5).
+        try {
+          if (!fs.lstatSync(completa).isFile()) return;
+        } catch {
+          return;
+        }
         const crudo = leerSiCabe(completa);
         if (crudo === null) return;
 

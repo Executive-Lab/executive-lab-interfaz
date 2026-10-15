@@ -87,7 +87,8 @@ function delDisco() {
     .map((e) => {
       let dentro = [];
       try {
-        dentro = fs.readdirSync(path.join(wiki, e.name));
+        // Solo ficheros de verdad: de un enlace del disco se leía el título (revisión, B5).
+        dentro = fs.readdirSync(path.join(wiki, e.name), { withFileTypes: true }).filter((f) => f.isFile()).map((f) => f.name);
       } catch { /* una carpeta que no se puede leer no tumba las demás */ }
 
       return {
@@ -172,13 +173,26 @@ function cuantoSabe() {
 }
 
 // La ruta viene del índice, que escribe el asistente: se comprueba que no se
-// salga de la wiki antes de abrir nada.
+// salga de la wiki antes de abrir nada. Y de verdad, siguiendo los enlaces del
+// disco: un `x.md` que es un enlace a `~/.ssh/config` está en la wiki por el
+// nombre, y al pulsarlo se leía y se enseñaba (revisión de seguridad, B5).
 function dentroDeLaWiki(rutaRelativa) {
   const wiki = proyecto.ruta(...WIKI);
-  if (!wiki) return null;
+  if (!wiki || typeof rutaRelativa !== 'string') return null;
   const completa = path.resolve(wiki, rutaRelativa);
-  return completa.startsWith(wiki + path.sep) && fs.existsSync(completa) ? completa : null;
+  if (!completa.startsWith(wiki + path.sep)) return null;
+  try {
+    return fs.realpathSync(completa).startsWith(fs.realpathSync(wiki) + path.sep) ? completa : null;
+  } catch {
+    return null;
+  }
 }
+
+// Lo que se lee de un concepto dentro de la barra, y cuántos enlaces se miran:
+// un artículo de un mega con `[` sin cerrar colgaba el editor al abrirlo desde
+// la foto (revisión de seguridad, B4).
+const MAXIMO_ARTICULO = 1024 * 1024;
+const MAXIMO_ENLACES = 2000;
 
 // Los enlaces que un artículo hace a otros. Se resuelven aquí, con la misma
 // guarda que todo lo demás, y el panel solo pinta como clicables los que
@@ -188,7 +202,12 @@ function enlacesDe(cuerpo, rutaRelativa) {
   const carpeta = path.dirname(rutaRelativa);
   const encontrados = {};
 
-  for (const [, destino] of cuerpo.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+  // Con tope y sin corchetes dentro, como en `foto.js`: `\[[^\]]+\]` volvía
+  // atrás sin fin con una línea de `[` sin cerrar. El panel busca lo mismo.
+  let cuantos = 0;
+  for (const [, destino] of cuerpo.matchAll(/\[[^[\]\n]{1,300}\]\(([^()\n]{1,1000})\)/g)) {
+    cuantos += 1;
+    if (cuantos > MAXIMO_ENLACES) break;
     if (/^https?:|^mailto:|^#/.test(destino) || encontrados[destino]) continue;
     // El ancla de dentro del fichero no lleva a otro documento.
     const limpio = destino.split('#')[0];
@@ -209,6 +228,14 @@ function leerArticulo(rutaRelativa) {
 
   let texto;
   try {
+    if (fs.statSync(completa).size > MAXIMO_ARTICULO) {
+      return {
+        ok: false,
+        malo: false,
+        mensaje: 'Este concepto es demasiado largo para leerlo aquí.',
+        boton: { etiqueta: 'Pedírselo al asistente', accion: { tipo: 'pedir', prompt: `Cuéntame en pocas líneas qué dice el concepto «${path.basename(completa, '.md')}» de la wiki.` } },
+      };
+    }
     texto = fs.readFileSync(completa, 'utf8');
   } catch {
     return { ok: false, mensaje: 'No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.' };
@@ -255,7 +282,8 @@ function todosLosDocumentos() {
         // las versiones viejas de `_archive/` (revisión de F7, importante 1).
         if (entrada.name === '_archive' || (carpeta === wiki && NO_SON_TEMAS.has(entrada.name))) continue;
         recorrer(completa);
-      } else if (entrada.name.endsWith('.md') && !raiz.includes(relativa)) {
+      // Solo ficheros de verdad: un enlace del disco no es un concepto (revisión, B5).
+      } else if (entrada.isFile() && entrada.name.endsWith('.md') && !raiz.includes(relativa)) {
         encontrados.push(relativa);
       }
     }
@@ -347,7 +375,8 @@ const abrirPanel = () => vscode.env.openExternal(vscode.Uri.file(proyecto.ruta(.
 
 // -------------------------------------------------- darle documentos
 
-function contar(partes, saltar = []) {
+// `saltar` y `noCuentan` miran solo arriba del todo, como en «Documentos entregados».
+function contar(partes, saltar = [], noCuentan = null) {
   const carpeta = proyecto.ruta(...partes);
   if (!carpeta || !fs.existsSync(carpeta)) return 0;
 
@@ -355,8 +384,9 @@ function contar(partes, saltar = []) {
   const recorrer = (donde) => {
     for (const entrada of fs.readdirSync(donde, { withFileTypes: true })) {
       if (entrada.name.startsWith('.') || entrada.name === 'README.md') continue;
+      if (noCuentan && donde === carpeta && noCuentan.test(entrada.name)) continue;
       if (entrada.isDirectory()) {
-        if (saltar.includes(entrada.name)) continue;
+        if (donde === carpeta && saltar.includes(entrada.name)) continue;
         recorrer(path.join(donde, entrada.name));
       } else cuenta += 1;
     }
@@ -392,8 +422,13 @@ function esperandoDesdeHace() {
 const yaLeidos = () => contar([...INBOX, '_processed']);
 // `raw/worklog/` también cuelga de `raw/`, pero no es un documento que nadie
 // haya dado: es el diario que el arnés se escribe solo. Contarlo ahí le diría
-// al alumno que ha entregado papeles que no ha entregado.
-const originales = () => contar(['02-DOCS', 'raw'], ['worklog']);
+// al alumno que ha entregado papeles que no ha entregado. Lo mismo lo que deja
+// la barra (los avisos, los informes): se salta lo mismo que en «Documentos
+// entregados», de la misma lista (revisión de la 153).
+const originales = () => {
+  const { NO_SON_PAPELES, NO_ES_UN_PAPEL } = require('./papeles');
+  return contar(['02-DOCS', 'raw'], NO_SON_PAPELES, NO_ES_UN_PAPEL);
+};
 
 // Copia lo que elija el alumno a `inbox/`. No se procesa aquí: el barrido de
 // la bandeja lo hace el asistente, que sabe extraer, clasificar y enlazar.

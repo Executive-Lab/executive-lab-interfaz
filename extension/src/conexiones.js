@@ -199,7 +199,7 @@ function dondeSeSacaCadaClave(carpeta) {
   return donde;
 }
 
-// ── Qué clase de acceso pide (decisión 154) ──────────────────────────────
+// ── Qué clase de acceso pide (decisión 156) ──────────────────────────────
 //
 // La propuesta decía una columna «Tipo de acceso» en la tabla de CREDENTIALS.md.
 // Pero esa tabla no tiene una forma fija: la plantilla de RSC trae cuatro
@@ -227,7 +227,7 @@ const CLASES_DE_ACCESO = [
 const TITULO_DEL_ACCESO = /(?:tipo|clase)\s+de\s+acceso|access\s+type|auth(?:entication)?\s+type/i;
 const LARGO_DE_UNA_LINEA = 300;
 
-// Lo nuevo de la 154 lee estos ficheros sin seguir enlaces y con tope: uno que
+// Lo nuevo de la 156 lee estos ficheros sin seguir enlaces y con tope: uno que
 // fuera un enlace a /dev/zero colgaba el editor (revisión de la 149, con la huella).
 function leerSiEsUnFichero(ruta, tope = 256 * 1024) {
   try {
@@ -295,7 +295,7 @@ function accesoDe(carpeta) {
   if (texto === null) return ninguna;
   // Con tope por línea antes de ninguna expresión: esto corre en cada repintado
   // (`proveedores()`), y un CREDENTIALS.md preparado con cien espacios delante
-  // tenía a la de antes 2,4 s pensando (revisión de seguridad de la 154).
+  // tenía a la de antes 2,4 s pensando (revisión de seguridad de la 156).
   const lineas = texto.split(/\r?\n/).map((l) => l.slice(0, LARGO_DE_UNA_LINEA * 3));
   // Primero la línea: «- Tipo de acceso: Una clave», con negritas o sin ellas.
   // A mano y no con una expresión: el título va hasta los dos puntos.
@@ -374,7 +374,7 @@ function comoSeConecta(carpeta) {
     .slice(0, 4);
 }
 
-// Lo que el asistente dejó escrito para su informático (decisión 154), en una
+// Lo que el asistente dejó escrito para su informático (decisión 156), en una
 // sección «## Para tu informático» del README: para qué es, qué acceso y con qué
 // permisos, si basta con leer, la página y qué preguntarle. Tal cual, sin el
 // título, hasta la sección siguiente. Vacío si no está o es la plantilla.
@@ -387,7 +387,7 @@ function paraTuInformatico(proveedorId) {
   if (!seccion) return '';
   const cuerpo = seccion.split('\n').slice(1).join('\n').trim();
   // Una sección que solo trae marcadores no es una sección.
-  // Con tope: `<[^>]*>` era cuadrática con muchos `<` (revisión de seguridad de la 154).
+  // Con tope: `<[^>]*>` era cuadrática con muchos `<` (revisión de seguridad de la 156).
   return cuerpo.replace(/<[^<>\n]{0,200}>|\{[^{}\n]{0,200}\}/g, '').replace(/[\s\-*|:.]/g, '').length >= 20 ? cuerpo : '';
 }
 
@@ -488,7 +488,7 @@ function proveedores() {
         // herramienta con eso puesto no está «sin conectar» aunque su `.env`
         // esté vacío (decisión 105).
         conFichero: conFicheroDeAcceso(e.name),
-        // Qué clase de acceso pide, si el asistente lo dejó escrito (decisión 154).
+        // Qué clase de acceso pide, si el asistente lo dejó escrito (decisión 156).
         acceso: comoSeEntra(carpeta),
         pideFichero: pideElFichero(accesoDe(carpeta)),
         // Sigue siendo la plantilla: el asistente la creó y no la ha terminado.
@@ -526,7 +526,7 @@ function claves(proveedorId) {
       pasos: comoSeConecta(carpeta),
       aMedioHacer: [...esperadas.keys()].some(ES_MARCADOR),
       conFichero: conFicheroDeAcceso(proveedorId),
-      // La clase de acceso decide la pantalla (decisión 154). Vacío, la de siempre.
+      // La clase de acceso decide la pantalla (decisión 156). Vacío, la de siempre.
       acceso,
       // Si le hace falta su fichero, y no como una opción más.
       pideFichero: pideElFichero(deVerdad),
@@ -626,7 +626,7 @@ function escribir(proveedorId, clave, valorBruto) {
   return { ok: true, mensaje: 'Guardado.' };
 }
 
-// ── Un fichero de acceso, a su sitio (decisión 154) ──────────────────────
+// ── Un fichero de acceso, a su sitio (decisión 156) ──────────────────────
 //
 // Una cuenta de servicio o un certificado no caben en un campo: son un fichero
 // entero (decisión 105). Se sueltan encima de la barra, o se eligen, y van a
@@ -666,7 +666,7 @@ function elQueBusca(carpeta) {
 
 // Un `.json` entra solo si dice por dentro lo que es: por el nombre, un
 // `credentials.json` con una factura dentro acababa entre las llaves (revisión de
-// seguridad de la 154). Lo que sí se mira es esto, como en `sueltas.js`.
+// seguridad de la 156). Lo que sí se mira es esto, como en `sueltas.js`.
 const UN_JSON_DE_ACCESO = /"(?:type"\s*:\s*"service_account|private_key"|client_secret"|refresh_token")/;
 function loEs(nombre, bytes, queEs, ruta) {
   if (!queEs(nombre, ruta)) return false;
@@ -691,7 +691,7 @@ async function fueraDeGit(ruta) {
 }
 
 // El de antes, al lado y con la fecha: con un nombre fijo, la tercera vez se
-// perdía el primero (revisión de seguridad de la 154).
+// perdía el primero (revisión de seguridad de la 156).
 function alLado(destino) {
   const fecha = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '');
   let otro = `${destino}.anterior-${fecha}`;
@@ -721,7 +721,7 @@ async function ponerFicheroDeAcceso(proveedorId, ficheros) {
     // se mira con git después de poner el fichero.
     let hay = true;
     try { fs.lstatSync(fuera); } catch { hay = false; }
-    if (!hay) fs.writeFileSync(fuera, '# Los ficheros de acceso no entran en las copias (decisión 154).\n*\n', { flag: 'wx' });
+    if (!hay) fs.writeFileSync(fuera, '# Los ficheros de acceso no entran en las copias (decisión 156).\n*\n', { flag: 'wx' });
   } catch {
     return { ok: false, mensaje: NO_LO_GUARDO };
   }
@@ -772,7 +772,7 @@ async function ponerFicheroDeAcceso(proveedorId, ficheros) {
     // verdad), y si sigue dentro, no se deja: se quita y se dice.
     if (await fueraDeGit(destino) === false) {
       try {
-        if (fs.lstatSync(fuera).isFile()) fs.appendFileSync(fuera, `\n# La barra deja fuera de las copias este fichero de acceso (decisión 154).\n/${nombre}\n`);
+        if (fs.lstatSync(fuera).isFile()) fs.appendFileSync(fuera, `\n# La barra deja fuera de las copias este fichero de acceso (decisión 156).\n/${nombre}\n`);
       } catch { /* sin un .gitignore de verdad, no se puede */ }
       if (await fueraDeGit(destino) === false) {
         try {
@@ -1235,5 +1235,5 @@ const tienePrueba = (proveedorId) => {
 };
 
 module.exports = { huella, tienePrueba, proveedores, claves, escribir, probar, scripts, loQueSePuedeMirar, ejecutar, etiquetaDeClave, enmascarar, leerEnv, taparClaves, valoresDeClaves, quePython };
-// Decisión 154: la clase de acceso, lo que pedirle a su informático y el fichero de acceso.
+// Decisión 156: la clase de acceso, lo que pedirle a su informático y el fichero de acceso.
 Object.assign(module.exports, { comoSeEntra, clasesQueNombra, leerLasClases, paraTuInformatico, ponerFicheroDeAcceso, elQueBusca, NOMBRE_SECRETO, CABE_UN_FICHERO_DE_ACCESO });

@@ -1,4 +1,4 @@
-// «Pídeselo a tu informático» (decisión 154).
+// «Pídeselo a tu informático» (decisión 156).
 //
 // Muchas veces la clave no la puede sacar quien usa la barra: la tiene quien
 // administra la cuenta, o hay que dar permisos que no sabe dar. Jose, al pedir el
@@ -47,7 +47,7 @@ const CUENTA_Y_MAS = 'Entrar con mi cuenta, además de lo de abajo. Puede que te
 // caducidad si se puede, que la barra pregunta y avisa (decisión 149). Lo mejor
 // de todo: que no viaje, que lo pegue él en la barra de este ordenador, que
 // supone estar delante o conectado a él. Y si ya viajó, que se anule: una clave
-// que ha pasado por un correo ya no es segura (revisión de seguridad de la 154).
+// que ha pasado por un correo ya no es segura (revisión de seguridad de la 156).
 // `{X}` es el nombre de la herramienta.
 const POR_SEGURIDAD = {
   clave: [
@@ -119,7 +119,7 @@ function enTextoLlano(md) {
 
 // ── Que no lleve ninguna clave ───────────────────────────────────────────
 //
-// La revisión de seguridad de la 154 lo rompió por seis sitios, y por cada uno
+// La revisión de seguridad de la 156 lo rompió por seis sitios, y por cada uno
 // hay una vía aquí. Se tapa sobre el texto crudo, antes de tocarlo, y otra vez
 // sobre el mensaje entero: pasarlo a texto llano quita `__`, `**` y comillas
 // invertidas, y eso puede juntar una clave que antes estaba partida.
@@ -361,7 +361,7 @@ const CABE_EN_WINDOWS = 2000;
 const PEGALO = 'Te he copiado el mensaje: pégalo aquí con Ctrl+V.';
 
 // Con las mitades sueltas de un emoji cambiadas por «�»: `encodeURIComponent`
-// lanzaba con ellas (revisión de seguridad de la 154).
+// lanzaba con ellas (revisión de seguridad de la 156).
 const bienFormado = (t) => String(t).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
 const codificar = (t) => encodeURIComponent(bienFormado(t).replace(/\r?\n/g, '\r\n'));
 const enlace = (asunto, cuerpo) => `mailto:?subject=${codificar(asunto)}&body=${codificar(cuerpo)}`;

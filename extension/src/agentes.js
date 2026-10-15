@@ -49,19 +49,11 @@ const ES_PLANTILLA = (t) => /[{}]/.test(t || '');
 // Son dos formatos más y quince líneas. Lo que se saca es lo mismo en los tres:
 // cómo se llama y para qué sirve.
 
-// TOML de RSC: `clave = "valor"` en las primeras líneas, y el cuerpo después en
-// una cadena literal `'''…'''` que aquí no se mira. No es un analizador de TOML:
-// es lo justo para las dos claves que se leen, igual que `frontmatter.js` es lo
-// justo para YAML.
+// RSC usa cadenas simples; los agentes propios pueden usar también comillas
+// literales, escapes, comentarios y varias líneas. El lector consume el cuerpo
+// entero sin confundir un name escrito dentro de las instrucciones con el real.
 function deToml(texto) {
-  const campos = {};
-  for (const linea of (texto || '').split('\n')) {
-    const fila = linea.match(/^\s*([A-Za-z_][\w-]*)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/);
-    if (fila) campos[fila[1]] = fila[2].replace(/\\(["\\])/g, '$1');
-    // El cuerpo llega después y puede traer cualquier cosa: se para al verlo.
-    if (/^\s*[A-Za-z_][\w-]*\s*=\s*'''/.test(linea)) break;
-  }
-  return campos;
+  return require('./toml-campos').leer(texto || '');
 }
 
 function deJson(texto) {
@@ -85,7 +77,8 @@ function queHay() {
 
   let ficheros;
   try {
-    ficheros = fs.readdirSync(carpeta).filter((n) => /\.(md|toml|json)$/i.test(n) && !n.startsWith('.'));
+    const formato = donde.paraQuien() === 'codex' ? /\.toml$/i : /\.(md|toml|json)$/i;
+    ficheros = fs.readdirSync(carpeta).filter((n) => formato.test(n) && !n.startsWith('.'));
   } catch {
     return [];
   }
@@ -99,6 +92,7 @@ function queHay() {
     const campos = camposDe(nombre, crudo);
     const humano = (v) => (typeof v === 'string' && v.trim() && !ES_PLANTILLA(v) ? v.trim() : '');
     const id = nombre.replace(/\.[^.]+$/, '');
+    const invocacion = donde.paraQuien() === 'codex' && humano(campos.name) ? humano(campos.name) : id;
 
     // Lo que diga su fichero manda, con una condición: que esté en español.
     // Los agentes de RSC traen `name` en clave (`refuter-security`) y
@@ -125,7 +119,7 @@ function queHay() {
       // Cómo se le pide al asistente que lo lance: por su identificador, que
       // es lo que él tiene en su carpeta. «Quiero que cobros atrasados haga lo
       // suyo» no nombraba nada que el asistente pudiera buscar.
-      prompt: `Usa el agente «${id}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.`,
+      prompt: `Usa el agente «${invocacion}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.`,
     };
   });
 }

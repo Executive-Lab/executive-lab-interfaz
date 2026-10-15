@@ -15,7 +15,7 @@ técnicos»*. Sigue a [conexiones-paso-a-paso](conexiones-paso-a-paso.md) (F4).
 
 ## Decisión
 
-Decisión 154.
+Decisión 156.
 
 - La clase de acceso va en una línea de `CREDENTIALS.md` (`- Tipo de acceso: Una clave`), junto a la
   URL. No va en una columna: la tabla de RSC no tiene una forma fija, y una herramienta sin variables

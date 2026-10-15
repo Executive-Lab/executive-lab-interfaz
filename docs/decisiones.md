@@ -5267,7 +5267,427 @@ lo demás lo hace sola (P9).
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
 
-## 154. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
+## 150. El asistente le pide la habilidad a la barra
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 10 de la decisión 142. La regla 7 de los raíles decía «dile que la busque en *Habilidades
+(skills)* y la pulse»: el alumno, que estaba hablando con el asistente, tenía que irse a otra pantalla a buscar
+un botón. Y el asistente no puede añadirla él con `npx`, que traería la última versión publicada y no la de la
+clase (decisión 145).
+
+- **El asistente pregunta, y con el sí deja un pedido**: un fichero vacío
+  `02-DOCS/raw/pedidos/<id>.habilidad`, con el identificador del catálogo. Lo dice la regla 7 en las dos copias
+  de `siempre.md`.
+- **La barra lo ve** por el vigía de la carpeta, y por el reloj de cada minuto por si el vigía no lo vio, y la
+  añade como el botón: con su arnés, la versión de la clase y lo que el equipo apagó (`rsc.anadir`). Lo cuenta
+  en una frase («He añadido Facturación, que te ha pedido el asistente. Se pide con /invoicing.») y **contesta
+  siempre** en `<id>.hecho`, que el asistente lee y le dice en una línea.
+- **Sola, con las guardas de P9**: carpeta de confianza, que este ordenador conoce y con el arnés entero. Si
+  no, pregunta a la persona («El asistente quiere añadir Facturación. ¿La añado?») y «Añadirla» pasa por el
+  botón de siempre. Si cierra la pregunta, se le contesta al asistente que ahora no, para que no se quede
+  esperando.
+- **Con el arnés de la carpeta por delante** la barra no puede (P7), y lo contesta sin preguntar a nadie. Sin
+  darle al asistente ninguna orden que correr: `npx` en esa carpeta leería su `.npmrc`, que es justo por lo que
+  la barra tampoco lo usa ahí.
+- **Si el nombre no está en el catálogo**, la respuesta trae las que más se parecen, por el identificador o por
+  sus palabras en español («facturas» → invoicing).
+- **Tres por vez, y cinco sin preguntar en cada sesión.** Uno que llega mientras se atiende otro no espera al
+  minuto siguiente, y lo que espera a que la persona conteste no ocupa sitio.
+- `02-DOCS/raw/pedidos/` no entra en git (`no-entra-en-git.js`).
+
+**Sin seguir enlaces.** La carpeta viene en el repositorio. Con el borrador, un `<id>.hecho` que fuera un
+enlace a un fichero de la persona se sobrescribía solo con abrir la carpeta, antes de ninguna guarda, y una
+carpeta `pedidos` enlazada a otra parte hacía borrar allí. Ahora cada trozo del camino tiene que ser una carpeta
+de verdad, el pedido un fichero de verdad, y la respuesta se escribe nueva (`pedidos.js`). La prueba lo hace con
+enlaces de verdad.
+
+**La revisión adversaria** (seguridad y corrección) no encontró nada alto. Lo que encontró, arreglado y con su
+prueba:
+
+- Seguridad: la respuesta con el arnés por delante mandaba correr `npx` (arriba); el nombre del fichero salía tal
+  cual en la respuesta, que el asistente lee con la voz de la barra, y ahora solo sale si es un identificador;
+  sin confianza se preguntaba, y «Añadirla» daba la carpeta por conocida: ahora sin confianza no se pregunta y se
+  dice por qué, y la pregunta no da nada por conocido; y el tope de tres no paraba una cadena de pedidos, que
+  ahora para el de cinco por sesión.
+- Corrección: la respuesta de la vez anterior se leía como la nueva (la barra la quita al ver el pedido, y la
+  regla 7 le dice al asistente que la borre antes); con la pregunta abierta, el reloj la añadía sola y luego se
+  contestaba dos veces; «Añadirla» con el arnés ocupado contestaba «no se ha podido» (ahora espera, y con el sí
+  dado no se vuelve a preguntar); un pedido podía pisar un botón que corre el arnés (los botones lo marcan
+  ocupado, y lo que la barra arregla sola al abrir espera a que quede libre); si el arnés reventaba, el pedido se
+  repetía cada minuto; con Codex la frase de cómo se pide salía rota; y el vigía no veía las rutas de Windows.
+
+## 151. Documentos en una pantalla, y la foto del cerebro
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F7 del plan de simplificar la barra y punto 11 de la
+decisión 142) · **Vía rápida** `documentos-y-el-cerebro`
+
+Dos cosas que van juntas porque viven en el mismo sitio. La F7 del plan: *«Documentos: una pantalla con tres
+cosas»*. Y lo que pasó en la clase del 13-10: Eric mandó instalar Obsidian para hacerle una foto al cerebro, el
+conocimiento que el asistente va escribiendo en `02-DOCS/wiki/`. Con P9, esa foto la hace la barra, sin
+instalar nada.
+
+**Documentos, en una pantalla.**
+
+- En la principal, Documentos sigue siendo una fila, con «2 sin leer» al lado. Pero ya no se despliega: abre
+  la pantalla Documentos. El botón dice lo mismo que el título que abre (decisión 101).
+- La pantalla tiene las tres cosas del plan, en este orden:
+  - **Darle documentos (inbox)**: «Arrástralos aquí, o a cualquier sitio de la barra.», y «Elegirlos». Lo
+    soltado encima de Documentos se queda en Documentos y sale enseguida en la lista.
+  - **Sin leer todavía**, con «Que los lea». Salen también los documentos sueltos en la carpeta, con «Sin
+    colocar todavía» debajo, porque desde su lado también los ha dado. Esos no se quitan desde aquí: están
+    donde los dejó (P4).
+  - **Resultados (out)**, para abrirlos o llevárselos, con la foto del cerebro en su grupo.
+- **Nada se borra.** El plegable de la F2 se apaga en `piezas.json` (`documentosPlegable`), y la barra
+  completa sigue como estaba, con Documentos entregados y Conocimiento.
+- Elegirlos, quitar uno sin leer o soltarlos desde Documentos vuelven a Documentos. Antes, elegirlos
+  llevaba a Conocimiento, que en la sencilla está apagado; quitar uno, a Documentos entregados; y soltarlos,
+  a la principal.
+
+**La foto del cerebro.**
+
+- **Un punto por concepto y una línea por enlace**, como la vista de grafo de Obsidian. Pulsar un punto abre
+  el concepto en la barra, con el mismo lector de Conocimiento (sin la cabecera técnica), y desde ahí se
+  vuelve a la foto.
+- **Los enlaces, de las dos formas.** RSC 3 escribe enlaces normales de markdown, relativos, y nunca
+  `[[…]]`: su wiki es OKF, y OKF no sabe seguir los otros. Pero en clase se habló de `[[wikilinks]]`, y hay
+  wikis escritas a mano. Se leen las dos. Un `[[nombre]]` se busca como lo busca Obsidian, por el nombre del
+  fichero, y además por sus `aliases`, donde RSC deja el nombre viejo, y por su título.
+- **Qué es un concepto** lo dice `cerebro.todosLosDocumentos()`, como en todo lo demás. Quedan fuera el
+  andamio, lo archivado, el índice, el diario y los huecos.
+- **Dónde va cada punto**: una disposición de fuerzas sencilla, la de Fruchterman y Reingold. Todos los puntos
+  se repelen, cada enlace tira como un muelle y un poco de gravedad sujeta lo suelto. Sin nada al azar: se
+  empieza en espiral, y la misma wiki da la misma foto. Vive en `extension/src/foto.js`, sin `vscode`, y se
+  prueba entero sin abrir el editor.
+- **Con cientos de conceptos no se cuelga.** Caben 300 puntos: con más, salen los 300 que más enlazan, y se
+  dice («Tiene 412 conceptos: para que se vea, la foto enseña los 300 con más enlaces.»). Se leen como mucho
+  2.000 ficheros, de hasta 1 MB y 64 MB entre todos, sin seguir enlaces del disco; y como mucho 2.000 enlaces
+  por artículo y 100.000 entre todos. Si no se leen todos, también se dice. Con 700 conceptos tarda menos de
+  un segundo.
+- **Sin conceptos o sin enlaces, nunca una pantalla sin salida (P1).** Sin conceptos, «Darle documentos
+  (inbox)». Sin enlaces, se ven los puntos y se ofrece «Que los enlace».
+
+**Dónde se ve, y por qué ahí.** En Documentos, debajo de Resultados, y también en Conocimiento, en la barra
+completa. Conocimiento está apagado en la sencilla porque lo que ha aprendido se le pregunta mejor al
+asistente. Una foto, en cambio, es justo lo que la conversación no puede dar, que es el criterio del plan. Y
+en Documentos está el camino entero: lo que se le da, lo que lee y lo que sale. La foto, una vez guardada, es
+un resultado más.
+
+Va en la misma barra y no en una pestaña del editor, por dos motivos. Uno: la barra es una sola vista. Dos:
+así se reutiliza el lector de conceptos, y se prueba con el mismo panel de mentira. La versión grande es la
+foto guardada, que «Abrirla» abre al lado.
+
+**La política de contenido no cambia.** El dibujo es SVG dentro de la página, con clases y colores con
+significado y sin un solo estilo en línea. Cada punto es un elemento con su `data-accion`, que se pulsa como
+cualquier botón. Ni CDN ni red.
+
+**Guardar la foto**, solo y dicho en una frase (P9):
+
+- La barra la dibuja en un lienzo de 1.600 puntos, sin cargar ninguna imagen, ni siquiera `data:`. Arriba
+  lleva «Conocimiento de {nombre}», el día y cuántos hay, para que se entienda fuera de aquí.
+- La extensión comprueba que es un PNG, y de menos de 15 MB.
+- La guarda en `02-DOCS/wiki/out/La foto del cerebro 15-10-2026.png`. La segunda del mismo día lleva «(2)»:
+  sirve para comparar el antes y el después de pedirle que enlace.
+- Lo dice: «Guardada en Resultados (out), dentro de Documentos: «La foto del cerebro 15-10-2026.png».», con
+  «Abrirla». Sale en Resultados, para abrirla o llevársela.
+
+**PNG y no SVG**: un PNG se abre en cualquier sitio y se pega en Circle. Un `.svg`, el editor lo abre como
+texto.
+
+**`02-DOCS/wiki/out/` y no otra carpeta:**
+
+- El barrido de RSC no lee `02-DOCS/wiki/`. En la 3.0.22 ese barrido no es un programa: lo hace el
+  asistente siguiendo el protocolo de la wiki, y el protocolo deja la wiki fuera siempre, porque es lo que sale
+  de leer y no lo que entra (`ingest-ignore-defaults.md`). `02-DOCS/.rscignore` es donde lo escribe al empezar
+  la wiki; en una carpeta que aún no lo tiene, manda el protocolo. Una foto en `02-DOCS/out/` sí la cogería
+  como un documento nuevo, y la movería a `raw/`. Una prueba mira en el paquete que la wiki sigue fuera.
+- RSC ya deja ahí su propia vista para personas, `dashboard.html` (El panel completo).
+- Va en un `out/`, como lo que produce cada conexión, así que «Resultados (out)» dice la verdad.
+- No es un tema: no lleva ningún `.md`.
+- **Entra en las copias, a propósito**, y no va a la lista de lo que no entra en git (decisión 147):
+  - pesa unos cientos de KB, nada que ver con los vídeos de la 147;
+  - la de un día no se puede repetir otro, porque la wiki cambia, y compararlas es para lo que sirve;
+  - lo que enseña, los títulos de los conceptos, ya está en git con la wiki;
+  - y tocar esa lista cambia el bloque del `.gitignore` de todas las carpetas.
+
+**Las pruebas**: `humo.js` pasa de 374 a 380. Seis comprobaciones nuevas y una cambiada:
+
+- las 19 formas de escribir un enlace, una a una;
+- la disposición: siempre la misma, dentro del cuadro, sin pisarse, y con lo enlazado más cerca;
+- 700 conceptos: el tope, los que se quedan y lo que no se lee;
+- guardar la foto;
+- la pantalla Documentos;
+- la foto entera, con un lienzo de mentira;
+- y la principal sencilla, que ahora pide la fila que abre Documentos.
+
+**Mutaciones a mano: 65, las 65 tumbadas.** Cada una cambia una línea y se corre `humo.js` entero:
+- 20 en cómo se leen los enlaces, cada forma por separado, y en las expresiones que volvían atrás;
+- 6 en la disposición;
+- 6 en el tope y en lo que no se lee;
+- 6 en guardar y abrir la foto;
+- 16 en el panel;
+- 10 en la extensión;
+- y 1 en la tabla de piezas.
+
+Al escribirlas salieron dos fallos, arreglados con su prueba. Uno: con un fichero preparado, las expresiones que
+buscan los enlaces volvían atrás sin fin; 60 KB ya tardaban seis segundos, y uno de un mega colgaba la barra.
+Dos: si la carpeta de las fotos era un enlace a otro sitio del disco, la foto se escribía allí.
+
+**Lo que no hace, todavía:**
+
+- no se acerca ni se arrastra;
+- no colorea por tema: un solo color, el de la marca, como Obsidian sin grupos;
+- en la barra, el nombre de los diez que más enlazan; en la foto guardada, de los cuarenta; y solo el que
+  cabe sin pisar a otro;
+- los puntos no se recorren con el teclado: los conceptos siguen en Conocimiento;
+- el lienzo de verdad solo se ha probado de mentira: falta verlo en VS Code, en las máquinas de GitHub o a
+  mano.
+
+**La revisión adversaria encontró esto, y está arreglado** (PR #39), cada cosa con su prueba.
+
+*Seguridad*:
+
+- **M1, la foto congelaba el editor.** Con 2.000 artículos del mismo nombre, cada `[[enlace]]` ordenaba la
+  lista entera: 200.000 enlaces eran 15,8 s, y con los topes de entonces hasta 17 minutos, en el hilo del
+  editor. Ahora el ganador de cada nombre se decide una vez. Además, como mucho 2.000 enlaces por artículo y
+  100.000 entre todos; si no se leen todos, la foto lo dice. 100.000 enlaces al mismo nombre: menos de
+  100 ms.
+- **M2, los alias.** Sin quitar repetidos ni tope, 2.000 ficheros con 5.000 alias eran 17,5 s. Ahora:
+  - sin repetidos, como mucho 50, y de 200 letras como mucho;
+  - de la cabecera se lee solo lo que hace falta, una vez por artículo.
+
+  Ahora tarda 0,8 s, con el ordenador muy cargado.
+- **M3, la foto se escribía fuera.** Guardar solo miraba el último trozo de la carpeta. Con `02-DOCS/wiki`
+  enlazada a otro sitio, `out/` y la foto se creaban fuera (reproducido). Ahora se sigue la ruta de verdad y
+  tiene que quedar dentro de la carpeta de trabajo: antes de crear nada, otra vez después, y también al
+  listar y al abrir.
+- **B4, un concepto que colgaba.** La búsqueda de enlaces de `cerebro.js` volvía atrás sin fin: 100.000 `[`
+  sin cerrar eran 19,5 s, y se llega pulsando un punto. La del panel, igual al pintarlo. Las dos van con
+  tope, como mucho 2.000 enlaces por concepto. Uno de más de 1 MB no se abre en la barra: «Este concepto es
+  demasiado largo para leerlo aquí.», con «Pedírselo al asistente».
+- **B5, un enlace a `~/.ssh/config`.** Un `x.md` que es un enlace del disco salía como punto, y al pulsarlo
+  se leía y se enseñaba. Ahora `dentroDeLaWiki` sigue los enlaces y exige quedarse en la wiki, y un enlace no
+  es un concepto. No sale en la foto, ni en los temas, ni en lo que falta por ordenar, ni al buscar. Lo de
+  buscar ya pasaba antes de la 151.
+- **B6, un `.rscignore` que no existe.** Lo que dice ahora la 151 está más arriba: la wiki la deja fuera el
+  protocolo de RSC, y una prueba lo mira en el paquete. La foto entra en las copias, a propósito, y otra
+  prueba lo mira con git.
+
+*Corrección*:
+
+1. **Los avisos de Documentos y de la foto** pintaban la principal con `donde` aún en la otra pantalla. El
+   vigía te devolvía allí y se comía el aviso. Pasaba con abrir o llevarse una foto, con «Que los lea», con
+   «Que los enlace», al abrir un resultado y con un concepto que no se abre. Ahora se dicen en su pantalla.
+2. **Soltar en Documentos algo que no se puede leer** (más de 40 MB, una carpeta) te sacaba a la principal
+   sin decir nada. Ahora: «No he podido leer lo que has soltado. Si es un archivo muy grande, dáselo con
+   «Elegirlos».».
+3. **La fila de Documentos y «Sin leer todavía» cuentan lo mismo**: lo de la bandeja. Lo suelto en la
+   carpeta va aparte, en «Sin colocar todavía», con «Que los coloque y los lea», como en Documentos
+   entregados.
+4. **Más enlaces llevan a su concepto**:
+   - con otras mayúsculas o con las tildes del Mac (NFD);
+   - con paréntesis;
+   - con un «%» suelto, que antes podía reventar la foto;
+   - y los nombres en otros alfabetos, que antes se quedaban en nada.
+5. **Los puntos se usan con el teclado**: se llega con el tabulador y se abren con Intro o con espacio.
+6. **`empresas-distintas.js`** pasa las dieciocho pantallas por las tres empresas, la de Codex incluida. Y
+   cuenta lo que se ve en la principal sencilla: cinco en las tres, como pide el plan.
+
+Y **diecisiete mutantes que sobrevivían**, ahora cerrados con su prueba:
+- el título de un punto y su nombre, sin escapar;
+- un bloque de código sin cerrar;
+- los topes de líneas y de ficheros, y el orden del recorte;
+- el `?` y el `%` de un enlace, y las tildes;
+- los nombres que se pisan;
+- dónde empieza y dónde acaba el dibujo dentro del PNG;
+- los errores al soltar y al elegir en Documentos;
+- de dónde se vino a la foto, al guardarla y al repintarla;
+- y cancelar al llevarse una foto.
+
+**Las pruebas, después**:
+
+- `humo.js` pasa de 380 a 385 comprobaciones: cuatro de la revisión de seguridad y una de la de corrección;
+- `contrato.js`, 14;
+- `empresas-distintas.js`, con dieciocho pantallas y cinco cosas a la vista;
+- el diccionario y `revisar-powershell.js`, en verde.
+
+**Mutaciones: 119, las 119 tumbadas**:
+
+- las 65 de antes, apuntadas al código de ahora;
+- 24 de la revisión de seguridad;
+- 30 de la de corrección: sus seis puntos y sus diecisiete mutantes.
+
+Dos sobrevivieron a la primera pasada y se cerraron con una prueba más: un enlace sin extensión cuando hay dos
+ficheros que solo cambian en mayúsculas, y la foto que no dice que no está entera. Con el ordenador cargado
+por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
+mutar. La batería entera se pasó al final, sin mutar.
+
+## 153. Los datos de clientes, en Ayuda y a tiempo
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 12 de la decisión 142. En la clase del 13-10, Eric: con datos de clientes, licencia de empresa, y
+dónde se apaga que se usen tus datos. Eso no lo puede hacer la barra por nadie: una licencia cuesta dinero, y los
+ajustes son de su cuenta (P9). Lo que sí hace sola es decirlo a tiempo.
+
+- **En Ayuda, «Si trabajas con datos de clientes»**, entre Sugerencias y Más ayuda; y en Más ayuda, en Guías.
+  Es una pantalla para leer, con tres cosas:
+  - **una licencia de empresa**. Con ella, de fábrica, Anthropic y OpenAI no entrenan con lo que se les da: en
+    Claude, Team, Enterprise o Education; en ChatGPT, Business, Enterprise o Edu. Tampoco si se paga por uso, con una
+    clave de acceso. Con un plan personal depende de un ajuste;
+  - **dónde se apaga** en cada asistente de la barra, con el camino de menús y un botón a su página de ajustes;
+  - **lo que no se pega nunca**: claves y contraseñas, el banco, la salud y los documentos de identidad. Y que
+    valorar con el pulgar o mandar un fallo puede mandar la conversación entera a entrenar, aunque esté apagado.
+- **El texto vive en `extension/media/datos-de-clientes.json`** (P5), con la fecha en que se comprobó, y pasa
+  por el diccionario como las otras tablas. Lleva también los dos enlaces a lo que dicen Anthropic y OpenAI,
+  porque esto cambia.
+- **La tarjeta sale una vez por carpeta**, cuando empiezan a entrar datos de verdad. Pasa con la primera
+  conexión con todas sus claves puestas, lo mismo que pide la 149 para preguntar cuándo caduca. O con el
+  primer documento entregado, sin leer, leído u original. Son las dos puertas por las que entran los datos del
+  negocio, y lo siguiente es hablar de ellos con el asistente, que es cuando salen del ordenador. Con «Leerlo» o
+  «Entendido» no vuelve en esa carpeta. Leerlo desde Ayuda cuenta solo si ya entran datos: leído antes, la
+  tarjeta sale igual cuando entren, porque lo que importa es el momento, y semanas antes no se tiene delante.
+  Una carpeta que ya tenía algo conectado la ve una vez, al abrir la versión que trae esto.
+- **El orden de la tarjeta que toca:** detrás de lo que impide trabajar (sin git, sin asistente, sin cuenta,
+  sin ajustar), del recordatorio que tiene su hora y de «Recargar ahora». Delante de lo nuevo de la versión, la
+  costumbre, el consejo, los avisos y la versión nueva. No impide trabajar, pero es lo que hay que saber antes
+  de pegar nada.
+
+**Comprobado el 15 de octubre de 2026, en las páginas oficiales.** De Anthropic, leídas directamente:
+
+- [Cómo cambio mi configuración de privacidad de mejora del modelo](https://privacy.claude.com/es/articles/12109829-como-cambio-mi-configuracion-de-privacidad-de-mejora-del-modelo)
+  (actualizada el 3-8-2026). Configuración › Privacidad › «Ayudar a mejorar nuestros modelos de IA». Vale para
+  Free, Pro y Max, también cuando esas cuentas usan Claude Code. Los ajustes están en
+  `https://claude.ai/settings/data-privacy-controls`.
+- [Is my data used for model training? (consumo)](https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training)
+  (16-3-2026). En los planes personales se entrena si lo permites. El pulgar guarda la conversación entera
+  hasta cinco años.
+- [Is my data used for model training? (empresa)](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training)
+  (18-8-2026). *«By default, we will not use your inputs or outputs from our commercial products (e.g. Claude for
+  Work, Anthropic API, Claude Gov, etc.) to train our models»*, salvo lo que se manda con el pulgar o como fallo.
+- [Precios](https://claude.com/pricing). Team, *«No model training on your content by default»*; Team y
+  Enterprise, *«None by default»*; los personales, *«Opt-out»*.
+- [Updates to our consumer terms](https://www.anthropic.com/news/updates-to-our-consumer-terms) (28-8-2025).
+  Claude for Work son los planes Team y Enterprise.
+
+De OpenAI:
+
+- [Pricing de Codex](https://learn.chatgpt.com/docs/pricing). Es la documentación de OpenAI, y
+  `developers.openai.com/codex/pricing` lleva aquí. Business, *«No training on your business data by
+  default»*. En la tabla, *«No training on API or business data by default»* en Business, Enterprise y clave de
+  acceso, y no en Plus ni Pro.
+- [ChatGPT Work cloud security](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-cloud-security). Business,
+  Enterprise y Edu, *«not used to train OpenAI models by default»*.
+- [Your data](https://developers.openai.com/api/docs/guides/your-data). Lo que llega por la API no se usa para
+  entrenar desde el 1-3-2023, salvo si te apuntas.
+- [Browser](https://learn.chatgpt.com/docs/browser) y [Use ChatGPT](https://learn.chatgpt.com/docs/use-chatgpt).
+  *«Settings > Data controls»*, y el enlace oficial a esa pantalla, `https://chatgpt.com/#settings/DataControls`.
+- [Preguntas frecuentes sobre los controles de datos](https://help.openai.com/es-es/articles/7730893-preguntas-frecuentes-sobre-los-controles-de-datos)
+  y [su versión en inglés](https://help.openai.com/en/articles/7730893-data-controls-faq). Configuración ›
+  Controles de datos › «Mejorar el modelo para todos». Con un plan personal vale también para las tareas de
+  Codex. Aunque esté apagado, lo que se valora se puede usar para entrenar. **Esta página no se deja leer con
+  una petición automática (403)**: se leyó con el buscador, que la tenía al día (actualizada entre 3 y 22 días
+  antes). Lo que dice coincide con las páginas de OpenAI de arriba.
+
+**Lo que se queda fuera:**
+
+- Los menús como salen en el ordenador de cada uno, que dependen del idioma. Los de Claude, como los da su ayuda
+  en español, que se leyó. Los de ChatGPT, en inglés como los da la fuente, con la traducción al lado y «Si lo
+  tienes en español, salen traducidos»: su ayuda en español no se deja leer, y su nombre en español no está
+  comprobado.
+- «Include environments», el ajuste de Codex en la nube: la barra trabaja con Codex en el editor. Por eso dice
+  «Vale también para las tareas de Codex», que es lo que dice la fuente, y no «para Codex».
+- Cuánto se guardan las conversaciones (30 días o cinco años en Claude): no cambia lo que hay que hacer.
+- La transcripción de la clase no está en este repositorio. Las palabras de Eric son las que apuntó el repaso de
+  la 142.
+
+**La revisión adversaria** (corrección, datos y seguridad) encontró esto, y está arreglado con su prueba:
+
+- **Corrección.**
+  - Lo que deja la barra en `02-DOCS/raw/` (los avisos para Executive Lab, los pedidos, los informes de «Algo va
+    mal» y «Qué falta por montar» por escrito) contaba como un documento entregado. Hacía salir «Ya le has dado
+    documentos…» sin ninguno, y como sale una vez, la gastaba. También salía en «Documentos entregados». Ahora
+    las dos cosas se saltan lo mismo, de la misma lista (`papeles.js`), y solo arriba de `raw/`: una carpeta
+    suya que se llame «avisos» más abajo, cuenta.
+  - Leerlo desde Ayuda antes de que entrara nada la gastaba. Ahora no (ver arriba).
+  - Cuatro mutantes vivían: una conexión con solo su fichero de acceso; un `.env.example` vacío contado como
+    puesto; dos conexiones, una puesta y otra a medias; y «Entendido» sin repintar, que dejaba la tarjeta en
+    pantalla. Los cuatro caen ahora.
+- **Datos.** «Mejorar el modelo para todos» no estaba comprobado en una página oficial que se pudiera leer:
+  ahora va en inglés, como la fuente, con la traducción al lado. «Vale también para Codex» pasa a «para las
+  tareas de Codex». Y Education entra en las licencias de empresa de Claude.
+- **Seguridad, de antes de esta decisión.** La ruta `abrir` del panel abría cualquier cosa, con cualquier
+  esquema y de cualquier sitio. La página de una conexión sale de su CREDENTIALS.md, así que una plantilla podía
+  poner una página falsa en «Abrir su página para sacar la clave». Ahora solo se abre lo que va por https. Lo
+  que es la barra en GitHub (`sitio.js`) o una página de Anthropic u OpenAI de la tabla se abre directo. Lo
+  demás se pregunta antes, con el sitio a la vista: «Voy a abrir app.holded.com. ¿Lo abro?». Lo que no es https
+  no se abre: «No abro esa página: no es segura. Díselo a tu tutor.»
+
+## 154. El mapa de Codex coincide con lo que se lee y lo que se invoca
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«Haz todos los mapeos de codex»*. El mapa completo, contrastado con RSC 3.0.22, la extensión
+de OpenAI instalada y sus fuentes oficiales, queda en la revisión del 15 de octubre de
+[`auditoria-codex-y-claude.md`](auditoria-codex-y-claude.md).
+
+- Una habilidad solo cuenta si tiene su `SKILL.md`. Las nativas se piden con el `name` de su cabecera;
+  si coinciden con una copia de RSC, ficha y botón miran la nativa. Las descripciones YAML multilínea
+  y los rótulos con comillas se leen enteros.
+- El diagnóstico del arnés comprueba sus propias copias. Una nativa con el mismo id no tapa lo que
+  falta en `.codex/rsc/`; «Añadir» exige que termine bien y quede puesta para cada asistente declarado.
+- Los agentes TOML se invocan con su `name`, no con el nombre del fichero. Sus conflictos entran en
+  el flujo de conservar o renombrar, manteniendo formato, instrucciones y comentarios.
+- `AGENTS.override.md`, cuando no está vacío, manda sobre `AGENTS.md` para la ficha, abrir, el vigía,
+  los raíles y su diagnóstico. Se mantiene el consentimiento al tocar instrucciones ajenas y no se
+  escribe a través de un override enlazado. Nunca se muestran reglas de Claude como reglas de Codex.
+- Conversación nueva tiene el repuesto real `chatgpt.newCodexPanel`. El texto sigue por el
+  portapapeles, entero, con el atajo de cada sistema, porque no hay un comando general de envío en
+  la extensión de OpenAI inspeccionada.
+
+No cambia dónde RSC guarda las habilidades ni se inventa un adaptador de guardianes para Codex.
+Las pruebas cubren los fallos anteriores, el montaje con el paquete real y el cambio de asistente.
+
+## 155. Rutinas y horarios tiene pantalla y se gestiona sin escribir código
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«sigue, haz cosas, mejora la barra. Lo de las rutinas y tareas programadas está?»*.
+La decisión 144 ya había puesto el reloj y la detección de costumbres. Faltaba poder gestionarlos:
+solo se veían en Habilidades, con un botón para quitarlos.
+
+- **Rutinas y horarios**, dentro de Acciones en las dos barras, también accesible desde Habilidades
+  y desde la tarjeta del aviso. Muestra los horarios de esta carpeta, los pendientes primero y la
+  próxima fecha real, con la hora del ordenador. Los horarios que no se entienden se ven para
+  corregirlos; los meses sin el día elegido se saltan.
+- **Poner horario a una habilidad**: elegir una habilidad con botón, frecuencia diaria, laborable,
+  semanal o mensual, día si hace falta y hora. Se conserva `metadata.cuando` como contrato compartido
+  con el asistente. Cancelar conserva el archivo; cambiar o quitar vuelve a la misma pantalla.
+  **Crear una rutina nueva** le pide al asistente el trabajo y su habilidad, sin inventar tareas
+  de una empresa en el código de la barra.
+- **Hacerlo ahora** y **Ahora no**, con el comportamiento de la 144. El vigía y el reloj actualizan
+  la pantalla de rutinas sin devolver a la principal. La detección de hábitos usa el botón real:
+  en Codex, su invocación puede llevar un `name` diferente al nombre de la carpeta.
+- **Tareas que se hacen solas** explica dónde se programan y ofrece preparar el encargo, manteniendo
+  las instrucciones y el horario de la habilidad elegida. Estas tareas se crean, se verifican y se
+  revisan en el gestor oficial del asistente. La barra no las presenta como activas ni ejecuta el
+  modelo por debajo.
+- Se conserva el resto de la cabecera y del cuerpo al cambiar el horario, incluidos comentarios y
+  descripciones con varias líneas. Un formato de metadatos no soportado se deja para el asistente.
+  Una habilidad enlazada fuera de esta carpeta se puede leer, pero no cambiar desde el reloj.
+
+Fuentes contrastadas el 15-10-2026: [Scheduled tasks de OpenAI](https://learn.chatgpt.com/docs/automations)
+y [Routines de Claude](https://code.claude.com/docs/en/routines). Corrige la limitación descrita en la
+144: Codex también tiene tareas en la web, con documentos y conexiones accesibles allí. Para los
+archivos del ordenador, se usa la app de escritorio con el ordenador encendido y la app abierta.
+El editor no ofrece el gestor de tareas de Codex.
+
+Pruebas: creación, cambio, cancelación, cadencias, pendientes, nombre declarado de Codex, conservación
+del contenido, enlaces compartidos y fechas reales —incluido el cambio de hora y el año 2100—.
+La pantalla vacía también se prueba en las tres empresas de muestra. No se ha creado ninguna tarea
+en las cuentas personales de Claude o ChatGPT.
+
+## 156. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F5 del plan de simplificar la barra)
 

@@ -30,6 +30,12 @@ const CONSTITUCION = ['02-DOCS', 'wiki', 'sdd', 'constitution.md'];
 const DE_CLAUDE = ['CLAUDE.md'];
 const DE_LOS_DEMAS = ['AGENTS.md'];
 
+// Codex escoge el primer fichero no vacío de este nivel. La ficha y «verlas
+// enteras» resuelven lo mismo; nunca se completan con las reglas de Claude.
+function reglasDeCodex() {
+  return require('../media/railes/sitios').dondeVaLoDeSiempre('codex', proyecto.raiz());
+}
+
 // ── Las reglas que no se piden por favor: se aplican solas ───────────────
 //
 // Los guardianes son lo único del arnés que puede **decirle que no** a
@@ -349,16 +355,17 @@ function principios(texto) {
 function queHay() {
   const constitucion = leer(...CONSTITUCION);
   const deClaude = leer(...DE_CLAUDE);
-  const deLosDemas = leer(...DE_LOS_DEMAS);
+  const conCodex = asistentes.elDeAhora().id === 'codex';
+  const deLosDemas = leer(...(conCodex ? reglasDeCodex() : DE_LOS_DEMAS));
 
   // `AGENTS.md` repite las de `CLAUDE.md` por diseño, así que se enseña una
   // sola lista: dos listas iguales seguidas solo hacen dudar de si son
   // distintas. Manda la del asistente con el que se está hablando — con Codex,
   // `CLAUDE.md` no lo lee nadie, así que enseñarlo sería enseñar reglas que no
   // se están aplicando.
-  const conCodex = asistentes.elDeAhora().id !== 'claude';
-  const primero = conCodex ? deLosDemas : deClaude;
-  const segundo = conCodex ? deClaude : deLosDemas;
+  const otro = asistentes.elDeAhora().id !== 'claude';
+  const primero = otro ? deLosDemas : deClaude;
+  const segundo = otro ? deClaude : deLosDemas;
 
   return {
     innegociables: principios(constitucion),
@@ -375,9 +382,9 @@ function queHay() {
     puedeTenerFrenos: donde.puedeTenerFrenos(),
     deLaCasa: puntosDe(primero, 'Working rules').length
       ? puntosDe(primero, 'Working rules')
-      : puntosDe(segundo, 'Working rules'),
+      : conCodex ? puntosDe(primero) : puntosDe(segundo, 'Working rules'),
     // Cuál se está leyendo, para que el botón de "verlas enteras" abra ese.
-    cual: conCodex ? 'otros' : 'claude',
+    cual: otro ? 'otros' : 'claude',
     hay: {
       constitucion: Boolean(constitucion),
       claude: Boolean(deClaude),
@@ -393,7 +400,9 @@ const PLAN_DE_MONTAJE = ['02-DOCS', 'wiki', 'harness', 'installation-plan.md'];
 
 function dondeVive(cual) {
   const sitios = {
-    constitucion: CONSTITUCION, claude: DE_CLAUDE, otros: DE_LOS_DEMAS, plan: PLAN_DE_MONTAJE,
+    constitucion: CONSTITUCION, claude: DE_CLAUDE,
+    otros: asistentes.elDeAhora().id === 'codex' ? reglasDeCodex() : DE_LOS_DEMAS,
+    plan: PLAN_DE_MONTAJE,
   };
   const partes = sitios[cual];
   if (!partes) return null;

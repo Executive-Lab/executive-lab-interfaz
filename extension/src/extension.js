@@ -28,6 +28,8 @@ const cerebro = require('./cerebro');
 const buscador = require('./buscar');
 const consejos = require('./consejos');
 const recordatorios = require('./recordatorios');
+const rutinas = require('./rutinas');
+const cuando = require('./cuando');
 const copias = require('./guardar');
 const soporte = require('./soporte');
 // Lo que falla, lo que no se entiende y lo que se echa en falta, para Jose (decisión 131).
@@ -40,6 +42,10 @@ const github = require('./github');
 const terreno = require('./terreno');
 const saberes = require('./saberes');
 const salidas = require('./salidas');
+// La foto del cerebro (decisión 151): el dibujo es puro; aquí solo se lee y se guarda.
+const foto = require('./foto');
+// Donde quedan las fotos (por qué ahí, en `foto.js`).
+const LAS_FOTOS = foto.CARPETA;
 const version = require('./version');
 const diario = require('./diario');
 const papeles = require('./papeles');
@@ -57,6 +63,8 @@ const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
 const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacidad']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
+// Lo que el asistente le pide a la barra (decisión 150).
+const pedidos = require('./pedidos');
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -71,6 +79,8 @@ const web = require('./web');
 const rastro = require('./rastro');
 const entorno = require('./entorno');
 const relevo = require('./relevo');
+const clientes = require('./clientes');
+const sitio = require('./sitio');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -319,6 +329,14 @@ ${cabecera}
     const tareas = solo.queSeHaceSolo(await mirar());
     if (!tareas.length) return [];
 
+    // Si un pedido del asistente o un botón está corriendo el arnés, se espera a que
+    // termine (decisión 150; revisión de corrección, 4).
+    const vueltas = this.vueltasDeEspera === undefined ? 360 : this.vueltasDeEspera; // tres minutos
+    for (let i = 0; i < vueltas && this.conElArnes(); i += 1) await new Promise((r) => setTimeout(r, 500));
+    if (this.conElArnes()) {
+      this.salida.appendLine('[solo] el arnés sigue ocupado: se deja para otra vez'); // diccionario: interno
+      return [];
+    }
     // Mientras dura, los botones que corren el arnés esperan (ver `manejar`).
     this.arreglandoSolo = true;
     let hechas = [];
@@ -371,6 +389,11 @@ ${cabecera}
     if (d.tipo === 'conexion') return this.verConexion(d.proveedor);
     if (d.tipo === 'cerebro') return this.verCerebro();
     if (d.tipo === 'tema') return this.verTema(d.tema);
+    // Documentos y la foto del cerebro se repintan con lo nuevo, y con el aviso
+    // que tenían: guardar la foto o soltar un documento es lo que despierta al vigía.
+    if (d.tipo === 'documentos') return this.verDocumentos(d.aviso);
+    if (d.tipo === 'foto') return this.verLaFoto(d.desde, d.aviso);
+    if (d.tipo === 'rutinas') return this.verRutinas(d.aviso);
     // En una pantalla de lectura o de resultado no se toca nada: está leyendo.
     if (d.tipo === 'quieto') return undefined;
     return this.refrescar(true);
@@ -391,9 +414,7 @@ ${cabecera}
       // Cuatro datos de hoy en una línea, en vez de la tarjeta que contaba
       // dónde estabas: eso ya lo hace `orient` en la conversación, y mejor.
       pulso: await pulso.deHoy(),
-      // Si el asistente de esta carpeta llega a tener botones. Codex no: RSC no
-      // le escribe comandos a ninguno de su familia. Sin esto, la barra
-      // enseñaba un hueco y nadie sabía si era que no había o que no iban.
+      // Codex también tiene botones: salen de sus habilidades nativas.
       puedeTenerBotones: donde.puedeTenerBotones(),
       // Cuántos hay de cada cosa, para que el rótulo de su fila lo diga.
       comandos: acciones.todos().length,
@@ -413,6 +434,8 @@ ${cabecera}
       // acaba de convertir en recordatorio, dicha una vez (decisión 144).
       recordatorio: await this.elRecordatorioQueToca(),
       costumbrePuesta: await this.ponerLasCostumbres(),
+      // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
+      datosDeClientes: this.laTarjetaDeLosDatos(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -683,6 +706,123 @@ ${cabecera}
     return this.refrescar(true);
   }
 
+  // ── Lo que pide el asistente (decisión 150) ──────────────────────────
+  //
+  // La regla 7 decía «dile que la busque en la barra y la pulse»: el alumno, que
+  // estaba hablando con el asistente, tenía que irse a otra pantalla a buscar un
+  // botón. Ahora el asistente le pregunta, y con su sí deja el pedido escrito; la
+  // barra lo ve (el vigía, y el reloj de los recordatorios por si acaso) y la añade
+  // como el botón: con su arnés, la versión de la clase, sin npx y con lo que el
+  // equipo apagó (`rsc.correr`). Solo del catálogo de la clase.
+  //
+  // Sola, con las guardas de lo que se hace solo (P9): carpeta de confianza, que
+  // este ordenador conoce y con un arnés que no va por delante. Si no, no se
+  // queda esperando: se pregunta a la persona, con su botón, una vez por pedido.
+  //
+  // Si el arnés de la carpeta va por delante, la barra no puede (P7): se le dice al
+  // asistente, que sí puede, con la versión que la carpeta declara. Dónde está la
+  // carpeta, qué pedidos hay y cómo se contesta sin seguir enlaces: `pedidos.js`.
+  //
+  // Un pedido que llega mientras se atiende otro no espera al minuto: se da otra
+  // vuelta al terminar.
+  async atenderLosPedidos() {
+    if (this.atendiendo) {
+      this.otraVuelta = true;
+      return;
+    }
+    this.atendiendo = true;
+    try {
+      do {
+        this.otraVuelta = false;
+        await this.unaVueltaDePedidos();
+      } while (this.otraVuelta);
+    } finally {
+      this.atendiendo = false;
+    }
+  }
+
+  async unaVueltaDePedidos() {
+    const raiz = proyecto.raiz();
+    this.preguntados = this.preguntados || new Set();
+    this.aceptados = this.aceptados || new Set();
+    // Lo que espera a que la persona conteste no ocupa sitio: los demás se atienden
+    // (revisión de corrección, 2 y 6).
+    const hay = pedidos.losQueHay(raiz).filter((id) => !this.preguntados.has(id)).slice(0, pedidos.POR_VEZ);
+    if (!hay.length) return;
+    for (const id of hay) pedidos.olvidarLaRespuesta(raiz, id);
+    const catalogo = consejos.capacidades(this.contexto.extensionPath);
+    const contestar = (id, que, mas = {}) => pedidos.contestar(raiz, id, pedidos.respuesta(que, { id, comoSePide: saberes.comoSePide(id), ...mas }));
+    const confianza = vscode.workspace.isTrusted !== false;
+    const porDelante = rsc.vaPorDelante();
+    let anadidas = 0;
+    for (const id of hay) {
+      // Con el sí de la persona a la pregunta, como si pudiera sola.
+      const dijoQueSi = this.aceptados.has(id);
+      const sola = dijoQueSi || (confianza && this.carpetaConocida() && proyecto.arnesCompleto() && (this.anadidasSolas || 0) < pedidos.POR_SESION);
+      const { que, nombre, parecidas } = pedidos.queHacer(id, { catalogo, enDisco: rsc.habilidadesEnDisco(), sola });
+      if (que === 'noEsta' || que === 'yaEstaba') {
+        this.aceptados.delete(id);
+        contestar(id, que, { parecidas });
+        continue;
+      }
+      if (porDelante || !confianza) {
+        this.aceptados.delete(id);
+        contestar(id, porDelante ? 'porDelante' : 'sinConfianza');
+        continue;
+      }
+      if (que === 'preguntar') {
+        this.preguntarElPedido(id, nombre);
+        continue;
+      }
+      // Con el arnés ocupado, al minuto siguiente; los que no lo necesitan, ya.
+      if (this.conElArnes()) continue;
+      this.arreglandoSolo = true;
+      let ok = false;
+      try {
+        ({ ok } = await rsc.anadir(id));
+      } catch (error) {
+        // Contestado igual: si no, se reintentaría cada minuto (revisión de corrección, 5).
+        this.salida.appendLine(`[pedidos] ${id}: ${error.message}`); // diccionario: interno
+      } finally {
+        this.arreglandoSolo = false;
+      }
+      this.aceptados.delete(id);
+      if (!dijoQueSi) this.anadidasSolas = (this.anadidasSolas || 0) + 1;
+      contestar(id, ok ? 'anadida' : 'noSePudo');
+      this.salida.appendLine(`[pedidos] ${id}: ${ok}`); // diccionario: interno
+      if (ok) {
+        anadidas += 1;
+        vscode.window.showInformationMessage(`He añadido ${nombre}, que te ha pedido el asistente. ${pedidos.sePide(id, saberes.comoSePide(id))}`);
+      }
+    }
+    if (anadidas) await this.refrescar(true);
+  }
+
+  // Sin poder hacerlo sola, se pregunta, una vez por pedido. Con «Añadirla» se
+  // añade como si pudiera sola, en la vuelta siguiente y con las mismas guardas: si
+  // el arnés está ocupado, espera, y si va por delante, se le dice al asistente
+  // (revisión de corrección, 3). No da la carpeta por conocida: la pregunta la
+  // puede haber traído el repositorio (revisión de seguridad, 3). Si cierra la
+  // pregunta, se le dice al asistente, que si no se quedaría esperando.
+  // Una vez por pedido: la vuelta ya aparta los que esperan respuesta.
+  preguntarElPedido(id, nombre) {
+    this.preguntados.add(id);
+    Promise.resolve(vscode.window.showInformationMessage(`El asistente quiere añadir ${nombre}. ¿La añado?`, 'Añadirla')).then((quiere) => {
+      this.preguntados.delete(id);
+      const raiz = proyecto.raiz();
+      if (!pedidos.sigue(raiz, id)) return undefined;
+      if (quiere !== 'Añadirla') return pedidos.contestar(raiz, id, pedidos.respuesta('noQuiere'));
+      this.aceptados.add(id);
+      return this.atenderLosPedidos();
+    }).catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
+  }
+
+  // Si algo está corriendo el arnés ahora: un arreglo solo, o un botón que lo usa.
+  // Dos a la vez escribirían los mismos ficheros (revisión de corrección, 4).
+  conElArnes() {
+    return Boolean(this.arreglandoSolo || this.botonesDelArnes);
+  }
+
   // Añadir una habilidad del catálogo (`rsc add`), sin que el alumno vea nada
   // de esto. Se nombra por su nombre —«Facturación»— y se le dice cómo se
   // invoca, que con Claude es escribir `/su-identificador`.
@@ -710,11 +850,15 @@ ${cabecera}
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
+      verRutinas: () => this.verRutinas(),
+      crearRutina: () => this.pedir(rutinas.CREAR_RUTINA),
+      ponerHorario: () => this.ponerHorario(mensaje.nombre),
+      prepararTareaProgramada: () => this.prepararTareaProgramada(mensaje.nombre),
       entendidaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, false),
       noHaceFaltaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, true),
       conversacionNueva: () => this.conversacionNueva(),
       pedirAyudaEnElForo: () => this.pedirAyudaEnElForo(),
-      abrir: () => vscode.env.openExternal(vscode.Uri.parse(mensaje.url)),
+      abrir: () => this.abrirUnaPagina(mensaje.url),
       bajarLaNueva: () => vscode.env.openExternal(version.dondeBajarla()),
       verLaRelease: () => vscode.env.openExternal(version.dondeVerla(this.versionDeLaBarra())),
       yaLoHeVisto: () => this.yaLoHeVisto(),
@@ -728,7 +872,7 @@ ${cabecera}
       verConexion: () => this.verConexion(mensaje.proveedor),
       guardarClave: () => this.guardarClave(mensaje.proveedor, mensaje.clave, mensaje.valor),
       pasoDeLaGuia: () => this.pasoDeLaGuia(mensaje.proveedor, mensaje.paso, mensaje.todos),
-      // Decisión 154: cada clase de acceso, su forma, y lo que pedirle al informático.
+      // Decisión 156: cada clase de acceso, su forma, y lo que pedirle al informático.
       guardarClaves: () => this.guardarClaves(mensaje.proveedor, mensaje.valores),
       soltarFicheroDeAcceso: () => this.ponerFicheroDeAcceso(mensaje.proveedor, mensaje.ficheros),
       elegirFicheroDeAcceso: () => this.elegirFicheroDeAcceso(mensaje.proveedor),
@@ -744,9 +888,14 @@ ${cabecera}
       leerArticulo: () => this.leerArticulo(mensaje.ruta, mensaje.tema, mensaje.desde),
       abrirFuera: () => this.abrirFuera(mensaje.ruta),
       cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre "${mensaje.titulo}". Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
-      anadirDocumentos: () => this.anadirDocumentos(),
+      anadirDocumentos: () => this.anadirDocumentos(mensaje.desde),
       soltarDocumentos: () => this.soltarDocumentos(mensaje.ficheros, mensaje.para),
       abrirPanelCompleto: () => cerebro.abrirPanel(),
+      verDocumentos: () => this.verDocumentos(),
+      verLaFoto: () => this.verLaFoto(mensaje.desde),
+      guardarLaFoto: () => this.guardarLaFoto(mensaje.png),
+      abrirLaFoto: () => this.abrirLaFoto(mensaje.fichero),
+      llevarteLaFoto: () => this.llevarteLaFoto(mensaje.fichero),
 
       verCopias: () => this.verCopias(),
       guardarCopia: () => this.guardarCopia(),
@@ -778,8 +927,10 @@ ${cabecera}
       verHuecos: () => this.verHuecos(),
       verPapeles: () => this.verPapeles(),
       abrirPapel: () => this.abrirPapel(mensaje.ruta),
-      quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre),
+      quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre, mensaje.desde),
       verAyuda: () => this.verAyuda(),
+      verDatosDeClientes: () => this.verDatosDeClientes(),
+      entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
@@ -833,6 +984,8 @@ ${cabecera}
       await this.darPorConocida();
     }
 
+    const delArnes = LOS_DEL_ARNES.has(mensaje.tipo);
+    if (delArnes) this.botonesDelArnes = (this.botonesDelArnes || 0) + 1;
     try {
       await accion();
     } catch (error) {
@@ -843,6 +996,8 @@ ${cabecera}
       // lo ve y dice que sí (decisión 131).
       avisos.apuntarUnFallo({ accion: mensaje.tipo, error, lineas: this.salida.ultimas ? this.salida.ultimas() : [] });
       this.enviar({ tipo: 'aviso', texto: 'Algo no ha ido bien. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    } finally {
+      if (delArnes) this.botonesDelArnes -= 1;
     }
   }
 
@@ -854,7 +1009,7 @@ ${cabecera}
     // apunta con nombre y apellidos, y se dice que algo va mal.
     if (typeof prompt !== 'string' || !prompt.trim()) {
       this.salida.appendLine(`[pedir] un botón ha mandado un texto que no vale: ${JSON.stringify(prompt)}`); // diccionario: interno
-      this.enviar({ tipo: 'aviso', texto: 'Ese botón está mal montado. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+      this.avisarAqui({ texto: 'Ese botón está mal montado. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
       return;
     }
 
@@ -865,7 +1020,7 @@ ${cabecera}
     // escrito en su caja y no lo envían (asistentes.js lo documenta). Decir que
     // ya se lo hemos pedido dejaba a la persona esperando una respuesta que no
     // iba a llegar hasta que ella misma le diera a enviar.
-    if (como === 'directo') this.enviar({ tipo: 'aviso', texto: 'Te lo he dejado escrito en la conversación. Dale a enviar.' });
+    if (como === 'directo') this.avisarAqui({ texto: 'Te lo he dejado escrito en la conversación. Dale a enviar.' });
   }
 
   // Ayuda › Conversación nueva. Con Codex no hay comando para eso: se abre su
@@ -905,10 +1060,72 @@ ${cabecera}
   // Cuándo se pulsó cada botón (una habilidad o un comando, `/x` o `$x`): de ahí
   // sale la costumbre. Solo el nombre y la hora, en su ordenador.
   async anotarElUso(prompt) {
-    const m = String(prompt || '').trim().match(/^[/$]([a-z0-9][a-z0-9-]*)$/i);
-    if (!m || !acciones.acciones().some((b) => b.nombre === m[1])) return;
+    const boton = acciones.acciones().find((b) => b.prompt === String(prompt || '').trim());
+    if (!boton) return;
     const antes = this.almacen().get(CLAVE_USOS) || [];
-    await this.almacen().update(CLAVE_USOS, [...antes, { nombre: m[1], t: Date.now() }].slice(-200));
+    await this.almacen().update(CLAVE_USOS, [...antes, { nombre: boton.nombre, t: Date.now() }].slice(-200));
+  }
+
+  async verRutinas(avisoLocal = null) {
+    this.donde = { tipo: 'rutinas', aviso: avisoLocal };
+    const pendientes = new Set((await this.losRecordatoriosQueTocan()).map((r) => r.nombre));
+    const ahora = Date.now();
+    const horarios = recordatorios.conHorario().map((r) => {
+      const proxima = cuando.proximaVez(r.cuando, ahora);
+      return { nombre: r.nombre, etiqueta: r.etiqueta, enPalabras: cuando.enPalabras(r.cuando),
+        pendiente: pendientes.has(r.nombre), proxima: rutinas.fecha(proxima), proximaHora: proxima,
+        puedeCambiar: r.fichero.endsWith('SKILL.md') };
+    }).sort((a, b) => Number(b.pendiente) - Number(a.pendiente)
+      || (a.proximaHora ?? Infinity) - (b.proximaHora ?? Infinity) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
+    this.enviar({ tipo: 'rutinas', horarios, automatica: rutinas.automatica(asistentes.elDeAhora().id), aviso: avisoLocal });
+  }
+
+  async ponerHorario(nombre) {
+    if (this.eligiendoHorario) return;
+    this.eligiendoHorario = true;
+    const raiz = proyecto.raiz();
+    const quien = asistentes.elDeAhora().id;
+    try {
+      let boton;
+      if (nombre) boton = recordatorios.disponibles().find((b) => b.nombre === nombre);
+      else {
+        const opciones = recordatorios.disponibles().map((b) => ({ label: b.etiqueta,
+          description: b.cuando ? cuando.enPalabras(b.cuando) || 'Revisar horario' : 'Sin horario', boton: b }));
+        if (!opciones.length) return this.pedir(rutinas.CREAR_RUTINA);
+        const elegida = await vscode.window.showQuickPick(opciones, {
+          title: 'Rutinas y horarios', placeHolder: '¿Qué habilidad quieres que te recuerde?',
+        });
+        if (!elegida) return;
+        boton = elegida.boton;
+      }
+      if (!boton) return this.verRutinas({ texto: 'Esa habilidad ya no está en esta carpeta.', malo: true });
+      const cron = await rutinas.elegirHorario(boton.etiqueta, boton.cuando || '');
+      if (!cron || proyecto.raiz() !== raiz || asistentes.elDeAhora().id !== quien) return;
+      const hecho = recordatorios.ponerCuando(boton.nombre, cron);
+      if (!hecho.ok) return this.verRutinas({ texto: 'No he podido cambiar ese horario. Pídele al asistente que revise esa habilidad.', malo: true });
+      // Contar desde ahora, incluso al volver a poner la misma hora. Un aviso
+      // anterior no puede reaparecer después de haberlo quitado y vuelto a poner.
+      await this.marcarHecho(boton.nombre);
+      await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}), [boton.nombre]: cron });
+      const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+      if (puestas[boton.nombre]) {
+        puestas[boton.nombre] = { ...puestas[boton.nombre], porDecir: false };
+        await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+      }
+      return this.verRutinas({ texto: `Te recordaré «${hecho.boton.etiqueta}» ${hecho.enPalabras}.` });
+    } finally {
+      this.eligiendoHorario = false;
+    }
+  }
+
+  async prepararTareaProgramada(nombre) {
+    const r = nombre && recordatorios.conHorario().find((b) => b.nombre === nombre);
+    const detalle = r ? ` Quiero repetir «${r.etiqueta}», ${cuando.enPalabras(r.cuando) || 'con un horario por concretar'}, usando la habilidad que aquí se pide con ${r.prompt}. Lee la habilidad para conservar exactamente sus instrucciones y su horario.` : '';
+    return this.pedir(rutinas.automatica(asistentes.elDeAhora().id).prompt + detalle);
+  }
+
+  actualizarRecordatorios() {
+    return this.donde && this.donde.tipo === 'rutinas' ? this.verRutinas(this.donde.aviso) : this.refrescar(true);
   }
 
   // Los que tocan, del más antiguo al más nuevo. La principal enseña uno; el
@@ -968,18 +1185,19 @@ ${cabecera}
   async hacerElRecordatorio(nombre) {
     const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
     await this.marcarHecho(nombre);
-    if (!uno) return this.refrescar(true);
+    if (!uno) return this.actualizarRecordatorios();
     await this.pedir(uno.prompt);
-    return this.refrescar(true);
+    return this.actualizarRecordatorios();
   }
 
   async dejarElRecordatorio(nombre) {
     await this.marcarHecho(nombre);
-    return this.refrescar(true);
+    return this.actualizarRecordatorios();
   }
 
   async quitarRecordatorio(nombre) {
     const hecho = recordatorios.ponerCuando(nombre, null);
+    if (!hecho.ok) return this.avisarAqui({ texto: 'No he podido quitar ese recordatorio. Pídele al asistente que revise esa habilidad.', malo: true });
     // Lo que se quita no vuelve por costumbre, venga de donde venga; y si se
     // vuelve a poner, empieza a contar desde entonces.
     const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
@@ -988,7 +1206,8 @@ ${cabecera}
     const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
     delete vistos[nombre];
     await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
-    if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
+    if (this.donde && this.donde.tipo === 'rutinas') return this.verRutinas({ texto: `Ya no te recordaré «${hecho.boton.etiqueta}».` });
+    else if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
     else await this.refrescar(true);
     return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
   }
@@ -1004,6 +1223,8 @@ ${cabecera}
   // Cada minuto, desde `activate`: si ha llegado la hora de uno, se dice una vez
   // aunque la barra esté cerrada, y la principal lo enseña con su botón.
   async mirarLosRecordatorios() {
+    // Los pedidos del asistente, por si el vigía no los vio (decisión 150).
+    await this.atenderLosPedidos().catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
     await this.mirarLasCaducidades().catch((error) => this.salida.appendLine(`[caducidades] ${error.message}`)); // diccionario: interno
     const avisados = { ...(this.almacen().get(CLAVE_AVISADOS) || {}) };
     const sinAvisar = (await this.losRecordatoriosQueTocan()).filter((t) => avisados[t.nombre] !== t.ultima);
@@ -1011,6 +1232,7 @@ ${cabecera}
     for (const t of sinAvisar) avisados[t.nombre] = t.ultima;
     await this.almacen().update(CLAVE_AVISADOS, avisados);
     if (!this.donde || this.donde.tipo === 'principal') await this.refrescar(true);
+    else if (this.donde.tipo === 'rutinas') await this.verRutinas(this.donde.aviso);
     // Sin esperar a uno para enseñar el siguiente: cada aviso, con su botón.
     await Promise.all(sinAvisar.map(async (t) => {
       const quiere = await vscode.window.showInformationMessage(`Toca: ${t.etiqueta}.`, 'Hacerlo ahora');
@@ -1083,7 +1305,7 @@ ${cabecera}
   }
 
   // Lo de después de poner algo, una clave o un fichero de acceso: si ya está
-  // todo, se prueba sola; si no, se dice qué falta (decisiones 146 y 154).
+  // todo, se prueba sola; si no, se dice qué falta (decisiones 146 y 156).
   async yaEstaPuesto(proveedor, dicho, sinPrueba) {
     const datos = conexiones.claves(proveedor);
     const faltan = datos ? datos.claves.filter((c) => !c.puesta).length : 0;
@@ -1104,7 +1326,7 @@ ${cabecera}
     return this.verConexion(proveedor, { ...aviso, texto: `${dicho} ${aviso.texto}` });
   }
 
-  // El usuario y la contraseña, con un solo «Guardar» (decisión 154): si cada uno
+  // El usuario y la contraseña, con un solo «Guardar» (decisión 156): si cada uno
   // llevara el suyo, se escribirían los dos y se pulsaría solo el de abajo, y el
   // de arriba se perdería al repintar. Se guardan todos y el último hace lo de
   // siempre: probarla si ya está todo.
@@ -1121,7 +1343,7 @@ ${cabecera}
     return this.guardarClave(proveedor, clave, valor);
   }
 
-  // Un fichero de acceso, soltado encima de la barra o elegido (decisión 154): a
+  // Un fichero de acceso, soltado encima de la barra o elegido (decisión 156): a
   // su sitio, y si con eso ya está todo, se prueba sola, como una clave (P9).
   async ponerFicheroDeAcceso(proveedor, ficheros) {
     const hecho = await conexiones.ponerFicheroDeAcceso(proveedor, ficheros);
@@ -1146,7 +1368,7 @@ ${cabecera}
     return this.ponerFicheroDeAcceso(proveedor, ficheros);
   }
 
-  // ── «Pídeselo a tu informático» (decisión 154) ────────────────────────
+  // ── «Pídeselo a tu informático» (decisión 156) ────────────────────────
   //
   // El mensaje se arma en `informatico.js` cada vez, del disco: los botones solo
   // dicen de qué conexión es, y el texto no viaja desde la pantalla. La barra no
@@ -1406,7 +1628,7 @@ ${cabecera}
   // antes que el texto, y eso es justo lo que aquí no se enseña nunca.
   leerArticulo(ruta, tema, desde) {
     const leido = cerebro.leerArticulo(ruta);
-    if (!leido.ok) return this.enviar({ tipo: 'aviso', texto: leido.mensaje, malo: true });
+    if (!leido.ok) return this.avisarAqui({ texto: leido.mensaje, malo: leido.malo !== false, ...(leido.boton ? { boton: leido.boton } : {}) });
     this.donde = { tipo: 'quieto' };
 
     // Con qué sigue y con qué venía, dentro del mismo tema: leer una cosa y
@@ -1434,7 +1656,15 @@ ${cabecera}
   // Soltados encima de la barra. Llegan ya leídos por el panel, porque el
   // editor no le da la ruta de lo que se suelta — y hace bien.
   async soltarDocumentos(ficheros, para = 'documentos') {
-    if (!ficheros || !ficheros.length) return this.refrescar();
+    // Lo que el panel no puede leer (más de 40 MB, una carpeta) llega vacío. En
+    // Documentos se dice ahí mismo; antes te sacaba a la principal sin decir nada
+    // (revisión de corrección, 2).
+    if (!ficheros || !ficheros.length) {
+      if (para !== 'marca' && this.donde && this.donde.tipo === 'documentos') {
+        return this.verDocumentos({ texto: 'No he podido leer lo que has soltado. Si es un archivo muy grande, dáselo con «Elegirlos».', malo: true });
+      }
+      return this.refrescar();
+    }
 
     // Arrastrado encima de la pantalla de la marca, el material va a su
     // carpeta: es lo que el asistente mira para sacar los colores, y en la
@@ -1446,23 +1676,113 @@ ${cabecera}
       return this.verLaCara({ texto: `${puesto.mensaje} Se lo he pasado al asistente.`, malo: false });
     }
 
+    // Soltado encima de Documentos, se queda en Documentos: lo que acaba de
+    // soltar sale ahí mismo, en «Sin leer todavía» (F7, decisión 151).
+    const enDocumentos = Boolean(this.donde && this.donde.tipo === 'documentos');
     const { ok, cuantos, mensaje } = cerebro.guardarSoltados(ficheros);
-    if (!ok) return this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) return enDocumentos ? this.verDocumentos({ texto: mensaje, malo: true }) : this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
 
-    await this.refrescar(true);
-    this.enviar({ tipo: 'aviso', texto: mensaje });
+    if (enDocumentos) {
+      await this.verDocumentos({ texto: mensaje, malo: false });
+    } else {
+      await this.refrescar(true);
+      this.enviar({ tipo: 'aviso', texto: mensaje });
+    }
     await puente.enviar(`Te he dejado ${cuantos === 1 ? 'un documento nuevo' : `${cuantos} documentos nuevos`} en la bandeja. Léelos y cuéntame qué has aprendido.`);
     return undefined;
   }
 
-  async anadirDocumentos() {
+  // Desde Documentos se vuelve a Documentos; desde lo demás, a Conocimiento, como antes.
+  async anadirDocumentos(desde = null) {
+    const volver = (aviso = null) => (desde === 'documentos' ? this.verDocumentos(aviso) : this.verCerebro(aviso));
     const { ok, cuantos, mensaje } = await cerebro.anadirDocumentos();
-    if (!ok) return this.verCerebro({ texto: mensaje, malo: true });
-    if (!cuantos) return this.verCerebro();
+    if (!ok) return volver({ texto: mensaje, malo: true });
+    if (!cuantos) return volver();
 
     await puente.enviar('He dejado documentos nuevos en la bandeja de entrada. Léelos, guárdalos donde toque y cuéntame en dos líneas qué has aprendido.');
     brujula.olvidar();
-    return this.verCerebro({ texto: mensaje, malo: false });
+    return volver({ texto: mensaje, malo: false });
+  }
+
+  // ── Documentos, en una pantalla (F7, decisión 151) ─────────────────────
+  //
+  // Lo que se le da, lo que tiene sin leer y los resultados, juntos. Se repinta
+  // cuando el asistente lee o produce algo, con el aviso que tuviera.
+  async verDocumentos(aviso = null) {
+    this.donde = { tipo: 'documentos', aviso };
+    const { sueltos, esperando } = papeles.sinLeerTodavia();
+    this.enviar({
+      tipo: 'documentos',
+      esperando,
+      sueltos,
+      herramientas: salidas.loQueHaProducido(),
+      fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()),
+      aviso,
+    });
+  }
+
+  // ── La foto del cerebro (decisión 151, punto 11 de la 142) ──────────────
+  //
+  // Un punto por concepto y una línea por enlace, sin instalar Obsidian. Qué es
+  // un concepto lo dice `cerebro`; el dibujo y dónde va cada punto, `foto`.
+  verLaFoto(desde = 'documentos', aviso = null) {
+    const de = desde === 'cerebro' ? 'cerebro' : 'documentos';
+    this.donde = { tipo: 'foto', desde: de, aviso };
+    const wiki = proyecto.ruta('02-DOCS', 'wiki');
+    const dibujo = foto.laFoto(wiki, wiki ? cerebro.todosLosDocumentos() : []);
+    this.enviar({
+      tipo: 'foto',
+      lado: dibujo.lado,
+      total: dibujo.total,
+      nodos: dibujo.nodos,
+      enlaces: dibujo.enlaces,
+      rotulos: dibujo.rotulos,
+      entera: dibujo.entera,
+      desde: de,
+      aviso,
+    });
+  }
+
+  // El panel la dibuja y la manda en PNG; aquí se guarda, sin pisar ninguna, y
+  // se dice dónde ha quedado en una frase (P9), con un botón para abrirla.
+  guardarLaFoto(png) {
+    const desde = this.donde && this.donde.tipo === 'foto' ? this.donde.desde : 'documentos';
+    const hecho = foto.guardar(proyecto.ruta(...LAS_FOTOS), png, { raiz: proyecto.raiz() });
+    if (!hecho.ok) {
+      this.salida.appendLine(`[guardarLaFoto] ${hecho.motivo}${hecho.detalle ? `: ${hecho.detalle}` : ''}`); // diccionario: interno
+      return this.verLaFoto(desde, { texto: 'No he podido guardar la foto. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    }
+    return this.verLaFoto(desde, {
+      texto: `Guardada en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
+      malo: false,
+      boton: { etiqueta: 'Abrirla', accion: { tipo: 'abrirLaFoto', fichero: hecho.fichero } },
+    });
+  }
+
+  async abrirLaFoto(fichero) {
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero, proyecto.raiz());
+    if (!completa) return this.avisarAqui({ texto: 'Esa foto ya no está.', malo: true });
+    return papeles.abrirFichero(completa);
+  }
+
+  async llevarteLaFoto(fichero) {
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero, proyecto.raiz());
+    if (!completa) return this.avisarAqui({ texto: 'Esa foto ya no está.', malo: true });
+    const hecho = await salidas.llevarte(completa);
+    if (hecho.cancelado) return undefined;
+    return this.avisarAqui({ texto: hecho.mensaje, malo: !hecho.ok });
+  }
+
+  // Un aviso, en la pantalla donde se está. En Documentos y en la foto, en la
+  // suya: el aviso de siempre pinta la principal, pero `donde` seguía en la otra
+  // y el vigía, al repintar, te devolvía allí y se comía el aviso (revisión de
+  // corrección, 1). En las demás, como siempre.
+  avisarAqui(aviso) {
+    const d = this.donde || {};
+    if (d.tipo === 'rutinas') return this.verRutinas(aviso);
+    if (d.tipo === 'documentos') return this.verDocumentos(aviso);
+    if (d.tipo === 'foto') return this.verLaFoto(d.desde, aviso);
+    return this.enviar({ tipo: 'aviso', ...aviso });
   }
 
   // ----------------------------------------------------------- copias
@@ -1485,18 +1805,18 @@ ${cabecera}
   // define en cada herramienta.
   async verSalidas() {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido() });
+    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido(), fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()) });
   }
 
   async abrirSalida(herramienta, fichero) {
     const { ok, mensaje } = await salidas.abrir(herramienta, fichero);
-    if (!ok) this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) this.avisarAqui({ texto: mensaje, malo: true });
   }
 
   async guardarSalida(herramienta, fichero) {
     const hecho = await salidas.guardarCopia(herramienta, fichero);
     if (hecho.cancelado) return;
-    this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
+    this.avisarAqui({ texto: hecho.mensaje, malo: !hecho.ok });
   }
 
   async verSaberes() {
@@ -1539,7 +1859,7 @@ ${cabecera}
 
   // Se pregunta antes, y con el nombre del documento dentro de la pregunta: un
   // "¿seguro?" a secas no dice qué se va a borrar.
-  async quitarPapel(ruta, nombre) {
+  async quitarPapel(ruta, nombre, desde = null) {
     const seguro = await vscode.window.showWarningMessage(
       `¿Quito "${nombre}"? Todavía no lo ha leído nadie, así que no se pierde nada aprendido.`,
       { modal: true },
@@ -1548,12 +1868,14 @@ ${cabecera}
     if (seguro !== 'Sí, quítalo') return undefined;
 
     const { ok, mensaje } = papeles.quitar(ruta);
+    // Desde Documentos se vuelve a Documentos (F7, decisión 151).
+    if (desde === 'documentos') return this.verDocumentos({ texto: mensaje, malo: !ok });
     return this.verPapeles({ texto: mensaje, malo: !ok });
   }
 
   async abrirPapel(ruta) {
     const { ok, mensaje } = await papeles.abrir(ruta);
-    if (!ok) this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) this.avisarAqui({ texto: mensaje, malo: true });
   }
 
   // Todo lo que sirve cuando alguien se atasca, junto. "¿Y ahora qué hago?" es
@@ -1575,6 +1897,96 @@ ${cabecera}
         sola: version.actualizarSola(),
       },
     });
+  }
+
+  // ── Los datos de clientes (decisión 153) ──────────────────────────────
+  //
+  // Para leer, en Ayuda; y dicho a tiempo, una vez por carpeta. El texto sale de su
+  // tabla (`clientes.js`).
+
+  // La tabla, o null si no se puede leer. Se apunta: un fallo no se calla (P3).
+  laTablaDeLosDatos() {
+    try {
+      return clientes.laTabla(this.contexto.extensionPath);
+    } catch (error) {
+      this.salida.appendLine(`[clientes] ${error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // La tarjeta: hasta que se lee o se pulsa «Entendido», y solo si ya entran datos
+  // de verdad, por una conexión puesta o por los documentos que le ha dado.
+  laTarjetaDeLosDatos() {
+    try {
+      if (this.almacen().get(clientes.CLAVE)) return null;
+      const porDonde = clientes.porDondeEntran({
+        conexiones: conexiones.proveedores().map((p) => ({ ...p, claves: (conexiones.claves(p.id) || {}).claves || [] })),
+        documentos: cerebro.esperandoLectura() + cerebro.yaLeidos() + cerebro.originales(),
+      });
+      return porDonde ? clientes.laTarjeta(this.laTablaDeLosDatos(), porDonde) : null;
+    } catch (error) {
+      // Es un aviso de más: si falla, la barra sigue igual, y queda apuntado.
+      this.salida.appendLine(`[clientes] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  async yaSeDijoLoDeLosDatos() {
+    await this.almacen().update(clientes.CLAVE, Date.now());
+  }
+
+  // Leerlo cuenta como dicho si ya entran datos, venga de Ayuda o de la tarjeta.
+  // Leído antes, desde Ayuda, la tarjeta sale igual cuando entren: lo que importa
+  // es el momento, y semanas antes no se tiene delante (revisión de la 153).
+  async verDatosDeClientes() {
+    const tabla = this.laTablaDeLosDatos();
+    if (!tabla) return this.enviar({ tipo: 'aviso', texto: 'No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    this.donde = { tipo: 'quieto' };
+    if (this.laTarjetaDeLosDatos()) await this.yaSeDijoLoDeLosDatos();
+    return this.enviar({ tipo: 'datosDeClientes', tabla: clientes.paraLeer(tabla) });
+  }
+
+  // ── Abrir una página (revisión de seguridad de la 153) ────────────────
+  //
+  // La dirección llega del panel, y alguna sale de la carpeta: la página de una
+  // conexión viene de su CREDENTIALS.md, que puede haber escrito cualquiera. Así
+  // que solo se abre lo que va por https; y lo que no es nuestro en GitHub ni una
+  // de las páginas de Anthropic y OpenAI de la tabla de los datos de clientes, se
+  // pregunta antes, con el sitio a la vista.
+  async abrirUnaPagina(url) {
+    let direccion = null;
+    try {
+      direccion = new URL(String(url));
+    } catch {
+      direccion = null;
+    }
+    if (!direccion || direccion.protocol !== 'https:' || !direccion.hostname) {
+      this.salida.appendLine(`[abrir] no se abre, no va por https: ${String(url).slice(0, 200)}`); // diccionario: interno
+      return this.enviar({ tipo: 'aviso', texto: 'No abro esa página: no es segura. Díselo a tu tutor.', malo: true });
+    }
+    if (!this.esUnaPaginaNuestra(direccion)) {
+      const si = await vscode.window.showWarningMessage(`Voy a abrir ${direccion.hostname}. ¿Lo abro?`, { modal: true }, 'Abrirlo');
+      if (si !== 'Abrirlo') return undefined;
+    }
+    return vscode.env.openExternal(vscode.Uri.parse(direccion.href));
+  }
+
+  // Nuestra en GitHub (el repositorio de la barra, `sitio.js`), o de Anthropic u
+  // OpenAI, de las que da la tabla de los datos de clientes.
+  esUnaPaginaNuestra(direccion) {
+    if (['claude', 'codex'].some((id) => rutinas.automatica(id).guia === direccion.href)) return true;
+    if (direccion.hostname === 'github.com') {
+      return sitio.esNuestro(direccion.pathname.split('/').filter(Boolean).slice(0, 2).join('/'));
+    }
+    const tabla = this.laTablaDeLosDatos();
+    const deLaTabla = (JSON.stringify(tabla || {}).match(/https:\/\/[^"\s]+/g) || [])
+      .map((u) => { try { return new URL(u).hostname; } catch { return null; } });
+    return deLaTabla.includes(direccion.hostname);
+  }
+
+  async entendidoLoDeLosDatos() {
+    await this.yaSeDijoLoDeLosDatos();
+    return this.refrescar(true);
   }
 
   // ── Resolver una incidencia ────────────────────────────────────────────
@@ -2630,7 +3042,7 @@ async function vestir(contexto, salida) {
 // Así que las carpetas del asistente se preguntan, no se escriben. Lo fijo es
 // lo que no depende de él: la declaración, las herramientas y la wiki.
 // Y los avisos para Executive Lab, que deja el asistente y la barra enseña.
-const LO_FIJO = ['.rsc.json', '01-TOOLS/**', '02-DOCS/wiki/**', '02-DOCS/inbox/*', '02-DOCS/raw/avisos/*'];
+const LO_FIJO = ['.rsc.json', '01-TOOLS/**', '02-DOCS/wiki/**', '02-DOCS/inbox/*', '02-DOCS/raw/avisos/*', '02-DOCS/raw/pedidos/*'];
 
 // Relativa a la raíz, que es lo que quiere `RelativePattern`.
 function suCarpeta(completa) {
@@ -2648,7 +3060,9 @@ function loQueMira() {
     donde.carpetaDeAgentes(),
   ].map(suCarpeta).filter(Boolean).map((c) => `${c}/**`);
 
-  return `{${[...LO_FIJO, ...new Set(suyas)].join(',')}}`;
+  const reglasDelAsistente = donde.paraQuien() === 'codex'
+    ? ['AGENTS.md', 'AGENTS.override.md'] : ['CLAUDE.md'];
+  return `{${[...LO_FIJO, ...reglasDelAsistente, ...new Set(suyas)].join(',')}}`;
 }
 
 // Volver a vigilar lo del asistente de ahora. Cambiar de asistente ya no toca
@@ -2667,6 +3081,8 @@ function vigilarElArnes(contexto, panel) {
   // Una tanda de cambios (RSC escribe muchos ficheros de golpe) es un solo
   // repintado, no veinte.
   const alCambiar = (uri) => {
+    // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
+    if (pedidos.esUnPedido(uri.fsPath)) panel.atenderLosPedidos().catch((error) => panel.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
     const esMarca = uri.fsPath.includes(`${marca.CARPETA.join('/')}/`) || uri.fsPath.includes(marca.FICHERO);
     // El índice del buscador se hizo con lo que había antes de este cambio.
     buscador.olvidar();
@@ -2847,6 +3263,7 @@ function activate(contexto) {
     comando('executiveLab.cerebro', () => panel.verCerebro()),
     comando('executiveLab.radiografia', () => panel.verRadiografia()),
     comando('executiveLab.saberes', () => panel.verSaberes()),
+    comando('executiveLab.rutinas', () => panel.verRutinas()),
     comando('executiveLab.salidas', () => panel.verSalidas()),
     comando('executiveLab.huecos', () => panel.verHuecos()),
     comando('executiveLab.papeles', () => panel.verPapeles()),

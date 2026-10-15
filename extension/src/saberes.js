@@ -153,9 +153,15 @@ function queSabe(carpetaDeLaExtension, corpus = '') {
   const puedeAprender = [...encajan, ...restantes.filter(sirveAqui)];
   const lasDemas = restantes.filter((c) => !sirveAqui(c));
 
-  const delCatalogo = (c) => ({
-    id: c.id, nombre: c.nombre, frase: c.frase, prompt: comoSePide(c.id), delArnes: false, porQue: c.porQue || [],
-  });
+  const delCatalogo = (c) => {
+    // También puede coincidir con una habilidad nativa de Codex. La cabecera
+    // de la copia que se invoca manda sobre el rótulo genérico del catálogo.
+    const suya = puestas.includes(c.id) ? loQueDiceSuCabecera(c.id, raiz) : {};
+    return {
+      id: c.id, nombre: suya.nombre || c.nombre, frase: suya.queHace || c.frase,
+      prompt: comoSePide(c.id), delArnes: false, porQue: c.porQue || [],
+    };
+  };
 
   return {
     suyas: suyas.map((id) => comoSeLlama(id, raiz)),
