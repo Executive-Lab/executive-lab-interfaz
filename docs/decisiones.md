@@ -5287,12 +5287,13 @@ clase (decisión 145).
   no, pregunta a la persona («El asistente quiere añadir Facturación. ¿La añado?») y «Añadirla» pasa por el
   botón de siempre. Si cierra la pregunta, se le contesta al asistente que ahora no, para que no se quede
   esperando.
-- **Con el arnés de la carpeta por delante** la barra no puede (P7). Contesta al asistente cómo hacerlo él,
-  con la versión que declara `.rsc.json`, y solo si es un número de versión: lo que viene de un fichero del
-  repositorio no llega tal cual a una orden.
+- **Con el arnés de la carpeta por delante** la barra no puede (P7), y lo contesta sin preguntar a nadie. Sin
+  darle al asistente ninguna orden que correr: `npx` en esa carpeta leería su `.npmrc`, que es justo por lo que
+  la barra tampoco lo usa ahí.
 - **Si el nombre no está en el catálogo**, la respuesta trae las que más se parecen, por el identificador o por
   sus palabras en español («facturas» → invoicing).
-- **Tres por vez**, y uno que llega mientras se atiende otro no espera al minuto siguiente.
+- **Tres por vez, y cinco sin preguntar en cada sesión.** Uno que llega mientras se atiende otro no espera al
+  minuto siguiente, y lo que espera a que la persona conteste no ocupa sitio.
 - `02-DOCS/raw/pedidos/` no entra en git (`no-entra-en-git.js`).
 
 **Sin seguir enlaces.** La carpeta viene en el repositorio. Con el borrador, un `<id>.hecho` que fuera un
@@ -5300,3 +5301,18 @@ enlace a un fichero de la persona se sobrescribía solo con abrir la carpeta, an
 carpeta `pedidos` enlazada a otra parte hacía borrar allí. Ahora cada trozo del camino tiene que ser una carpeta
 de verdad, el pedido un fichero de verdad, y la respuesta se escribe nueva (`pedidos.js`). La prueba lo hace con
 enlaces de verdad.
+
+**La revisión adversaria** (seguridad y corrección) no encontró nada alto. Lo que encontró, arreglado y con su
+prueba:
+
+- Seguridad: la respuesta con el arnés por delante mandaba correr `npx` (arriba); el nombre del fichero salía tal
+  cual en la respuesta, que el asistente lee con la voz de la barra, y ahora solo sale si es un identificador;
+  sin confianza se preguntaba, y «Añadirla» daba la carpeta por conocida: ahora sin confianza no se pregunta y se
+  dice por qué, y la pregunta no da nada por conocido; y el tope de tres no paraba una cadena de pedidos, que
+  ahora para el de cinco por sesión.
+- Corrección: la respuesta de la vez anterior se leía como la nueva (la barra la quita al ver el pedido, y la
+  regla 7 le dice al asistente que la borre antes); con la pregunta abierta, el reloj la añadía sola y luego se
+  contestaba dos veces; «Añadirla» con el arnés ocupado contestaba «no se ha podido» (ahora espera, y con el sí
+  dado no se vuelve a preguntar); un pedido podía pisar un botón que corre el arnés (los botones lo marcan
+  ocupado, y lo que la barra arregla sola al abrir espera a que quede libre); si el arnés reventaba, el pedido se
+  repetía cada minuto; con Codex la frase de cómo se pide salía rota; y el vigía no veía las rutas de Windows.

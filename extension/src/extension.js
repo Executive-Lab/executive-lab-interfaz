@@ -320,6 +320,14 @@ ${cabecera}
     const tareas = solo.queSeHaceSolo(await mirar());
     if (!tareas.length) return [];
 
+    // Si un pedido del asistente o un botón está corriendo el arnés, se espera a que
+    // termine (decisión 150; revisión de corrección, 4).
+    const vueltas = this.vueltasDeEspera === undefined ? 360 : this.vueltasDeEspera; // tres minutos
+    for (let i = 0; i < vueltas && this.conElArnes(); i += 1) await new Promise((r) => setTimeout(r, 500));
+    if (this.conElArnes()) {
+      this.salida.appendLine('[solo] el arnés sigue ocupado: se deja para otra vez'); // diccionario: interno
+      return [];
+    }
     // Mientras dura, los botones que corren el arnés esperan (ver `manejar`).
     this.arreglandoSolo = true;
     let hechas = [];
@@ -721,49 +729,84 @@ ${cabecera}
 
   async unaVueltaDePedidos() {
     const raiz = proyecto.raiz();
-    const hay = pedidos.losQueHay(raiz);
+    this.preguntados = this.preguntados || new Set();
+    this.aceptados = this.aceptados || new Set();
+    // Lo que espera a que la persona conteste no ocupa sitio: los demás se atienden
+    // (revisión de corrección, 2 y 6).
+    const hay = pedidos.losQueHay(raiz).filter((id) => !this.preguntados.has(id)).slice(0, pedidos.POR_VEZ);
     if (!hay.length) return;
+    for (const id of hay) pedidos.olvidarLaRespuesta(raiz, id);
     const catalogo = consejos.capacidades(this.contexto.extensionPath);
     const contestar = (id, que, mas = {}) => pedidos.contestar(raiz, id, pedidos.respuesta(que, { id, comoSePide: saberes.comoSePide(id), ...mas }));
+    const confianza = vscode.workspace.isTrusted !== false;
     const porDelante = rsc.vaPorDelante();
-    const sola = vscode.workspace.isTrusted !== false && this.carpetaConocida() && proyecto.arnesCompleto() && !porDelante;
     let anadidas = 0;
     for (const id of hay) {
+      // Con el sí de la persona a la pregunta, como si pudiera sola.
+      const dijoQueSi = this.aceptados.has(id);
+      const sola = dijoQueSi || (confianza && this.carpetaConocida() && proyecto.arnesCompleto() && (this.anadidasSolas || 0) < pedidos.POR_SESION);
       const { que, nombre, parecidas } = pedidos.queHacer(id, { catalogo, enDisco: rsc.habilidadesEnDisco(), sola });
-      if (que === 'noEsta' || que === 'yaEstaba') { contestar(id, que, { parecidas }); continue; }
-      if (porDelante) { contestar(id, 'porDelante', { version: proyecto.versionDelCatalogo() }); continue; }
-      if (que === 'preguntar') { this.preguntarElPedido(id, nombre, contestar); continue; }
-      if (this.arreglandoSolo) break; // al minuto siguiente
+      if (que === 'noEsta' || que === 'yaEstaba') {
+        this.aceptados.delete(id);
+        contestar(id, que, { parecidas });
+        continue;
+      }
+      if (porDelante || !confianza) {
+        this.aceptados.delete(id);
+        contestar(id, porDelante ? 'porDelante' : 'sinConfianza');
+        continue;
+      }
+      if (que === 'preguntar') {
+        this.preguntarElPedido(id, nombre);
+        continue;
+      }
+      // Con el arnés ocupado, al minuto siguiente; los que no lo necesitan, ya.
+      if (this.conElArnes()) continue;
       this.arreglandoSolo = true;
       let ok = false;
       try {
         ({ ok } = await rsc.anadir(id));
+      } catch (error) {
+        // Contestado igual: si no, se reintentaría cada minuto (revisión de corrección, 5).
+        this.salida.appendLine(`[pedidos] ${id}: ${error.message}`); // diccionario: interno
       } finally {
         this.arreglandoSolo = false;
       }
+      this.aceptados.delete(id);
+      if (!dijoQueSi) this.anadidasSolas = (this.anadidasSolas || 0) + 1;
       contestar(id, ok ? 'anadida' : 'noSePudo');
       this.salida.appendLine(`[pedidos] ${id}: ${ok}`); // diccionario: interno
       if (ok) {
         anadidas += 1;
-        vscode.window.showInformationMessage(`He añadido ${nombre}, que te ha pedido el asistente. Se pide con ${saberes.comoSePide(id)}.`);
+        vscode.window.showInformationMessage(`He añadido ${nombre}, que te ha pedido el asistente. ${pedidos.sePide(id, saberes.comoSePide(id))}`);
       }
     }
     if (anadidas) await this.refrescar(true);
   }
 
-  // Sin poder hacerlo solo, se pregunta, una vez por pedido. «Añadirla» pasa por
-  // el botón de siempre, que da la carpeta por conocida. Si cierra la pregunta,
-  // se le dice al asistente, que si no se quedaría esperando.
-  preguntarElPedido(id, nombre, contestar) {
-    this.preguntados = this.preguntados || new Set();
-    if (this.preguntados.has(id)) return;
+  // Sin poder hacerlo sola, se pregunta, una vez por pedido. Con «Añadirla» se
+  // añade como si pudiera sola, en la vuelta siguiente y con las mismas guardas: si
+  // el arnés está ocupado, espera, y si va por delante, se le dice al asistente
+  // (revisión de corrección, 3). No da la carpeta por conocida: la pregunta la
+  // puede haber traído el repositorio (revisión de seguridad, 3). Si cierra la
+  // pregunta, se le dice al asistente, que si no se quedaría esperando.
+  // Una vez por pedido: la vuelta ya aparta los que esperan respuesta.
+  preguntarElPedido(id, nombre) {
     this.preguntados.add(id);
-    Promise.resolve(vscode.window.showInformationMessage(`El asistente quiere añadir ${nombre}. ¿La añado?`, 'Añadirla')).then(async (quiere) => {
-      if (quiere !== 'Añadirla') return contestar(id, 'noQuiere');
-      await this.manejar({ tipo: 'aprenderCapacidad', capacidad: id, nombre });
-      return contestar(id, rsc.habilidadesEnDisco().includes(id) ? 'anadida' : 'noSePudo');
-    }).catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)) // diccionario: interno
-      .finally(() => this.preguntados.delete(id));
+    Promise.resolve(vscode.window.showInformationMessage(`El asistente quiere añadir ${nombre}. ¿La añado?`, 'Añadirla')).then((quiere) => {
+      this.preguntados.delete(id);
+      const raiz = proyecto.raiz();
+      if (!pedidos.sigue(raiz, id)) return undefined;
+      if (quiere !== 'Añadirla') return pedidos.contestar(raiz, id, pedidos.respuesta('noQuiere'));
+      this.aceptados.add(id);
+      return this.atenderLosPedidos();
+    }).catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
+  }
+
+  // Si algo está corriendo el arnés ahora: un arreglo solo, o un botón que lo usa.
+  // Dos a la vez escribirían los mismos ficheros (revisión de corrección, 4).
+  conElArnes() {
+    return Boolean(this.arreglandoSolo || this.botonesDelArnes);
   }
 
   // Añadir una habilidad del catálogo (`rsc add`), sin que el alumno vea nada
@@ -909,6 +952,8 @@ ${cabecera}
       await this.darPorConocida();
     }
 
+    const delArnes = LOS_DEL_ARNES.has(mensaje.tipo);
+    if (delArnes) this.botonesDelArnes = (this.botonesDelArnes || 0) + 1;
     try {
       await accion();
     } catch (error) {
@@ -919,6 +964,8 @@ ${cabecera}
       // lo ve y dice que sí (decisión 131).
       avisos.apuntarUnFallo({ accion: mensaje.tipo, error, lineas: this.salida.ultimas ? this.salida.ultimas() : [] });
       this.enviar({ tipo: 'aviso', texto: 'Algo no ha ido bien. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    } finally {
+      if (delArnes) this.botonesDelArnes -= 1;
     }
   }
 
@@ -2645,7 +2692,7 @@ function vigilarElArnes(contexto, panel) {
   // repintado, no veinte.
   const alCambiar = (uri) => {
     // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
-    if (/[\\/]02-DOCS[\\/]raw[\\/]pedidos[\\/][^\\/]+\.habilidad$/.test(uri.fsPath)) panel.atenderLosPedidos().catch(() => {});
+    if (pedidos.esUnPedido(uri.fsPath)) panel.atenderLosPedidos().catch((error) => panel.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
     const esMarca = uri.fsPath.includes(`${marca.CARPETA.join('/')}/`) || uri.fsPath.includes(marca.FICHERO);
     // El índice del buscador se hizo con lo que había antes de este cambio.
     buscador.olvidar();

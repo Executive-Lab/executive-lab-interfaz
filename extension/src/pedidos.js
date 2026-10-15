@@ -27,9 +27,12 @@ const path = require('node:path');
 const CARPETA = ['02-DOCS', 'raw', 'pedidos'];
 const PIDE = '.habilidad';
 const CONTESTA = '.hecho';
-// Tres por vez, como mucho: un repositorio con cien no tiene a la barra
-// añadiendo habilidades una hora.
+// Tres por vez, y cinco sin preguntar en cada sesión: un repositorio con cien
+// pedidos no tiene a la barra añadiendo habilidades una hora sin que nadie lo vea
+// (revisión de seguridad, 4). De los que hay se leen cincuenta como mucho.
 const POR_VEZ = 3;
+const POR_SESION = 5;
+const LEIDOS = 50;
 const ID = /^[a-z0-9-]{2,40}$/;
 
 function carpeta(raiz) {
@@ -47,8 +50,9 @@ function carpeta(raiz) {
   return donde;
 }
 
-// Los identificadores pedidos, en orden y como mucho `POR_VEZ`. Un enlace que
-// se llame `.habilidad` no es un pedido.
+// Los identificadores pedidos, en orden. Un enlace que se llame `.habilidad` no
+// es un pedido. El tope de cada vuelta lo pone quien atiende, después de apartar
+// los que esperan a que la persona conteste (revisión de corrección, 6).
 function losQueHay(raiz) {
   const donde = carpeta(raiz);
   if (!donde) return [];
@@ -62,8 +66,12 @@ function losQueHay(raiz) {
     .filter((e) => e.isFile() && e.name.endsWith(PIDE) && e.name.length > PIDE.length)
     .map((e) => e.name.slice(0, -PIDE.length))
     .sort()
-    .slice(0, POR_VEZ);
+    .slice(0, LEIDOS);
 }
+
+// Un cambio del vigía que es un pedido. Con las dos barras: en Windows la ruta
+// va con `\` (revisión de corrección, m9).
+const esUnPedido = (ruta) => /[\\/]02-DOCS[\\/]raw[\\/]pedidos[\\/][^\\/]+\.habilidad$/.test(String(ruta || ''));
 
 const pelar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -94,27 +102,59 @@ function queHacer(id, { catalogo = [], enDisco = [], sola = false } = {}) {
   return { que: sola ? 'anadir' : 'preguntar', nombre: del.nombre };
 }
 
+// Cómo se pide, en una frase. `comoSePide` es el `/id` de Claude o el `$id` de
+// Codex; con Codex, una del arnés se pide con palabras, y esa frase no cabe detrás
+// de «Se pide con» (revisión de corrección, 7).
+const sePide = (id, comoSePide) => (/^[/$][a-z0-9-]+$/.test(comoSePide || '') ? `Se pide con ${comoSePide}.` : `Se pide nombrándola: «${id}».`);
+
 // Lo que se le contesta al asistente, que es quien lo lee y se lo dice al alumno.
-// `comoSePide` es el `/id` o el `$id` de cada asistente. Con el arnés por delante
-// la barra no puede (P7), y el asistente sí, con la versión que declara la carpeta.
-function respuesta(que, { id, comoSePide = '', parecidas = [], version = '' } = {}) {
+// El nombre del fichero solo sale si es un identificador de verdad: lo que lee el
+// asistente con la voz de la barra no lo escribe un repositorio (revisión de
+// seguridad, 2). Y ninguna respuesta le da una orden que correr: con el arnés por
+// delante, `npx` en esta carpeta leería su `.npmrc` (revisión de seguridad, 1; la
+// barra tampoco lo usa ahí, `rsc.correr`).
+function respuesta(que, { id, comoSePide = '', parecidas = [] } = {}) {
+  const nombre = ID.test(id || '') ? `«${id}»` : 'Ese nombre';
   switch (que) {
     case 'porDelante':
-      return /^\d+\.\d+\.\d+$/.test(version)
-        ? `En esta carpeta el arnés es más nuevo que el de la barra, y ella no puede añadirla. Añádela tú: npx @ericrisco/rsc@${version} add ${id}`
-        : 'En esta carpeta el arnés es más nuevo que el de la barra, y ella no puede añadirla. Añádela tú, con la versión que declara .rsc.json.';
+      return 'En esta carpeta el arnés es más nuevo que el de la barra, y ella no puede añadirla. Díselo a la persona: se podrá cuando la barra se ponga al día. No la añadas tú.';
+    case 'sinConfianza':
+      return 'Esta carpeta no es de confianza en el editor, y la barra no añade nada que se pida desde ella. Si la persona confía en la carpeta, que la busque en Habilidades (skills) y la pulse.';
     case 'noEsta':
       return parecidas.length
-        ? `«${id}» no está en el catálogo de la clase. Las que más se parecen: ${parecidas.join(', ')}. Pide la que sea con su nombre exacto.`
-        : `«${id}» no está en el catálogo de la clase. Pide una con su nombre exacto del catálogo.`;
+        ? `${nombre} no está en el catálogo de la clase. Las que más se parecen: ${parecidas.join(', ')}. Pide la que sea con su nombre exacto.`
+        : `${nombre} no está en el catálogo de la clase. Pide una con su nombre exacto del catálogo.`;
     case 'yaEstaba':
-      return `Ya estaba puesta. Se pide con ${comoSePide}.`;
+      return `Ya estaba puesta. ${sePide(id, comoSePide)}`;
     case 'anadida':
-      return `Añadida. Se pide con ${comoSePide}.`;
+      return `Añadida. ${sePide(id, comoSePide)}`;
     case 'noQuiere':
       return 'La persona ha dicho que ahora no. No la vuelvas a pedir hasta que te lo diga.';
     default:
       return 'No se ha podido añadir. Dile que la busque en Habilidades (skills) y la pulse.';
+  }
+}
+
+// La respuesta de otra vez se quita al ver un pedido nuevo, antes de decidir: si
+// no, el asistente leería la vieja como la de ahora (revisión de corrección, 1).
+// Quitar un enlace no toca lo que apunta.
+function olvidarLaRespuesta(raiz, id) {
+  const donde = carpeta(raiz);
+  if (!donde || !id || /[\\/]/.test(id)) return;
+  try {
+    fs.rmSync(path.join(donde, `${id}${CONTESTA}`), { force: true });
+  } catch { /* una carpeta con ese nombre: `contestar` tampoco podrá */ }
+}
+
+// Si el pedido sigue ahí: una pregunta que se contesta tarde no responde a un
+// pedido que el asistente ya retiró.
+function sigue(raiz, id) {
+  const donde = carpeta(raiz);
+  if (!donde || !id || /[\\/]/.test(id)) return false;
+  try {
+    return fs.lstatSync(path.join(donde, `${id}${PIDE}`)).isFile();
+  } catch {
+    return false;
   }
 }
 
@@ -136,4 +176,4 @@ function contestar(raiz, id, texto) {
   return escrita;
 }
 
-module.exports = { CARPETA, POR_VEZ, carpeta, losQueHay, lasQueSeParecen, queHacer, respuesta, contestar };
+module.exports = { CARPETA, POR_VEZ, POR_SESION, carpeta, losQueHay, esUnPedido, lasQueSeParecen, queHacer, sePide, respuesta, olvidarLaRespuesta, sigue, contestar };
