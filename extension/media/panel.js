@@ -2332,9 +2332,10 @@ const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya tra
 function loQuePideSuAcceso(p) {
   const clases = p.acceso || [];
   if (p.aMedioHacer || p.fueraDeSitio || (p.prueba && p.prueba.ok)) return null;
-  if (p.faltan && clases.length && clases.every((c) => c === 'cuenta')) return `${p.etiqueta} — falta entrar con tu cuenta`;
-  // Antes que «falta una clave»: sin el fichero no hay nada que probar.
-  if (clases.includes('fichero') && !p.conFichero) return `${p.etiqueta} — le falta su fichero de acceso`;
+  // Con claves por poner, «falta una clave» dice más; y si ya se probó, lo que dijo la prueba.
+  if (!p.faltan && !p.prueba && clases.length && clases.every((c) => c === 'cuenta')) return `${p.etiqueta} — falta entrar con tu cuenta`;
+  // Antes que «falta una clave», si de verdad lo pide: sin el fichero no hay nada que probar.
+  if (p.pideFichero && !p.conFichero) return `${p.etiqueta} — le falta su fichero de acceso`;
   return null;
 }
 
@@ -2363,8 +2364,10 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
   // todo como antes (P1).
   const clases = proveedor.acceso || [];
   const pide = (clase) => clases.includes(clase);
-  const soloEntrar = clases.length > 0 && clases.every((c) => c === 'cuenta');
-  const faltaAlguna = claves.some((c) => !c.puesta) || (pide('fichero') && !proveedor.conFichero);
+  // «Solo entrar» es cuando no queda ninguna clave por poner: con un ID y un
+  // secreto que pegar, se enseñan con su campo (revisión de corrección de la 156).
+  const soloEntrar = clases.length > 0 && clases.every((c) => c === 'cuenta') && !claves.some((c) => !c.puesta);
+  const faltaAlguna = claves.some((c) => !c.puesta) || (proveedor.pideFichero && !proveedor.conFichero);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
 
   // Los pasos los escribe el asistente al investigar la herramienta. Se
@@ -2379,11 +2382,14 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     const n = Math.min(paso, pasos.length - 1);
     const ultimo = n === pasos.length - 1;
     // Qué se hace abajo, según lo que pide y de qué habla el paso (decisión 154).
-    const deFichero = pide('fichero') && /fichero|archivo|descarg/i.test(pasos[n]);
+    // Con el fichero ya puesto, no se dice que se suelte.
+    const sinFichero = pide('fichero') && !proveedor.conFichero;
+    const deFichero = sinFichero && /fichero|archivo|descarg/i.test(pasos[n]);
     const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]) || deFichero;
     const yAbajo = soloEntrar ? 'Cuando lo tengas, pulsa «Entrar» abajo: el asistente te abre el navegador.'
-      : (deFichero || (pide('fichero') && !claves.some((c) => !c.puesta)) ? 'Cuando lo tengas, suéltalo abajo: lo pongo en su sitio y lo pruebo yo.'
-        : 'Cuando la tengas, pégala abajo y pulsa «Guardar»: la pruebo yo.');
+      : (deFichero || (sinFichero && !claves.some((c) => !c.puesta)) ? 'Cuando lo tengas, suéltalo abajo: lo pongo en su sitio y lo pruebo yo.'
+        : (pide('usuario') ? 'Cuando los tengas, pégalos abajo y pulsa «Guardar»: los pruebo yo.'
+          : 'Cuando la tengas, pégala abajo y pulsa «Guardar»: la pruebo yo.'));
     return `
       <div class="conexion guia-paso">
         <p class="pista">${texto(`Paso ${n + 1} de ${pasos.length}`)}</p>
@@ -2413,11 +2419,13 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
   const queSePega = agrupar && !sueltasDeUna.length ? 'Escribe el usuario y la contraseña tal cual te los dieron.'
     : (visibles.length && visibles.every((c) => c.forma === 'direccion') ? 'Pega la dirección entera. Los espacios y las comillas los quito yo.'
       : 'Pega la clave entera. Los espacios y las comillas los quito yo.');
+  // Un secreto nunca se pinta como texto, sea de la forma que sea.
   const comoSeEscribe = (c) => {
-    if (c.forma === 'usuario') return ['text', 'Escribe aquí el usuario'];
-    if (c.forma === 'contrasena') return ['password', 'Escribe aquí la contraseña'];
-    if (c.forma === 'direccion') return ['text', 'Pega aquí la dirección entera'];
-    return [c.secreta ? 'password' : 'text', c.secreta ? 'Pega aquí la clave entera' : 'Escribe aquí el valor'];
+    const tipo = c.secreta || c.forma === 'contrasena' ? 'password' : 'text';
+    if (c.forma === 'usuario') return [tipo, 'Escribe aquí el usuario'];
+    if (c.forma === 'contrasena') return [tipo, 'Escribe aquí la contraseña'];
+    if (c.forma === 'direccion') return [tipo, 'Pega aquí la dirección entera'];
+    return [tipo, c.secreta ? 'Pega aquí la clave entera' : 'Escribe aquí el valor'];
   };
   const usuarioYContrasena = agrupar ? `
         <div class="conexion" data-proveedor="${atributo(proveedor.id)}">
@@ -2508,12 +2516,20 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
 // «Pídeselo a tu informático» (decisión 154). El mensaje lo arma la extensión
 // con lo que dejó escrito el asistente y la parte de seguridad de la barra. Los
 // botones solo dicen de qué conexión es: el texto no vuelve desde aquí.
-function pantallaInformatico({ proveedor, asunto, cuerpo, deLaCarpeta, aviso: avisoLocal }) {
+function pantallaInformatico({ proveedor, asunto, cuerpo, deLaCarpeta, paginasAjenas = [], tieneSuPagina = false, aviso: avisoLocal }) {
+  // Lo que preparó el asistente puede llevar páginas que no son de la
+  // herramienta: se enseñan antes de mandarlo (revisión de seguridad de la 154).
+  const paginas = paginasAjenas.length ? `
+    <p class="pista malo">${texto(tieneSuPagina
+    ? `Lleva páginas que no son de ${proveedor.etiqueta}. Mira que sean de fiar antes de mandarlo:`
+    : 'Lleva estas páginas. Mira que sean de fiar antes de mandarlo:')}</p>
+    ${paginasAjenas.map((u) => `<p class="pista">· ${texto(u)}</p>`).join('')}` : '';
   return `
     ${bloqueAviso(avisoLocal)}
     ${volver({ tipo: 'verConexion', proveedor: proveedor.id })}
     <p class="titulo">Para tu informático</p>
-    <p class="detalle">${texto('Mándaselo a quien te lleve los ordenadores y las cuentas. No lleva ninguna clave.')}</p>
+    <p class="detalle">${texto('Mándaselo a quien te lleve los ordenadores y las cuentas. Lo he revisado para quitar las claves: léelo antes de mandarlo.')}</p>
+    ${paginas}
     <p class="pista">${texto(asunto)}</p>
     <pre class="salida">${texto(cuerpo)}</pre>
     <div class="fila">

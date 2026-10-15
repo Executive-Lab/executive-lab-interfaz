@@ -1087,9 +1087,10 @@ ${cabecera}
   async yaEstaPuesto(proveedor, dicho, sinPrueba) {
     const datos = conexiones.claves(proveedor);
     const faltan = datos ? datos.claves.filter((c) => !c.puesta).length : 0;
-    // Pide su fichero de acceso y todavía no está: probar no diría nada nuevo.
-    const faltaElFichero = Boolean(datos) && (datos.proveedor.acceso || []).includes('fichero') && !datos.proveedor.conFichero;
-    if (faltan || faltaElFichero || !conexiones.tienePrueba(proveedor)) {
+    // Pide su fichero de acceso y todavía no está. No para la prueba: si trae una,
+    // ella dirá si falta (revisión de corrección de la 156); si no, se dice aquí.
+    const faltaElFichero = Boolean(datos) && datos.proveedor.pideFichero && !datos.proveedor.conFichero;
+    if (faltan || !conexiones.tienePrueba(proveedor)) {
       const queFalta = faltan ? (faltan === 1 ? 'Falta 1 por poner.' : `Faltan ${faltan} por poner.`) : (faltaElFichero ? 'Falta su fichero de acceso.' : '');
       return this.verConexion(proveedor, { texto: queFalta ? `${dicho} ${queFalta}` : sinPrueba, malo: false });
     }
@@ -1123,7 +1124,7 @@ ${cabecera}
   // Un fichero de acceso, soltado encima de la barra o elegido (decisión 154): a
   // su sitio, y si con eso ya está todo, se prueba sola, como una clave (P9).
   async ponerFicheroDeAcceso(proveedor, ficheros) {
-    const hecho = conexiones.ponerFicheroDeAcceso(proveedor, ficheros);
+    const hecho = await conexiones.ponerFicheroDeAcceso(proveedor, ficheros);
     if (!hecho.ok) return this.verConexion(proveedor, { texto: hecho.mensaje, malo: true, ...(hecho.boton ? { boton: hecho.boton } : {}) });
     return this.yaEstaPuesto(proveedor, hecho.mensaje, hecho.mensaje);
   }
@@ -1168,10 +1169,13 @@ ${cabecera}
   async mandarAlInformatico(proveedor) {
     const hecho = informatico.mensaje(proveedor);
     if (!hecho) return this.verConexiones();
-    const { enlace, alPortapapeles } = informatico.correo(hecho);
-    if (alPortapapeles) await vscode.env.clipboard.writeText(hecho.cuerpo);
     let abierto = false;
+    let alPortapapeles = false;
     try {
+      // Dentro: codificar puede lanzar con un texto raro, y entonces se copia.
+      const { enlace, alPortapapeles: copiado } = informatico.correo(hecho);
+      alPortapapeles = copiado;
+      if (alPortapapeles) await vscode.env.clipboard.writeText(hecho.cuerpo);
       // Como texto, no con `Uri.parse`: ver `informatico.correo`.
       abierto = await vscode.env.openExternal(enlace);
     } catch (error) {
@@ -1233,7 +1237,9 @@ ${cabecera}
   }
 
   queDecirDeCuandoCaduca(proveedor, datos, aviso) {
-    const puestas = datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero);
+    // Y con su fichero de acceso, si lo pide: antes se preguntaba sin él (revisión de corrección de la 156).
+    const puestas = (datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero))
+      && (!datos.proveedor.pideFichero || Boolean(datos.proveedor.conFichero));
     if (!puestas || datos.proveedor.aMedioHacer) return null;
     const una = this.cuandoCaduca(proveedor);
     if (!una) return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };

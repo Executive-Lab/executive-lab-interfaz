@@ -199,7 +199,13 @@ pide un fichero, no tiene variable donde escribirlo.
 - **Un fichero de acceso** lo pone la barra en `keys/`, con su nombre. Si la prueba lo busca con otro,
   escríbelo una vez como `keys/<nombre>`, en el `.env.example` o en `CREDENTIALS.md`, y lo guarda así.
 - **Entrar con tu cuenta**: «Entrar» te pide que le abras el navegador para que entre y dé permiso.
-  Guarda lo que devuelva donde lo busque la prueba, sin enseñárselo.
+  Guarda lo que devuelva donde lo busque la prueba, sin enseñárselo. Si además hay que pegar un ID y
+  un secreto (una aplicación OAuth), son dos clases: `- Tipo de acceso: Entrar con tu cuenta y una
+  clave`. Y en `.env.example`, solo lo que él pega: lo que devuelve el navegador no, que la barra lo
+  tomaría por una clave que le falta.
+- Escribe solo la clase, sin explicarla en la misma frase: lo que va detrás de un punto, una coma o un
+  paréntesis no se lee, y «no», «ni» o «sin» delante de una clase la quitan. Con «o» entre dos, vale
+  cualquiera de las dos.
 
 **e) Lo que pedirle a su informático, en el `README.md`, bajo `## Para tu informático`.** Muchas
 veces la clave la tiene quien administra la cuenta, o hay que dar permisos que él no sabe dar. La

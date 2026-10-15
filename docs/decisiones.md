@@ -5291,9 +5291,9 @@ tiene otra persona.
     «Elegir el fichero». Va a `keys/` de esa conexión, y solo si `sueltas.js` lo reconoce: una factura
     soltada por error no acaba entre las llaves. Si la conexión dice qué fichero busca
     (`keys/cuenta-de-servicio.json`), se guarda con ese nombre. El de antes se queda al lado, como
-    `.anterior`, porque sobrescribir no se deshace (P4). Y `keys/` lleva su propio `.gitignore`: la
-    pantalla dice «no sale de este ordenador», y una herramienta hecha sin la plantilla no lo
-    cumpliría. Al ponerlo, si ya está todo, se prueba sola, como una clave (P9).
+    `.anterior-<fecha>`, porque sobrescribir no se deshace (P4). La pantalla dice «no sale de este
+    ordenador», así que se comprueba con git (más abajo). Al ponerlo, si ya está todo, se prueba
+    sola, como una clave (P9).
   - *Entrar con tu cuenta* (OAuth): no hay nada que pegar. «Entrar» se lo pide al asistente, que abre
     el navegador. Es un botón porque sale de su ordenador en su nombre.
   - *Una dirección que te dan* (un webhook): un campo para la dirección, con dónde sale.
@@ -5314,23 +5314,30 @@ tiene otra persona.
     > Cómo hacérmela llegar, por seguridad:
     > - Nunca me la mandes por correo ni por mensajería, ni la pegues en la conversación con el
     >   asistente: ahí se queda guardada y se puede reenviar.
-    > - Lo mejor es que la pegues tú en la barra de Executive Lab de mi ordenador, en Conexiones (tools)
-    >   → Holded. Así no pasa por ningún otro sitio.
+    > - Lo mejor es que la pegues tú mismo en mi ordenador, en la barra de Executive Lab: Conexiones
+    >   (tools) → Holded. Para eso tienes que estar delante de él, o conectado a él. Así no pasa por
+    >   ningún otro sitio.
     > - Si no puede ser, compártela conmigo con un gestor de contraseñas.
     > - Mejor una nueva, solo para esto y con los permisos mínimos, que una que ya se use para otra
     >   cosa: así se puede quitar sin romper nada.
     > - Si se le puede poner fecha de caducidad, pónsela y dime cuál es.
+    > - Si ya me la has mandado por correo o por mensajería, anúlala y saca otra: esa ya no es segura.
 
     Es lo de siempre con un secreto (la *Secrets Management Cheat Sheet* de OWASP): que no viaje por
     donde se queda guardado, solo lo mínimo, uno para cada uso y con caducidad. La fecha la pregunta la
     barra desde la 149. Con usuario y contraseña, y con un fichero, dice lo mismo en su forma. Entrando
     con tu cuenta, que no hace falta mandar ninguna clave, y que si hay que autorizarlo como
     administrador, diga qué hay que aceptar.
-  - **Nunca un valor de una clave.** Todo lo que viene del disco pasa antes por los valores de las
-    claves de la carpeta y por las formas de clave que ya tapa «Algo va mal». Así se tapa también una
-    que el asistente haya pegado donde no debe: sale «[clave quitada]». El mensaje se arma en la
-    extensión cada vez, y los botones solo dicen de qué conexión es: el texto no vuelve desde la
-    pantalla.
+  - **Nunca un valor de una clave**, ni aunque el asistente la haya pegado donde no debe: sale
+    «[clave quitada]» (cómo, en la revisión de seguridad, abajo). El mensaje se arma en la extensión
+    cada vez, y los botones solo dicen de qué conexión es: el texto no vuelve desde la pantalla. La
+    pantalla no promete que no lleva claves: dice «Lo he revisado para quitar las claves: léelo antes
+    de mandarlo».
+  - **Primero lo de la barra, y después, marcado, lo del asistente.** El README lo puede escribir
+    quien prepara la carpeta, va en primera persona y acaba en manos de un tercero. Así que va detrás
+    de la parte de seguridad, bajo «Lo que preparó el asistente para esta herramienta:», con cada
+    línea citada con «>». Sin direcciones de correo («[correo quitado]»), y con las páginas que no son
+    de la herramienta a la vista en la pantalla, antes de mandarlo.
   - **El `mailto:` se abre como texto, no con `Uri.parse`.** El editor decodifica lo que va detrás del
     `?` al leer la dirección, y al abrirla la vuelve a codificar a su manera
     (`encodeURI(uri.toString(true))`, en su `openerService`). Un «?» del mensaje llegaba como «%3F» y un
@@ -5343,7 +5350,32 @@ tiene otra persona.
   informático, con su ejemplo. «Conectar algo nuevo» también las pide. Una prueba lee las cinco
   palabras de los raíles y su ejemplo con el código de la barra, para que no se separen.
 
-Queda fuera: un fichero de `keys/` que ya estaba guardado en git sigue en git, porque el `.gitignore`
-no saca lo que ya se seguía. Si se pone otro con ese mismo nombre, entraría en la copia siguiente, y
-esta pantalla todavía no lo mira. Con la plantilla de RSC no pasa: su `.gitignore` deja fuera `keys/`
-desde el principio.
+**Lo que encontró la revisión de seguridad** (PR #40), arreglado y con su prueba:
+
+- **La clave salía a trozos en el mensaje.** Se pasaba a texto llano antes de tapar, y eso quita `__`,
+  `**` y comillas invertidas: la clave ya no casaba. Y el corte a 4.000 caracteres podía partirla.
+  Ahora se tapa sobre el texto crudo y otra vez sobre el mensaje entero, y se corta por líneas
+  enteras. Además se tapa cada valor también codificado como en una dirección, en base64 (también
+  dentro de otro base64) y partido por espacios, saltos, guiones o puntos. Los de 4 o 5 caracteres de
+  una clave secreta por su nombre se tapan como palabra entera. También se tapa la clave de
+  `https://usuario:clave@sitio`, y lo que parece una clave por lo revuelto que es.
+- **Un `keys/.gitignore` que ya venía se daba por bueno.** Con `!*` dentro, la cuenta de servicio
+  entraba en git (reproducido con `git add -A`). Ahora, después de ponerlo, se pregunta a git
+  (`check-ignore`). Si no queda fuera, se añade su nombre a ese `.gitignore`, y si aun así entraría
+  (porque git ya lo seguía), no se deja: el de antes vuelve a su sitio y se dice, con su botón. Y el
+  `.gitignore` nuevo se escribe sin seguir un enlace que esté colgando.
+- **Expresiones lentas con un fichero preparado.** La de la línea del tipo de acceso tardaba segundos
+  con cien espacios delante, y corre en cada repintado. La de los marcadores y la de los enlaces eran
+  cuadráticas. Ahora tienen tope por línea y por tramo, y la primera se lee a mano.
+- **El asunto del correo:** el nombre sale de la primera línea del README, y un `\r` dentro abría otra
+  cabecera. Ahora va en una línea. Un emoji partido hacía fallar el correo: se corta por letras
+  enteras y lo que queda suelto se cambia.
+- **El de antes, con fecha**: con `.anterior` a secas, la tercera vez se perdía el primero.
+- **Un `.json` dice lo que es por dentro**: un `credentials.json` con una factura entraba por el
+  nombre.
+- **La parte de seguridad** dice qué hacer si ya se mandó (anularla y sacar otra), y que pegarla en
+  la barra supone estar en ese ordenador.
+
+Queda fuera: lo que parece una clave se mira con una regla (mayúsculas, minúsculas y cifras revueltas,
+o una ristra hexadecimal larga). Una clave de solo minúsculas que no esté en esta carpeta pasaría, y
+un identificador revuelto que no lo es se taparía.
