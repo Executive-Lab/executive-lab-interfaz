@@ -12453,7 +12453,7 @@ exec git "$@"
       // Lo que Jose decidió que sale, y lo que no: cambiarlo es otra decisión.
       const { _: _porque, ...encendidas } = tabla;
       assert.deepEqual(encendidas, {
-        tarjetaUnica: true, documentos: true, acciones: true, ayuda: true, copias: true, pie: true,
+        tarjetaUnica: true, documentos: true, documentosPlegable: false, acciones: true, ayuda: true, copias: true, pie: true,
         accionesRapidas: false, pulso: false, conocimiento: false, enQueEstamos: false, ajustes: false, comandos: false,
       }, 'la tabla de piezas ha cambiado');
       const ajuste = require(path.join(RAIZ, 'package.json')).contributes.configuration.properties['executiveLab.barraCompleta'];
@@ -12527,8 +12527,9 @@ exec git "$@"
       const adonde = (html) => Object.fromEntries([...html.matchAll(/data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)]
         .map(([, accion, dentro]) => [dentro.replace(/<span class="icono"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), JSON.parse(desescapar(accion)).tipo]));
       const botones = adonde(pintar({ ...conTodo, comandos: 3, habilidades: 2, hayAgentes: true, copias: { hace: 'ayer', sinGuardar: false, subir: true } }));
+      // Documentos es una pantalla desde la F7 (decisión 151): su fila la abre, y
+      // los tres botones del plegable ya no están en la principal.
       const quiero = {
-        'Darle documentos (inbox)': 'anadirDocumentos', 'Documentos entregados': 'verPapeles', 'Resultados (out)': 'verSalidas',
         'Conexiones (tools)': 'verConexiones', 'Conectar algo nuevo': 'pedir', 'Habilidades (skills)': 'verSaberes', Agentes: 'verAgentes',
         'Seguir donde lo dejé': 'pedir', 'Conversación nueva': 'conversacionNueva', 'Dime qué hago ahora': 'pedir', 'Pedir ayuda en el foro': 'pedirAyudaEnElForo',
         Sugerencias: 'verSugerencias', 'Más ayuda': 'verAyuda',
@@ -12536,6 +12537,16 @@ exec git "$@"
         'Barra 0.46.0': 'verAyuda', 'Cambiar de proyecto': 'elegirCarpeta',
       };
       for (const [etiqueta, tipo] of Object.entries(quiero)) assert.equal(botones[etiqueta], tipo, `«${etiqueta}» lleva a otro sitio`);
+      for (const deAntes of ['Darle documentos (inbox)', 'Documentos entregados', 'Resultados (out)']) {
+        assert.equal(botones[deAntes], undefined, `«${deAntes}» sigue en la principal: Documentos es una pantalla`);
+      }
+      assert.doesNotMatch(pintar(conTodo), /data-abrir="sencilla:documentos"/, 'Documentos sigue plegable en la principal');
+      // Con lo que espera al lado, como antes; y sin nada, solo el nombre.
+      assert.equal(adonde(pintar({ ...conTodo, estado: { ...conTodo.estado, esperando: 2 } }))['Documentos 2 sin leer'], 'verDocumentos', 'la fila no dice cuántos esperan, o no abre Documentos');
+      assert.equal(adonde(pintar({ ...conTodo, estado: { ...conTodo.estado, esperando: 0 } })).Documentos, 'verDocumentos', 'sin nada esperando, la fila no abre Documentos');
+      // Lo de antes no se ha borrado: con su pieza encendida, vuelve el plegable.
+      const conElDeAntes = adonde(pintar({ ...conTodo, piezas: { ...tabla, documentosPlegable: true } }));
+      assert.equal(conElDeAntes['Documentos entregados'], 'verPapeles', 'encendido en la tabla, el plegable de antes no vuelve');
       // Conexiones sale siempre, aunque no haya nada conectado: desde ella se conecta lo primero.
       assert.equal(adonde(pintar({ ...conTodo, estado: { ...conTodo.estado, conectados: 0 } }))['Conexiones (tools)'], 'verConexiones', 'sin nada conectado, no sale Conexiones');
 
@@ -12609,6 +12620,501 @@ exec git "$@"
     } finally {
       proveedor.enviar = antes.enviar;
       vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+    }
+  });
+
+  // ------------------------------------- documentos y la foto del cerebro
+  //
+  // Decisión 151: la F7 del plan de simplificar la barra (Documentos en una
+  // pantalla) y el punto 11 de la 142 (la foto del cerebro sin instalar
+  // Obsidian). El dibujo es puro (`foto.js`) y se prueba sin pintar nada; lo que
+  // pinta el panel, con el panel de mentira; y lo que hace la extensión, con una
+  // empresa de mentira recién montada, para no depender de lo que dejaron las
+  // pruebas de antes.
+
+  // Un PNG de un punto, de verdad: lo que devuelve el lienzo de mentira.
+  const UN_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const accionesDe = (html) => [...html.matchAll(/data-accion="([^"]*)"/g)]
+    .map((m) => JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')));
+
+  await comprobar('la foto del cerebro: un punto por concepto y una línea por enlace, en markdown o con [[ ]]', () => {
+    const foto = cargar('foto');
+    // Cada forma de enlazar, sola, entre A y «Nota con espacio»: si una deja de
+    // leerse, cae su caso y no otro. RSC escribe markdown relativo; en clase se
+    // habló de [[wikilinks]]; y Obsidian escribe a veces solo el nombre.
+    const casos = [
+      ['markdown relativo, con %20', '[x](../b/Nota%20con%20espacio.md)', 1],
+      ['markdown entre <>', '[x](<../b/Nota con espacio.md>)', 1],
+      ['markdown con ancla y título', '[x](../b/Nota%20con%20espacio.md#parte "Título")', 1],
+      ['markdown sin la extensión', '[x](../b/Nota%20con%20espacio)', 1],
+      ['markdown con solo el nombre, como lo escribe Obsidian', '[x](Nota%20con%20espacio.md)', 1],
+      ['markdown desde la base de Obsidian', '[x](/wiki/b/Nota%20con%20espacio.md)', 1],
+      ['una referencia al pie', 'Ver [x][1].\n\n[1]: ../b/Nota%20con%20espacio.md', 1],
+      ['[[nombre]]', '[[Nota con espacio]]', 1],
+      ['[[nombre#sección|lo que se lee]], sin mayúsculas', '[[nota con espacio#arriba|leer]]', 1],
+      ['[[carpeta/nombre]]', '[[b/Nota con espacio]]', 1],
+      ['[[alias]], con los aliases entre corchetes', '[[nota-vieja]]', 1, '---\naliases: [nota-vieja]\n---\n'],
+      ['[[alias]], con los aliases en lista', '[[nota-vieja]]', 1, '---\naliases:\n  - nota-vieja\n---\n'],
+      ['[[título]]', '[[Precios de 2026]]', 1, '---\ntitle: Precios de 2026\n---\n'],
+      ['una web no es un concepto', '[x](https://ejemplo.com/b/Nota%20con%20espacio.md)', 0],
+      ['un original de raw no es un concepto', '[x](../../raw/b/Nota%20con%20espacio.md)', 0],
+      ['lo que está en código no enlaza', '```\n[[Nota con espacio]]\n```\nNi `[x](../b/Nota%20con%20espacio.md)`.', 0],
+      ['la cabecera no enlaza', '', 0, '', '---\nsources: "[x](../b/Nota%20con%20espacio.md)"\n---\n'],
+      ['lo que ya no está no enlaza', '[[No existe]] [x](../b/Otra.md)', 0],
+      ['uno consigo mismo no es una línea', '[x](A.md) [[A]]', 0],
+    ];
+    for (const [que, enlace, lineas, cabeceraDeB = '', cabeceraDeA = ''] of casos) {
+      const { nodos, enlaces } = foto.delCerebro([
+        { ruta: 'a/A.md', texto: `${cabeceraDeA}# A\n\n${enlace}\n` },
+        { ruta: 'b/Nota con espacio.md', texto: `${cabeceraDeB}# Nota con espacio\n` },
+      ]);
+      assert.equal(nodos.length, 2, `${que}: un punto por concepto`);
+      assert.deepEqual(enlaces, lineas ? [[0, 1]] : [], `${que}: ${lineas ? 'no sale la línea' : 'sale una línea que no es'}`);
+    }
+
+    // El título: el de la cabecera; si no, el primer «# »; y si no, el nombre del fichero.
+    const titulos = foto.delCerebro([
+      { ruta: 'z/Con cabecera.md', texto: '---\ntitle: "El de la cabecera"\n---\n\n# El del texto\n\n[[Sin nada]] [[El del texto solo]]\n' },
+      { ruta: 'z/El del texto solo.md', texto: '# Lo que dice dentro\n\n[vuelta](Con%20cabecera.md)\n' },
+      { ruta: 'z/sin-nada_aqui.md', texto: 'Nada.' },
+      { ruta: 'z/Sin nada.md', texto: '' },
+    ]);
+    assert.deepEqual(titulos.nodos.map((n) => n.titulo), ['El de la cabecera', 'Lo que dice dentro', 'Sin nada', 'Sin nada aqui']);
+    assert.deepEqual(titulos.enlaces, [[0, 1], [0, 2]], 'ida y vuelta es una sola línea');
+    assert.deepEqual(titulos.nodos.map((n) => n.grado), [2, 1, 1, 0], 'cuántos enlaces tiene cada uno');
+    // Dos con el mismo nombre en temas distintos: gana el del mismo tema, como en Obsidian.
+    const dos = foto.delCerebro([{ ruta: 'a/Nota.md', texto: '' }, { ruta: 'b/A.md', texto: '[[Nota]]' }, { ruta: 'b/Nota.md', texto: '' }]);
+    assert.deepEqual(dos.enlaces, [[1, 2]], 'el [[Nota]] de un tema lleva a la Nota de otro');
+    // Repetido no es más de una línea.
+    assert.deepEqual(foto.delCerebro([{ ruta: 'a/A.md', texto: '[[B]] [[B]] [b](../b/B.md)' }, { ruta: 'b/B.md', texto: '[[A]]' }]).enlaces, [[0, 1]], 'un enlace repetido es otra línea');
+    return `${casos.length} formas de escribir un enlace, y de dónde sale cada título`;
+  });
+
+  await comprobar('la foto del cerebro: cada punto en su sitio, siempre el mismo, dentro del cuadro y sin pisarse', () => {
+    const foto = cargar('foto');
+    // Dos temas muy enlazados por dentro y unidos por una sola línea, y dos sueltos.
+    const articulos = [];
+    for (const tema of ['ventas', 'compras']) {
+      for (let i = 0; i < 6; i += 1) {
+        articulos.push({ ruta: `${tema}/${tema} ${i}.md`, texto: `# ${tema} ${i}\n\n[[${tema} ${(i + 1) % 6}]] [[${tema} ${(i + 2) % 6}]]\n` });
+      }
+    }
+    articulos[0].texto += '[[compras 0]]\n';
+    articulos.push({ ruta: 'sueltos/Uno.md', texto: '# Uno\n' }, { ruta: 'sueltos/Otro.md', texto: '# Otro\n' });
+
+    const grafo = foto.delCerebro(articulos);
+    assert.equal(grafo.enlaces.length, 25, 'doce por tema y la que los une');
+    const sitio = foto.disponer(grafo);
+    assert.equal(sitio.length, grafo.nodos.length, 'un sitio por punto');
+    // Determinista: lo mismo da la misma foto, en el orden que lleguen los ficheros.
+    assert.deepEqual(foto.disponer(grafo), sitio, 'dos veces lo mismo no da la misma foto');
+    const alReves = foto.delCerebro([...articulos].reverse());
+    assert.deepEqual(alReves, grafo, 'el orden de los ficheros cambia el dibujo');
+    assert.deepEqual(foto.disponer(alReves), sitio, 'el orden de los ficheros cambia la foto');
+
+    // Dentro del cuadro, con su margen, y aprovechándolo.
+    const { LADO } = foto;
+    for (const p of sitio) assert.ok(p.x >= 69.9 && p.x <= LADO - 69.9 && p.y >= 69.9 && p.y <= LADO - 69.9, `un punto se sale de la foto: ${JSON.stringify(p)}`);
+    const tramo = (lista, eje) => Math.max(...lista.map((p) => p[eje])) - Math.min(...lista.map((p) => p[eje]));
+    assert.ok(Math.max(tramo(sitio, 'x'), tramo(sitio, 'y')) > LADO - 141, 'la foto no aprovecha el cuadro');
+
+    // Sin pisarse: ningún par más cerca que dos puntos de los grandes.
+    const lejos = (a, b) => Math.hypot(sitio[a].x - sitio[b].x, sitio[a].y - sitio[b].y);
+    let masCerca = Infinity;
+    for (let a = 0; a < sitio.length; a += 1) for (let b = a + 1; b < sitio.length; b += 1) masCerca = Math.min(masCerca, lejos(a, b));
+    const dosPuntos = 2 * foto.radio(4, sitio.length);
+    assert.ok(masCerca > dosPuntos, `hay dos puntos encima: ${masCerca.toFixed(1)} < ${dosPuntos}`);
+
+    // Lo enlazado, cerca; cada tema, junto; y lo que enlaza no se encoge por lo suelto.
+    const media = (l) => l.reduce((s, v) => s + v, 0) / l.length;
+    const enlazados = new Set(grafo.enlaces.map(([a, b]) => `${a}:${b}`));
+    const pares = { si: [], no: [] };
+    for (let a = 0; a < sitio.length; a += 1) for (let b = a + 1; b < sitio.length; b += 1) pares[enlazados.has(`${a}:${b}`) ? 'si' : 'no'].push(lejos(a, b));
+    assert.ok(media(pares.si) < media(pares.no) * 0.6, `lo enlazado no queda más cerca: ${media(pares.si).toFixed(0)} frente a ${media(pares.no).toFixed(0)}`);
+    const de = (tema) => grafo.nodos.map((n, i) => (n.ruta.startsWith(`${tema}/`) ? i : -1)).filter((i) => i >= 0);
+    const centro = (lista) => ({ x: media(lista.map((i) => sitio[i].x)), y: media(lista.map((i) => sitio[i].y)) });
+    const [cv, cc] = [centro(de('ventas')), centro(de('compras'))];
+    const anchoDeVentas = media(de('ventas').map((i) => Math.hypot(sitio[i].x - cv.x, sitio[i].y - cv.y)));
+    assert.ok(Math.hypot(cv.x - cc.x, cv.y - cc.y) > anchoDeVentas * 1.5, 'los dos temas salen mezclados');
+    const conEnlaces = grafo.nodos.map((n, i) => (n.grado ? sitio[i] : null)).filter(Boolean);
+    assert.ok(Math.max(tramo(conEnlaces, 'x'), tramo(conEnlaces, 'y')) > (LADO - 140) * 0.6, 'lo suelto se escapa y lo demás se queda en un rincón');
+
+    // Uno solo, en el centro; ninguno, nada.
+    assert.deepEqual(foto.disponer({ nodos: [{ ruta: 'a.md', grado: 0 }], enlaces: [] }), [{ x: LADO / 2, y: LADO / 2 }]);
+    assert.deepEqual(foto.disponer({ nodos: [], enlaces: [] }), []);
+    // Más grande cuanto más enlaza, y más pequeños cuantos más hay.
+    assert.ok(foto.radio(9, 50) > foto.radio(1, 50) && foto.radio(1, 50) > foto.radio(0, 50), 'el tamaño no dice cuánto enlaza');
+    assert.ok(foto.radio(1, 300) < foto.radio(1, 20), 'con muchos, los puntos no se achican');
+    return `${sitio.length} puntos, a ${masCerca.toFixed(0)} como poco`;
+  });
+
+  await comprobar('la foto del cerebro con cientos de conceptos: no se cuelga, enseña los que más enlazan y dice cuántos hay', () => {
+    const foto = cargar('foto');
+    const wiki = fs.mkdtempSync(path.join(os.tmpdir(), 'cerebro-grande-'));
+    const nombre = (i) => `Concepto ${String(i).padStart(3, '0')}`;
+    const rutaDe = (i) => `tema${i % 7}/${nombre(i)}.md`;
+    const rutas = [];
+    // 700: 40 a los que enlaza todo el mundo, 560 que enlazan a dos de esos, y 100 sueltos.
+    for (let i = 0; i < 700; i += 1) {
+      const enlaces = i >= 40 && i < 600 ? `[[${nombre(i % 40)}]] [[${nombre((i * 7) % 40)}]]` : '';
+      fs.mkdirSync(path.join(wiki, `tema${i % 7}`), { recursive: true });
+      fs.writeFileSync(path.join(wiki, rutaDe(i)), `# ${nombre(i)}\n\n${enlaces}\n`);
+      rutas.push(rutaDe(i));
+    }
+    const antes = Date.now();
+    const f = foto.laFoto(wiki, rutas);
+    const tarda = Date.now() - antes;
+    // Holgado a propósito: con el Mac medio dormido, una vuelta tarda el triple.
+    assert.ok(tarda < 15000, `tarda ${tarda} ms`);
+    assert.equal(f.total, 700, 'no dice cuántos hay');
+    assert.equal(f.nodos.length, foto.TOPE, 'no se queda en el tope');
+    // Los que más enlazan, dentro; y ninguno suelto mientras quedan fuera otros que enlazan.
+    const dentro = new Set(f.nodos.map((n) => n.ruta));
+    for (let i = 0; i < 40; i += 1) assert.ok(dentro.has(rutaDe(i)), `se queda fuera uno de los que más enlazan: ${nombre(i)}`);
+    assert.ok(f.nodos.every((n) => n.grado > 0), 'entra uno suelto y se queda fuera uno que enlaza');
+    // Las líneas, entre los que se quedan, y todas las que hay entre ellos.
+    assert.ok(f.enlaces.every(([a, b]) => a !== b && a >= 0 && b >= 0 && a < f.nodos.length && b < f.nodos.length), 'una línea lleva a un punto que no está');
+    const losGrandes = new Set(Array.from({ length: 40 }, (_, i) => rutaDe(i)));
+    assert.equal(f.enlaces.length, f.nodos.filter((n) => !losGrandes.has(n.ruta)).reduce((s, n) => s + n.grado, 0), 'faltan líneas entre los que se quedan');
+    // Cada punto con su sitio y su tamaño; y el nombre, de los que más enlazan.
+    assert.ok(f.nodos.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y) && n.r > 0), 'un punto sin sitio');
+    assert.equal(f.rotulos.length, 40);
+    assert.equal(f.nodos[f.rotulos[0]].grado, Math.max(...f.nodos.map((n) => n.grado)), 'el primer nombre no es del que más enlaza');
+
+    // Lo que no se lee entero: uno enorme, y uno que lleva a otro sitio del disco.
+    fs.writeFileSync(path.join(wiki, 'tema0', 'Enorme.md'), `${'x'.repeat(1024 * 1024 + 10)}\n[[${nombre(650)}]]\n`);
+    assert.deepEqual(foto.laFoto(wiki, ['tema0/Enorme.md', rutaDe(650)]).enlaces, [], 'uno enorme se lee entero');
+    // Y entre todos hay un tope: pasado, los conceptos salen, pero no se leen.
+    const pocos = [rutaDe(41), rutaDe(81), rutaDe(1)];
+    assert.equal(foto.laFoto(wiki, pocos).enlaces.length, 2, 'sin pasar del tope no se leen todos');
+    // Se leen por orden (el Concepto 001 primero, que no enlaza), y con un tope de diez letras no pasa del primero.
+    const conTope = foto.laFoto(wiki, pocos, { enTotal: 10 });
+    assert.deepEqual([conTope.nodos.length, conTope.enlaces.length], [3, 0], 'pasado el tope de lectura se sigue leyendo');
+    let conEnlace = 'sin enlaces en este sistema';
+    try {
+      fs.symlinkSync(path.join(wiki, rutaDe(41)), path.join(wiki, 'tema0', 'Enlace.md'));
+      assert.deepEqual(foto.laFoto(wiki, ['tema0/Enlace.md', rutaDe(1), rutaDe(41)]).enlaces.length, 1, 'se sigue un enlace del disco');
+      conEnlace = 'el enlace del disco no se sigue';
+    } catch (error) {
+      if (error instanceof assert.AssertionError) throw error;
+    }
+    // Un fichero preparado para que las expresiones vuelvan atrás sin fin no
+    // cuelga la barra: con las de antes, 60 KB así tardaban seis segundos.
+    const trampa = Date.now();
+    foto.delCerebro([
+      { ruta: 'a.md', texto: '](' .repeat(300000) },
+      { ruta: 'b.md', texto: '[['.repeat(300000) },
+      { ruta: 'c.md', texto: `[x](${'a'.repeat(900000)}` },
+      { ruta: 'd.md', texto: '```\n~~~\n'.repeat(100000) },
+    ]);
+    assert.ok(Date.now() - trampa < 5000, `un fichero preparado la cuelga: ${Date.now() - trampa} ms`);
+    fs.rmSync(wiki, { recursive: true, force: true });
+    return `${f.total} conceptos en ${tarda} ms; se enseñan ${f.nodos.length} · ${conEnlace}`;
+  });
+
+  await comprobar('la foto del cerebro se guarda en PNG, sin pisar ninguna, y solo se abre una de las nuestras', () => {
+    const foto = cargar('foto');
+    const carpeta = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-')), 'out');
+    const el15 = new Date(2026, 9, 15, 12, 0, 0);
+    assert.equal(foto.nombreDeLaFoto(el15), 'La foto del cerebro 15-10-2026.png');
+    const una = foto.guardar(carpeta, UN_PNG, el15);
+    assert.deepEqual(una, { ok: true, fichero: 'La foto del cerebro 15-10-2026.png' });
+    assert.deepEqual(fs.readFileSync(path.join(carpeta, una.fichero)), Buffer.from(UN_PNG, 'base64'), 'no es la foto que llegó');
+    const otra = foto.guardar(carpeta, UN_PNG, el15);
+    assert.equal(otra.fichero, 'La foto del cerebro 15-10-2026 (2).png', 'la segunda del día pisa la primera');
+    assert.ok(fs.existsSync(path.join(carpeta, una.fichero)));
+
+    // Lo que no es un PNG no se guarda, ni nada vacío, ni algo enorme.
+    for (const [que, datos, motivo] of [
+      ['un texto', Buffer.from('<svg onload="x"></svg>').toString('base64'), 'noEsUnaFoto'],
+      ['nada', '', 'sinDatos'],
+      ['algo que no es texto', { png: UN_PNG }, 'sinDatos'],
+      ['algo enorme', 'A'.repeat(21 * 1024 * 1024), 'demasiado'],
+    ]) {
+      assert.equal(foto.guardar(carpeta, datos, el15).motivo, motivo, `${que}: se guarda`);
+    }
+    assert.equal(foto.guardar(null, UN_PNG, el15).ok, false, 'sin carpeta abierta');
+    // Si la carpeta de las fotos es un enlace a otro sitio del disco, ahí no se escribe.
+    let otroSitio = 'sin enlaces en este sistema';
+    try {
+      const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-'));
+      const trampa = path.join(path.dirname(carpeta), 'out-enlazada');
+      fs.symlinkSync(fuera, trampa);
+      assert.equal(foto.guardar(trampa, UN_PNG, el15).ok, false, 'se escribe a través de un enlace');
+      assert.deepEqual(fs.readdirSync(fuera), [], 'ha dejado la foto en otro sitio del disco');
+      otroSitio = 'ni a través de un enlace';
+    } catch (error) {
+      if (error instanceof assert.AssertionError) throw error;
+    }
+    fs.writeFileSync(path.join(carpeta, 'notas.txt'), 'x');
+    fs.writeFileSync(path.join(carpeta, 'otra.png'), Buffer.from(UN_PNG, 'base64'));
+    fs.utimesSync(path.join(carpeta, una.fichero), new Date(2026, 9, 15, 10), new Date(2026, 9, 15, 10));
+    fs.utimesSync(path.join(carpeta, otra.fichero), new Date(2026, 9, 15, 11), new Date(2026, 9, 15, 11));
+
+    // Solo las nuestras, de la más nueva a la más vieja, como un resultado más.
+    const lista = foto.lasFotos(carpeta);
+    assert.deepEqual(lista.map((f) => f.fichero), [otra.fichero, una.fichero], 'salen otras cosas, o en otro orden');
+    assert.equal(lista[0].tamano, '1 KB');
+    assert.match(lista[0].cuando, /^\d{4}-\d{2}-\d{2}T/);
+    assert.deepEqual(foto.lasFotos(path.join(carpeta, 'no-existe')), []);
+    // Y para abrirla o llevársela, solo una de las nuestras y en su sitio.
+    assert.equal(foto.donde(carpeta, una.fichero), path.join(carpeta, una.fichero));
+    for (const truco of ['../out/La foto del cerebro 15-10-2026.png', 'otra.png', 'notas.txt', 'La foto del cerebro 01-01-2026.png', '', null]) {
+      assert.equal(foto.donde(carpeta, truco), null, `se abre «${truco}»`);
+    }
+    return `${lista.length} fotos, y nada que no lo sea · ${otroSitio}`;
+  });
+
+  await comprobar('Documentos en una pantalla: darle documentos, los que tiene sin leer con «Que los lea», y los resultados', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const { montarPanelConClics } = require('./panel-con-clics');
+    const otra = montar();
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, eleccion: vscode.guion.eleccion, ficheros: vscode.guion.ficheros };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    const ultimo = () => enviados[enviados.length - 1];
+    try {
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      const m = ultimo();
+      assert.equal(m.tipo, 'documentos');
+      assert.deepEqual(m.esperando.map((d) => d.nombre), ['contrato-talleres-ruiz.txt'], 'lo que espera en la bandeja');
+      assert.deepEqual([m.sueltos, m.herramientas, m.fotos], [[], [], []]);
+
+      const html = montarPanelConClics().mandar(m);
+      // Un nombre por pantalla: la fila de la principal dice «Documentos» y abre «Documentos».
+      assert.match(html, /<p class="titulo">Documentos<\/p>/);
+      for (const sale of ['Darle documentos \\(inbox\\)', 'Arrástralos aquí, o a cualquier sitio de la barra\\.', 'Elegirlos', 'Sin leer todavía',
+        'contrato-talleres-ruiz\\.txt', 'Que los lea', 'Resultados \\(out\\)', 'Todavía no ha preparado nada para llevarse\\.', 'La foto del cerebro']) {
+        assert.match(html, new RegExp(sale), `no sale «${sale}»`);
+      }
+      assert.ok(html.indexOf('Darle documentos') < html.indexOf('Sin leer todavía') && html.indexOf('Sin leer todavía') < html.indexOf('Resultados (out)'), 'las tres cosas, en otro orden');
+      const botones = accionesDe(html);
+      assert.ok(botones.some((a) => a.tipo === 'volver'), 'una pantalla sin salida');
+      assert.deepEqual(botones.find((a) => a.tipo === 'anadirDocumentos'), { tipo: 'anadirDocumentos', desde: 'documentos' });
+      assert.match(botones.find((a) => a.tipo === 'pedir').prompt, /sin leer en la bandeja de entrada/);
+      assert.equal(botones.find((a) => a.tipo === 'quitarPapel').desde, 'documentos', 'quitar uno lleva a otra pantalla');
+      assert.deepEqual(botones.find((a) => a.tipo === 'verLaFoto'), { tipo: 'verLaFoto', desde: 'documentos' });
+
+      // Sin nada esperando, se dice, y no se ofrece leer nada.
+      const vacia = montarPanel().mandar({ ...m, esperando: [] });
+      assert.match(vacia, /Ninguno esperando\./);
+      assert.doesNotMatch(vacia, /Que los lea/);
+      // Lo suelto en la carpeta también lo ha dado: sale, no se quita desde aquí, y se le pide que lo coloque.
+      fs.writeFileSync(path.join(otra, 'presupuesto.pdf'), 'pdf de mentira');
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      const conSuelto = montarPanel().mandar(ultimo());
+      assert.match(conSuelto, /presupuesto\.pdf<\/p>\s*<p class="pista">Sin colocar todavía/);
+      assert.ok(!accionesDe(conSuelto).some((a) => a.tipo === 'quitarPapel' && a.ruta === 'presupuesto.pdf'), 'lo suelto en su carpeta se ofrece quitar');
+      assert.match(accionesDe(conSuelto).find((a) => a.tipo === 'pedir').prompt, /sueltos en la carpeta/);
+
+      // Lo producido, en Resultados, para abrirlo o llevárselo.
+      fs.mkdirSync(path.join(otra, '01-TOOLS', 'HOLDED', 'out'), { recursive: true });
+      fs.writeFileSync(path.join(otra, '01-TOOLS', 'HOLDED', 'out', 'informe.pdf'), 'informe');
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      const conResultados = montarPanel().mandar(ultimo());
+      assert.match(conResultados, /Holded[\s\S]*informe\.pdf/);
+      for (const tipo of ['abrirSalida', 'guardarSalida']) {
+        assert.ok(accionesDe(conResultados).some((a) => a.tipo === tipo && a.herramienta === 'HOLDED' && a.fichero === 'informe.pdf'), `sin ${tipo}`);
+      }
+
+      // Soltado encima de Documentos, se queda en Documentos, con lo soltado en la lista.
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [{ nombre: 'albaran.txt', datos: Buffer.from('albarán').toString('base64') }] });
+      const trasSoltar = enviados.filter((x) => x.tipo === 'documentos' || x.tipo === 'estado').pop();
+      assert.equal(trasSoltar.tipo, 'documentos', 'soltar en Documentos te saca a la principal');
+      assert.ok(trasSoltar.esperando.some((d) => d.nombre === 'albaran.txt'), 'lo soltado no sale');
+      assert.equal(trasSoltar.aviso.texto, 'Documento añadido. Se lo paso.');
+      // Y el aviso se queda al repintar, que es lo que pasa justo después de soltar algo.
+      enviados.length = 0;
+      await proveedor.repintarLoQueHaya();
+      assert.equal(ultimo().tipo, 'documentos', 'el vigía saca de Documentos');
+      assert.equal(ultimo().aviso && ultimo().aviso.texto, 'Documento añadido. Se lo paso.', 'el vigía se come el aviso');
+
+      // Elegirlos, desde Documentos, vuelve a Documentos; desde Conocimiento, como antes.
+      const elegido = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'elegir-')), 'factura.txt');
+      fs.writeFileSync(elegido, 'factura');
+      vscode.guion.ficheros = [elegido];
+      await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
+      assert.equal(ultimo().tipo, 'documentos', 'después de elegirlos, a otra pantalla');
+      assert.equal(ultimo().aviso.texto, 'Documento añadido. Se lo paso.');
+      vscode.guion.ficheros = [];
+      await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
+      assert.equal(ultimo().tipo, 'documentos', 'sin elegir nada, a otra pantalla');
+      await proveedor.manejar({ tipo: 'anadirDocumentos' });
+      assert.equal(ultimo().tipo, 'cerebro', 'desde Conocimiento ya no se vuelve a Conocimiento');
+
+      // Quitar uno sin leer, desde Documentos, vuelve a Documentos; desde Documentos entregados, allí.
+      vscode.guion.eleccion = 'Sí, quítalo';
+      await proveedor.manejar({ tipo: 'quitarPapel', ruta: '02-DOCS/inbox/albaran.txt', nombre: 'albaran.txt', desde: 'documentos' });
+      assert.equal(ultimo().tipo, 'documentos', 'después de quitarlo, a otra pantalla');
+      assert.ok(!ultimo().esperando.some((d) => d.nombre === 'albaran.txt'), 'no se ha quitado');
+      await proveedor.manejar({ tipo: 'quitarPapel', ruta: '02-DOCS/inbox/factura.txt', nombre: 'factura.txt' });
+      assert.equal(ultimo().tipo, 'papeles');
+      return 'darle, sin leer y resultados, y se vuelve a Documentos';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.eleccion = antes.eleccion;
+      vscode.guion.ficheros = antes.ficheros;
+      vscode.guion.raiz = empresa;
+      proveedor.donde = { tipo: 'principal' };
+    }
+  });
+
+  await comprobar('la foto del cerebro: se ve, se pulsa un punto y se lee, y se guarda en Resultados diciendo dónde', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const { montarPanelConClics } = require('./panel-con-clics');
+    const otra = montar();
+    const out = path.join(otra, '02-DOCS', 'wiki', 'out');
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, guardarDialogo: vscode.window.showSaveDialog };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    const ultimo = () => enviados[enviados.length - 1];
+    // Un lienzo de mentira que apunta lo que se dibuja en él.
+    const dibujado = { puntos: 0, lineas: 0, textos: [] };
+    const pincel = {
+      fillRect() {}, beginPath() {}, moveTo() {}, stroke() {}, fill() {}, translate() {}, strokeText() {},
+      lineTo() { dibujado.lineas += 1; },
+      arc() { dibujado.puntos += 1; },
+      fillText(t) { dibujado.textos.push(t); },
+    };
+    const lienzo = () => ({ width: 0, height: 0, getContext: (que) => (que === '2d' ? pincel : null), toDataURL: (que) => (que === 'image/png' ? `data:image/png;base64,${UN_PNG}` : '') });
+    try {
+      await proveedor.manejar({ tipo: 'verLaFoto', desde: 'documentos' });
+      const m = ultimo();
+      assert.equal(m.tipo, 'foto');
+      assert.deepEqual(m.nodos.map((n) => n.ruta), ['clientes/ferreteria-soler.md', 'clientes/talleres-ruiz.md', 'facturacion/ciclo.md', 'facturacion/morosos.md'],
+        'salen como conceptos el andamio, el índice o el diario');
+      assert.deepEqual(m.enlaces, [[0, 2]], 'Ciclo de facturación enlaza con Ferretería Soler');
+      assert.deepEqual([m.total, m.desde, m.lado], [4, 'documentos', 1000]);
+
+      const p = montarPanelConClics(undefined, { lienzo });
+      const html = p.mandar(m);
+      assert.match(html, /<p class="titulo">La foto del cerebro<\/p>/, 'el título no es el del botón que la abre');
+      assert.equal((html.match(/<g class="nodo"/g) || []).length, 4, 'no sale un punto por concepto');
+      assert.equal((html.match(/<line /g) || []).length, 1, 'no sale una línea por enlace');
+      for (const sale of ['4 conceptos · 1 enlace', '<title>Ciclo de facturación</title>', 'Pulsa un punto para leerlo\\.', '>Ferretería Soler</text>', 'Guardar la foto']) {
+        assert.match(html, new RegExp(sale), `no sale «${sale}»`);
+      }
+      assert.doesNotMatch(html, /Que los enlace|Tiene \d+ conceptos/, 'con enlaces y sin tope, se pide o se dice de más');
+      // La política de contenido de la barra: ni estilos en línea, ni guiones, ni nada de fuera.
+      assert.doesNotMatch(html, /\sstyle=|<style|<script|\son[a-z]+=|https?:|data:/i, 'el dibujo se salta la política de contenido');
+      assert.deepEqual(accionesDe(html).find((a) => a.tipo === 'verDocumentos'), { tipo: 'verDocumentos' }, 'no se vuelve a Documentos');
+
+      // Cada punto abre su concepto, y desde él se vuelve a la foto.
+      const puntos = accionesDe(html).filter((a) => a.tipo === 'leerArticulo');
+      assert.deepEqual(puntos.map((a) => a.ruta).sort(), m.nodos.map((n) => n.ruta).sort(), 'un punto que no abre su concepto');
+      assert.ok(puntos.every((a) => a.desde === 'foto'), 'desde un punto no se vuelve a la foto');
+      p.pulsar('leerArticulo');
+      await proveedor.manejar(p.enviados[p.enviados.length - 1]);
+      assert.deepEqual([ultimo().tipo, ultimo().desde], ['articulo', 'foto']);
+      await proveedor.manejar({ tipo: 'leerArticulo', ruta: 'facturacion/ciclo.md', desde: 'foto' });
+      const ciclo = p.mandar(ultimo());
+      assert.match(ciclo, /<nav class="migas"><a[^>]*>La foto del cerebro<\/a>/, 'las migas no llevan a la foto');
+      assert.deepEqual(accionesDe(ciclo).filter((a) => a.tipo === 'verLaFoto').map((a) => a.desde), ['documentos', 'documentos'], 'volver no lleva a la foto');
+      const dentroDelArticulo = accionesDe(ciclo).filter((a) => a.tipo === 'leerArticulo');
+      assert.ok(dentroDelArticulo.length && dentroDelArticulo.every((a) => a.desde === 'foto'), 'un enlace de dentro del concepto ya no vuelve a la foto');
+      // Y leído desde Conocimiento, como antes.
+      await proveedor.manejar({ tipo: 'leerArticulo', ruta: 'facturacion/ciclo.md', tema: 'facturacion' });
+      assert.ok(!accionesDe(p.mandar(ultimo())).some((a) => a.tipo === 'verLaFoto' || a.desde === 'foto'), 'desde Conocimiento se vuelve a la foto');
+
+      // Guardar la foto: el panel la dibuja, la extensión la guarda en Resultados, y lo dice.
+      await proveedor.manejar({ tipo: 'verLaFoto', desde: 'documentos' });
+      p.mandar(ultimo());
+      p.pulsar('guardarLaFoto');
+      const pedido = p.enviados[p.enviados.length - 1];
+      assert.equal(pedido.png, UN_PNG, 'la foto no viaja');
+      assert.deepEqual([dibujado.puntos, dibujado.lineas], [4, 1], 'la foto no lleva los mismos puntos y líneas');
+      assert.ok(dibujado.textos.includes('Conocimiento de tu trabajo'), `la foto no dice de quién es: ${dibujado.textos.join(' | ')}`);
+      assert.ok(dibujado.textos.some((t) => /\d{4} · 4 conceptos · 1 enlace$/.test(t)), 'la foto no dice el día ni cuántos hay');
+      assert.ok(dibujado.textos.includes('Ciclo de facturación'), 'la foto va sin nombres');
+      await proveedor.manejar(pedido);
+      const nombre = cargar('foto').nombreDeLaFoto(new Date());
+      const guardada = ultimo();
+      assert.equal(guardada.tipo, 'foto', 'después de guardarla, a otra pantalla');
+      assert.equal(guardada.aviso.texto, `Guardada en Resultados (out), dentro de Documentos: «${nombre}».`);
+      assert.deepEqual(guardada.aviso.boton, { etiqueta: 'Abrirla', accion: { tipo: 'abrirLaFoto', fichero: nombre } });
+      assert.deepEqual(fs.readFileSync(path.join(out, nombre)), Buffer.from(UN_PNG, 'base64'), 'no está donde se dice');
+      assert.match(p.mandar(guardada), /Guardada en Resultados \(out\)[\s\S]*Abrirla/, 'el panel no lo dice');
+      // El vigía, que se despierta al escribirla, repinta con lo que se dijo.
+      enviados.length = 0;
+      await proveedor.repintarLoQueHaya();
+      assert.equal(ultimo().tipo, 'foto');
+      assert.equal(ultimo().aviso && ultimo().aviso.texto, guardada.aviso.texto, 'el vigía se come dónde ha quedado');
+      // La foto guardada no es un concepto ni un tema.
+      assert.equal(ultimo().nodos.length, 4, 'la foto guardada sale en la foto');
+      assert.ok(!cargar('cerebro').catalogo().some((t) => t.id === 'out'), 'la carpeta de las fotos sale como tema');
+
+      // En Resultados, en Documentos y en la de antes, para abrirla o llevársela.
+      for (const tipo of ['verDocumentos', 'verSalidas']) {
+        await proveedor.manejar({ tipo });
+        assert.deepEqual(ultimo().fotos.map((f) => f.fichero), [nombre], `${tipo}: no sale la foto`);
+        const pintado = montarPanel().mandar(ultimo());
+        assert.match(pintado, /La foto del cerebro <span class="cuantos">1<\/span>/, `${tipo}: sin su grupo`);
+        for (const a of ['abrirLaFoto', 'llevarteLaFoto']) assert.ok(accionesDe(pintado).some((x) => x.tipo === a && x.fichero === nombre), `${tipo}: sin ${a}`);
+      }
+      vscode.registrado.ejecutados.length = 0;
+      vscode.registrado.abiertos.length = 0;
+      await proveedor.manejar({ tipo: 'abrirLaFoto', fichero: nombre });
+      const abiertos = [...vscode.registrado.ejecutados.map((e) => e.args[0] && e.args[0].fsPath), ...vscode.registrado.abiertos];
+      assert.ok(abiertos.includes(path.join(out, nombre)), 'no se abre');
+      const destino = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'llevarse-')), 'mia.png');
+      vscode.window.showSaveDialog = async () => ({ fsPath: destino });
+      await proveedor.manejar({ tipo: 'llevarteLaFoto', fichero: nombre });
+      assert.equal(ultimo().texto, 'Guardado: mia.png');
+      assert.ok(fs.existsSync(destino), 'no se la lleva');
+      for (const truco of ['../../../.rsc.json', '../ciclo.md', 'otra.png']) {
+        await proveedor.manejar({ tipo: 'abrirLaFoto', fichero: truco });
+        assert.equal(ultimo().texto, 'Esa foto ya no está.', `se abre «${truco}»`);
+      }
+
+      // Sin lienzo no se guarda nada a medias, y se dice con su salida.
+      const sinLienzo = montarPanelConClics();
+      sinLienzo.mandar(m);
+      sinLienzo.pulsar('guardarLaFoto');
+      const sinPng = sinLienzo.enviados[sinLienzo.enviados.length - 1];
+      assert.equal(sinPng.png, undefined);
+      const cuantas = fs.readdirSync(out).length;
+      await proveedor.manejar(sinPng);
+      assert.equal(ultimo().aviso.texto, 'No he podido guardar la foto. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+      assert.equal(ultimo().aviso.malo, true);
+      assert.equal(fs.readdirSync(out).length, cuantas, 'sin foto, se guarda algo');
+      assert.match(montarPanel().mandar(ultimo()), /algoVaMal/, 'el fallo no trae su botón');
+
+      // Desde Conocimiento, se vuelve a Conocimiento; y Conocimiento lleva a la foto.
+      await proveedor.manejar({ tipo: 'verLaFoto', desde: 'cerebro' });
+      const desdeConocimiento = accionesDe(montarPanel().mandar(ultimo()));
+      assert.ok(desdeConocimiento.some((a) => a.tipo === 'verCerebro') && !desdeConocimiento.some((a) => a.tipo === 'verDocumentos'), 'desde Conocimiento se vuelve a otro sitio');
+      await proveedor.manejar({ tipo: 'verCerebro' });
+      assert.ok(accionesDe(montarPanel().mandar(ultimo())).some((a) => a.tipo === 'verLaFoto' && a.desde === 'cerebro'), 'Conocimiento no lleva a la foto');
+
+      // Sin conceptos, nada que fotografiar, pero con salida (P1).
+      const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'sin-cerebro-'));
+      vscode.guion.raiz = vacia;
+      await proveedor.manejar({ tipo: 'verLaFoto' });
+      assert.deepEqual(ultimo().nodos, []);
+      const sinNada = montarPanel().mandar(ultimo());
+      assert.match(sinNada, /Todavía no hay conceptos que fotografiar\. Dale documentos y los irá escribiendo\./);
+      assert.doesNotMatch(sinNada, /<svg|Guardar la foto/, 'sin conceptos, una foto vacía');
+      assert.deepEqual(accionesDe(sinNada).find((a) => a.tipo === 'anadirDocumentos'), { tipo: 'anadirDocumentos', desde: 'documentos' }, 'sin conceptos, sin salida');
+      // Con conceptos y sin enlaces, se ve igual, y se ofrece enlazarlos.
+      fs.mkdirSync(path.join(vacia, '02-DOCS', 'wiki', 'ventas'), { recursive: true });
+      for (const n of ['Uno', 'Dos']) fs.writeFileSync(path.join(vacia, '02-DOCS', 'wiki', 'ventas', `${n}.md`), `# ${n}\n`);
+      await proveedor.manejar({ tipo: 'verLaFoto' });
+      const sinEnlaces = montarPanel().mandar(ultimo());
+      assert.match(sinEnlaces, /2 conceptos · 0 enlaces/);
+      assert.match(sinEnlaces, /Todavía ningún concepto enlaza con otro\./);
+      assert.match(accionesDe(sinEnlaces).find((a) => a.tipo === 'pedir').prompt, /enlaza entre sí/);
+      assert.match(sinEnlaces, /Guardar la foto/, 'sin enlaces no se puede guardar');
+      // Con más de los que caben, se dice cuántos hay.
+      assert.match(montarPanel().mandar({ ...ultimo(), total: 412 }), /Tiene 412 conceptos: para que se vea, la foto enseña los 2 con más enlaces\./);
+      return `4 puntos y 1 línea, abiertos desde la foto, y «${nombre}» en Resultados`;
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.window.showSaveDialog = antes.guardarDialogo;
+      vscode.guion.raiz = empresa;
+      proveedor.donde = { tipo: 'principal' };
     }
   });
 

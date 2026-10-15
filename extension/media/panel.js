@@ -228,6 +228,9 @@ const volver = (accion = { tipo: 'volver' }) => boton({ etiqueta: 'Volver', icon
 // de verdad. Los resuelve la extensión (cerebro.enlacesDe), que es quien puede
 // mirar el disco; aquí solo se pintan.
 let enlacesDelArticulo = {};
+// Si el artículo se abrió desde la foto del cerebro: sus enlaces siguen
+// volviendo a la foto (decisión 151).
+let enlacesDesde = null;
 
 function enLinea(t) {
   return texto(t)
@@ -240,7 +243,7 @@ function enLinea(t) {
       if (/^https?:/.test(destino)) return `<a href="${atributo(destino)}">${rotulo}</a>`;
       const dentro = enlacesDelArticulo[destino];
       return dentro
-        ? `<a class="enlace-interno vivo" data-accion="${atributo(JSON.stringify({ tipo: 'leerArticulo', ruta: dentro }))}">${rotulo}</a>`
+        ? `<a class="enlace-interno vivo" data-accion="${atributo(JSON.stringify({ tipo: 'leerArticulo', ruta: dentro, ...(enlacesDesde ? { desde: enlacesDesde } : {}) }))}">${rotulo}</a>`
         : `<span class="enlace-interno">${rotulo}</span>`;
     });
 }
@@ -356,23 +359,39 @@ function cajaDeBusqueda(donde, valor = '') {
 // Lo que el asistente ha producido, sacado del `out/` que RSC define en cada
 // herramienta. Dos formas de llevárselo y ninguna enseña una ruta: abrirlo con
 // el programa de siempre, o guardarlo donde esa persona diga.
-function pantallaSalidas(datos) {
-  const herramientas = datos.herramientas || [];
-
-  // El nombre manda, y las dos acciones son dos dibujos a la derecha: son
-  // siempre las mismas para todos los ficheros, así que escribirlas enteras
-  // una y otra vez solo quita sitio al nombre, que es lo único que cambia.
-  const archivo = (h, a) => `
+// El nombre manda, y las dos acciones son dos dibujos a la derecha: son
+// siempre las mismas para todos los ficheros, así que escribirlas enteras
+// una y otra vez solo quita sitio al nombre, que es lo único que cambia.
+const filaDeResultado = (a, abrir, llevar) => `
     <div class="archivo">
       <div class="archivo-que">
         <p class="nombre">${texto(a.fichero)}</p>
         <p class="pista">${texto(a.tamano)} · ${texto(cuando(a.cuando.slice(0, 10)))}</p>
       </div>
       <div class="archivo-acciones">
-        ${boton({ etiqueta: `Abrir ${a.fichero}`, icono: '👁', pequeno: true, soloIcono: true, accion: { tipo: 'abrirSalida', herramienta: h.id, fichero: a.fichero } })}
-        ${boton({ etiqueta: `Guardar ${a.fichero} donde yo diga`, icono: '⬇', pequeno: true, soloIcono: true, accion: { tipo: 'guardarSalida', herramienta: h.id, fichero: a.fichero } })}
+        ${boton({ etiqueta: `Abrir ${a.fichero}`, icono: '👁', pequeno: true, soloIcono: true, accion: abrir })}
+        ${boton({ etiqueta: `Guardar ${a.fichero} donde yo diga`, icono: '⬇', pequeno: true, soloIcono: true, accion: llevar })}
       </div>
     </div>`;
+
+// Lo producido, en un plegable por conexión; y las fotos del cerebro, en el
+// suyo (decisión 151). Lo usan Resultados (out) y Documentos.
+function gruposDeResultados(herramientas = [], fotos = []) {
+  const plegable = (id, etiqueta, cuantos, dentro) => `
+      <details class="acordeon" data-abrir="${atributo(id)}"${abiertas.has(id) ? ' open' : ''}>
+        <summary>${texto(etiqueta)} <span class="cuantos">${cuantos}</span></summary>
+        ${dentro}
+      </details>`;
+  return herramientas.map((h) => plegable(`salida:${h.id}`, h.etiqueta, h.cuantos, `
+        ${h.archivos.map((a) => filaDeResultado(a, { tipo: 'abrirSalida', herramienta: h.id, fichero: a.fichero }, { tipo: 'guardarSalida', herramienta: h.id, fichero: a.fichero })).join('')}
+        ${h.hayMas ? boton({ etiqueta: plural(h.hayMas, 'Ver el que falta', 'Ver los {n} que faltan'), icono: '📂', discreto: true, pequeno: true, accion: { tipo: 'abrirCarpetaDeSalida', herramienta: h.id } }) : ''}`)).join('')
+    + (fotos.length ? plegable('fotos:cerebro', 'La foto del cerebro', fotos.length,
+      fotos.map((a) => filaDeResultado(a, { tipo: 'abrirLaFoto', fichero: a.fichero }, { tipo: 'llevarteLaFoto', fichero: a.fichero })).join('')) : '');
+}
+
+function pantallaSalidas(datos) {
+  const herramientas = datos.herramientas || [];
+  const fotos = datos.fotos || [];
 
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Resultados (out)' }])}
@@ -384,12 +403,7 @@ function pantallaSalidas(datos) {
       <p class="hiciste">Lo que ha producido con cada conexión. Ábrelo para verlo, o guárdatelo donde quieras.</p>
     </div>
 
-    ${herramientas.length ? herramientas.map((h) => `
-      <details class="acordeon" data-abrir="salida:${atributo(h.id)}"${abiertas.has(`salida:${h.id}`) ? ' open' : ''}>
-        <summary>${texto(h.etiqueta)} <span class="cuantos">${h.cuantos}</span></summary>
-        ${h.archivos.map((a) => archivo(h, a)).join('')}
-        ${h.hayMas ? boton({ etiqueta: plural(h.hayMas, 'Ver el que falta', 'Ver los {n} que faltan'), icono: '📂', discreto: true, pequeno: true, accion: { tipo: 'abrirCarpetaDeSalida', herramienta: h.id } }) : ''}
-      </details>`).join('')
+    ${herramientas.length || fotos.length ? gruposDeResultados(herramientas, fotos)
       : nada('Todavía no ha preparado nada para llevarse.')}
 
   `;
@@ -1185,6 +1199,70 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
 
 // ------------------------------------------------------------- los papeles
 
+// Un documento: su nombre, cuándo llegó (o lo que haga falta decir de él) y, a
+// la derecha, abrirlo y, si nadie lo ha leído todavía, quitarlo. Lo usan
+// Documentos entregados y Documentos (decisión 151); `desde` dice a cuál volver.
+function filaDePapel(d, { seQuita = false, pista = '', desde = null } = {}) {
+  const debajo = pista || (d.cuando ? cuando(String(d.cuando).slice(0, 10)) : '');
+  return `
+      <div class="archivo">
+        <div class="archivo-que">
+          <p class="nombre">${texto(d.nombre)}</p>
+          ${debajo ? `<p class="pista">${texto(debajo)}</p>` : ''}
+        </div>
+        <div class="archivo-acciones">
+          ${boton({ etiqueta: `Abrir ${d.nombre}`, icono: '↗', pequeno: true, soloIcono: true, accion: { tipo: 'abrirPapel', ruta: d.ruta } })}
+          ${seQuita ? boton({ etiqueta: `Quitar ${d.nombre}`, icono: '×', pequeno: true, soloIcono: true, accion: { tipo: 'quitarPapel', ruta: d.ruta, nombre: d.nombre, ...(desde ? { desde } : {}) } }) : ''}
+        </div>
+      </div>`;
+}
+
+// ------------------------------------------- documentos, en una pantalla
+
+// F7 del plan de simplificar la barra (decisión 151). Era un plegable con tres
+// botones que llevaban a tres pantallas; ahora es una pantalla con las tres
+// cosas a la vista: darle documentos, los que tiene sin leer y los resultados.
+// Arrastrar sigue valiendo en toda la barra (el `drop` de arriba del todo), y
+// aquí lo soltado sale enseguida en «Sin leer todavía».
+//
+// Lo de antes no se borra: «Documentos entregados» sigue entero en la barra
+// completa, y el plegable vuelve con `documentosPlegable` en la tabla de piezas.
+const QUE_LOS_LEA = 'Lee los documentos que tienes sin leer en la bandeja de entrada, guarda lo que aprendas donde toque y cuéntame en dos líneas qué has sacado.';
+const QUE_LOS_LEA_Y_COLOQUE = 'Lee los documentos que tienes sin leer: los de la bandeja de entrada y los que dejé sueltos en la carpeta. Ponlos donde toque, guarda lo que aprendas y cuéntame en dos líneas qué has sacado.';
+
+function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], fotos = [], aviso: avisoLocal }) {
+  // Los sueltos en la carpeta también los ha dado, aunque no estén en la
+  // bandeja; pero son suyos y están donde los dejó, así que no se quitan desde aquí.
+  const sinLeer = [
+    ...esperando.map((d) => filaDePapel(d, { seQuita: true, desde: 'documentos' })),
+    ...sueltos.map((d) => filaDePapel(d, { pista: 'Sin colocar todavía' })),
+  ].join('');
+
+  return `
+    ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Documentos' }])}
+    ${bloqueAviso(avisoLocal)}
+    ${volver()}
+    <p class="titulo">Documentos</p>
+
+    <div class="soltar-aqui">
+      <h2>Darle documentos (inbox)</h2>
+      <p class="detalle">Arrástralos aquí, o a cualquier sitio de la barra.</p>
+      ${boton({ etiqueta: 'Elegirlos', icono: '📎', principal: true, accion: { tipo: 'anadirDocumentos', desde: 'documentos' } })}
+    </div>
+
+    <h2>Sin leer todavía</h2>
+    ${sinLeer || nada('Ninguno esperando.')}
+    ${sinLeer ? boton({ etiqueta: 'Que los lea', icono: '📥', accion: { tipo: 'pedir', prompt: sueltos.length ? QUE_LOS_LEA_Y_COLOQUE : QUE_LOS_LEA } }) : ''}
+
+    <hr class="separador">
+    <h2>Resultados (out)</h2>
+    ${herramientas.length || fotos.length
+      ? `<p class="detalle">Ábrelo para verlo, o guárdatelo donde quieras.</p>${gruposDeResultados(herramientas, fotos)}`
+      : nada('Todavía no ha preparado nada para llevarse.')}
+    ${boton({ etiqueta: 'La foto del cerebro', icono: '🧠', pequeno: true, accion: { tipo: 'verLaFoto', desde: 'documentos' } })}
+  `;
+}
+
 // El archivador: los documentos que han entrado. NO es lo que el arnés ha
 // entendido —eso son los conceptos— sino los ficheros, en los tres estados por
 // los que pasan. Hasta ahora de los tres solo se veía un número.
@@ -1195,17 +1273,7 @@ function pantallaPapeles({
   // salido ningún concepto, así que borrar el papel lo borra de verdad. Con los
   // demás hay un botón distinto, abajo, que se lo pide al asistente.
   const monton = (papeles, vacio, seQuitan = false) => (papeles.length
-    ? papeles.map((d) => `
-      <div class="archivo">
-        <div class="archivo-que">
-          <p class="nombre">${texto(d.nombre)}</p>
-          ${d.cuando ? `<p class="pista">${texto(cuando(String(d.cuando).slice(0, 10)))}</p>` : ''}
-        </div>
-        <div class="archivo-acciones">
-          ${boton({ etiqueta: `Abrir ${d.nombre}`, icono: '↗', pequeno: true, soloIcono: true, accion: { tipo: 'abrirPapel', ruta: d.ruta } })}
-          ${seQuitan ? boton({ etiqueta: `Quitar ${d.nombre}`, icono: '×', pequeno: true, soloIcono: true, accion: { tipo: 'quitarPapel', ruta: d.ruta, nombre: d.nombre } }) : ''}
-        </div>
-      </div>`).join('')
+    ? papeles.map((d) => filaDePapel(d, { seQuita: seQuitan })).join('')
     : nada(vacio));
 
   return `
@@ -1687,7 +1755,8 @@ function pantallaPrincipalSencilla() {
     ${encendida('pulso') && pulso.length ? `<p class="pulso">${texto(pulso.join(' · '))}</p>` : ''}
     ${tarjeta}
     ${encendida('accionesRapidas') ? accionesRapidas(descubiertos) : ''}
-    ${encendida('documentos') ? grupoDocumentosSencillo() : ''}
+    ${encendida('documentos') ? filaDeDocumentos() : ''}
+    ${encendida('documentosPlegable') ? grupoDocumentosSencillo() : ''}
     ${encendida('conocimiento') ? grupoConocimiento() : ''}
     ${encendida('acciones') ? grupoAccionesSencillo() : ''}
     ${encendida('enQueEstamos') ? grupoEnQueEstamos() : ''}
@@ -1698,7 +1767,20 @@ function pantallaPrincipalSencilla() {
   `;
 }
 
-// Documentos, como estaba, con cuántos esperan al lado.
+// Documentos, en una pantalla (F7, decisión 151): una fila como las otras, que
+// en vez de desplegarse abre su pantalla, con cuántos esperan al lado. El rótulo
+// es el título de lo que abre.
+function filaDeDocumentos() {
+  const cuantos = estado.esperando ? plural(estado.esperando, '1 sin leer', '{n} sin leer') : '';
+  return `
+    <button class="fila-de-pantalla" data-accion="${atributo(JSON.stringify({ tipo: 'verDocumentos' }))}">
+      <span class="texto">Documentos</span>
+      ${cuantos ? `<span class="cuantos">${texto(cuantos)}</span>` : ''}
+    </button>`;
+}
+
+// Documentos, como estaba en la F2: plegable, con los tres botones. Apagado en
+// la tabla (`documentosPlegable`) desde la F7, no borrado.
 function grupoDocumentosSencillo() {
   return grupo({
     id: 'sencilla:documentos',
@@ -2479,9 +2561,196 @@ function pantallaCerebro({ temas, sinOrdenar = [], esperando, yaLeidos, hayPanel
     ${esperando ? `<p class="detalle">${texto(plural(esperando, 'Hay 1 documento esperando a que lo lea.', 'Hay {n} documentos esperando a que los lea.'))}</p>` : ''}
     ${yaLeidos ? `<p class="detalle">${texto(plural(yaLeidos, 'Ya ha leído 1 documento.', 'Ya ha leído {n} documentos.'))}</p>` : ''}
     ${hayPanel ? boton({ etiqueta: 'Ver el panel completo', icono: '🗂️', accion: { tipo: 'abrirPanelCompleto' } }) : ''}
+    ${boton({ etiqueta: 'La foto del cerebro', icono: '🧠', accion: { tipo: 'verLaFoto', desde: 'cerebro' } })}
     ${sueltos}
 
   `;
+}
+
+// ------------------------------------------------------- la foto del cerebro
+
+// El punto 11 de la decisión 142 (decisión 151). En clase, Eric mandó instalar
+// Obsidian para hacerle una foto al cerebro; esto es esa foto, sin instalar
+// nada: un punto por concepto y una línea por enlace, como su vista de grafo.
+// Dónde va cada punto lo calcula la extensión (`foto.js`, puro y probado);
+// aquí solo se pinta.
+//
+// En SVG dentro de la página y sin un solo estilo en línea: la política de
+// contenido de la barra no deja otra cosa, y así cada punto es un elemento con
+// su `data-accion`, que se pulsa como cualquier botón y abre su concepto. La
+// foto que se guarda sale de un lienzo dibujado a mano con lo mismo: nada que
+// cargar de fuera, ni una imagen `data:`.
+let laFotoDeAhora = null;
+// De dónde se llegó a la foto, para volver ahí desde un concepto.
+let fotoDesde = 'documentos';
+// En la barra, que es estrecha, el nombre de los diez que más enlazan; en la
+// foto que se guarda, que es grande, el de los cuarenta.
+const NOMBRES_EN_LA_BARRA = 10;
+const corto = (t, cuanto = 28) => (String(t).length > cuanto ? `${String(t).slice(0, cuanto - 1)}…` : String(t));
+const numero = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const QUE_LOS_ENLACE = 'Repasa los conceptos de la wiki y enlaza entre sí los que tengan que ver, como pide el protocolo de la wiki. No cambies lo que dicen.';
+const conceptosYEnlaces = (nodos, enlaces) => `${plural(nodos, '1 concepto', '{n} conceptos')} · ${plural(enlaces, '1 enlace', '{n} enlaces')}`;
+// Los nombres que caben sin pisarse, de los que más enlazan a los que menos:
+// uno que se montaría encima de otro ya puesto no se escribe. `letra` es el
+// tamaño de la letra en las unidades del dibujo; el ancho se calcula a ojo.
+function nombresQueCaben(f, cuantos, letra, hueco) {
+  const puestos = [];
+  for (const i of f.rotulos.slice(0, cuantos)) {
+    const n = f.nodos[i];
+    if (!n) continue;
+    const nombre = corto(n.titulo, 28);
+    const sitio = dondeVaElNombre(n, f.lado, hueco);
+    const ancho = nombre.length * letra * 0.55;
+    const x0 = sitio.ancla === 'start' ? sitio.x : (sitio.ancla === 'end' ? sitio.x - ancho : sitio.x - ancho / 2);
+    const caja = { x0, x1: x0 + ancho, y0: sitio.y - letra, y1: sitio.y + letra * 0.3 };
+    if (puestos.some(({ caja: o }) => caja.x0 < o.x1 && o.x0 < caja.x1 && caja.y0 < o.y1 && o.y0 < caja.y1)) continue;
+    puestos.push({ nombre, sitio, caja });
+  }
+  return puestos;
+}
+
+// Dónde va el nombre de un punto: debajo, y encima si está abajo del todo; y
+// hacia dentro si está en un borde, para que no se corte.
+function dondeVaElNombre(n, lado, hueco = 34) {
+  const x = numero(n.x);
+  const y = numero(n.y);
+  const r = numero(n.r);
+  const ancla = x < lado * 0.3 ? 'start' : (x > lado * 0.7 ? 'end' : 'middle');
+  return {
+    x: ancla === 'start' ? x - r : (ancla === 'end' ? x + r : x),
+    y: y > lado * 0.85 ? y - r - hueco / 3 : y + r + hueco,
+    ancla,
+  };
+}
+
+function pantallaFoto({ nodos = [], enlaces = [], total = 0, rotulos = [], lado = 1000, desde = 'documentos', aviso: avisoLocal }) {
+  fotoDesde = desde === 'cerebro' ? 'cerebro' : 'documentos';
+  const deDonde = fotoDesde === 'cerebro'
+    ? { etiqueta: 'Conocimiento', accion: { tipo: 'verCerebro' } }
+    : { etiqueta: 'Documentos', accion: { tipo: 'verDocumentos' } };
+  laFotoDeAhora = nodos.length ? { nodos, enlaces, rotulos, lado: numero(lado) || 1000 } : null;
+
+  const cabecera = `
+    ${migas([deDonde, { etiqueta: 'La foto del cerebro' }])}
+    ${bloqueAviso(avisoLocal)}
+    ${volver(deDonde.accion)}
+    <p class="titulo">La foto del cerebro</p>`;
+
+  // Sin conceptos no hay foto, pero sí salida (P1): darle documentos.
+  if (!nodos.length) {
+    return `${cabecera}
+      ${nada('Todavía no hay conceptos que fotografiar. Dale documentos y los irá escribiendo.')}
+      ${boton({ etiqueta: 'Darle documentos (inbox)', icono: '📎', principal: true, accion: { tipo: 'anadirDocumentos', desde: 'documentos' } })}`;
+  }
+
+  const punto = (i) => nodos[i] || { x: 0, y: 0, r: 0 };
+  const lineas = enlaces.map(([a, b]) => `<line x1="${numero(punto(a).x)}" y1="${numero(punto(a).y)}" x2="${numero(punto(b).x)}" y2="${numero(punto(b).y)}"/>`).join('');
+  const puntos = nodos.map((n) => `<g class="nodo" data-accion="${atributo(JSON.stringify({ tipo: 'leerArticulo', ruta: n.ruta, desde: 'foto' }))}"><circle cx="${numero(n.x)}" cy="${numero(n.y)}" r="${numero(n.r)}"/><title>${texto(n.titulo)}</title></g>`).join('');
+  const nombres = nombresQueCaben(laFotoDeAhora, NOMBRES_EN_LA_BARRA, 30, 34)
+    .map(({ nombre, sitio }) => `<text x="${sitio.x}" y="${sitio.y}" text-anchor="${sitio.ancla}">${texto(nombre)}</text>`).join('');
+  const cuenta = conceptosYEnlaces(nodos.length, enlaces.length);
+  const ladoDeVerdad = numero(lado) || 1000;
+
+  return `${cabecera}
+    <p class="detalle">${texto(cuenta)}</p>
+    ${total > nodos.length ? `<p class="detalle">${texto(`Tiene ${total} conceptos: para que se vea, la foto enseña los ${nodos.length} con más enlaces.`)}</p>` : ''}
+    <div class="foto">
+      <svg viewBox="0 0 ${ladoDeVerdad} ${ladoDeVerdad}" role="group" aria-label="${atributo(`La foto del cerebro: ${cuenta}`)}">
+        <g class="enlaces">${lineas}</g>
+        <g class="nodos">${puntos}</g>
+        <g class="rotulos">${nombres}</g>
+      </svg>
+    </div>
+    <p class="detalle">Un punto por concepto y una línea por enlace. Pulsa un punto para leerlo.</p>
+    ${enlaces.length ? '' : `
+      <p class="detalle">Todavía ningún concepto enlaza con otro.</p>
+      ${boton({ etiqueta: 'Que los enlace', icono: '🔗', accion: { tipo: 'pedir', prompt: QUE_LOS_ENLACE } })}`}
+    ${boton({ etiqueta: 'Guardar la foto', icono: '📸', principal: true, accion: { tipo: 'guardarLaFoto' } })}
+  `;
+}
+
+// Los colores de la barra, para que la foto se parezca a lo que se ve. Sin
+// poderlos leer, los de Executive Lab.
+function coloresDeLaFoto() {
+  const de = (nombre, siNo) => {
+    try {
+      const valor = getComputedStyle(document.body).getPropertyValue(nombre).trim();
+      return valor || siNo;
+    } catch {
+      return siNo;
+    }
+  };
+  return {
+    fondo: de('--fondo', '#f4eee6'),
+    texto: de('--texto', '#1a1a1a'),
+    apagado: de('--apagado', '#6b6b6b'),
+    acento: de('--acento', '#ec4429'),
+    letra: de('--sans', 'sans-serif'),
+  };
+}
+
+// La foto que se guarda: el mismo dibujo en un lienzo de 1.600 puntos de lado,
+// con de quién es y el día arriba, para que se entienda fuera de aquí. Devuelve
+// el PNG en base64, o null si no hay lienzo: entonces la extensión dice que no
+// ha podido, en vez de guardar nada a medias.
+function laFotoEnPng(f = laFotoDeAhora) {
+  if (!f) return null;
+  try {
+    const lienzo = document.createElement('canvas');
+    const c = lienzo && typeof lienzo.getContext === 'function' ? lienzo.getContext('2d') : null;
+    if (!c) return null;
+    const LADO = 1600;
+    const ARRIBA = 150;
+    const e = LADO / f.lado;
+    lienzo.width = LADO;
+    lienzo.height = LADO + ARRIBA;
+    const color = coloresDeLaFoto();
+
+    c.fillStyle = color.fondo;
+    c.fillRect(0, 0, lienzo.width, lienzo.height);
+    c.textAlign = 'left';
+    c.fillStyle = color.texto;
+    c.font = `600 44px ${color.letra}`;
+    c.fillText(corto(`Conocimiento de ${comoSeLlama}`, 60), 64, 78);
+    c.fillStyle = color.apagado;
+    c.font = `28px ${color.letra}`;
+    const hoy = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+    c.fillText(`${hoy} · ${conceptosYEnlaces(f.nodos.length, f.enlaces.length)}`, 64, 122);
+
+    c.translate(0, ARRIBA);
+    c.strokeStyle = color.apagado;
+    c.globalAlpha = 0.45;
+    c.lineWidth = 2;
+    c.beginPath();
+    for (const [a, b] of f.enlaces) {
+      if (!f.nodos[a] || !f.nodos[b]) continue;
+      c.moveTo(numero(f.nodos[a].x) * e, numero(f.nodos[a].y) * e);
+      c.lineTo(numero(f.nodos[b].x) * e, numero(f.nodos[b].y) * e);
+    }
+    c.stroke();
+    c.globalAlpha = 1;
+    c.fillStyle = color.acento;
+    for (const n of f.nodos) {
+      c.beginPath();
+      c.arc(numero(n.x) * e, numero(n.y) * e, numero(n.r) * e, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.font = `24px ${color.letra}`;
+    c.lineWidth = 6;
+    c.lineJoin = 'round';
+    c.strokeStyle = color.fondo;
+    c.fillStyle = color.texto;
+    for (const { nombre, sitio } of nombresQueCaben(f, f.rotulos.length, 24 / e, 20)) {
+      c.textAlign = { start: 'left', end: 'right', middle: 'center' }[sitio.ancla];
+      c.strokeText(nombre, sitio.x * e, sitio.y * e);
+      c.fillText(nombre, sitio.x * e, sitio.y * e);
+    }
+
+    const url = String(lienzo.toDataURL('image/png'));
+    return url.startsWith('data:image/png;base64,') ? url.slice(url.indexOf(',') + 1) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Lo que ha salido de buscar. La caja se repinta con lo escrito dentro, así
@@ -2595,11 +2864,15 @@ function pantallaTema({ tema }) {
 // El artículo, dentro del panel. La vista previa de VS Code enseñaría primero
 // su cabecera técnica, que es justo lo que aquí no se enseña nunca.
 function pantallaArticulo({ titulo, cuerpo, tema, enlaces, hermanos, desde }) {
+  // Desde la foto del cerebro se vuelve a la foto, también tras seguir un
+  // enlace de dentro del artículo (decisión 151).
+  const aLaFoto = { tipo: 'verLaFoto', desde: fotoDesde };
+  enlacesDesde = desde === 'foto' ? 'foto' : null;
   const atras = desde === 'buscar'
     ? { tipo: 'buscar', texto: ultimaBusqueda }
-    : (tema ? { tipo: 'verTema', tema } : { tipo: 'verCerebro' });
+    : (desde === 'foto' ? aLaFoto : (tema ? { tipo: 'verTema', tema } : { tipo: 'verCerebro' }));
 
-  const rastro = migas([
+  const rastro = migas(desde === 'foto' ? [{ etiqueta: 'La foto del cerebro', accion: aLaFoto }, { etiqueta: titulo }] : [
     { etiqueta: 'Conocimiento', accion: { tipo: 'verCerebro' } },
     desde === 'buscar' ? { etiqueta: `Buscando "${ultimaBusqueda}"`, accion: { tipo: 'buscar', texto: ultimaBusqueda } } : null,
     tema && desde !== 'buscar' ? { etiqueta: tema, accion: { tipo: 'verTema', tema } } : null,
@@ -2753,6 +3026,11 @@ function pintar(html) {
         const campoDelTitulo = app.querySelector('input[data-aviso-titulo]');
         if (campoDelTitulo) accion.titulo = campoDelTitulo.value;
       }
+      // La foto se dibuja aquí, que es donde está el dibujo, y viaja en PNG.
+      if (accion.tipo === 'guardarLaFoto') {
+        const png = laFotoEnPng();
+        if (png) accion.png = png;
+      }
       aviso = null;
       pedir(accion.tipo, accion);
     });
@@ -2884,6 +3162,8 @@ function atender(data) {
     case 'saberes': return pintar(pantallaSaberes(data));
     case 'salidas': return pintar(pantallaSalidas(data));
     case 'papeles': return pintar(pantallaPapeles(data));
+    case 'documentos': return pintar(pantallaDocumentos(data));
+    case 'foto': return pintar(pantallaFoto(data));
     case 'fijadas': return pintar(pantallaFijadas(data));
     case 'ayuda': return pintar(pantallaAyuda(data));
     case 'reglas': return pintar(pantallaReglas(data));

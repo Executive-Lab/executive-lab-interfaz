@@ -6,7 +6,9 @@ const vm = require('node:vm');
 
 const deshacer = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'panel.js')) {
+// `lienzo`: lo que devuelve `createElement('canvas')`, para probar la foto del
+// cerebro (decisión 151). Sin él, no hay lienzo, como en este navegador de mentira.
+function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'panel.js'), { lienzo = null } = {}) {
   const oyentes = {};
   const enviados = [];
   let pintado = '';
@@ -52,7 +54,7 @@ function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'pane
     acquireVsCodeApi: () => ({ postMessage: (m) => enviados.push(m), getState: () => undefined, setState() {} }),
     document: {
       getElementById: (id) => (id === 'app' ? app : otro()),
-      createElement: otro,
+      createElement: (que) => (que === 'canvas' && lienzo ? lienzo() : otro()),
       addEventListener(que, fn) { oyentes[que] = fn; },
       querySelector: () => null,
       querySelectorAll: () => [],

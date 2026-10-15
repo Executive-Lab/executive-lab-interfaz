@@ -39,6 +39,11 @@ const github = require('./github');
 const terreno = require('./terreno');
 const saberes = require('./saberes');
 const salidas = require('./salidas');
+// La foto del cerebro (decisión 151): el dibujo es puro; aquí solo se lee y se guarda.
+const foto = require('./foto');
+// Donde quedan las fotos: dentro de la wiki, que el barrido de RSC no lee como
+// documentos nuevos (`.rscignore`), en su `out/`, como los demás resultados.
+const LAS_FOTOS = ['02-DOCS', 'wiki', 'out'];
 const version = require('./version');
 const diario = require('./diario');
 const papeles = require('./papeles');
@@ -370,6 +375,10 @@ ${cabecera}
     if (d.tipo === 'conexion') return this.verConexion(d.proveedor);
     if (d.tipo === 'cerebro') return this.verCerebro();
     if (d.tipo === 'tema') return this.verTema(d.tema);
+    // Documentos y la foto del cerebro se repintan con lo nuevo, y con el aviso
+    // que tenían: guardar la foto o soltar un documento es lo que despierta al vigía.
+    if (d.tipo === 'documentos') return this.verDocumentos(d.aviso);
+    if (d.tipo === 'foto') return this.verLaFoto(d.desde, d.aviso);
     // En una pantalla de lectura o de resultado no se toca nada: está leyendo.
     if (d.tipo === 'quieto') return undefined;
     return this.refrescar(true);
@@ -736,9 +745,14 @@ ${cabecera}
       leerArticulo: () => this.leerArticulo(mensaje.ruta, mensaje.tema, mensaje.desde),
       abrirFuera: () => this.abrirFuera(mensaje.ruta),
       cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre "${mensaje.titulo}". Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
-      anadirDocumentos: () => this.anadirDocumentos(),
+      anadirDocumentos: () => this.anadirDocumentos(mensaje.desde),
       soltarDocumentos: () => this.soltarDocumentos(mensaje.ficheros, mensaje.para),
       abrirPanelCompleto: () => cerebro.abrirPanel(),
+      verDocumentos: () => this.verDocumentos(),
+      verLaFoto: () => this.verLaFoto(mensaje.desde),
+      guardarLaFoto: () => this.guardarLaFoto(mensaje.png),
+      abrirLaFoto: () => this.abrirLaFoto(mensaje.fichero),
+      llevarteLaFoto: () => this.llevarteLaFoto(mensaje.fichero),
 
       verCopias: () => this.verCopias(),
       guardarCopia: () => this.guardarCopia(),
@@ -770,7 +784,7 @@ ${cabecera}
       verHuecos: () => this.verHuecos(),
       verPapeles: () => this.verPapeles(),
       abrirPapel: () => this.abrirPapel(mensaje.ruta),
-      quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre),
+      quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre, mensaje.desde),
       verAyuda: () => this.verAyuda(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
@@ -1337,23 +1351,100 @@ ${cabecera}
       return this.verLaCara({ texto: `${puesto.mensaje} Se lo he pasado al asistente.`, malo: false });
     }
 
+    // Soltado encima de Documentos, se queda en Documentos: lo que acaba de
+    // soltar sale ahí mismo, en «Sin leer todavía» (F7, decisión 151).
+    const enDocumentos = Boolean(this.donde && this.donde.tipo === 'documentos');
     const { ok, cuantos, mensaje } = cerebro.guardarSoltados(ficheros);
-    if (!ok) return this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) return enDocumentos ? this.verDocumentos({ texto: mensaje, malo: true }) : this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
 
-    await this.refrescar(true);
-    this.enviar({ tipo: 'aviso', texto: mensaje });
+    if (enDocumentos) {
+      await this.verDocumentos({ texto: mensaje, malo: false });
+    } else {
+      await this.refrescar(true);
+      this.enviar({ tipo: 'aviso', texto: mensaje });
+    }
     await puente.enviar(`Te he dejado ${cuantos === 1 ? 'un documento nuevo' : `${cuantos} documentos nuevos`} en la bandeja. Léelos y cuéntame qué has aprendido.`);
     return undefined;
   }
 
-  async anadirDocumentos() {
+  // Desde Documentos se vuelve a Documentos; desde lo demás, a Conocimiento, como antes.
+  async anadirDocumentos(desde = null) {
+    const volver = (aviso = null) => (desde === 'documentos' ? this.verDocumentos(aviso) : this.verCerebro(aviso));
     const { ok, cuantos, mensaje } = await cerebro.anadirDocumentos();
-    if (!ok) return this.verCerebro({ texto: mensaje, malo: true });
-    if (!cuantos) return this.verCerebro();
+    if (!ok) return volver({ texto: mensaje, malo: true });
+    if (!cuantos) return volver();
 
     await puente.enviar('He dejado documentos nuevos en la bandeja de entrada. Léelos, guárdalos donde toque y cuéntame en dos líneas qué has aprendido.');
     brujula.olvidar();
-    return this.verCerebro({ texto: mensaje, malo: false });
+    return volver({ texto: mensaje, malo: false });
+  }
+
+  // ── Documentos, en una pantalla (F7, decisión 151) ─────────────────────
+  //
+  // Lo que se le da, lo que tiene sin leer y los resultados, juntos. Se repinta
+  // cuando el asistente lee o produce algo, con el aviso que tuviera.
+  async verDocumentos(aviso = null) {
+    this.donde = { tipo: 'documentos', aviso };
+    const { sueltos, esperando } = papeles.sinLeerTodavia();
+    this.enviar({
+      tipo: 'documentos',
+      esperando,
+      sueltos,
+      herramientas: salidas.loQueHaProducido(),
+      fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS)),
+      aviso,
+    });
+  }
+
+  // ── La foto del cerebro (decisión 151, punto 11 de la 142) ──────────────
+  //
+  // Un punto por concepto y una línea por enlace, sin instalar Obsidian. Qué es
+  // un concepto lo dice `cerebro`; el dibujo y dónde va cada punto, `foto`.
+  verLaFoto(desde = 'documentos', aviso = null) {
+    const de = desde === 'cerebro' ? 'cerebro' : 'documentos';
+    this.donde = { tipo: 'foto', desde: de, aviso };
+    const wiki = proyecto.ruta('02-DOCS', 'wiki');
+    const dibujo = foto.laFoto(wiki, wiki ? cerebro.todosLosDocumentos() : []);
+    this.enviar({
+      tipo: 'foto',
+      lado: dibujo.lado,
+      total: dibujo.total,
+      nodos: dibujo.nodos,
+      enlaces: dibujo.enlaces,
+      rotulos: dibujo.rotulos,
+      desde: de,
+      aviso,
+    });
+  }
+
+  // El panel la dibuja y la manda en PNG; aquí se guarda, sin pisar ninguna, y
+  // se dice dónde ha quedado en una frase (P9), con un botón para abrirla.
+  guardarLaFoto(png) {
+    const desde = this.donde && this.donde.tipo === 'foto' ? this.donde.desde : 'documentos';
+    const hecho = foto.guardar(proyecto.ruta(...LAS_FOTOS), png);
+    if (!hecho.ok) {
+      this.salida.appendLine(`[guardarLaFoto] ${hecho.motivo}${hecho.detalle ? `: ${hecho.detalle}` : ''}`); // diccionario: interno
+      return this.verLaFoto(desde, { texto: 'No he podido guardar la foto. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    }
+    return this.verLaFoto(desde, {
+      texto: `Guardada en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
+      malo: false,
+      boton: { etiqueta: 'Abrirla', accion: { tipo: 'abrirLaFoto', fichero: hecho.fichero } },
+    });
+  }
+
+  async abrirLaFoto(fichero) {
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero);
+    if (!completa) return this.enviar({ tipo: 'aviso', texto: 'Esa foto ya no está.', malo: true });
+    return papeles.abrirFichero(completa);
+  }
+
+  async llevarteLaFoto(fichero) {
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero);
+    if (!completa) return this.enviar({ tipo: 'aviso', texto: 'Esa foto ya no está.', malo: true });
+    const hecho = await salidas.llevarte(completa);
+    if (hecho.cancelado) return undefined;
+    return this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
   }
 
   // ----------------------------------------------------------- copias
@@ -1376,7 +1467,7 @@ ${cabecera}
   // define en cada herramienta.
   async verSalidas() {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido() });
+    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido(), fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS)) });
   }
 
   async abrirSalida(herramienta, fichero) {
@@ -1430,7 +1521,7 @@ ${cabecera}
 
   // Se pregunta antes, y con el nombre del documento dentro de la pregunta: un
   // "¿seguro?" a secas no dice qué se va a borrar.
-  async quitarPapel(ruta, nombre) {
+  async quitarPapel(ruta, nombre, desde = null) {
     const seguro = await vscode.window.showWarningMessage(
       `¿Quito "${nombre}"? Todavía no lo ha leído nadie, así que no se pierde nada aprendido.`,
       { modal: true },
@@ -1439,6 +1530,8 @@ ${cabecera}
     if (seguro !== 'Sí, quítalo') return undefined;
 
     const { ok, mensaje } = papeles.quitar(ruta);
+    // Desde Documentos se vuelve a Documentos (F7, decisión 151).
+    if (desde === 'documentos') return this.verDocumentos({ texto: mensaje, malo: !ok });
     return this.verPapeles({ texto: mensaje, malo: !ok });
   }
 

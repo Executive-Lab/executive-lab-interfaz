@@ -125,6 +125,13 @@ function queHay() {
   };
 }
 
+// Solo lo que espera a que lo lea: lo de la bandeja y lo suelto en la carpeta.
+// Es lo que enseña Documentos (F7, decisión 151), y no hace falta recorrer los
+// leídos ni los originales para eso.
+function sinLeerTodavia() {
+  return { sueltos: sueltos(), esperando: listar(INBOX, { hondo: false }) };
+}
+
 // Abrir uno. Se comprueba que sigue siendo de los sitios de arriba: la ruta
 // viene de un mensaje del panel, y se trata como si viniera de fuera.
 function donde(rutaRelativa) {
@@ -237,4 +244,4 @@ function quitar(rutaRelativa) {
   return { ok: true, mensaje: `Quitado ${path.basename(completa)}.` };
 }
 
-module.exports = { queHay, donde, abrir, abrirFichero, quitar, sinLeer, LAS_PINTA_EL_EDITOR };
+module.exports = { queHay, sinLeerTodavia, donde, abrir, abrirFichero, quitar, sinLeer, LAS_PINTA_EL_EDITOR };

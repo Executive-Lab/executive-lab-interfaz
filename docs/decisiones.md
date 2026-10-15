@@ -5266,3 +5266,119 @@ lo demás lo hace sola (P9).
 
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
+
+## 151. Documentos en una pantalla, y la foto del cerebro
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F7 del plan de simplificar la barra y punto 11 de la
+decisión 142) · **Vía rápida** `documentos-y-el-cerebro`
+
+Dos cosas que van juntas porque viven en el mismo sitio. La F7 del plan: *«Documentos: una pantalla con tres
+cosas»*. Y lo que pasó en la clase del 13-10: Eric mandó instalar Obsidian para hacerle una foto al cerebro, el
+conocimiento que el asistente va escribiendo en `02-DOCS/wiki/`. Con P9, esa foto la hace la barra, sin
+instalar nada.
+
+**Documentos, en una pantalla.**
+
+- En la principal, Documentos sigue siendo una fila, con «2 sin leer» al lado. Pero ya no se despliega: abre
+  la pantalla Documentos. El botón dice lo mismo que el título que abre (decisión 101).
+- La pantalla tiene las tres cosas del plan, en este orden:
+  - **Darle documentos (inbox)**: «Arrástralos aquí, o a cualquier sitio de la barra.», y «Elegirlos». Lo
+    soltado encima de Documentos se queda en Documentos y sale enseguida en la lista.
+  - **Sin leer todavía**, con «Que los lea». Salen también los documentos sueltos en la carpeta, con «Sin
+    colocar todavía» debajo, porque desde su lado también los ha dado. Esos no se quitan desde aquí: están
+    donde los dejó (P4).
+  - **Resultados (out)**, para abrirlos o llevárselos, con la foto del cerebro en su grupo.
+- **Nada se borra.** El plegable de la F2 se apaga en `piezas.json` (`documentosPlegable`), y la barra
+  completa sigue como estaba, con Documentos entregados y Conocimiento.
+- Elegirlos, quitar uno sin leer o soltarlos desde Documentos vuelven a Documentos. Antes, elegirlos
+  llevaba a Conocimiento, que en la sencilla está apagado; quitar uno, a Documentos entregados; y soltarlos,
+  a la principal.
+
+**La foto del cerebro.**
+
+- **Un punto por concepto y una línea por enlace**, como la vista de grafo de Obsidian. Pulsar un punto abre
+  el concepto en la barra, con el mismo lector de Conocimiento (sin la cabecera técnica), y desde ahí se
+  vuelve a la foto.
+- **Los enlaces, de las dos formas.** RSC 3 escribe enlaces normales de markdown, relativos, y nunca
+  `[[…]]`: su wiki es OKF, y OKF no sabe seguir los otros. Pero en clase se habló de `[[wikilinks]]`, y hay
+  wikis escritas a mano. Se leen las dos. Un `[[nombre]]` se busca como lo busca Obsidian, por el nombre del
+  fichero, y además por sus `aliases`, donde RSC deja el nombre viejo, y por su título.
+- **Qué es un concepto** lo dice `cerebro.todosLosDocumentos()`, como en todo lo demás. Quedan fuera el
+  andamio, lo archivado, el índice, el diario y los huecos.
+- **Dónde va cada punto**: una disposición de fuerzas sencilla, la de Fruchterman y Reingold. Todos los puntos
+  se repelen, cada enlace tira como un muelle y un poco de gravedad sujeta lo suelto. Sin nada al azar: se
+  empieza en espiral, y la misma wiki da la misma foto. Vive en `extension/src/foto.js`, sin `vscode`, y se
+  prueba entero sin abrir el editor.
+- **Con cientos de conceptos no se cuelga.** Caben 300 puntos: con más, salen los 300 que más enlazan, y se
+  dice («Tiene 412 conceptos: para que se vea, la foto enseña los 300 con más enlaces.»). Se leen como mucho
+  2.000 ficheros, de hasta 1 MB, y sin seguir enlaces del disco. Con 700 conceptos tarda menos de un segundo.
+- **Sin conceptos o sin enlaces, nunca una pantalla sin salida (P1).** Sin conceptos, «Darle documentos
+  (inbox)». Sin enlaces, se ven los puntos y se ofrece «Que los enlace».
+
+**Dónde se ve, y por qué ahí.** En Documentos, debajo de Resultados, y también en Conocimiento, en la barra
+completa. Conocimiento está apagado en la sencilla porque lo que ha aprendido se le pregunta mejor al
+asistente. Una foto, en cambio, es justo lo que la conversación no puede dar, que es el criterio del plan. Y
+en Documentos está el camino entero: lo que se le da, lo que lee y lo que sale. La foto, una vez guardada, es
+un resultado más.
+
+Va en la misma barra y no en una pestaña del editor, por dos motivos. Uno: la barra es una sola vista. Dos:
+así se reutiliza el lector de conceptos, y se prueba con el mismo panel de mentira. La versión grande es la
+foto guardada, que «Abrirla» abre al lado.
+
+**La política de contenido no cambia.** El dibujo es SVG dentro de la página, con clases y colores con
+significado y sin un solo estilo en línea. Cada punto es un elemento con su `data-accion`, que se pulsa como
+cualquier botón. Ni CDN ni red.
+
+**Guardar la foto**, solo y dicho en una frase (P9):
+
+- La barra la dibuja en un lienzo de 1.600 puntos, sin cargar ninguna imagen, ni siquiera `data:`. Arriba
+  lleva «Conocimiento de {nombre}», el día y cuántos hay, para que se entienda fuera de aquí.
+- La extensión comprueba que es un PNG, y de menos de 15 MB.
+- La guarda en `02-DOCS/wiki/out/La foto del cerebro 15-10-2026.png`. La segunda del mismo día lleva «(2)»:
+  sirve para comparar el antes y el después de pedirle que enlace.
+- Lo dice: «Guardada en Resultados (out), dentro de Documentos: «La foto del cerebro 15-10-2026.png».», con
+  «Abrirla». Sale en Resultados, para abrirla o llevársela.
+
+**PNG y no SVG**: un PNG se abre en cualquier sitio y se pega en Circle. Un `.svg`, el editor lo abre como
+texto.
+
+**`02-DOCS/wiki/out/` y no otra carpeta:**
+
+- El barrido de RSC no lee `02-DOCS/wiki/` (`.rscignore`). Una foto en `02-DOCS/out/` la cogería como un
+  documento nuevo, la leería y la movería a `raw/`.
+- RSC ya deja ahí su propia vista para personas, `dashboard.html` (El panel completo).
+- Va en un `out/`, como lo que produce cada conexión, así que «Resultados (out)» dice la verdad.
+- No es un tema: no lleva ningún `.md`. Sí entra en las copias: pesa unos cientos de KB.
+
+**Las pruebas**: `humo.js` pasa de 374 a 380. Seis comprobaciones nuevas y una cambiada:
+
+- las 19 formas de escribir un enlace, una a una;
+- la disposición: siempre la misma, dentro del cuadro, sin pisarse, y con lo enlazado más cerca;
+- 700 conceptos: el tope, los que se quedan y lo que no se lee;
+- guardar la foto;
+- la pantalla Documentos;
+- la foto entera, con un lienzo de mentira;
+- y la principal sencilla, que ahora pide la fila que abre Documentos.
+
+**Mutaciones a mano: 65, las 65 tumbadas.** Cada una cambia una línea y se corre `humo.js` entero:
+- 20 en cómo se leen los enlaces, cada forma por separado, y en las expresiones que volvían atrás;
+- 6 en la disposición;
+- 6 en el tope y en lo que no se lee;
+- 6 en guardar y abrir la foto;
+- 16 en el panel;
+- 10 en la extensión;
+- y 1 en la tabla de piezas.
+
+Al escribirlas salieron dos fallos, arreglados con su prueba. Uno: con un fichero preparado, las expresiones que
+buscan los enlaces volvían atrás sin fin; 60 KB ya tardaban seis segundos, y uno de un mega colgaba la barra.
+Dos: si la carpeta de las fotos era un enlace a otro sitio del disco, la foto se escribía allí.
+
+**Lo que no hace, todavía:**
+
+- no se acerca ni se arrastra;
+- no colorea por tema: un solo color, el de la marca, como Obsidian sin grupos;
+- en la barra, el nombre de los diez que más enlazan; en la foto guardada, de los cuarenta; y solo el que
+  cabe sin pisar a otro;
+- los puntos no se recorren con el teclado: los conceptos siguen en Conocimiento;
+- el lienzo de verdad solo se ha probado de mentira: falta verlo en VS Code, en las máquinas de GitHub o a
+  mano.

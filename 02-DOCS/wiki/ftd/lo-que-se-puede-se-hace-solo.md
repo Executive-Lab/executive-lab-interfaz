@@ -163,7 +163,7 @@ hacerse solo, porque no se puede deshacer.
 - [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [x] 9. Cuándo caduca una clave: decisión 149.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
-- [ ] 11. La foto del cerebro.
+- [x] 11. La foto del cerebro: decisión 151, `ftd/documentos-y-el-cerebro.md`.
 - [ ] 12. Los datos de clientes, en Ayuda.
 
 ## Evidence
@@ -255,6 +255,10 @@ hacerse solo, porque no se puede deshacer.
     - lo de caducar tapaba en la lista la pregunta de la clave que puede escribir;
     - una conexión a medio hacer preguntaba.
   - Cinco mutaciones vivas, y una más que salió después porque un paso nuevo vaciaba la prueba: 24 de 24.
+- **Punto 11** (decisión 151, 15-10): la foto del cerebro, sin Obsidian. Un punto por concepto y una línea por
+  enlace, de markdown o `[[ ]]`; se pulsa un punto y se lee; «Guardar la foto» la deja en PNG en Resultados (out)
+  y lo dice en una frase. Se llega desde Documentos, que pasa a ser una pantalla (F7). `humo.js` 380, contrato 14,
+  diccionario, y 65 de 65 mutaciones.
 
 ## Next
 
