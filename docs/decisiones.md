@@ -5796,6 +5796,33 @@ tiene otra persona.
 - **La parte de seguridad** dice qué hacer si ya se mandó (anularla y sacar otra), y que pegarla en
   la barra supone estar en ese ordenador.
 
+**Lo que encontró la revisión de corrección** (PR #40), arreglado y con su prueba:
+
+- **La clase de acceso se leía de la frase entera.** «Una clave de API (va en el .env, no hace falta
+  ningún archivo)» salía clave y fichero, y la barra decía que le faltaba un fichero que no pedía.
+  Ahora se lee solo la primera frase (hasta el primer punto, paréntesis o coma). No cuenta lo que va
+  detrás de «no», «ni» o «sin», y con «o» entre dos vale cualquiera, sin exigir las dos. «Entra con
+  tu cuenta», «Entrar con la cuenta de Google» e «Inicia sesión con tu cuenta» son entrar con tu
+  cuenta, y «Basic auth», usuario y contraseña.
+- **Sin el fichero no se probaba sola**: decía «Falta su fichero de acceso» y se paraba (rompía la
+  146). Ahora, si trae prueba, se prueba igual y ella dice lo que falta. Sin prueba, se dice. Y la
+  pregunta de cuándo caduca espera a que esté el fichero.
+- **El nombre que busca la prueba** se lee también de la prueba misma (`test_connection.*`), que manda
+  sobre los documentos. Si los documentos nombran más de uno, se dice que no se sabe.
+- **Con una sola clase «dirección», cualquier clave se pintaba como dirección**, y un secreto de firma
+  salía a la vista. Ahora se mira el nombre de cada clave, y un secreto nunca se pinta como texto.
+- **El mensaje tapaba también los ajustes**: la dirección de su panel o `production`, y el informático
+  se quedaba sin saber adónde ir. Ahora se tapan solo las claves secretas por su nombre, los ficheros
+  de acceso y las formas de clave.
+- **«Entrar con tu cuenta» con un ID y un secreto por pegar** no tenía dónde pegarlos, y al
+  informático le decía que no hacía falta ninguna clave. Ahora «solo entrar» es cuando no queda
+  ninguna clave por poner. Si quedan, salen con su campo y el mensaje lleva la parte de seguridad de
+  una clave. El raíl lo dice: son dos clases.
+- **«Dónde se saca» se lee por su cabecera**: si el asistente pone el tipo de acceso como tercera
+  columna, ya no sale como dónde se saca.
+- **Menores:** la guía habla en plural con usuario y contraseña, y no dice «suéltalo» con el fichero
+  ya puesto.
+
 Queda fuera: lo que parece una clave se mira con una regla (mayúsculas, minúsculas y cifras revueltas,
 o una ristra hexadecimal larga). Una clave de solo minúsculas que no esté en esta carpeta pasaría, y
 un identificador revuelto que no lo es se taparía.

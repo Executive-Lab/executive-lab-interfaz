@@ -14633,6 +14633,7 @@ exec git "$@"
       const laLista = panel.mandar(ultimo('conexiones'));
       assert.match(laLista, /Agenda — falta entrar con tu cuenta/);
       assert.doesNotMatch(laLista, /Cualquiera — le falta su fichero/, 'con «o», se exige el fichero');
+      assert.match(laLista, /Calendario — faltan 2 claves/, 'con claves por poner, «falta entrar» no dice cuáles');
       // Entrar con tu cuenta y un ID y un secreto que pegar: se enseñan, con su campo, y «Entrar» también.
       html = await pantalla('Calendario');
       assert.match(html, /data-clave="OC_CLIENT_ID"/, 'con claves por poner, no hay dónde pegarlas');
@@ -14653,6 +14654,7 @@ exec git "$@"
         ['Una clave de API (se guarda en el .env, no hace falta ningún archivo)', ['clave'], false],
         ['Una clave. No usa OAuth ni fichero', ['clave'], false],
         ['Una clave y no un fichero', ['clave'], false],
+        ['Una clave (la de su cuenta de servicio)', ['clave'], false],
         ['Una clave o un fichero de acceso (cualquiera de las dos)', ['clave', 'fichero'], true],
         ['Entra con tu cuenta', ['cuenta'], false],
         ['Entrar con la cuenta de Google', ['cuenta'], false],
@@ -15139,8 +15141,8 @@ exec git "$@"
       busca('Mayusculas', { '.env.example': 'CERT=keys/cert.p12\n' });
       await soltar('Mayusculas', 'Mi Cert.P12', Buffer.from('un certificado'));
       assert.ok(fs.existsSync(path.join(carpeta, '01-TOOLS', 'Mayusculas', 'keys', 'cert.p12')), 'con la extensión en mayúsculas, no se llama como lo busca');
-      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Mayusculas', ficheros: [{ nombre: 'uno.pem', datos: Buffer.from('a').toString('base64') }, { nombre: 'dos.pem', datos: Buffer.from('b').toString('base64') }] });
-      assert.ok(['uno.pem', 'dos.pem'].every((f) => fs.existsSync(path.join(carpeta, '01-TOOLS', 'Mayusculas', 'keys', f))), 'con varios, se les cambia el nombre');
+      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Mayusculas', ficheros: [{ nombre: 'uno.p12', datos: Buffer.from('a').toString('base64') }, { nombre: 'dos.p12', datos: Buffer.from('b').toString('base64') }] });
+      assert.ok(['uno.p12', 'dos.p12'].every((f) => fs.existsSync(path.join(carpeta, '01-TOOLS', 'Mayusculas', 'keys', f))), 'con varios, se les cambia el nombre');
 
       // Y un README o un CREDENTIALS.md preparados para que las expresiones se atasquen, no las atascan.
       const lenta = herramienta('Lenta');
