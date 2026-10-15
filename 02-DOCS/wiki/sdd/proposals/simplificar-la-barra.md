@@ -438,7 +438,7 @@ estado, como hoy.
 | F2 ✅ | La principal nueva: la tarjeta, Documentos, Acciones (solo lo que hay), Ayuda, la línea de las copias (si las hay) y, abajo y en pequeño, la versión y Cambiar de proyecto. Se apaga lo demás en la tabla. | M |
 | F3 ✅ | Ayuda con sus cinco: Seguir donde lo dejé, Conversación nueva, Dime qué hago ahora, Pedir ayuda en el foro y Sugerencias (con copias, GitHub y la cara de la empresa) | M |
 | F4 ✅ | Conexiones I: el estado en la lista, la guía de un paso cada vez y probar al guardar | M |
-| F5 | Conexiones II: las clases de acceso, «Pídeselo a tu informático» y el raíl | M-L |
+| F5 ✅ | Conexiones II: las clases de acceso, «Pídeselo a tu informático» y el raíl | M-L |
 | F6 | Se adapta y da ideas | M |
 | F7 | Documentos en una pantalla | S |
 | F8 | La versión, con un «Qué trae» que explique el cambio: «Ahora la barra es más sencilla: arriba lo que más cuesta, y lo demás en Más». | S |

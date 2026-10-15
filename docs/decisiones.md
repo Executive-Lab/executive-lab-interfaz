@@ -5266,3 +5266,84 @@ lo demás lo hace sola (P9).
 
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
+
+## 154. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F5 del plan de simplificar la barra)
+
+Jose, al pedir el plan: *«lo que más fricción da es conectar las conexiones y tools […] y que se pueda
+saber qué preguntar a informáticos y técnicos»*. La 146 dejó la guía de un paso cada vez. Faltaban dos
+cosas de la propuesta: que no todas las herramientas piden una clave, y que muchas veces la clave la
+tiene otra persona.
+
+- **La clase de acceso, en una línea de `CREDENTIALS.md`**, junto a la URL de su panel:
+  `- Tipo de acceso: Una clave`. La propuesta decía una columna, pero la tabla de verdad no tiene una
+  forma fija: la plantilla de RSC trae cuatro columnas, sus propios ejemplos traen tres, y alguno ni
+  empieza por «Variable». Una columna nueva cambiaría la posición de lo que ya se lee («Dónde se
+  saca» es la tercera). Y es una tabla de variables: una herramienta en la que se entra con tu cuenta,
+  o que solo pide un fichero, no tiene fila donde escribirlo. La línea va donde la barra ya lee la URL,
+  y no toca nada de lo que se leía. Si el asistente la escribe como columna, también vale.
+- **Cinco clases, y cada una su pantalla:**
+  - *Una clave*: un campo, como hasta ahora.
+  - *Usuario y contraseña*: los dos juntos, con un solo «Guardar». Con uno por campo se escribían los
+    dos, se pulsaba el de abajo, y el de arriba se perdía al repintar.
+  - *Un fichero de acceso* (cuenta de servicio, certificado): «Suéltalo aquí», encima de la barra, o
+    «Elegir el fichero». Va a `keys/` de esa conexión, y solo si `sueltas.js` lo reconoce: una factura
+    soltada por error no acaba entre las llaves. Si la conexión dice qué fichero busca
+    (`keys/cuenta-de-servicio.json`), se guarda con ese nombre. El de antes se queda al lado, como
+    `.anterior`, porque sobrescribir no se deshace (P4). Y `keys/` lleva su propio `.gitignore`: la
+    pantalla dice «no sale de este ordenador», y una herramienta hecha sin la plantilla no lo
+    cumpliría. Al ponerlo, si ya está todo, se prueba sola, como una clave (P9).
+  - *Entrar con tu cuenta* (OAuth): no hay nada que pegar. «Entrar» se lo pide al asistente, que abre
+    el navegador. Es un botón porque sale de su ordenador en su nombre.
+  - *Una dirección que te dan* (un webhook): un campo para la dirección, con dónde sale.
+  - Puede nombrar dos («Un fichero de acceso y entrar con tu cuenta»), y salen las dos.
+  - **Sin la línea, como antes (P1).** La lista dice «le falta su fichero de acceso» o «falta entrar con
+    tu cuenta» en vez de «falta una clave».
+  - Ninguna herramienta va nombrada en el código: las clases salen de lo que escribió el asistente.
+- **«Pídeselo a tu informático»**, en cada conexión. Arma un mensaje listo para mandar, con «Copiarlo»
+  y «Mandarlo por correo». La barra no manda nada: copia el mensaje, o abre el correo de esa persona con
+  él puesto y sin destinatario, y lo manda ella.
+  - **Lo de cada herramienta lo escribe el asistente** en el README, bajo `## Para tu informático`:
+    para qué es, qué acceso y con qué permisos mínimos, si basta con leer, la página y qué preguntarle.
+    La barra lo copia tal cual, en texto llano (P5). Si no está, arma lo que sabe del disco: la
+    clase de acceso, el nombre de cada clave y dónde se saca, y la página. Además ofrece «Que lo
+    escriba el asistente».
+  - **La parte de seguridad la pone la barra**, escrita una vez en `informatico.js`. Es el riesgo que
+    nombraba la propuesta: el consejo no cambia de una conversación a otra. Con una clave dice:
+    > Cómo hacérmela llegar, por seguridad:
+    > - Nunca me la mandes por correo ni por mensajería, ni la pegues en la conversación con el
+    >   asistente: ahí se queda guardada y se puede reenviar.
+    > - Lo mejor es que la pegues tú en la barra de Executive Lab de mi ordenador, en Conexiones (tools)
+    >   → Holded. Así no pasa por ningún otro sitio.
+    > - Si no puede ser, compártela conmigo con un gestor de contraseñas.
+    > - Mejor una nueva, solo para esto y con los permisos mínimos, que una que ya se use para otra
+    >   cosa: así se puede quitar sin romper nada.
+    > - Si se le puede poner fecha de caducidad, pónsela y dime cuál es.
+
+    Es lo de siempre con un secreto (la *Secrets Management Cheat Sheet* de OWASP): que no viaje por
+    donde se queda guardado, solo lo mínimo, uno para cada uso y con caducidad. La fecha la pregunta la
+    barra desde la 149. Con usuario y contraseña, y con un fichero, dice lo mismo en su forma. Entrando
+    con tu cuenta, que no hace falta mandar ninguna clave, y que si hay que autorizarlo como
+    administrador, diga qué hay que aceptar.
+  - **Nunca un valor de una clave.** Todo lo que viene del disco pasa antes por los valores de las
+    claves de la carpeta y por las formas de clave que ya tapa «Algo va mal». Así se tapa también una
+    que el asistente haya pegado donde no debe: sale «[clave quitada]». El mensaje se arma en la
+    extensión cada vez, y los botones solo dicen de qué conexión es: el texto no vuelve desde la
+    pantalla.
+  - **El `mailto:` se abre como texto, no con `Uri.parse`.** El editor decodifica lo que va detrás del
+    `?` al leer la dirección, y al abrirla la vuelve a codificar a su manera
+    (`encodeURI(uri.toString(true))`, en su `openerService`). Un «?» del mensaje llegaba como «%3F» y un
+    «&» partía el cuerpo en dos. Con el texto, su código lo abre «AS IS». Asunto y cuerpo van con
+    `encodeURIComponent` y los saltos como `%0D%0A`, como pide la norma (RFC 6068). En Windows, una
+    dirección de más de 2.000 caracteres se corta (decisión 130): el mensaje va al portapapeles y el
+    correo se abre con una línea que dice que lo pegue.
+- **El raíl** (`SKILL.md`, §2, en las dos copias) pasa de tres a cinco cosas que el panel enseña tal
+  cual: d) la clase de acceso, con las cinco palabras que la barra lee, y e) la sección para el
+  informático, con su ejemplo. «Conectar algo nuevo» también las pide. Una prueba lee las cinco
+  palabras de los raíles y su ejemplo con el código de la barra, para que no se separen.
+
+Queda fuera: un fichero de `keys/` que ya estaba guardado en git sigue en git, porque el `.gitignore`
+no saca lo que ya se seguía. Si se pone otro con ese mismo nombre, entraría en la copia siguiente, y
+esta pantalla todavía no lo mira. Con la plantilla de RSC no pasa: su `.gitignore` deja fuera `keys/`
+desde el principio.

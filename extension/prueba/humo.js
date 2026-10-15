@@ -13454,6 +13454,346 @@ exec git "$@"
     }
   });
 
+  await comprobar('cada clase de acceso, su forma: clave, usuario y contraseña, fichero, entrar con tu cuenta y dirección; sin decirlo, como antes', async () => {
+    // Decisión 154 (F5 del plan de simplificar la barra). El asistente escribe en
+    // CREDENTIALS.md qué clase de acceso pide, en una línea junto a la URL, y la
+    // barra elige la pantalla según eso. Sin la línea, la de siempre (P1).
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'acceso-'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    const herramienta = (id, ficheros) => {
+      const suya = path.join(carpeta, '01-TOOLS', id);
+      fs.mkdirSync(suya, { recursive: true });
+      for (const [nombre, contenido] of Object.entries(ficheros)) fs.writeFileSync(path.join(suya, nombre), contenido);
+      return suya;
+    };
+    const credenciales = (tipo, filas = '') => `# Credenciales\n\n## Provider dashboard\n\n- URL: https://ejemplo.test/panel\n${tipo ? `- Tipo de acceso: ${tipo}\n` : ''}\n| Variable | Tipo | Dónde se saca | Rotación |\n|---|---|---|---|\n${filas}`;
+    // Una prueba que conecta si su .env, o su carpeta keys/, tienen lo que se le pide.
+    const prueba = (condicion) => [
+      "const fs = require('node:fs'); const path = require('node:path');",
+      "const env = fs.existsSync(path.join(__dirname, '.env')) ? fs.readFileSync(path.join(__dirname, '.env'), 'utf8') : '';",
+      `if (${condicion}) { console.log('OK'); process.exit(0); }`,
+      "console.error('HTTP 401 Unauthorized'); process.exit(1);",
+    ].join('\n');
+    herramienta('Facturas', { '.env.example': 'FACTURAS_API_KEY=\n', 'CREDENTIALS.md': credenciales(null, '| `FACTURAS_API_KEY` | secreta | Ajustes → API | — |\n'), 'README.md': '# Facturas\n' });
+    herramienta('Nominas', {
+      '.env.example': 'NOMINAS_USER=\nNOMINAS_PASSWORD=\n',
+      'CREDENTIALS.md': credenciales('Usuario y contraseña'),
+      'README.md': '# Nóminas\n',
+      'test_connection.js': prueba("/NOMINAS_USER=ana/.test(env) && /NOMINAS_PASSWORD=/.test(env)"),
+    });
+    const drive = herramienta('Drive', {
+      '.env.example': 'DRIVE_FOLDER_ID=\n',
+      'CREDENTIALS.md': `${credenciales('Un fichero de acceso (cuenta de servicio)', '| `DRIVE_FOLDER_ID` | ajuste | Lo de después de folders/ en la dirección de la carpeta | — |\n')}\nLa prueba lo busca en \`keys/cuenta-de-servicio.json\`.\n`,
+      'README.md': '# Drive\n\n## Cómo conectarla\n\n1. Entra en la consola de Google Cloud.\n2. Crea una cuenta de servicio y descarga su fichero.\n',
+      'test_connection.js': prueba("fs.existsSync(path.join(__dirname, 'keys', 'cuenta-de-servicio.json')) && /DRIVE_FOLDER_ID=\\w/.test(env)"),
+    });
+    herramienta('Agenda', { '.env.example': 'AGENDA_REFRESH_TOKEN=\n', 'CREDENTIALS.md': credenciales('Entrar con tu cuenta (OAuth)'), 'README.md': '# Agenda\n' });
+    herramienta('Avisos', {
+      '.env.example': 'AVISOS_WEBHOOK_URL=\nAVISOS_CANAL_URL=\n',
+      'CREDENTIALS.md': credenciales('Una dirección que te dan (un webhook)', '| `AVISOS_WEBHOOK_URL` | secreta | Ajustes → Integraciones → Webhook entrante → Copiar | — |\n'),
+      'README.md': '# Avisos\n',
+    });
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, pruebas: almacen.get('executiveLab.pruebasDeConexion'), ficheros: vscode.guion.ficheros, guias: proveedor.guias };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const panel = require('./panel-falso').montarPanel();
+    const pantalla = async (id) => {
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: id });
+      return panel.mandar(ultimo('conexion'));
+    };
+    const acciones = (html) => [...html.matchAll(/data-accion="([^"]*)"/g)].map((m) => JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')));
+    vscode.guion.raiz = carpeta;
+    try {
+      await almacen.update('executiveLab.pruebasDeConexion', {});
+      const conexionesM = cargar('conexiones');
+
+      // Lo que lee del disco: la línea, una columna si la puso así, en inglés, y nada con marcadores.
+      assert.deepEqual(['Facturas', 'Nominas', 'Drive', 'Agenda', 'Avisos'].map((id) => conexionesM.claves(id).proveedor.acceso),
+        [[], ['usuario'], ['fichero'], ['cuenta'], ['direccion']], 'no se lee la clase de acceso');
+      const columna = path.join(carpeta, 'columna');
+      fs.mkdirSync(columna);
+      fs.writeFileSync(path.join(columna, 'CREDENTIALS.md'), '| Variable | Tipo de acceso | Dónde |\n|---|---|---|\n| `X_KEY` | Una clave | aquí |\n| `X_HOOK` | Una dirección que te dan | allí |\n');
+      assert.deepEqual(conexionesM.comoSeEntra(columna), ['clave', 'direccion'], 'como columna no se lee');
+      fs.writeFileSync(path.join(columna, 'CREDENTIALS.md'), '- **Access type**: OAuth sign-in with Google\n');
+      assert.deepEqual(conexionesM.comoSeEntra(columna), ['cuenta'], 'en inglés no se lee');
+      fs.writeFileSync(path.join(columna, 'CREDENTIALS.md'), '- Tipo de acceso: <una de las cinco>\n');
+      assert.deepEqual(conexionesM.comoSeEntra(columna), [], 'la plantilla sin rellenar cuenta como una clase');
+      assert.deepEqual(conexionesM.clasesQueNombra('Un fichero de acceso y entrar con tu cuenta'), ['fichero', 'cuenta']);
+      assert.deepEqual(conexionesM.clasesQueNombra('Usuario y contraseña para iniciar sesión'), ['usuario'], '«iniciar sesión» a secas no es entrar con tu cuenta');
+
+      // Los raíles nombran las cinco con las palabras que la barra lee, en las dos copias.
+      for (const donde of [path.join(RAIZ, '..', 'skills'), path.join(RAIZ, 'media', 'railes')]) {
+        const skill = fs.readFileSync(path.join(donde, 'executive-lab', 'SKILL.md'), 'utf8');
+        const seccion = skill.slice(skill.indexOf('**d) Qué clase de acceso pide'), skill.indexOf('### 3. '));
+        const cinco = seccion.slice(seccion.indexOf('*Una clave* ·'), seccion.indexOf('Si pide dos')).match(/\*([^*\n]+)\*/g) || [];
+        assert.deepEqual(cinco.map((n) => conexionesM.clasesQueNombra(n.replace(/\*/g, ''))), [['clave'], ['usuario'], ['fichero'], ['cuenta'], ['direccion']], `los raíles nombran otras clases: ${cinco.join(' · ')}`);
+        assert.match(seccion, /- Tipo de acceso: Una clave/, 'los raíles no dicen cómo se escribe la línea');
+        // Y su ejemplo de «Para tu informático» se lee tal cual.
+        const ejemplo = (seccion.match(/```markdown\n(## Para tu informático[\s\S]*?)```/) || [])[1];
+        assert.ok(ejemplo, 'los raíles no traen el ejemplo de «Para tu informático»');
+        fs.writeFileSync(path.join(carpeta, '01-TOOLS', 'Facturas', 'README.md'), `# Facturas\n\n${ejemplo}`);
+        assert.match(conexionesM.paraTuInformatico('Facturas'), /^- \*\*Para qué es\*\*/, 'el ejemplo de los raíles no se lee');
+        fs.writeFileSync(path.join(carpeta, '01-TOOLS', 'Facturas', 'README.md'), '# Facturas\n');
+      }
+
+      // Sin la línea, como antes: un campo por clave, su «Guardar», y nada nuevo encima.
+      let html = await pantalla('Facturas');
+      assert.match(html, /Pega la clave entera\. Los espacios y las comillas los quito yo\./);
+      assert.match(html, /<input type="password" placeholder="Pega aquí la clave entera" data-clave="FACTURAS_API_KEY">/);
+      assert.deepEqual(acciones(html).filter((a) => /^guardar/.test(a.tipo)).map((a) => [a.tipo, a.clave]), [['guardarClave', 'FACTURAS_API_KEY']]);
+      for (const nuevo of ['Suéltalo aquí', 'Entrar con tu cuenta', 'Usuario y contraseña', 'Pega aquí la dirección']) assert.ok(!html.includes(nuevo), `sin clase de acceso sale «${nuevo}»`);
+
+      // Usuario y contraseña: los dos juntos, con un solo «Guardar» que los guarda los dos.
+      // Si uno ya está en otro sitio, se dice dónde, como en los campos de siempre.
+      process.env.NOMINAS_USER = 'ana';
+      try {
+        assert.match(await pantalla('Nominas'), /Usuario: puesta en tu ordenador, fuera de esta carpeta/, 'juntos, no se dice que ya lo tiene');
+      } finally {
+        delete process.env.NOMINAS_USER;
+      }
+      html = await pantalla('Nominas');
+      assert.match(html, /<p class="nombre">Usuario y contraseña<\/p>/);
+      assert.match(html, /<input type="text" placeholder="Escribe aquí el usuario" data-clave="NOMINAS_USER">/);
+      assert.match(html, /<input type="password" placeholder="Escribe aquí la contraseña" data-clave="NOMINAS_PASSWORD">/);
+      assert.deepEqual(acciones(html).filter((a) => /^guardar/.test(a.tipo)).map((a) => a.tipo), ['guardarClaves'], 'cada uno con su «Guardar»: el de arriba se pierde');
+      assert.match(html, /Escribe el usuario y la contraseña tal cual te los dieron\./);
+      await proveedor.manejar({ tipo: 'guardarClaves', proveedor: 'Nominas', valores: { NOMINAS_USER: 'ana', NOMINAS_PASSWORD: 'una contraseña' } });
+      const env = conexionesM.leerEnv(path.join(carpeta, '01-TOOLS', 'Nominas', '.env'));
+      assert.deepEqual([env.get('NOMINAS_USER'), env.get('NOMINAS_PASSWORD')], ['ana', 'una contraseña'], 'no se guardan los dos');
+      assert.equal(ultimo('conexion').aviso.texto, 'Guardada. Conectado. Funciona.', 'con los dos, no se prueba sola');
+
+      // Un fichero de acceso: «Suéltalo aquí», y va a su sitio con el nombre que busca su prueba.
+      html = await pantalla('Drive');
+      assert.match(html, /Suéltalo aquí/);
+      assert.ok(acciones(html).some((a) => a.tipo === 'elegirFicheroDeAcceso' && a.proveedor === 'Drive'), 'sin arrastrar no hay salida');
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Drive', paso: 1 });
+      assert.match(panel.mandar(ultimo('conexion')), /Cuando lo tengas, suéltalo abajo/, 'el paso de la guía no dice dónde va el fichero');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.match(panel.mandar(ultimo('conexiones')), /Drive — le falta su fichero de acceso/);
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Drive' });
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Drive', clave: 'DRIVE_FOLDER_ID', valor: 'carpeta1' });
+      assert.equal(ultimo('conexion').aviso.texto, 'Guardada. Falta su fichero de acceso.', 'se prueba sin el fichero');
+      const cuenta = (correo) => Buffer.from(JSON.stringify({ type: 'service_account', client_email: correo, private_key: deMentira('-----BEGIN PRIVATE', ' KEY-----\nMIIabc\n-----END PRIVATE', ' KEY-----\n') })).toString('base64');
+      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Drive', ficheros: [{ nombre: 'mi-proyecto-1234.json', datos: cuenta('robot@mi-proyecto.iam.gserviceaccount.com') }] });
+      const puesto = path.join(drive, 'keys', 'cuenta-de-servicio.json');
+      assert.ok(fs.existsSync(puesto), 'no se llama como lo busca su prueba');
+      if (process.platform !== 'win32') assert.equal(fs.statSync(puesto).mode & 0o777, 0o600, 'lo puede leer cualquiera');
+      // Y no entra en las copias, aunque la herramienta no traiga el .gitignore de la plantilla.
+      const git = (...args) => require('node:child_process').spawnSync('git', args, { cwd: carpeta, encoding: 'utf8' });
+      if (git('init', '-q').status === 0) assert.equal(git('check-ignore', '-q', path.relative(carpeta, puesto)).status, 0, 'el fichero de acceso entraría en las copias');
+      assert.equal(ultimo('conexion').aviso.texto, 'Puesto en su sitio. Conectado. Funciona.', 'al ponerlo no se prueba sola');
+      // Otro encima: el de antes no se pierde.
+      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Drive', ficheros: [{ nombre: 'otro.json', datos: cuenta('robot2@mi-proyecto.iam.gserviceaccount.com') }] });
+      assert.ok(fs.existsSync(`${puesto}.anterior`), 'el de antes se ha perdido');
+      assert.match(ultimo('conexion').aviso.texto, /^Puesto en su sitio, en lugar del de antes\./);
+      assert.match(await pantalla('Drive'), /Puesto en su sitio\.[\s\S]*Cambiarlo/);
+      // Lo que no es un fichero de acceso no entra, y se dice con su salida.
+      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Drive', ficheros: [{ nombre: 'factura.pdf', datos: Buffer.from('%PDF-1.4 una factura').toString('base64') }] });
+      assert.equal(ultimo('conexion').aviso.texto, 'Eso no parece un fichero de acceso. Si lo es, pídeselo al asistente: sabe dónde va.');
+      assert.equal(ultimo('conexion').aviso.boton.accion.tipo, 'pedir');
+      assert.ok(!fs.readdirSync(path.join(drive, 'keys')).some((f) => /factura|entrando/.test(f)), 'una factura acaba entre las llaves');
+      // Con un nombre que sube por el árbol, se queda en su carpeta.
+      await proveedor.manejar({ tipo: 'soltarFicheroDeAcceso', proveedor: 'Drive', ficheros: [{ nombre: '../../escapa.pem', datos: Buffer.from('cert').toString('base64') }, { nombre: '..\\..\\escapa2.pem', datos: Buffer.from('cert').toString('base64') }] });
+      assert.ok(fs.existsSync(path.join(drive, 'keys', 'escapa.pem')) && fs.existsSync(path.join(drive, 'keys', 'escapa2.pem')), 'no se pone en su sitio');
+      assert.ok(!fs.existsSync(path.join(carpeta, '01-TOOLS', 'escapa.pem')) && !fs.existsSync(path.join(carpeta, 'escapa.pem')), 'se sale de su carpeta');
+      // Y elegido con el diálogo, igual.
+      const elegido = path.join(carpeta, 'cert.p12');
+      fs.writeFileSync(elegido, 'un certificado');
+      vscode.guion.ficheros = [elegido];
+      await proveedor.manejar({ tipo: 'elegirFicheroDeAcceso', proveedor: 'Drive' });
+      assert.ok(fs.existsSync(path.join(drive, 'keys', 'cert.p12')), 'elegido no va a su sitio');
+
+      // Entrar con tu cuenta: nada que pegar, y «Entrar» se lo pide al asistente.
+      html = await pantalla('Agenda');
+      assert.match(html, /No hay nada que pegar: entras con tu cuenta de Agenda en el navegador/);
+      assert.ok(!/data-clave=/.test(html), 'entrando con tu cuenta, se piden claves');
+      assert.ok(!html.includes('Esta conexión no pide ninguna clave'));
+      const entrar = acciones(html).find((a) => a.tipo === 'pedir' && /entrando con mi cuenta/.test(a.prompt));
+      assert.ok(entrar && /navegador/.test(entrar.prompt) && entrar.prompt.includes('01-TOOLS/Agenda/'), '«Entrar» no se lo pide al asistente');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.match(panel.mandar(ultimo('conexiones')), /Agenda — falta entrar con tu cuenta/);
+
+      // Una dirección que te dan: como dirección, con dónde sale; y si no lo dice, de dónde viene.
+      html = await pantalla('Avisos');
+      assert.match(html, /<input type="text" placeholder="Pega aquí la dirección entera" data-clave="AVISOS_WEBHOOK_URL">/);
+      assert.match(html, /Ajustes → Integraciones → Webhook entrante → Copiar/);
+      assert.match(html, /Te la da Avisos: cópiala entera de su página\./, 'sin dónde sale, no se dice nada');
+      assert.match(html, /Pega la dirección entera\./);
+
+      // En todas, «Pídeselo a tu informático».
+      for (const id of ['Facturas', 'Nominas', 'Drive', 'Agenda', 'Avisos']) {
+        assert.ok(acciones(await pantalla(id)).some((a) => a.tipo === 'verParaElInformatico' && a.proveedor === id), `${id} no tiene «Pídeselo a tu informático»`);
+      }
+      return 'cinco formas, y sin la línea, la de siempre';
+    } finally {
+      await almacen.update('executiveLab.pruebasDeConexion', antes.pruebas);
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.ficheros = antes.ficheros;
+      proveedor.guias = antes.guias;
+    }
+  });
+
+  await comprobar('«Pídeselo a tu informático»: sale del README, lleva la parte de seguridad, ningún valor, y el correo va bien codificado', async () => {
+    // Decisión 154. El mensaje sale de lo que el asistente dejó en «## Para tu
+    // informático»; la parte de seguridad la pone la barra; y nunca lleva el valor
+    // de una clave, ni aunque el asistente la haya pegado donde no debe.
+    const informaticoM = cargar('informatico');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'informatico-'));
+    const suya = path.join(carpeta, '01-TOOLS', 'Facturas');
+    fs.mkdirSync(suya, { recursive: true });
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    const falsa = deMentira('fk', '_live_', 'Zx9', 'Q7w', 'E2r', 'T5y', 'U8i', 'O1p');
+    const conForma = deMentira('sk', '-ant-', 'api03-', 'abcdefghijklmnopqrstu');
+    fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_API_KEY=\n');
+    fs.writeFileSync(path.join(suya, '.env'), `FACTURAS_API_KEY=${falsa}\n`);
+    fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), `# Credenciales\n\n- URL: https://facturas.test/api\n- Tipo de acceso: Una clave\n\n| Variable | Tipo | Dónde se saca | Rotación |\n|---|---|---|---|\n| \`FACTURAS_API_KEY\` | secreta | Ajustes → API (la de ahora es ${falsa}) | — |\n`);
+    const seccion = [
+      '## Para tu informático', '',
+      '- **Para qué es**: que el asistente lea las facturas & los cobros, 100% de solo lectura.',
+      '- **Qué acceso**: una clave con el permiso `facturas:leer` (nada de #admin ni de +escritura).',
+      `- **Dónde se hace**: [su panel](https://facturas.test/api?seccion=claves&nueva=1) — la que tengo es ${falsa} y otra ${conForma}`,
+      '- **Si no está claro, pregúntale**:', '  - ¿Tenemos cuenta de empresa?', '  - ¿Quién es el administrador?', '',
+      '## Notas', '', 'Esto ya no es para el informático.',
+    ].join('\n');
+    const readme = `# Facturas\n\n${seccion}\n`;
+    fs.writeFileSync(path.join(suya, 'README.md'), readme);
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, abrir: vscode.env.openExternal, portapapeles: vscode.registrado.portapapeles };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const panel = require('./panel-falso').montarPanel();
+    const abiertos = [];
+    let abre = true;
+    vscode.env.openExternal = async (u) => { abiertos.push(u); return abre; };
+    const lleva = (texto, valor) => texto.includes(valor) || texto.includes(encodeURIComponent(valor));
+    // Un `mailto:` se lee así: lo de después del primer «?», partido por «&», y cada parte decodificada.
+    const leerElCorreo = (enlace) => {
+      assert.ok(enlace.startsWith('mailto:?'), `no es un correo sin destinatario: ${enlace.slice(0, 40)}`);
+      assert.ok(!/[\s#]/.test(enlace) && enlace.indexOf('?') === enlace.lastIndexOf('?'), 'lleva espacios, saltos, «#» o un «?» sin codificar');
+      const partes = enlace.slice('mailto:?'.length).split('&').map((p) => p.split('='));
+      assert.deepEqual(partes.map(([k]) => k), ['subject', 'body'], 'el «&» del mensaje parte el correo');
+      return Object.fromEntries(partes.map(([k, v]) => [k, decodeURIComponent(v)]));
+    };
+    vscode.guion.raiz = carpeta;
+    try {
+      // Sale del README: la sección entera, en texto llano, y nada de la siguiente.
+      await proveedor.manejar({ tipo: 'verParaElInformatico', proveedor: 'Facturas' });
+      const pantalla = ultimo('informatico');
+      assert.equal(pantalla.deLaCarpeta, true, 'no se lee la sección');
+      assert.match(pantalla.cuerpo, /^Hola:\n\nEstoy conectando Facturas con mi asistente de IA/);
+      assert.match(pantalla.cuerpo, /- Para qué es: que el asistente lea las facturas & los cobros, 100% de solo lectura\./);
+      assert.match(pantalla.cuerpo, /el permiso facturas:leer/);
+      assert.match(pantalla.cuerpo, /su panel \(https:\/\/facturas\.test\/api\?seccion=claves&nueva=1\)/);
+      assert.match(pantalla.cuerpo, /¿Quién es el administrador\?/);
+      assert.doesNotMatch(pantalla.cuerpo, /Esto ya no es para el informático/, 'se mete la sección siguiente');
+      assert.equal(pantalla.asunto, 'Acceso a Facturas para mi asistente de IA');
+      // La parte de seguridad, escrita una vez, entera.
+      for (const linea of informaticoM.POR_SEGURIDAD.clave) assert.ok(pantalla.cuerpo.includes(linea.replace('{X}', 'Facturas')), `falta «${linea}»`);
+      assert.match(pantalla.cuerpo, /Nunca me la mandes por correo ni por mensajería/);
+      assert.match(pantalla.cuerpo, /la pegues tú en la barra de Executive Lab de mi ordenador/);
+      assert.match(pantalla.cuerpo, /gestor de contraseñas/);
+      // Ni un valor: ni el de su .env, pegado en el README por error, ni nada con forma de clave.
+      for (const valor of [falsa, conForma]) {
+        assert.ok(!lleva(pantalla.cuerpo, valor) && !lleva(pantalla.asunto, valor), 'el mensaje lleva una clave');
+        assert.ok(!JSON.stringify(enviados).includes(valor), 'la pantalla recibe una clave');
+      }
+      assert.match(pantalla.cuerpo, /la que tengo es \[clave quitada\] y otra \[clave quitada\]/);
+      // En pantalla: el mensaje, sus dos botones, y sin «Que lo escriba el asistente».
+      const html = panel.mandar(pantalla);
+      assert.match(html, /Para tu informático/);
+      assert.match(html, /Copiarlo[\s\S]*Mandarlo por correo/);
+      assert.match(html, /&quot;tipo&quot;:&quot;copiarParaElInformatico&quot;,&quot;proveedor&quot;:&quot;Facturas&quot;/);
+      assert.match(html, /&quot;tipo&quot;:&quot;mandarAlInformatico&quot;,&quot;proveedor&quot;:&quot;Facturas&quot;/);
+      assert.ok(!html.includes('Que lo escriba el asistente'), 'se ofrece escribir lo que ya está');
+      assert.ok(!html.includes(falsa));
+
+      // «Copiarlo»: el mensaje, al portapapeles.
+      await proveedor.manejar({ tipo: 'copiarParaElInformatico', proveedor: 'Facturas' });
+      assert.equal(vscode.registrado.portapapeles, pantalla.cuerpo);
+      assert.equal(ultimo('informatico').aviso.texto, 'Copiado. Pégalo donde se lo vayas a mandar.');
+
+      // «Mandarlo por correo»: un mailto: sin destinatario, como texto, y que se lee entero.
+      vscode.registrado.portapapeles = null;
+      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' });
+      const enlace = abiertos[abiertos.length - 1];
+      assert.equal(typeof enlace, 'string', 'se abre con Uri.parse: el editor recodifica el «?» y parte el «&»');
+      const correo = leerElCorreo(enlace);
+      assert.equal(correo.subject, pantalla.asunto);
+      assert.equal(correo.body, pantalla.cuerpo.replace(/\n/g, '\r\n'), 'el cuerpo no llega igual, o sin los saltos de la norma');
+      assert.ok(!lleva(enlace, falsa) && !lleva(enlace, conForma), 'el correo lleva una clave');
+      assert.equal(vscode.registrado.portapapeles, null, 'cabe en el correo y se copia igual');
+      assert.equal(ultimo('informatico').aviso.texto, 'Te he abierto el correo con el mensaje. Pon a quién va y mándalo tú.');
+      // Si no se abre, se copia y se dice.
+      abre = false;
+      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' });
+      assert.equal(vscode.registrado.portapapeles, pantalla.cuerpo);
+      assert.equal(ultimo('informatico').aviso.malo, true);
+      assert.match(ultimo('informatico').aviso.texto, /^No he podido abrir tu correo\. Te lo he copiado/);
+      abre = true;
+      // En Windows, una dirección larga se corta (decisión 130): el mensaje va al portapapeles.
+      const largo = { asunto: 'Acceso a Facturas', cuerpo: `${'Una línea larga con tildes, ñ y algo más. '.repeat(60)}` };
+      const enWindows = informaticoM.correo(largo, { plataforma: 'win32' });
+      assert.equal(enWindows.alPortapapeles, true);
+      assert.ok(enWindows.enlace.length <= informaticoM.CABE_EN_WINDOWS, 'en Windows no cabe');
+      assert.match(leerElCorreo(enWindows.enlace).body, /pégalo aquí con Ctrl\+V/);
+      assert.equal(informaticoM.correo(largo, { plataforma: 'darwin' }).alPortapapeles, false, 'en un Mac se corta sin hacer falta');
+      assert.equal(leerElCorreo(informaticoM.correo(largo, { plataforma: 'darwin' }).enlace).body, largo.cuerpo);
+
+      // Sin la sección: lo que se sabe del disco, la seguridad igual, y «Que lo escriba el asistente».
+      fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Para tu informático\n\n- <para qué es>\n');
+      await proveedor.manejar({ tipo: 'verParaElInformatico', proveedor: 'Facturas' });
+      const armado = ultimo('informatico');
+      assert.equal(armado.deLaCarpeta, false, 'la plantilla cuenta como sección');
+      assert.match(armado.cuerpo, /Lo que hace falta:\n- Una clave de acceso\.\n- FACTURAS_API_KEY: Ajustes → API/);
+      assert.match(armado.cuerpo, /- Se hace aquí: https:\/\/facturas\.test\/api/);
+      assert.match(armado.cuerpo, /Nunca me la mandes por correo ni por mensajería/);
+      assert.ok(!lleva(armado.cuerpo, falsa), 'lo que se sabe del disco lleva la clave');
+      const sinSeccion = panel.mandar(armado);
+      assert.match(sinSeccion, /Que lo escriba el asistente/);
+      assert.match(sinSeccion, /## Para tu informático/, '«Que lo escriba el asistente» no dice qué sección');
+
+      // La parte de seguridad, según lo que pide.
+      const seguridad = (tipo) => {
+        fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), `# Credenciales\n\n- Tipo de acceso: ${tipo}\n`);
+        return informaticoM.mensaje('Facturas').cuerpo;
+      };
+      assert.match(seguridad('Entrar con tu cuenta'), /No hace falta que me mandes ninguna clave ni contraseña: entro yo con mi cuenta\./);
+      assert.doesNotMatch(seguridad('Entrar con tu cuenta'), /pégala|gestor de contraseñas/);
+      assert.match(seguridad('Un fichero de acceso'), /Nunca me lo mandes por correo[\s\S]*lo sueltes tú en la barra/);
+      assert.match(seguridad('Usuario y contraseña'), /Nunca me los mandes por correo[\s\S]*los escribas tú en la barra/);
+      assert.match(seguridad('Una clave y un fichero de acceso'), /Nunca me la mandes[\s\S]*Y lo mismo con el fichero de acceso/);
+      assert.match(seguridad('<sin rellenar>'), /Nunca me la mandes por correo/, 'sin saber lo que pide, sin consejo');
+
+      // Un README o un CREDENTIALS.md que son un enlace a algo que no acaba no cuelgan el editor.
+      if (process.platform !== 'win32') {
+        for (const fichero of ['README.md', 'CREDENTIALS.md']) {
+          fs.rmSync(path.join(suya, fichero));
+          fs.symlinkSync('/dev/zero', path.join(suya, fichero));
+        }
+        const empieza = Date.now();
+        assert.equal(cargar('conexiones').paraTuInformatico('Facturas'), '');
+        assert.deepEqual(cargar('conexiones').comoSeEntra(suya), []);
+        assert.ok(Date.now() - empieza < 2000, 'lee un enlace que no acaba');
+        for (const fichero of ['README.md', 'CREDENTIALS.md']) fs.rmSync(path.join(suya, fichero));
+      }
+
+      // Y una conexión que no existe no arma nada.
+      await proveedor.manejar({ tipo: 'verParaElInformatico', proveedor: '../fuera' });
+      assert.equal(ultimo('conexiones') && ultimo('conexiones').tipo, 'conexiones');
+      return 'del README, con la seguridad de la barra, sin valores, y el correo se lee entero';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.env.openExternal = antes.abrir;
+      vscode.registrado.portapapeles = antes.portapapeles;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
   await comprobar('todo tipo que manda el panel se despacha sin excepción', async () => {
     // G1 e I2. «Resolver una incidencia» reventaba siempre: `encargos` se usaba y
     // no se importaba, y ninguna prueba pasaba por los manejadores del panel. La
