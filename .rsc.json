@@ -43,7 +43,11 @@
   ],
   "ownSkills": [
     "texto-de-la-barra",
-    "executive-lab"
+    "executive-lab",
+    "ayuda",
+    "empezar",
+    "guardar",
+    "seguir"
   ],
   "catalogVersion": "3.0.22",
   "tier": null,
