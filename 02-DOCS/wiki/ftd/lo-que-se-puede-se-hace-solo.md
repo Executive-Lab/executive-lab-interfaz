@@ -163,7 +163,7 @@ hacerse solo, porque no se puede deshacer.
 - [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [x] 9. Cuándo caduca una clave: decisión 149.
 - [x] 10. Añadir una habilidad sin mandar a nadie a la barra: decisión 150.
-- [ ] 11. La foto del cerebro.
+- [x] 11. La foto del cerebro: decisión 151, `ftd/documentos-y-el-cerebro.md`.
 - [x] 12. Los datos de clientes, en Ayuda: `ftd/los-datos-de-clientes.md`, decisión 153.
 
 ## Evidence
@@ -266,6 +266,15 @@ hacerse solo, porque no se puede deshacer.
   crea después; el reloj del minuto lo cubre) y el `rsc add` de verdad (fingido; `rsc.anadir` no cambia y
   tiene sus pruebas).
 
+- **Punto 11** (decisión 151, 15-10): la foto del cerebro, sin Obsidian. Un punto por concepto y una línea por
+  enlace, de markdown o `[[ ]]`; se pulsa un punto y se lee; «Guardar la foto» la deja en PNG en Resultados (out)
+  y lo dice en una frase. Se llega desde Documentos, que pasa a ser una pantalla (F7). `humo.js` 380, contrato 14,
+  diccionario, y 65 de 65 mutaciones.
+- **La revisión adversaria del punto 11** encontró seis fallos de seguridad (la foto congelaba el editor, se
+  escribía fuera a través de una wiki enlazada, un `.md` enlazado a `~/.ssh/config` se enseñaba…) y seis de
+  corrección (los avisos de Documentos y de la foto se los comía el vigía…), más 17 mutantes vivos. Arreglados
+  con su prueba: `humo.js` 385, las tres empresas con dieciocho pantallas, y 119 de 119 mutaciones.
+
 - **Punto 12** (decisión 153, 15-10): en Ayuda, «Si trabajas con datos de clientes», para leer: licencia de
   empresa, dónde se apaga en Claude y en Codex, y lo que no se pega nunca. Sale de su tabla, comprobada ese día en
   las páginas de Anthropic y OpenAI. La tarjeta lo dice una vez por carpeta, con la primera conexión puesta o el
@@ -275,10 +284,9 @@ hacerse solo, porque no se puede deshacer.
   mutantes vivos y un nombre de menú de ChatGPT sin comprobar. Y uno de seguridad, de antes: la ruta `abrir` del
   panel abría cualquier esquema y cualquier sitio, y la página de una conexión sale de su CREDENTIALS.md. Ahora
   solo https, y lo que no es nuestro se pregunta con el sitio a la vista. `humo.js` 376 y 39 de 39 mutaciones.
-
 ## Next
 
-Del 1 al 10 y el 12, hechos; queda el 11.
+Del 1 al 12, hechos.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la

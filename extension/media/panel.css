@@ -841,3 +841,82 @@ button.solo-icono .icono { font-size: 15px; }
 /* Abajo y en pequeño: qué barra es y cambiar de proyecto (decisión 138). */
 .fila.pie { margin-top: 18px; gap: 4px; flex-wrap: wrap; opacity: .85; }
 .fila.pie button { width: auto; }
+
+/* Documentos, en una pantalla (F7, decisión 151). En la principal es una fila
+   como las plegables, sin caja y con su marca a la izquierda, que en vez de
+   desplegarse abre su pantalla: por eso la marca es «›» y no «▸». */
+button.fila-de-pantalla {
+  gap: 0.4rem;
+  min-height: 0;
+  margin: 0;
+  padding: 9px 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-fuerte);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--borde);
+  border-radius: 0;
+  box-shadow: none;
+}
+button.fila-de-pantalla:hover { transform: none; color: var(--acento-relleno); }
+button.fila-de-pantalla::before { content: '›'; opacity: 0.5; font-size: 1.05em; }
+button.fila-de-pantalla .cuantos {
+  flex: none;
+  padding-left: 8px;
+  color: var(--apagado);
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+/* Donde se sueltan los documentos: se ilumina mientras se arrastra algo encima. */
+.soltar-aqui {
+  padding: 2px 13px 0;
+  margin-bottom: 18px;
+  border: 2px dashed var(--borde);
+  border-radius: var(--radio-lg);
+}
+.soltar-aqui h2 { margin-top: 12px; }
+body.soltando .soltar-aqui { border-color: var(--acento); }
+
+/* La foto del cerebro (decisión 151): un punto por concepto y una línea por
+   enlace. Todo con clases y colores con significado, nada en línea: la política
+   de contenido de la barra no deja estilos dentro del dibujo. */
+.foto {
+  margin: 8px 0 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+.foto svg { display: block; width: 100%; height: auto; }
+.foto line {
+  stroke: var(--apagado);
+  stroke-opacity: 0.45;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.foto .nodo { cursor: pointer; outline: none; }
+.foto .nodo:focus-visible circle {
+  fill: var(--acento-relleno);
+  stroke: var(--texto-fuerte);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+.foto .nodo circle { fill: var(--acento); }
+.foto .nodo:hover circle {
+  fill: var(--acento-relleno);
+  stroke: var(--texto-fuerte);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.foto text {
+  fill: var(--texto);
+  font-family: var(--sans);
+  font-size: 30px;
+  paint-order: stroke;
+  stroke: var(--superficie);
+  stroke-width: 8px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}

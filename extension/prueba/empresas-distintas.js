@@ -8,10 +8,11 @@
 // se enseñen cero botones sin decir por qué, que un despacho sin conexiones no
 // enseñe la pantalla de una gestoría.
 //
-// Aquí se montan tres carpetas distintas y se pasan las dieciséis pantallas por
+// Aquí se montan tres carpetas distintas y se pasan las dieciocho pantallas por
 // cada una. Lo que se comprueba no es el contenido —eso es de `humo.js`— sino
 // que **ninguna revienta y ninguna cae en la pantalla de fallo**, que es la red
-// de seguridad y no un aprobado.
+// de seguridad y no un aprobado. Y que la principal sencilla, plegada, no pasa
+// de cinco cosas a la vista (el plan de simplificar la barra).
 //
 //   node prueba/empresas-distintas.js <raíz del repositorio>
 
@@ -113,6 +114,17 @@ for (const [nombre, montar] of TODAS) {
   anadir('comoTrabaja', { ...cargar('ajustes').comoEstamos(), aviso: null }, null);
   anadir('laCara', { ...cargar('tema').comoEstamos(), aviso: null }, null);
   anadir('salidas', { herramientas: cargar('salidas').loQueHaProducido() }, null);
+  // Documentos en una pantalla y la foto del cerebro (decisión 151), con lo que
+  // mandaría la extensión en esta carpeta.
+  const fotoM = cargar('foto');
+  const wiki = path.join(vscode.guion.raiz, '02-DOCS', 'wiki');
+  anadir('documentos', {
+    ...cargar('papeles').sinLeerTodavia(),
+    herramientas: cargar('salidas').loQueHaProducido(),
+    fotos: fotoM.lasFotos(path.join(vscode.guion.raiz, ...fotoM.CARPETA), vscode.guion.raiz),
+    aviso: null,
+  }, null);
+  anadir('foto', { ...fotoM.laFoto(wiki, cargar('cerebro').todosLosDocumentos()), desde: 'documentos', aviso: null }, null);
   anadir('diario', { sesiones: cargar('diario').sesiones(), decisiones: cargar('diario').decisiones(), aprendido: [] }, null);
   anadir('sugerencias', { ahora: [], hayAgentes: cargar('agentes').hayAlguno(), hayProyectos: cargar('proyectos').hayAlgo() }, null);
   anadir('estado', {
@@ -147,6 +159,22 @@ for (const [nombre, montar] of TODAS) {
     else if (/no se ha podido pintar/.test(pintado)) rotas.push(`${tipo}: cae en la pantalla de fallo`);
   }
 
+  // La principal sencilla, plegada: como mucho cinco cosas a la vista (la
+  // tarjeta, tres filas y la línea de las copias), con todo lo que pueda salir.
+  const [, delEstado] = mensajes.find(([tipo]) => tipo === 'estado');
+  const sencilla = panel.mandar({
+    tipo: 'estado',
+    ...delEstado,
+    barraCompleta: false,
+    piezas: JSON.parse(fs.readFileSync(path.join(ext, 'media', 'piezas.json'), 'utf8')),
+    consejo: { id: 'x', texto: 'Un consejo.', boton: 'Hacerlo', accion: { tipo: 'verDocumentos' } },
+    copias: { hace: 'hace 5 minutos', sinGuardar: false, subir: true },
+    versionDeLaBarra: '0.0.0',
+  });
+  const aLaVista = ['class="consejo"', 'class="aviso', 'class="acordeon grupo"', 'class="fila-de-pantalla"']
+    .reduce((n, marca) => n + sencilla.split(marca).length - 1, 0);
+  if (aLaVista > 5 || aLaVista < 4) rotas.push(`principal sencilla: ${aLaVista} cosas a la vista`);
+
   const q = cargar;
   const resumen = [
     `${q('conexiones').proveedores().length} conexiones`,
@@ -161,7 +189,7 @@ for (const [nombre, montar] of TODAS) {
     mal += rotas.length;
     console.log(`✗ ${nombre}\n    ${rotas.join('\n    ')}`);
   } else {
-    console.log(`✓ ${nombre} — ${mensajes.length} pantallas · ${resumen}`);
+    console.log(`✓ ${nombre} — ${mensajes.length} pantallas · ${aLaVista} cosas a la vista · ${resumen}`);
   }
 }
 
