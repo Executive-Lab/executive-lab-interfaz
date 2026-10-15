@@ -225,9 +225,9 @@ async function anadir(id) {
   const sitios = require('../media/railes/sitios');
   const declarados = ((proyecto.declaracion() || {}).targets || []).filter((q) => sitios.sitiosDe(q));
   const para = declarados.length ? declarados : [require('./donde').paraQuien()];
-  await module.exports.correr(['add', id, '--target', para.join(',')], { tiempoMaximo: 180000 });
+  const hecho = await module.exports.correr(['add', id, '--target', para.join(',')], { tiempoMaximo: 180000 });
   // En disco, no declarada: una que el arnés declaró y no puso no se da por añadida (G4).
-  return { ok: habilidadesEnDisco().includes(id) };
+  return { ok: hecho.codigo === 0 && para.every((quien) => habilidadesDelArnesEnDisco(quien).includes(id)) };
 }
 
 // Las habilidades que están **en disco, en este ordenador**.
@@ -251,17 +251,24 @@ function habilidadesEnDisco() {
   return [...enSuCarpeta, ...habilidadesEn(deBotones).filter((id) => !enSuCarpeta.includes(id))];
 }
 
-function habilidadesEn(carpeta) {
+function habilidadesDelArnesEnDisco(quien = require('./donde').paraQuien()) {
   const donde = require('./donde');
+  const suyo = donde.SITIOS[quien] || {};
+  return habilidadesEn(donde.carpetaDeOtro(quien, 'habilidades'), suyo.habilidadEnUnFichero || null);
+}
+
+function habilidadesEn(carpeta, ext = require('./donde').habilidadEnUnFichero()) {
   if (!carpeta || !fs.existsSync(carpeta)) return [];
-  const ext = donde.habilidadEnUnFichero();
   try {
     // Un enlace cuenta si lleva a algo: en Mac, RSC enlaza cada habilidad a
     // `.rsc/skills/<id>`, y sin esa carpeta el enlace apunta a nada (revisión de
     // F7, m1). `existsSync` sigue el enlace.
     const lleva = (e) => !e.isSymbolicLink() || fs.existsSync(path.join(carpeta, e.name));
     const entradas = fs.readdirSync(carpeta, { withFileTypes: true }).filter((e) => !e.name.startsWith('.') && lleva(e));
-    if (!ext) return entradas.filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
+    if (!ext) return entradas.filter((e) => {
+      if (!e.isDirectory() && !e.isSymbolicLink()) return false;
+      try { return fs.statSync(path.join(carpeta, e.name, 'SKILL.md')).isFile(); } catch { return false; }
+    }).map((e) => e.name);
     return entradas
       .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith(ext) && !e.name.startsWith('rsc-'))
       .map((e) => e.name.slice(0, -ext.length));
@@ -588,5 +595,5 @@ module.exports = {
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,
-  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, anadir,
+  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, habilidadesDelArnesEnDisco, anadir,
 };

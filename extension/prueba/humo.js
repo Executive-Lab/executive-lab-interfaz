@@ -10109,6 +10109,8 @@ exec git "$@"
       assert.match(enviados[enviados.length - 1].aviso.texto, /no trae frenos/, 'el aviso de los frenos se borra al repintar');
       // I4: y se vigila lo de Codex, no lo de Claude.
       assert.match(vscode.registrado.vigilado, /\.codex\/rsc\/\*\*/, `tras cambiar se sigue vigilando lo de antes: ${vscode.registrado.vigilado}`);
+      assert.match(vscode.registrado.vigilado, /\.agents\/skills\/\*\*/, 'se dejan de vigilar las habilidades nativas de Codex');
+      assert.match(vscode.registrado.vigilado, /AGENTS\.override\.md/, 'se deja de vigilar el fichero de reglas que Codex lee primero');
 
       // I3: si falla, lo que dijo el arnés va al registro.
       const falla = nueva(['claude']);

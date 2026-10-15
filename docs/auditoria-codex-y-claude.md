@@ -716,3 +716,49 @@ OpenAI no expone ningún comando que acepte texto, así que los botones siguen a
 dejando el texto copiado —eso ya estaba comprobado y documentado, no ha cambiado—, pero que su
 lector de `AGENTS.md` cargue de verdad una habilidad a la que se le apunta es una suposición
 razonable, no un hecho verificado. Es lo que hace RSC con las suyas.
+
+## Revisión del mapa de Codex — 15 de octubre de 2026
+
+Revisado de nuevo tras integrar Documentos, la foto del cerebro y los pedidos de habilidades.
+Referencia: RSC **3.0.22**, la extensión instalada `openai.chatgpt` **26.1007.21434** y la documentación
+oficial de [habilidades](https://learn.chatgpt.com/docs/build-skills),
+[agentes](https://learn.chatgpt.com/docs/agent-configuration/subagents),
+[instrucciones](https://learn.chatgpt.com/docs/agent-configuration/agents-md) y
+[comandos del editor](https://learn.chatgpt.com/docs/developer-commands?surface=ide).
+
+Este es el mapa de **la carpeta con la que trabaja la barra**. Los ajustes personales, los plugins
+de la cuenta y las habilidades globales siguen siendo de Codex; no se presentan como instalados por
+RSC en la empresa. El cuadro sustituye las afirmaciones antiguas de esta auditoría sobre la ausencia
+de botones y la lectura exclusiva de `AGENTS.md`.
+
+| Pieza | Fuente para Codex | Cómo llega a la barra o al asistente |
+|---|---|---|
+| Asistente elegido | `.rsc.json` y la elección guardada por carpeta | La misma elección gobierna lectura, envío, diagnóstico y cambio de asistente. |
+| Habilidades de RSC | `.codex/rsc/<id>/SKILL.md` | Listadas, buscables y fijables; se piden por su nombre con palabras. |
+| Habilidades nativas | `.agents/skills/<carpeta>/SKILL.md` | Listadas aunque no tengan botón; se invocan con `$name`, leyendo el nombre declarado. |
+| Habilidades con botón | `metadata.boton`, `grupo`, `icono` en esas habilidades | Acciones, Habilidades y Acciones rápidas usan el mismo texto de invocación. |
+| Descripciones propias | Cabecera YAML, también `>` y `\|`, y cadenas entre comillas | La ficha conserva la descripción y los rótulos con comillas. |
+| Una copia nativa y otra de RSC con el mismo id | Ambas carpetas anteriores | La ficha lee la copia nativa que invoca con `$`; no muestra la descripción de la otra. El diagnóstico comprueba aparte la copia de RSC. |
+| Instalación completa | `SKILL.md` real en la carpeta de cada asistente declarado | Una carpeta vacía no cuenta. Añadir solo termina bien si el proceso termina bien y están todas las copias solicitadas. |
+| Comandos antiguos | RSC no los genera para Codex | La barra no crea ni invoca comandos de Claude en esa carpeta. Los botones son habilidades. |
+| Agentes | `.codex/agents/*.toml` | Se leen comillas simples y dobles, comentarios, escapes y descripciones multilínea. Se invoca el `name` declarado, conservando el fichero para abrirlo. |
+| Agentes que ya eran de la empresa | Los mismos TOML, comparados con el plan de montaje | El choque permite conservar o renombrar; el nuevo nombre mantiene `.toml` y cambia solo el `name` raíz. Un fichero ilegible no se mueve a medias. |
+| Reglas de esta carpeta | `AGENTS.override.md` no vacío; después `AGENTS.md` | La ficha, abrirlas enteras, el diagnóstico y los raíles resuelven el mismo fichero. No se rellenan reglas de Codex con las de Claude. |
+| Reglas de Executive Lab | `.codex/rsc/executive-lab/`, apuntadas desde el fichero efectivo anterior | Un override de alguien conserva su texto y pasa por el consentimiento ya previsto; no se escribe a través de uno enlazado. |
+| Conversación nueva | `chatgpt.newChat`; repuesto `chatgpt.newCodexPanel` | Se comprueba que exista; si falla, se intenta el siguiente. Sin ninguno, se conserva la explicación del «+». |
+| Encargo al asistente | `chatgpt.openSidebar` y portapapeles | La extensión inspeccionada no ofrece un comando general que acepte texto. Se conserva entero, con Cmd+V en Mac y Ctrl+V en Windows/Linux; lo envía la persona. |
+| Recordatorios | `metadata.cuando` de la habilidad y estado por carpeta | El reloj de la barra usa el mismo botón y la misma invocación que Habilidades. |
+| Pedido de una habilidad | `02-DOCS/raw/pedidos/` | Añade para los asistentes declarados y responde con la forma correcta de pedirla. La copia nativa no disfraza un `add` fallido de RSC. |
+| Cambios en disco | `.codex/rsc/**`, `.agents/skills/**`, `.codex/agents/**` y ambos ficheros de reglas | El vigía se rearma al cambiar de asistente y observa también el override. |
+| Herramientas, claves y resultados | `01-TOOLS/`, sus `.env` y `out/` | Compartidos por la empresa, independientes del asistente. No se duplican en `.codex/`. |
+| Documentos y conocimiento | `02-DOCS/inbox`, `raw`, `wiki` y `wiki/out` | Documentos, búsqueda, conceptos, enlaces y fotos usan las mismas fuentes con Codex. |
+| Memoria, planes y decisiones | La wiki y los ficheros de RSC | Se muestran desde el proyecto, sin confundirlos con la memoria personal de la cuenta. |
+| Permisos y piezas automáticas | Lo que instala realmente RSC y lo que gestiona Codex | La barra no escribe ajustes de Claude para Codex. RSC 3.0.22 solo engancha sus guardianes a Claude; no se promete ese freno para Codex. |
+
+Se añadieron regresiones en `extension/prueba/mapeos-codex.js`, ejecutadas también por la batería de
+Windows. Las pruebas generales incluyen un montaje real con RSC para Codex y el paso desde Claude,
+conservando las habilidades de ambos. El despacho de ejemplo recorre las dieciocho pantallas con
+Codex. El texto y los nombres del editor se contrastaron con el paquete de OpenAI instalado.
+
+Esto verifica el contrato de la extensión y los ficheros que monta RSC. No equivale a haber enviado
+una conversación a un modelo de Codex desde VS Code ni a haber probado ajustes personales de la cuenta.

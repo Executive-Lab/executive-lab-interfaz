@@ -5622,3 +5622,28 @@ De OpenAI:
   que es la barra en GitHub (`sitio.js`) o una página de Anthropic u OpenAI de la tabla se abre directo. Lo
   demás se pregunta antes, con el sitio a la vista: «Voy a abrir app.holded.com. ¿Lo abro?». Lo que no es https
   no se abre: «No abro esa página: no es segura. Díselo a tu tutor.»
+
+## 154. El mapa de Codex coincide con lo que se lee y lo que se invoca
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«Haz todos los mapeos de codex»*. El mapa completo, contrastado con RSC 3.0.22, la extensión
+de OpenAI instalada y sus fuentes oficiales, queda en la revisión del 15 de octubre de
+[`auditoria-codex-y-claude.md`](auditoria-codex-y-claude.md).
+
+- Una habilidad solo cuenta si tiene su `SKILL.md`. Las nativas se piden con el `name` de su cabecera;
+  si coinciden con una copia de RSC, ficha y botón miran la nativa. Las descripciones YAML multilínea
+  y los rótulos con comillas se leen enteros.
+- El diagnóstico del arnés comprueba sus propias copias. Una nativa con el mismo id no tapa lo que
+  falta en `.codex/rsc/`; «Añadir» exige que termine bien y quede puesta para cada asistente declarado.
+- Los agentes TOML se invocan con su `name`, no con el nombre del fichero. Sus conflictos entran en
+  el flujo de conservar o renombrar, manteniendo formato, instrucciones y comentarios.
+- `AGENTS.override.md`, cuando no está vacío, manda sobre `AGENTS.md` para la ficha, abrir, el vigía,
+  los raíles y su diagnóstico. Se mantiene el consentimiento al tocar instrucciones ajenas y no se
+  escribe a través de un override enlazado. Nunca se muestran reglas de Claude como reglas de Codex.
+- Conversación nueva tiene el repuesto real `chatgpt.newCodexPanel`. El texto sigue por el
+  portapapeles, entero, con el atajo de cada sistema, porque no hay un comando general de envío en
+  la extensión de OpenAI inspeccionada.
+
+No cambia dónde RSC guarda las habilidades ni se inventa un adaptador de guardianes para Codex.
+Las pruebas cubren los fallos anteriores, el montaje con el paquete real y el cambio de asistente.

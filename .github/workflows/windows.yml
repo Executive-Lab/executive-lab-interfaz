@@ -51,6 +51,9 @@ jobs:
       - name: La batería de siempre
         run: node extension/prueba/humo.js
 
+      - name: Los mapeos de Codex
+        run: node extension/prueba/mapeos-codex.js
+
       - name: El contrato con el arnés
         run: node extension/prueba/contrato.js
 
