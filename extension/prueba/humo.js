@@ -2704,6 +2704,13 @@ exec git "$@"
 
     const nada = consejos.loQuePodriaAprender({ corpus: 'Hola qué tal', yaInstaladas: [], catalogo: CATALOGO });
     assert.deepEqual(nada, [], 'con una palabra suelta no se ofrece nada: eso es ruido');
+    // Una palabra del texto no cuenta dos veces: «facturación» contiene «factura» y
+    // «facturacion», y «clientes» contiene «cliente» y «clientes».
+    for (const corpus of ['Facturación', 'llevar la contabilidad de mis clientes']) {
+      const una = consejos.loQuePodriaAprender({ corpus, yaInstaladas: [], catalogo: CATALOGO });
+      assert.deepEqual(una.map((c) => c.id), [], `«${corpus}» es una palabra que cuenta dos veces`);
+    }
+    assert.ok(!facturas.some((c) => c.id === 'sales-pipeline'), 'Ventas por decir «clientes» una vez');
 
     const puesta = consejos.loQuePodriaAprender({
       corpus: 'facturas, facturación y cobros',
