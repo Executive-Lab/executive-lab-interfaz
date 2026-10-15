@@ -58,6 +58,16 @@ function capacidades(carpetaDeLaExtension) {
 
 const pelar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+// Una palabra del texto no cuenta dos veces. Se busca por trozos, así que
+// «clientes» encaja con «cliente» y con «clientes», y «facturación» con «factura»,
+// «facturacion» y «facturar»: una sola palabra suya daba las dos que hacen falta, y
+// salía Ventas para «la contabilidad de mis clientes». De las que encajan, la que
+// contiene a otra que también encaja no suma.
+function distintas(palabras) {
+  const peladas = palabras.map(pelar);
+  return palabras.filter((_, i) => !peladas.some((q, j) => j !== i && peladas[i].includes(q) && (q.length < peladas[i].length || j < i)));
+}
+
 // Qué capacidad le vendría bien, mirando lo que ya tiene escrito: su objetivo,
 // los temas de los que sabe, sus botones y sus conexiones.
 //
@@ -70,7 +80,7 @@ function loQuePodriaAprender({ corpus = '', yaInstaladas = [], catalogo = [] }) 
   return catalogo
     .filter((c) => !yaInstaladas.includes(c.id))
     .map((c) => {
-      const aciertos = c.palabras.filter((p) => texto.includes(pelar(p)));
+      const aciertos = distintas(c.palabras.filter((p) => texto.includes(pelar(p))));
       return { ...c, aciertos: aciertos.length, porQue: aciertos.slice(0, 3) };
     })
     .filter((c) => c.aciertos >= 2)
