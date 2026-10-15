@@ -37,7 +37,7 @@ el paquete llegaba con un nombre que la barra no daba por suyo (`sinPaquete`). D
   y las redirecciones. Para todo eso siguen haciendo falta el autor, quien sube el fichero y la huella.
   Dos notas menores: el control de cuentas solo frena un traslado a una cuenta ajena, y las cuentas salen
   de `SITIOS`, así que añadir un sitio en otra cuenta la da por nuestra.
-- [ ] 6. Las máquinas de GitHub en verde.
+- [x] 6. Las máquinas de GitHub: el-dmg, windows, vscode-de-verdad y el-exe en verde (PR #32).
 
 ## Evidence
 
