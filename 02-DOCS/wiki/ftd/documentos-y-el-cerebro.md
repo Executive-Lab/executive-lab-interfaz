@@ -67,6 +67,8 @@ Decisión 151, en `docs/decisiones.md`.
 - [x] 6. Mutaciones a mano: 65, las 65 tumbadas.
 - [x] 7. Diccionario, decisión 151, F7 en el plan y el punto 11 en `lo-que-se-puede-se-hace-solo.md`.
 - [ ] 8. Verlo en VS Code de verdad: el lienzo solo se ha probado con uno de mentira.
+- [x] 9. La revisión adversaria (PR #39): 6 de seguridad y 6 de corrección, más 17 mutantes vivos, arreglados
+  con su prueba. Mutaciones: 119, las 119 tumbadas.
 
 ## Evidence
 
@@ -95,6 +97,29 @@ Decisión 151, en `docs/decisiones.md`.
 - Al escribirlas salieron dos fallos, arreglados con su prueba:
   - con un fichero preparado, las expresiones de los enlaces volvían atrás sin fin: 60 KB tardaban seis segundos;
   - si la carpeta de las fotos era un enlace a otro sitio del disco, la foto se escribía allí.
+
+- **La revisión adversaria encontró esto, y está arreglado** (decisión 151):
+  - *seguridad*:
+    - la foto congelaba el editor con 2.000 artículos del mismo nombre: 15,8 s, y ahora menos de 100 ms;
+    - 5.000 alias en 2.000 ficheros: 17,5 s, y ahora 0,8 s;
+    - la foto se escribía fuera de la carpeta a través de una wiki enlazada;
+    - un concepto con `[` sin cerrar colgaba el editor al abrirlo;
+    - un `.md` enlazado a `~/.ssh/config` se enseñaba;
+    - y no había ningún `.rscignore`: la wiki la deja fuera del barrido el protocolo de RSC, y lo mira una
+      prueba;
+  - *corrección*:
+    - los avisos de Documentos y de la foto se los comía el vigía;
+    - soltar algo ilegible no decía nada;
+    - la fila y «Sin leer todavía» contaban distinto;
+    - enlaces con mayúsculas, tildes del Mac, paréntesis u otros alfabetos no llevaban a nada;
+    - los puntos no se usaban con el teclado;
+    - y `empresas-distintas.js` no pasaba las dos pantallas nuevas;
+  - y 17 mutantes vivos, ahora tumbados.
+- Después: `humo.js` 385, `contrato.js` 14, `empresas-distintas.js` (dieciocho pantallas y cinco cosas a la
+  vista en las tres), diccionario y `revisar-powershell.js`, en verde. Mutaciones: 119 de 119. Dos vivían en
+  la primera pasada y se cerraron con una prueba más. Con el ordenador cargado por otras pruebas, cada
+  mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin mutar; la batería entera,
+  al final.
 
 ## Next
 

@@ -5311,7 +5311,9 @@ instalar nada.
   prueba entero sin abrir el editor.
 - **Con cientos de conceptos no se cuelga.** Caben 300 puntos: con más, salen los 300 que más enlazan, y se
   dice («Tiene 412 conceptos: para que se vea, la foto enseña los 300 con más enlaces.»). Se leen como mucho
-  2.000 ficheros, de hasta 1 MB, y sin seguir enlaces del disco. Con 700 conceptos tarda menos de un segundo.
+  2.000 ficheros, de hasta 1 MB y 64 MB entre todos, sin seguir enlaces del disco; y como mucho 2.000 enlaces
+  por artículo y 100.000 entre todos. Si no se leen todos, también se dice. Con 700 conceptos tarda menos de
+  un segundo.
 - **Sin conceptos o sin enlaces, nunca una pantalla sin salida (P1).** Sin conceptos, «Darle documentos
   (inbox)». Sin enlaces, se ven los puntos y se ofrece «Que los enlace».
 
@@ -5344,11 +5346,19 @@ texto.
 
 **`02-DOCS/wiki/out/` y no otra carpeta:**
 
-- El barrido de RSC no lee `02-DOCS/wiki/` (`.rscignore`). Una foto en `02-DOCS/out/` la cogería como un
-  documento nuevo, la leería y la movería a `raw/`.
+- El barrido de RSC no lee `02-DOCS/wiki/`. En la 3.0.22 ese barrido no es un programa: lo hace el
+  asistente siguiendo el protocolo de la wiki, y el protocolo deja la wiki fuera siempre, porque es lo que sale
+  de leer y no lo que entra (`ingest-ignore-defaults.md`). `02-DOCS/.rscignore` es donde lo escribe al empezar
+  la wiki; en una carpeta que aún no lo tiene, manda el protocolo. Una foto en `02-DOCS/out/` sí la cogería
+  como un documento nuevo, y la movería a `raw/`. Una prueba mira en el paquete que la wiki sigue fuera.
 - RSC ya deja ahí su propia vista para personas, `dashboard.html` (El panel completo).
 - Va en un `out/`, como lo que produce cada conexión, así que «Resultados (out)» dice la verdad.
-- No es un tema: no lleva ningún `.md`. Sí entra en las copias: pesa unos cientos de KB.
+- No es un tema: no lleva ningún `.md`.
+- **Entra en las copias, a propósito**, y no va a la lista de lo que no entra en git (decisión 147):
+  - pesa unos cientos de KB, nada que ver con los vídeos de la 147;
+  - la de un día no se puede repetir otro, porque la wiki cambia, y compararlas es para lo que sirve;
+  - lo que enseña, los títulos de los conceptos, ya está en git con la wiki;
+  - y tocar esa lista cambia el bloque del `.gitignore` de todas las carpetas.
 
 **Las pruebas**: `humo.js` pasa de 374 a 380. Seis comprobaciones nuevas y una cambiada:
 
@@ -5382,3 +5392,82 @@ Dos: si la carpeta de las fotos era un enlace a otro sitio del disco, la foto se
 - los puntos no se recorren con el teclado: los conceptos siguen en Conocimiento;
 - el lienzo de verdad solo se ha probado de mentira: falta verlo en VS Code, en las máquinas de GitHub o a
   mano.
+
+**La revisión adversaria encontró esto, y está arreglado** (PR #39), cada cosa con su prueba.
+
+*Seguridad*:
+
+- **M1, la foto congelaba el editor.** Con 2.000 artículos del mismo nombre, cada `[[enlace]]` ordenaba la
+  lista entera: 200.000 enlaces eran 15,8 s, y con los topes de entonces hasta 17 minutos, en el hilo del
+  editor. Ahora el ganador de cada nombre se decide una vez. Además, como mucho 2.000 enlaces por artículo y
+  100.000 entre todos; si no se leen todos, la foto lo dice. 100.000 enlaces al mismo nombre: menos de
+  100 ms.
+- **M2, los alias.** Sin quitar repetidos ni tope, 2.000 ficheros con 5.000 alias eran 17,5 s. Ahora:
+  - sin repetidos, como mucho 50, y de 200 letras como mucho;
+  - de la cabecera se lee solo lo que hace falta, una vez por artículo.
+
+  Ahora tarda 0,8 s, con el ordenador muy cargado.
+- **M3, la foto se escribía fuera.** Guardar solo miraba el último trozo de la carpeta. Con `02-DOCS/wiki`
+  enlazada a otro sitio, `out/` y la foto se creaban fuera (reproducido). Ahora se sigue la ruta de verdad y
+  tiene que quedar dentro de la carpeta de trabajo: antes de crear nada, otra vez después, y también al
+  listar y al abrir.
+- **B4, un concepto que colgaba.** La búsqueda de enlaces de `cerebro.js` volvía atrás sin fin: 100.000 `[`
+  sin cerrar eran 19,5 s, y se llega pulsando un punto. La del panel, igual al pintarlo. Las dos van con
+  tope, como mucho 2.000 enlaces por concepto. Uno de más de 1 MB no se abre en la barra: «Este concepto es
+  demasiado largo para leerlo aquí.», con «Pedírselo al asistente».
+- **B5, un enlace a `~/.ssh/config`.** Un `x.md` que es un enlace del disco salía como punto, y al pulsarlo
+  se leía y se enseñaba. Ahora `dentroDeLaWiki` sigue los enlaces y exige quedarse en la wiki, y un enlace no
+  es un concepto. No sale en la foto, ni en los temas, ni en lo que falta por ordenar, ni al buscar. Lo de
+  buscar ya pasaba antes de la 151.
+- **B6, un `.rscignore` que no existe.** Lo que dice ahora la 151 está más arriba: la wiki la deja fuera el
+  protocolo de RSC, y una prueba lo mira en el paquete. La foto entra en las copias, a propósito, y otra
+  prueba lo mira con git.
+
+*Corrección*:
+
+1. **Los avisos de Documentos y de la foto** pintaban la principal con `donde` aún en la otra pantalla. El
+   vigía te devolvía allí y se comía el aviso. Pasaba con abrir o llevarse una foto, con «Que los lea», con
+   «Que los enlace», al abrir un resultado y con un concepto que no se abre. Ahora se dicen en su pantalla.
+2. **Soltar en Documentos algo que no se puede leer** (más de 40 MB, una carpeta) te sacaba a la principal
+   sin decir nada. Ahora: «No he podido leer lo que has soltado. Si es un archivo muy grande, dáselo con
+   «Elegirlos».».
+3. **La fila de Documentos y «Sin leer todavía» cuentan lo mismo**: lo de la bandeja. Lo suelto en la
+   carpeta va aparte, en «Sin colocar todavía», con «Que los coloque y los lea», como en Documentos
+   entregados.
+4. **Más enlaces llevan a su concepto**:
+   - con otras mayúsculas o con las tildes del Mac (NFD);
+   - con paréntesis;
+   - con un «%» suelto, que antes podía reventar la foto;
+   - y los nombres en otros alfabetos, que antes se quedaban en nada.
+5. **Los puntos se usan con el teclado**: se llega con el tabulador y se abren con Intro o con espacio.
+6. **`empresas-distintas.js`** pasa las dieciocho pantallas por las tres empresas, la de Codex incluida. Y
+   cuenta lo que se ve en la principal sencilla: cinco en las tres, como pide el plan.
+
+Y **diecisiete mutantes que sobrevivían**, ahora cerrados con su prueba:
+- el título de un punto y su nombre, sin escapar;
+- un bloque de código sin cerrar;
+- los topes de líneas y de ficheros, y el orden del recorte;
+- el `?` y el `%` de un enlace, y las tildes;
+- los nombres que se pisan;
+- dónde empieza y dónde acaba el dibujo dentro del PNG;
+- los errores al soltar y al elegir en Documentos;
+- de dónde se vino a la foto, al guardarla y al repintarla;
+- y cancelar al llevarse una foto.
+
+**Las pruebas, después**:
+
+- `humo.js` pasa de 380 a 385 comprobaciones: cuatro de la revisión de seguridad y una de la de corrección;
+- `contrato.js`, 14;
+- `empresas-distintas.js`, con dieciocho pantallas y cinco cosas a la vista;
+- el diccionario y `revisar-powershell.js`, en verde.
+
+**Mutaciones: 119, las 119 tumbadas**:
+
+- las 65 de antes, apuntadas al código de ahora;
+- 24 de la revisión de seguridad;
+- 30 de la de corrección: sus seis puntos y sus diecisiete mutantes.
+
+Dos sobrevivieron a la primera pasada y se cerraron con una prueba más: un enlace sin extensión cuando hay dos
+ficheros que solo cambian en mayúsculas, y la foto que no dice que no está entera. Con el ordenador cargado
+por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
+mutar. La batería entera se pasó al final, sin mutar.

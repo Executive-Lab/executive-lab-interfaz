@@ -896,7 +896,13 @@ body.soltando .soltar-aqui { border-color: var(--acento); }
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
 }
-.foto .nodo { cursor: pointer; }
+.foto .nodo { cursor: pointer; outline: none; }
+.foto .nodo:focus-visible circle {
+  fill: var(--acento-relleno);
+  stroke: var(--texto-fuerte);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
 .foto .nodo circle { fill: var(--acento); }
 .foto .nodo:hover circle {
   fill: var(--acento-relleno);

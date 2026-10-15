@@ -13,6 +13,7 @@ function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'pane
   const enviados = [];
   let pintado = '';
   let clics = [];
+  let teclas = [];
   let escrito = {};
 
   const campo = (selector) => {
@@ -35,13 +36,19 @@ function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'pane
   };
   const otro = () => ({ set innerHTML(v) {}, addEventListener() {}, querySelectorAll: () => [], querySelector: () => null, classList: { add() {}, remove() {} }, dataset: {}, focus() {} });
   const app = {
-    set innerHTML(v) { pintado = v; clics = []; escrito = {}; },
+    set innerHTML(v) { pintado = v; clics = []; teclas = []; escrito = {}; },
     get innerHTML() { return pintado; },
     addEventListener() {},
+    // Cada elemento con `data-accion`, con sus atributos (para `role`) y lo que
+    // escucha: el clic y, en lo que hace de botón, la tecla.
     querySelectorAll: (sel) => (sel === '[data-accion]'
-      ? [...pintado.matchAll(/data-accion="([^"]*)"/g)].map((m) => ({
-        dataset: { accion: deshacer(m[1]) },
-        addEventListener: (ev, fn) => { if (ev === 'click') clics.push({ accion: JSON.parse(deshacer(m[1])), fn }); },
+      ? [...pintado.matchAll(/<[a-zA-Z]+\b([^>]*\bdata-accion="([^"]*)"[^>]*)>/g)].map((m) => ({
+        dataset: { accion: deshacer(m[2]) },
+        getAttribute: (nombre) => ((m[1].match(new RegExp(`\\s${nombre}="([^"]*)"`)) || [])[1] ?? null),
+        addEventListener: (ev, fn) => {
+          if (ev === 'click') clics.push({ accion: JSON.parse(deshacer(m[2])), fn });
+          if (ev === 'keydown') teclas.push({ accion: JSON.parse(deshacer(m[2])), fn });
+        },
         closest: () => otro(),
       }))
       : []),
@@ -78,6 +85,14 @@ function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'pane
       const b = clics.find((c) => c.accion.tipo === tipo);
       if (!b) throw new Error(`no hay botón ${tipo}`);
       b.fn();
+    },
+    // Una tecla sobre lo que hace de botón: devuelve si se dejó de hacer lo de siempre.
+    teclear(tipo, tecla) {
+      const b = teclas.find((c) => c.accion.tipo === tipo);
+      if (!b) throw new Error(`nada que se pulse con el teclado: ${tipo}`);
+      let parado = false;
+      b.fn({ key: tecla, preventDefault() { parado = true; } });
+      return parado;
     },
     enviados,
   };

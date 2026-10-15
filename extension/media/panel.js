@@ -239,7 +239,9 @@ function enLinea(t) {
     .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
     // Los de fuera se abren fuera; los de dentro navegan por dentro, y los que
     // no llevan a ningún sitio se quedan en texto: mejor eso que un clic roto.
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, rotulo, destino) => {
+    // Con tope y sin corchetes dentro: `\[([^\]]+)\]` volvía atrás sin fin con
+    // una línea de `[` sin cerrar, y colgaba la pantalla (revisión de seguridad, B4).
+    .replace(/\[([^[\]\n]{1,300})\]\(([^()\n]{1,1000})\)/g, (_, rotulo, destino) => {
       if (/^https?:/.test(destino)) return `<a href="${atributo(destino)}">${rotulo}</a>`;
       const dentro = enlacesDelArticulo[destino];
       return dentro
@@ -1228,15 +1230,11 @@ function filaDePapel(d, { seQuita = false, pista = '', desde = null } = {}) {
 // Lo de antes no se borra: «Documentos entregados» sigue entero en la barra
 // completa, y el plegable vuelve con `documentosPlegable` en la tabla de piezas.
 const QUE_LOS_LEA = 'Lee los documentos que tienes sin leer en la bandeja de entrada, guarda lo que aprendas donde toque y cuéntame en dos líneas qué has sacado.';
-const QUE_LOS_LEA_Y_COLOQUE = 'Lee los documentos que tienes sin leer: los de la bandeja de entrada y los que dejé sueltos en la carpeta. Ponlos donde toque, guarda lo que aprendas y cuéntame en dos líneas qué has sacado.';
+// El mismo encargo que en Documentos entregados.
+const QUE_LOS_COLOQUE = 'Hay documentos sueltos en la carpeta, fuera de la bandeja. Míralos, ponlos donde toque y cuéntame en dos líneas qué has sacado de ellos.';
 
 function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], fotos = [], aviso: avisoLocal }) {
-  // Los sueltos en la carpeta también los ha dado, aunque no estén en la
-  // bandeja; pero son suyos y están donde los dejó, así que no se quitan desde aquí.
-  const sinLeer = [
-    ...esperando.map((d) => filaDePapel(d, { seQuita: true, desde: 'documentos' })),
-    ...sueltos.map((d) => filaDePapel(d, { pista: 'Sin colocar todavía' })),
-  ].join('');
+  const sinLeer = esperando.map((d) => filaDePapel(d, { seQuita: true, desde: 'documentos' })).join('');
 
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Documentos' }])}
@@ -1252,7 +1250,17 @@ function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], f
 
     <h2>Sin leer todavía</h2>
     ${sinLeer || nada('Ninguno esperando.')}
-    ${sinLeer ? boton({ etiqueta: 'Que los lea', icono: '📥', accion: { tipo: 'pedir', prompt: sueltos.length ? QUE_LOS_LEA_Y_COLOQUE : QUE_LOS_LEA } }) : ''}
+    ${sinLeer ? boton({ etiqueta: 'Que los lea', icono: '📥', accion: { tipo: 'pedir', prompt: QUE_LOS_LEA } }) : ''}
+
+    ${/* Los sueltos en la carpeta, aparte y con su nombre: la fila de la
+          principal cuenta los de la bandeja, y aquí «Sin leer todavía» cuenta
+          lo mismo (revisión de corrección, 3). Son suyos y están donde los dejó,
+          así que no se quitan desde aquí (P4). */''}
+    ${sueltos.length ? `
+      <h2>Sin colocar todavía</h2>
+      <p class="detalle">Los dejaste en la carpeta y siguen ahí fuera. Todavía no ha sacado nada de ellos.</p>
+      ${sueltos.map((d) => filaDePapel(d)).join('')}
+      ${boton({ etiqueta: 'Que los coloque y los lea', icono: '📥', accion: { tipo: 'pedir', prompt: QUE_LOS_COLOQUE } })}` : ''}
 
     <hr class="separador">
     <h2>Resultados (out)</h2>
@@ -1297,7 +1305,7 @@ function pantallaPapeles({
       ${boton({
         etiqueta: 'Que los coloque y los lea',
         icono: '📥',
-        accion: { tipo: 'pedir', prompt: 'Hay documentos sueltos en la carpeta, fuera de la bandeja. Míralos, ponlos donde toque y cuéntame en dos líneas qué has sacado de ellos.' },
+        accion: { tipo: 'pedir', prompt: QUE_LOS_COLOQUE },
       })}
       <hr class="separador">` : ''}
 
@@ -2623,7 +2631,7 @@ function dondeVaElNombre(n, lado, hueco = 34) {
   };
 }
 
-function pantallaFoto({ nodos = [], enlaces = [], total = 0, rotulos = [], lado = 1000, desde = 'documentos', aviso: avisoLocal }) {
+function pantallaFoto({ nodos = [], enlaces = [], total = 0, rotulos = [], lado = 1000, entera = true, desde = 'documentos', aviso: avisoLocal }) {
   fotoDesde = desde === 'cerebro' ? 'cerebro' : 'documentos';
   const deDonde = fotoDesde === 'cerebro'
     ? { etiqueta: 'Conocimiento', accion: { tipo: 'verCerebro' } }
@@ -2645,7 +2653,9 @@ function pantallaFoto({ nodos = [], enlaces = [], total = 0, rotulos = [], lado 
 
   const punto = (i) => nodos[i] || { x: 0, y: 0, r: 0 };
   const lineas = enlaces.map(([a, b]) => `<line x1="${numero(punto(a).x)}" y1="${numero(punto(a).y)}" x2="${numero(punto(b).x)}" y2="${numero(punto(b).y)}"/>`).join('');
-  const puntos = nodos.map((n) => `<g class="nodo" data-accion="${atributo(JSON.stringify({ tipo: 'leerArticulo', ruta: n.ruta, desde: 'foto' }))}"><circle cx="${numero(n.x)}" cy="${numero(n.y)}" r="${numero(n.r)}"/><title>${texto(n.titulo)}</title></g>`).join('');
+  // Cada punto se alcanza con el tabulador y se abre con Intro, como un botón
+  // (revisión de corrección, 5).
+  const puntos = nodos.map((n) => `<g class="nodo" tabindex="0" role="button" aria-label="${atributo(n.titulo)}" data-accion="${atributo(JSON.stringify({ tipo: 'leerArticulo', ruta: n.ruta, desde: 'foto' }))}"><circle cx="${numero(n.x)}" cy="${numero(n.y)}" r="${numero(n.r)}"/><title>${texto(n.titulo)}</title></g>`).join('');
   const nombres = nombresQueCaben(laFotoDeAhora, NOMBRES_EN_LA_BARRA, 30, 34)
     .map(({ nombre, sitio }) => `<text x="${sitio.x}" y="${sitio.y}" text-anchor="${sitio.ancla}">${texto(nombre)}</text>`).join('');
   const cuenta = conceptosYEnlaces(nodos.length, enlaces.length);
@@ -2654,6 +2664,7 @@ function pantallaFoto({ nodos = [], enlaces = [], total = 0, rotulos = [], lado 
   return `${cabecera}
     <p class="detalle">${texto(cuenta)}</p>
     ${total > nodos.length ? `<p class="detalle">${texto(`Tiene ${total} conceptos: para que se vea, la foto enseña los ${nodos.length} con más enlaces.`)}</p>` : ''}
+    ${entera === false ? '<p class="detalle">Hay tantos enlaces que no los he leído todos: la foto no está entera.</p>' : ''}
     <div class="foto">
       <svg viewBox="0 0 ${ladoDeVerdad} ${ladoDeVerdad}" role="group" aria-label="${atributo(`La foto del cerebro: ${cuenta}`)}">
         <g class="enlaces">${lineas}</g>
@@ -3006,7 +3017,7 @@ function pintar(html) {
   app.innerHTML = html;
 
   app.querySelectorAll('[data-accion]').forEach((b) => {
-    b.addEventListener('click', () => {
+    const alPulsar = () => {
       const accion = JSON.parse(b.dataset.accion);
       if (accion.tipo === 'guardarClave') {
         const campo = b.closest('.conexion').querySelector('input[data-clave]');
@@ -3033,7 +3044,17 @@ function pintar(html) {
       }
       aviso = null;
       pedir(accion.tipo, accion);
-    });
+    };
+    b.addEventListener('click', alPulsar);
+    // Lo que no es un botón pero hace de botón (los puntos de la foto) se pulsa
+    // también con Intro o con la barra espaciadora (revisión de corrección, 5).
+    if (b.getAttribute && b.getAttribute('role') === 'button') {
+      b.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        alPulsar();
+      });
+    }
   });
 
   engancharLasInfos();

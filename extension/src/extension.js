@@ -41,9 +41,8 @@ const saberes = require('./saberes');
 const salidas = require('./salidas');
 // La foto del cerebro (decisión 151): el dibujo es puro; aquí solo se lee y se guarda.
 const foto = require('./foto');
-// Donde quedan las fotos: dentro de la wiki, que el barrido de RSC no lee como
-// documentos nuevos (`.rscignore`), en su `out/`, como los demás resultados.
-const LAS_FOTOS = ['02-DOCS', 'wiki', 'out'];
+// Donde quedan las fotos (por qué ahí, en `foto.js`).
+const LAS_FOTOS = foto.CARPETA;
 const version = require('./version');
 const diario = require('./diario');
 const papeles = require('./papeles');
@@ -860,7 +859,7 @@ ${cabecera}
     // apunta con nombre y apellidos, y se dice que algo va mal.
     if (typeof prompt !== 'string' || !prompt.trim()) {
       this.salida.appendLine(`[pedir] un botón ha mandado un texto que no vale: ${JSON.stringify(prompt)}`); // diccionario: interno
-      this.enviar({ tipo: 'aviso', texto: 'Ese botón está mal montado. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+      this.avisarAqui({ texto: 'Ese botón está mal montado. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
       return;
     }
 
@@ -871,7 +870,7 @@ ${cabecera}
     // escrito en su caja y no lo envían (asistentes.js lo documenta). Decir que
     // ya se lo hemos pedido dejaba a la persona esperando una respuesta que no
     // iba a llegar hasta que ella misma le diera a enviar.
-    if (como === 'directo') this.enviar({ tipo: 'aviso', texto: 'Te lo he dejado escrito en la conversación. Dale a enviar.' });
+    if (como === 'directo') this.avisarAqui({ texto: 'Te lo he dejado escrito en la conversación. Dale a enviar.' });
   }
 
   // Ayuda › Conversación nueva. Con Codex no hay comando para eso: se abre su
@@ -1311,7 +1310,7 @@ ${cabecera}
   // antes que el texto, y eso es justo lo que aquí no se enseña nunca.
   leerArticulo(ruta, tema, desde) {
     const leido = cerebro.leerArticulo(ruta);
-    if (!leido.ok) return this.enviar({ tipo: 'aviso', texto: leido.mensaje, malo: true });
+    if (!leido.ok) return this.avisarAqui({ texto: leido.mensaje, malo: leido.malo !== false, ...(leido.boton ? { boton: leido.boton } : {}) });
     this.donde = { tipo: 'quieto' };
 
     // Con qué sigue y con qué venía, dentro del mismo tema: leer una cosa y
@@ -1339,7 +1338,15 @@ ${cabecera}
   // Soltados encima de la barra. Llegan ya leídos por el panel, porque el
   // editor no le da la ruta de lo que se suelta — y hace bien.
   async soltarDocumentos(ficheros, para = 'documentos') {
-    if (!ficheros || !ficheros.length) return this.refrescar();
+    // Lo que el panel no puede leer (más de 40 MB, una carpeta) llega vacío. En
+    // Documentos se dice ahí mismo; antes te sacaba a la principal sin decir nada
+    // (revisión de corrección, 2).
+    if (!ficheros || !ficheros.length) {
+      if (para !== 'marca' && this.donde && this.donde.tipo === 'documentos') {
+        return this.verDocumentos({ texto: 'No he podido leer lo que has soltado. Si es un archivo muy grande, dáselo con «Elegirlos».', malo: true });
+      }
+      return this.refrescar();
+    }
 
     // Arrastrado encima de la pantalla de la marca, el material va a su
     // carpeta: es lo que el asistente mira para sacar los colores, y en la
@@ -1391,7 +1398,7 @@ ${cabecera}
       esperando,
       sueltos,
       herramientas: salidas.loQueHaProducido(),
-      fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS)),
+      fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()),
       aviso,
     });
   }
@@ -1412,6 +1419,7 @@ ${cabecera}
       nodos: dibujo.nodos,
       enlaces: dibujo.enlaces,
       rotulos: dibujo.rotulos,
+      entera: dibujo.entera,
       desde: de,
       aviso,
     });
@@ -1421,7 +1429,7 @@ ${cabecera}
   // se dice dónde ha quedado en una frase (P9), con un botón para abrirla.
   guardarLaFoto(png) {
     const desde = this.donde && this.donde.tipo === 'foto' ? this.donde.desde : 'documentos';
-    const hecho = foto.guardar(proyecto.ruta(...LAS_FOTOS), png);
+    const hecho = foto.guardar(proyecto.ruta(...LAS_FOTOS), png, { raiz: proyecto.raiz() });
     if (!hecho.ok) {
       this.salida.appendLine(`[guardarLaFoto] ${hecho.motivo}${hecho.detalle ? `: ${hecho.detalle}` : ''}`); // diccionario: interno
       return this.verLaFoto(desde, { texto: 'No he podido guardar la foto. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
@@ -1434,17 +1442,28 @@ ${cabecera}
   }
 
   async abrirLaFoto(fichero) {
-    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero);
-    if (!completa) return this.enviar({ tipo: 'aviso', texto: 'Esa foto ya no está.', malo: true });
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero, proyecto.raiz());
+    if (!completa) return this.avisarAqui({ texto: 'Esa foto ya no está.', malo: true });
     return papeles.abrirFichero(completa);
   }
 
   async llevarteLaFoto(fichero) {
-    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero);
-    if (!completa) return this.enviar({ tipo: 'aviso', texto: 'Esa foto ya no está.', malo: true });
+    const completa = foto.donde(proyecto.ruta(...LAS_FOTOS), fichero, proyecto.raiz());
+    if (!completa) return this.avisarAqui({ texto: 'Esa foto ya no está.', malo: true });
     const hecho = await salidas.llevarte(completa);
     if (hecho.cancelado) return undefined;
-    return this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
+    return this.avisarAqui({ texto: hecho.mensaje, malo: !hecho.ok });
+  }
+
+  // Un aviso, en la pantalla donde se está. En Documentos y en la foto, en la
+  // suya: el aviso de siempre pinta la principal, pero `donde` seguía en la otra
+  // y el vigía, al repintar, te devolvía allí y se comía el aviso (revisión de
+  // corrección, 1). En las demás, como siempre.
+  avisarAqui(aviso) {
+    const d = this.donde || {};
+    if (d.tipo === 'documentos') return this.verDocumentos(aviso);
+    if (d.tipo === 'foto') return this.verLaFoto(d.desde, aviso);
+    return this.enviar({ tipo: 'aviso', ...aviso });
   }
 
   // ----------------------------------------------------------- copias
@@ -1467,18 +1486,18 @@ ${cabecera}
   // define en cada herramienta.
   async verSalidas() {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido(), fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS)) });
+    this.enviar({ tipo: 'salidas', herramientas: salidas.loQueHaProducido(), fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()) });
   }
 
   async abrirSalida(herramienta, fichero) {
     const { ok, mensaje } = await salidas.abrir(herramienta, fichero);
-    if (!ok) this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) this.avisarAqui({ texto: mensaje, malo: true });
   }
 
   async guardarSalida(herramienta, fichero) {
     const hecho = await salidas.guardarCopia(herramienta, fichero);
     if (hecho.cancelado) return;
-    this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
+    this.avisarAqui({ texto: hecho.mensaje, malo: !hecho.ok });
   }
 
   async verSaberes() {
@@ -1537,7 +1556,7 @@ ${cabecera}
 
   async abrirPapel(ruta) {
     const { ok, mensaje } = await papeles.abrir(ruta);
-    if (!ok) this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
+    if (!ok) this.avisarAqui({ texto: mensaje, malo: true });
   }
 
   // Todo lo que sirve cuando alguien se atasca, junto. "¿Y ahora qué hago?" es

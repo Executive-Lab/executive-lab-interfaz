@@ -12662,6 +12662,11 @@ exec git "$@"
       ['la cabecera no enlaza', '', 0, '', '---\nsources: "[x](../b/Nota%20con%20espacio.md)"\n---\n'],
       ['lo que ya no está no enlaza', '[[No existe]] [x](../b/Otra.md)', 0],
       ['uno consigo mismo no es una línea', '[x](A.md) [[A]]', 0],
+      ['lo de después de un bloque de código sí enlaza', '```\n[[No existe]]\n```\n[[Nota con espacio]]', 1],
+      ['un bloque de código sin cerrar se come lo de después', '```\ncódigo\n~~~\n[[Nota con espacio]]', 0],
+      ['markdown con «?»', '[x](../b/Nota%20con%20espacio.md?v=2)', 1],
+      ['[[nombre]] con otras tildes', '[[Nota con espácio]]', 1],
+      ['markdown con otras mayúsculas', '[x](../B/nota%20CON%20espacio.md)', 1],
     ];
     for (const [que, enlace, lineas, cabeceraDeB = '', cabeceraDeA = ''] of casos) {
       const { nodos, enlaces } = foto.delCerebro([
@@ -12672,6 +12677,15 @@ exec git "$@"
       assert.deepEqual(enlaces, lineas ? [[0, 1]] : [], `${que}: ${lineas ? 'no sale la línea' : 'sale una línea que no es'}`);
     }
 
+    // Con la carpeta: las tildes del Mac (NFD), paréntesis, un «%» suelto y otros alfabetos.
+    const dosNotas = (enlace, ruta) => foto.delCerebro([{ ruta: 'a/A.md', texto: enlace }, { ruta, texto: '# B\n' }]).enlaces.length;
+    assert.equal(dosNotas('[x](../b/Facturacio\u0301n.md)', 'b/Facturación.md'), 1, 'un enlace con las tildes del Mac no lleva a su concepto');
+    assert.equal(dosNotas('[x](../b/Nota%20(2).md)', 'b/Nota (2).md'), 1, 'un enlace con paréntesis no lleva a su concepto');
+    assert.equal(dosNotas('[x](../a/100%.md)', 'a/100%.md'), 1, 'un «%» suelto rompe la foto');
+    assert.equal(dosNotas('[[Привет]]', 'b/Привет.md'), 1, 'un nombre en otro alfabeto no se puede enlazar');
+    // Si hay dos que solo cambian en mayúsculas, gana el que casa tal cual, también sin la extensión.
+    const casi = foto.delCerebro([{ ruta: 'a/A.md', texto: '[x](../b/nota)' }, { ruta: 'b/Nota.md', texto: '' }, { ruta: 'b/nota.md', texto: '' }]);
+    assert.deepEqual(casi.enlaces.map(([x, y]) => [casi.nodos[x].ruta, casi.nodos[y].ruta]), [['a/A.md', 'b/nota.md']], 'gana el parecido y no el que casa tal cual');
     // El título: el de la cabecera; si no, el primer «# »; y si no, el nombre del fichero.
     const titulos = foto.delCerebro([
       { ruta: 'z/Con cabecera.md', texto: '---\ntitle: "El de la cabecera"\n---\n\n# El del texto\n\n[[Sin nada]] [[El del texto solo]]\n' },
@@ -12767,6 +12781,7 @@ exec git "$@"
     // Holgado a propósito: con el Mac medio dormido, una vuelta tarda el triple.
     assert.ok(tarda < 15000, `tarda ${tarda} ms`);
     assert.equal(f.total, 700, 'no dice cuántos hay');
+    assert.equal(f.entera, true, 'con 1.120 enlaces dice que no ha leído todos');
     assert.equal(f.nodos.length, foto.TOPE, 'no se queda en el tope');
     // Los que más enlazan, dentro; y ninguno suelto mientras quedan fuera otros que enlazan.
     const dentro = new Set(f.nodos.map((n) => n.ruta));
@@ -12780,6 +12795,13 @@ exec git "$@"
     assert.ok(f.nodos.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y) && n.r > 0), 'un punto sin sitio');
     assert.equal(f.rotulos.length, 40);
     assert.equal(f.nodos[f.rotulos[0]].grado, Math.max(...f.nodos.map((n) => n.grado)), 'el primer nombre no es del que más enlaza');
+    assert.deepEqual(f.nodos.map((n) => n.ruta), [...f.nodos.map((n) => n.ruta)].sort(), 'recortar cambia el orden de los puntos');
+    // Y las líneas también tienen tope: 100 conceptos enlazados todos con todos son 4.950.
+    const cien = Array.from({ length: 100 }, (_, i) => ({ ruta: `c${String(i).padStart(3, '0')}.md`, grado: 99 }));
+    const todosConTodos = [];
+    for (let a = 0; a < 100; a += 1) for (let b = a + 1; b < 100; b += 1) todosConTodos.push([a, b]);
+    const recortado = foto.recortar({ nodos: cien, enlaces: todosConTodos });
+    assert.deepEqual([recortado.nodos.length, recortado.enlaces.length, recortado.total], [100, 4000, 100], 'con pocos conceptos y muchas líneas, no hay tope de líneas');
 
     // Lo que no se lee entero: uno enorme, y uno que lleva a otro sitio del disco.
     fs.writeFileSync(path.join(wiki, 'tema0', 'Enorme.md'), `${'x'.repeat(1024 * 1024 + 10)}\n[[${nombre(650)}]]\n`);
@@ -12790,6 +12812,12 @@ exec git "$@"
     // Se leen por orden (el Concepto 001 primero, que no enlaza), y con un tope de diez letras no pasa del primero.
     const conTope = foto.laFoto(wiki, pocos, { enTotal: 10 });
     assert.deepEqual([conTope.nodos.length, conTope.enlaces.length], [3, 0], 'pasado el tope de lectura se sigue leyendo');
+    // Un artículo que pasa de su tope de enlaces: la foto dice que no está entera.
+    fs.writeFileSync(path.join(wiki, 'tema0', 'Muchos.md'), `# Muchos\n\n${`[[${nombre(1)}]] `.repeat(2001)}\n`);
+    assert.equal(foto.laFoto(wiki, ['tema0/Muchos.md', rutaDe(1)]).entera, false, 'con un artículo de más de 2.000 enlaces, la foto dice que está entera');
+    // Y de ficheros: con dos, el tercero (el Concepto 081) sale, pero no se lee.
+    const conDos = foto.laFoto(wiki, pocos, { ficheros: 2 });
+    assert.deepEqual([conDos.nodos.length, conDos.enlaces.length], [3, 1], 'pasado el tope de ficheros se sigue leyendo');
     let conEnlace = 'sin enlaces en este sistema';
     try {
       fs.symlinkSync(path.join(wiki, rutaDe(41)), path.join(wiki, 'tema0', 'Enlace.md'));
@@ -12814,13 +12842,14 @@ exec git "$@"
 
   await comprobar('la foto del cerebro se guarda en PNG, sin pisar ninguna, y solo se abre una de las nuestras', () => {
     const foto = cargar('foto');
-    const carpeta = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-')), 'out');
+    const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-'));
+    const carpeta = path.join(raiz, 'out');
     const el15 = new Date(2026, 9, 15, 12, 0, 0);
     assert.equal(foto.nombreDeLaFoto(el15), 'La foto del cerebro 15-10-2026.png');
-    const una = foto.guardar(carpeta, UN_PNG, el15);
+    const una = foto.guardar(carpeta, UN_PNG, { cuando: el15, raiz });
     assert.deepEqual(una, { ok: true, fichero: 'La foto del cerebro 15-10-2026.png' });
     assert.deepEqual(fs.readFileSync(path.join(carpeta, una.fichero)), Buffer.from(UN_PNG, 'base64'), 'no es la foto que llegó');
-    const otra = foto.guardar(carpeta, UN_PNG, el15);
+    const otra = foto.guardar(carpeta, UN_PNG, { cuando: el15, raiz });
     assert.equal(otra.fichero, 'La foto del cerebro 15-10-2026 (2).png', 'la segunda del día pisa la primera');
     assert.ok(fs.existsSync(path.join(carpeta, una.fichero)));
 
@@ -12831,16 +12860,18 @@ exec git "$@"
       ['algo que no es texto', { png: UN_PNG }, 'sinDatos'],
       ['algo enorme', 'A'.repeat(21 * 1024 * 1024), 'demasiado'],
     ]) {
-      assert.equal(foto.guardar(carpeta, datos, el15).motivo, motivo, `${que}: se guarda`);
+      assert.equal(foto.guardar(carpeta, datos, { cuando: el15, raiz }).motivo, motivo, `${que}: se guarda`);
     }
-    assert.equal(foto.guardar(null, UN_PNG, el15).ok, false, 'sin carpeta abierta');
+    assert.equal(foto.guardar(null, UN_PNG, { cuando: el15, raiz }).ok, false, 'sin carpeta abierta');
+    assert.equal(foto.guardar(carpeta, UN_PNG, { cuando: el15 }).ok, false, 'sin saber cuál es la carpeta de trabajo');
+    assert.equal(foto.guardar(path.join(os.tmpdir(), 'otra-carpeta', 'out'), UN_PNG, { cuando: el15, raiz }).ok, false, 'fuera de la carpeta de trabajo');
     // Si la carpeta de las fotos es un enlace a otro sitio del disco, ahí no se escribe.
     let otroSitio = 'sin enlaces en este sistema';
     try {
       const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-'));
       const trampa = path.join(path.dirname(carpeta), 'out-enlazada');
       fs.symlinkSync(fuera, trampa);
-      assert.equal(foto.guardar(trampa, UN_PNG, el15).ok, false, 'se escribe a través de un enlace');
+      assert.equal(foto.guardar(trampa, UN_PNG, { cuando: el15, raiz }).ok, false, 'se escribe a través de un enlace');
       assert.deepEqual(fs.readdirSync(fuera), [], 'ha dejado la foto en otro sitio del disco');
       otroSitio = 'ni a través de un enlace';
     } catch (error) {
@@ -12852,17 +12883,266 @@ exec git "$@"
     fs.utimesSync(path.join(carpeta, otra.fichero), new Date(2026, 9, 15, 11), new Date(2026, 9, 15, 11));
 
     // Solo las nuestras, de la más nueva a la más vieja, como un resultado más.
-    const lista = foto.lasFotos(carpeta);
+    const lista = foto.lasFotos(carpeta, raiz);
     assert.deepEqual(lista.map((f) => f.fichero), [otra.fichero, una.fichero], 'salen otras cosas, o en otro orden');
     assert.equal(lista[0].tamano, '1 KB');
     assert.match(lista[0].cuando, /^\d{4}-\d{2}-\d{2}T/);
-    assert.deepEqual(foto.lasFotos(path.join(carpeta, 'no-existe')), []);
+    assert.deepEqual(foto.lasFotos(path.join(carpeta, 'no-existe'), raiz), []);
+    assert.deepEqual(foto.lasFotos(carpeta), [], 'se listan sin saber cuál es la carpeta de trabajo');
     // Y para abrirla o llevársela, solo una de las nuestras y en su sitio.
-    assert.equal(foto.donde(carpeta, una.fichero), path.join(carpeta, una.fichero));
+    assert.equal(foto.donde(carpeta, una.fichero, raiz), path.join(carpeta, una.fichero));
     for (const truco of ['../out/La foto del cerebro 15-10-2026.png', 'otra.png', 'notas.txt', 'La foto del cerebro 01-01-2026.png', '', null]) {
-      assert.equal(foto.donde(carpeta, truco), null, `se abre «${truco}»`);
+      assert.equal(foto.donde(carpeta, truco, raiz), null, `se abre «${truco}»`);
     }
     return `${lista.length} fotos, y nada que no lo sea · ${otroSitio}`;
+  });
+
+  // ---------------------------- lo que encontró la revisión de seguridad (151)
+
+  await comprobar('la foto del cerebro no congela el editor: topes de enlaces y de alias, y dice si no está entera', () => {
+    const foto = cargar('foto');
+    const cuanto = (fn) => { const antes = Date.now(); const hecho = fn(); return [Date.now() - antes, hecho]; };
+    // M1: 2.000 artículos con el mismo nombre en carpetas distintas, y 51 con 2.500 `[[x]]`
+    // cada uno. Antes se ordenaba la lista entera en cada enlace: 15,8 s con mucho menos.
+    const mismos = Array.from({ length: 2000 }, (_, i) => ({ ruta: `t${String(i).padStart(4, '0')}/x.md`, texto: '# x\n' }));
+    const pesados = Array.from({ length: 51 }, (_, i) => ({ ruta: `z/P${String(i).padStart(2, '0')}.md`, texto: '[[x]] '.repeat(2500) }));
+    const [tarda, grafo] = cuanto(() => foto.delCerebro([...mismos, ...pesados]));
+    assert.ok(tarda < 5000, `con 2.000 del mismo nombre y 100.000 enlaces tarda ${tarda} ms`);
+    assert.equal(grafo.entera, false, 'pasado el tope, la foto dice que está entera');
+    // Gana el primero por ruta, como antes.
+    assert.ok(grafo.enlaces.every(([a, b]) => grafo.nodos[a].ruta === 't0000/x.md' || grafo.nodos[b].ruta === 't0000/x.md'), 'un [[x]] lleva a otro que no es el primero');
+
+    // Como mucho 2.000 enlaces por artículo.
+    const destinos = Array.from({ length: 2001 }, (_, i) => ({ ruta: `d/D${String(i).padStart(4, '0')}.md`, texto: '' }));
+    const todos = { ruta: 'a/Todos.md', texto: destinos.map((d) => `[[${path.posix.basename(d.ruta, '.md')}]]`).join(' ') };
+    const porArticulo = foto.delCerebro([todos, ...destinos]);
+    assert.equal(porArticulo.enlaces.length, foto.MAXIMO_ENLACES_POR_ARTICULO, 'un artículo pasa de su tope de enlaces');
+    assert.equal(porArticulo.entera, false);
+    assert.equal(foto.delCerebro([{ ...todos, texto: todos.texto.split(' ').slice(0, 10).join(' ') }, ...destinos]).entera, true, 'con pocos enlaces dice que no está entera');
+    // Y entre todos, como mucho 100.000: lo que viene detrás ya no se lee.
+    const cincuenta = Array.from({ length: 50 }, (_, i) => ({ ruta: `m/M${String(i).padStart(2, '0')}.md`, texto: '[[x]] '.repeat(2000) }));
+    const entreTodos = foto.delCerebro([...cincuenta, { ruta: 'n/x.md', texto: '' }, { ruta: 'n/Otro.md', texto: '' }, { ruta: 'z/Último.md', texto: '[[Otro]]' }]);
+    assert.equal(foto.MAXIMO_ENLACES_EN_TOTAL, 50 * 2000);
+    assert.equal(entreTodos.enlaces.length, 50, 'pasado el tope de todos, se sigue leyendo');
+    assert.equal(entreTodos.entera, false);
+
+    // M2: los alias, sin repetidos, como mucho 50 y ninguno larguísimo.
+    const conAlias = (lista, enlace = 'y') => foto.delCerebro([
+      { ruta: 'a/A.md', texto: `[[${enlace}]]` },
+      { ruta: 'b/B.md', texto: `---\naliases: [${lista.join(', ')}]\n---\n` },
+    ]).enlaces.length;
+    assert.equal(conAlias([...Array(60).fill('x'), 'y']), 1, 'los alias repetidos se comen el tope');
+    assert.equal(conAlias([...Array.from({ length: 50 }, (_, i) => `a${i}`), 'y']), 0, 'pasan de 50 alias');
+    assert.equal(conAlias([...Array.from({ length: 49 }, (_, i) => `a${i}`), 'y']), 1, 'el alias 50 no cuenta');
+    assert.equal(conAlias(['l'.repeat(250)], 'l'.repeat(250)), 0, 'un alias larguísimo cuenta');
+    const alias = `---\naliases: [${Array.from({ length: 5000 }, (_, i) => `alias${i}`).join(', ')}]\n---\n`;
+    const [tardaAlias] = cuanto(() => foto.delCerebro(Array.from({ length: 2000 }, (_, i) => ({ ruta: `t/${i}.md`, texto: alias }))));
+    assert.ok(tardaAlias < 5000, `2.000 ficheros con 5.000 alias tardan ${tardaAlias} ms`);
+    return `${tarda} ms con 100.000 enlaces al mismo nombre; ${tardaAlias} ms con 10 millones de alias`;
+  });
+
+  await comprobar('la foto del cerebro no se guarda, ni se lista, ni se abre fuera de la carpeta de trabajo, aunque la wiki sea un enlace', () => {
+    const foto = cargar('foto');
+    const trabajo = fs.mkdtempSync(path.join(os.tmpdir(), 'trabajo-'));
+    const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-'));
+    fs.mkdirSync(path.join(trabajo, '02-DOCS'));
+    try {
+      fs.symlinkSync(fuera, path.join(trabajo, '02-DOCS', 'wiki'), 'dir');
+    } catch {
+      return 'sin enlaces del disco en este sistema: no se mira';
+    }
+    const carpeta = path.join(trabajo, ...foto.CARPETA);
+    // M3: antes se miraba solo el último trozo, y `mkdir` creaba `out/` fuera.
+    assert.equal(foto.guardar(carpeta, UN_PNG, { raiz: trabajo }).ok, false, 'se guarda fuera, a través de la wiki enlazada');
+    assert.deepEqual(fs.readdirSync(fuera), [], 'ha creado algo fuera de la carpeta de trabajo');
+    // Lo que ya hubiera fuera no se lista ni se abre.
+    fs.mkdirSync(path.join(fuera, 'out'));
+    fs.writeFileSync(path.join(fuera, 'out', 'La foto del cerebro 15-10-2026.png'), Buffer.from(UN_PNG, 'base64'));
+    assert.deepEqual(foto.lasFotos(carpeta, trabajo), [], 'se listan fotos de fuera');
+    assert.equal(foto.donde(carpeta, 'La foto del cerebro 15-10-2026.png', trabajo), null, 'se abre una foto de fuera');
+    // Y con la wiki de verdad, se guarda, se lista y se abre.
+    fs.unlinkSync(path.join(trabajo, '02-DOCS', 'wiki'));
+    const hecho = foto.guardar(carpeta, UN_PNG, { raiz: trabajo });
+    assert.equal(hecho.ok, true, 'dentro de la carpeta de trabajo no se guarda');
+    assert.deepEqual(foto.lasFotos(carpeta, trabajo).map((f) => f.fichero), [hecho.fichero]);
+    assert.ok(foto.donde(carpeta, hecho.fichero, trabajo));
+    // Y si entre mirar y crear la carpeta alguien la cambia por un enlace a fuera,
+    // tampoco: se mira otra vez después de crearla.
+    const otroFuera = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-'));
+    const crear = fs.mkdirSync;
+    fs.mkdirSync = (donde) => { fs.mkdirSync = crear; fs.symlinkSync(otroFuera, donde, 'dir'); };
+    try {
+      assert.equal(foto.guardar(path.join(trabajo, '02-DOCS', 'wiki', 'nueva'), UN_PNG, { raiz: trabajo }).ok, false, 'se guarda en una carpeta cambiada por un enlace a fuera');
+    } finally {
+      fs.mkdirSync = crear;
+    }
+    assert.deepEqual(fs.readdirSync(otroFuera), [], 'ha dejado la foto fuera, a través de la carpeta cambiada');
+    return 'ni a través de la wiki enlazada, ni de una carpeta cambiada a medias; y dentro sí';
+  });
+
+  await comprobar('un concepto se lee solo si es de la wiki de verdad, y uno enorme o con [ sin cerrar no cuelga nada', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const cerebroM = cargar('cerebro');
+    const buscador = cargar('buscar');
+    const otra = montar();
+    const wiki = path.join(otra, '02-DOCS', 'wiki');
+    const enviados = [];
+    const antes = proveedor.enviar;
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    try {
+      // B4: `[` sin cerrar. Antes, 100.000 eran 19,5 s al abrirlo, y otro tanto al pintarlo.
+      fs.writeFileSync(path.join(wiki, 'facturacion', 'trampa.md'), `# Trampa\n\n${'['.repeat(100000)}\n`);
+      let antesDe = Date.now();
+      const trampa = cerebroM.leerArticulo('facturacion/trampa.md');
+      assert.ok(trampa.ok && Date.now() - antesDe < 3000, `abrir uno con [ sin cerrar tarda ${Date.now() - antesDe} ms`);
+      antesDe = Date.now();
+      montarPanel().mandar({ tipo: 'articulo', ...trampa, ruta: 'facturacion/trampa.md' });
+      assert.ok(Date.now() - antesDe < 3000, `pintarlo tarda ${Date.now() - antesDe} ms`);
+      // Como mucho 2.000 enlaces por artículo.
+      fs.writeFileSync(path.join(wiki, 'facturacion', 'muchos.md'), `# Muchos\n\n${Array.from({ length: 2001 }, (_, i) => `[m](morosos.md#${i})`).join(' ')}\n`);
+      assert.equal(Object.keys(cerebroM.leerArticulo('facturacion/muchos.md').enlaces).length, 2000, 'se miran más de 2.000 enlaces');
+      // Uno enorme no se lee aquí: se dice, y se le pide al asistente.
+      fs.writeFileSync(path.join(wiki, 'facturacion', 'enorme.md'), `# Enorme\n\n${'x'.repeat(1024 * 1024)}\n`);
+      const enorme = cerebroM.leerArticulo('facturacion/enorme.md');
+      assert.deepEqual([enorme.ok, enorme.malo, enorme.mensaje], [false, false, 'Este concepto es demasiado largo para leerlo aquí.']);
+      assert.equal(enorme.boton.etiqueta, 'Pedírselo al asistente');
+      assert.match(enorme.boton.accion.prompt, /«enorme»/);
+      // Pulsado desde la foto, se dice en la foto, con su salida.
+      await proveedor.manejar({ tipo: 'verLaFoto' });
+      await proveedor.manejar({ tipo: 'leerArticulo', ruta: 'facturacion/enorme.md', desde: 'foto' });
+      const enLaFoto = enviados[enviados.length - 1];
+      assert.deepEqual([enLaFoto.tipo, enLaFoto.aviso.malo, enLaFoto.aviso.boton && enLaFoto.aviso.boton.etiqueta], ['foto', false, 'Pedírselo al asistente'], 'el aviso no trae su salida, o saca de la foto');
+      assert.match(montarPanel().mandar(enLaFoto), /Este concepto es demasiado largo[\s\S]*Pedírselo al asistente/);
+
+      // B5: un `.md` que es un enlace a otro sitio del disco no es un concepto.
+      const secreto = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'secreto-')), 'config');
+      fs.writeFileSync(secreto, '# Host secreto\nIdentityFile ~/.ssh/id_secreto\n');
+      try {
+        fs.symlinkSync(secreto, path.join(wiki, 'clientes', 'secreto.md'));
+        fs.symlinkSync(path.join(wiki, 'clientes', 'talleres-ruiz.md'), path.join(wiki, 'clientes', 'el-mismo.md'));
+      } catch {
+        return 'sin enlaces del disco en este sistema: lo de [ sin cerrar y lo enorme, sí';
+      }
+      assert.ok(!cerebroM.todosLosDocumentos().some((r) => r.startsWith('clientes/secreto') || r.startsWith('clientes/el-mismo')), 'un enlace del disco sale como concepto');
+      assert.equal(cerebroM.leerArticulo('clientes/secreto.md').ok, false, 'se lee un fichero de fuera de la wiki');
+      assert.ok(!cerebroM.sinOrdenar().some((d) => /secreto/i.test(d.titulo + d.ruta)), 'sale en lo que falta por ordenar');
+      buscador.olvidar();
+      assert.equal(buscador.buscar('IdentityFile', 15).cuantos, 0, 'lo de fuera de la wiki sale al buscar');
+      await proveedor.manejar({ tipo: 'verLaFoto' });
+      assert.ok(!enviados[enviados.length - 1].nodos.some((n) => /secreto|el-mismo/.test(n.ruta)), 'sale en la foto');
+      // Sin índice, los temas salen del disco: tampoco de ahí.
+      fs.unlinkSync(path.join(wiki, 'index.md'));
+      assert.ok(!JSON.stringify(cerebroM.catalogo()).includes('secreto'), 'sale en un tema');
+      // Un enlace que se queda dentro de la wiki sí se puede leer: no es un concepto más, pero no rompe nada.
+      assert.equal(cerebroM.leerArticulo('clientes/el-mismo.md').ok, true, 'un enlace dentro de la wiki no se lee');
+      return '[ sin cerrar, enorme, y un enlace a ~/.ssh: nada se cuelga ni se enseña';
+    } finally {
+      proveedor.enviar = antes;
+      vscode.guion.raiz = empresa;
+      proveedor.donde = { tipo: 'principal' };
+    }
+  });
+
+  await comprobar('en Documentos y en la foto, lo que se dice se dice ahí, y el vigía no te saca', async () => {
+    // Revisión de corrección, 1 y 2: un aviso pintaba la principal con `donde`
+    // aún en Documentos, y el vigía te devolvía allí sin el aviso.
+    const proveedor = vscode.registrado.proveedor;
+    const puenteM = cargar('puente');
+    const cerebroM = cargar('cerebro');
+    const otra = montar();
+    const enviados = [];
+    const antes = {
+      enviar: proveedor.enviar, puente: puenteM.enviar, soltados: cerebroM.guardarSoltados, elegidos: cerebroM.anadirDocumentos,
+      dialogo: vscode.window.showSaveDialog,
+    };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    const ultimo = () => enviados[enviados.length - 1];
+    const enSuPantalla = async (tipo, hacer, texto, malo) => {
+      await hacer();
+      assert.equal(ultimo().tipo, tipo, `${texto}: te saca de ${tipo}`);
+      assert.equal(ultimo().aviso && ultimo().aviso.texto, texto);
+      if (malo !== undefined) assert.equal(Boolean(ultimo().aviso.malo), malo, `${texto}: malo`);
+      enviados.length = 0;
+      await proveedor.repintarLoQueHaya();
+      assert.equal(ultimo().tipo, tipo, `${texto}: el vigía te saca de ${tipo}`);
+      assert.equal(ultimo().aviso && ultimo().aviso.texto, texto, `${texto}: el vigía se come el aviso`);
+    };
+    try {
+      puenteM.enviar = async () => 'directo';
+      // En Documentos: «Que los lea», una foto que ya no está, y lo que no se puede leer al soltarlo.
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      await enSuPantalla('documentos', () => proveedor.manejar({ tipo: 'pedir', prompt: 'Lee los documentos.' }), 'Te lo he dejado escrito en la conversación. Dale a enviar.');
+      await enSuPantalla('documentos', () => proveedor.manejar({ tipo: 'abrirLaFoto', fichero: 'otra.png' }), 'Esa foto ya no está.', true);
+      await enSuPantalla('documentos', () => proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [], para: 'documentos' }),
+        'No he podido leer lo que has soltado. Si es un archivo muy grande, dáselo con «Elegirlos».', true);
+      // Y si falla al guardar lo soltado o lo elegido.
+      cerebroM.guardarSoltados = () => ({ ok: false, mensaje: 'No he podido guardar ninguno.' });
+      await enSuPantalla('documentos', () => proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [{ nombre: 'a.txt', datos: 'YQ==' }] }), 'No he podido guardar ninguno.', true);
+      cerebroM.anadirDocumentos = async () => ({ ok: false, mensaje: 'No he podido copiar ninguno.' });
+      await enSuPantalla('documentos', () => proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' }), 'No he podido copiar ninguno.', true);
+      cerebroM.guardarSoltados = antes.soltados;
+      cerebroM.anadirDocumentos = antes.elegidos;
+      // Fuera de Documentos, soltar algo que no se lee sigue yendo a la principal, como antes.
+      proveedor.donde = { tipo: 'principal' };
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [] });
+      assert.ok(enviados.some((x) => x.tipo === 'estado') && !enviados.some((x) => x.tipo === 'documentos'), 'fuera de Documentos, soltar algo que no se lee va a otro sitio');
+
+      // En la foto, llegada desde Conocimiento: el aviso se queda en la foto, y de dónde se vino, también.
+      await proveedor.manejar({ tipo: 'verLaFoto', desde: 'cerebro' });
+      await enSuPantalla('foto', () => proveedor.manejar({ tipo: 'pedir', prompt: 'Enlázalos.' }), 'Te lo he dejado escrito en la conversación. Dale a enviar.');
+      assert.equal(ultimo().desde, 'cerebro', 'el vigía olvida de dónde se vino a la foto');
+      await proveedor.manejar({ tipo: 'guardarLaFoto', png: UN_PNG });
+      assert.deepEqual([ultimo().tipo, ultimo().desde], ['foto', 'cerebro'], 'al guardarla se olvida de dónde se vino');
+      const guardada = ultimo().aviso.boton.accion.fichero;
+      await enSuPantalla('foto', () => proveedor.manejar({ tipo: 'abrirLaFoto', fichero: 'otra.png' }), 'Esa foto ya no está.', true);
+      // Llevársela: si se cancela, no se dice nada; si sale bien, se dice en la foto.
+      vscode.window.showSaveDialog = async () => undefined;
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'llevarteLaFoto', fichero: guardada });
+      assert.deepEqual(enviados, [], 'al cancelar, se dice algo');
+      const destino = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'llevarse-')), 'mia.png');
+      vscode.window.showSaveDialog = async () => ({ fsPath: destino });
+      await enSuPantalla('foto', () => proveedor.manejar({ tipo: 'llevarteLaFoto', fichero: guardada }), 'Guardado: mia.png', false);
+      return 'Documentos y la foto se quedan con su aviso, y la foto con de dónde se vino';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      puenteM.enviar = antes.puente;
+      cerebroM.guardarSoltados = antes.soltados;
+      cerebroM.anadirDocumentos = antes.elegidos;
+      vscode.window.showSaveDialog = antes.dialogo;
+      vscode.guion.raiz = empresa;
+      proveedor.donde = { tipo: 'principal' };
+    }
+  });
+
+  await comprobar('la foto del cerebro queda fuera del barrido de RSC, y viaja en las copias', () => {
+    const foto = cargar('foto');
+    const carpeta = `${foto.CARPETA.join('/')}/`;
+    // B6: lo que RSC no barre lo dice su protocolo, no un programa. Se mira en el paquete.
+    const defectos = path.join(RAIZ, 'media', 'harness', 'node_modules', '@ericrisco', 'rsc', 'skills', 'harness', 'references', 'ingest-ignore-defaults.md');
+    let barrido = 'sin el paquete del arnés: el barrido no se mira';
+    if (fs.existsSync(defectos)) {
+      const bloque = (fs.readFileSync(defectos, 'utf8').match(/```gitignore\n([\s\S]*?)```/) || [])[1] || '';
+      const fueraDelBarrido = bloque.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+      assert.ok(fueraDelBarrido.length > 5, 'no se lee la lista de RSC');
+      assert.ok(fueraDelBarrido.some((p) => p.endsWith('/') && carpeta.startsWith(p)), `RSC ya no deja ${carpeta} fuera de su barrido`);
+      barrido = `fuera del barrido de RSC por «${fueraDelBarrido.find((p) => p.endsWith('/') && carpeta.startsWith(p))}»`;
+    }
+    // Y viaja en las copias: pesa poco, la de un día no se puede repetir, y lo que
+    // enseña ya está en git con la wiki (decisión 151).
+    const cp = require('node:child_process');
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'viaja-'));
+    cp.spawnSync('git', ['init', '-q'], { cwd: repo });
+    fs.writeFileSync(path.join(repo, '.gitignore'), `${require(path.join(RAIZ, 'media', 'railes', 'no-entra-en-git.js')).elBloque()}\n`);
+    const laFoto = `${carpeta}La foto del cerebro 15-10-2026.png`;
+    const mirado = cp.spawnSync('git', ['check-ignore', '-q', '--no-index', laFoto], { cwd: repo });
+    assert.equal(mirado.status, 1, `la foto no entra en las copias (git check-ignore: ${mirado.status})`);
+    // Y la comprobación sabe decir que no: un vídeo sí se queda fuera.
+    assert.equal(cp.spawnSync('git', ['check-ignore', '-q', '--no-index', 'video.MOV'], { cwd: repo }).status, 0, 'la comprobación no ve lo que sí se queda fuera');
+    return `${barrido}; y entra en las copias`;
   });
 
   await comprobar('Documentos en una pantalla: darle documentos, los que tiene sin leer con «Que los lea», y los resultados', async () => {
@@ -12904,9 +13184,14 @@ exec git "$@"
       fs.writeFileSync(path.join(otra, 'presupuesto.pdf'), 'pdf de mentira');
       await proveedor.manejar({ tipo: 'verDocumentos' });
       const conSuelto = montarPanel().mandar(ultimo());
-      assert.match(conSuelto, /presupuesto\.pdf<\/p>\s*<p class="pista">Sin colocar todavía/);
+      // Aparte y con su nombre: «Sin leer todavía» cuenta lo mismo que la fila de la principal.
+      assert.match(conSuelto, /Sin leer todavía<\/h2>[\s\S]*contrato-talleres-ruiz\.txt[\s\S]*Sin colocar todavía<\/h2>[\s\S]*presupuesto\.pdf/, 'lo suelto no va aparte');
+      const sinLeerDeVerdad = conSuelto.slice(conSuelto.indexOf('Sin leer todavía'), conSuelto.indexOf('Sin colocar todavía'));
+      assert.equal((sinLeerDeVerdad.match(/class="archivo"/g) || []).length, ultimo().esperando.length, '«Sin leer todavía» no cuenta lo mismo que la fila');
       assert.ok(!accionesDe(conSuelto).some((a) => a.tipo === 'quitarPapel' && a.ruta === 'presupuesto.pdf'), 'lo suelto en su carpeta se ofrece quitar');
-      assert.match(accionesDe(conSuelto).find((a) => a.tipo === 'pedir').prompt, /sueltos en la carpeta/);
+      const encargos = accionesDe(conSuelto).filter((a) => a.tipo === 'pedir').map((a) => a.prompt);
+      assert.ok(encargos.some((t) => /sueltos en la carpeta/.test(t)), 'lo suelto no tiene su «Que los coloque y los lea»');
+      assert.ok(!/sueltos/.test(encargos[0]), '«Que los lea» pide también lo suelto');
 
       // Lo producido, en Resultados, para abrirlo o llevárselo.
       fs.mkdirSync(path.join(otra, '01-TOOLS', 'HOLDED', 'out'), { recursive: true });
@@ -12972,14 +13257,18 @@ exec git "$@"
     vscode.guion.raiz = otra;
     const ultimo = () => enviados[enviados.length - 1];
     // Un lienzo de mentira que apunta lo que se dibuja en él.
-    const dibujado = { puntos: 0, lineas: 0, textos: [] };
+    const dibujado = { puntos: 0, lineas: 0, textos: [], bajado: 0, circulos: [], lienzo: null };
     const pincel = {
-      fillRect() {}, beginPath() {}, moveTo() {}, stroke() {}, fill() {}, translate() {}, strokeText() {},
+      fillRect() {}, beginPath() {}, moveTo() {}, stroke() {}, fill() {}, strokeText() {},
+      translate(x, y) { dibujado.bajado += y; },
       lineTo() { dibujado.lineas += 1; },
-      arc() { dibujado.puntos += 1; },
+      arc(x, y, r) { dibujado.puntos += 1; dibujado.circulos.push({ arriba: y + dibujado.bajado - r, abajo: y + dibujado.bajado + r }); },
       fillText(t) { dibujado.textos.push(t); },
     };
-    const lienzo = () => ({ width: 0, height: 0, getContext: (que) => (que === '2d' ? pincel : null), toDataURL: (que) => (que === 'image/png' ? `data:image/png;base64,${UN_PNG}` : '') });
+    const lienzo = () => {
+      dibujado.lienzo = { width: 0, height: 0, getContext: (que) => (que === '2d' ? pincel : null), toDataURL: (que) => (que === 'image/png' ? `data:image/png;base64,${UN_PNG}` : '') };
+      return dibujado.lienzo;
+    };
     try {
       await proveedor.manejar({ tipo: 'verLaFoto', desde: 'documentos' });
       const m = ultimo();
@@ -13002,6 +13291,24 @@ exec git "$@"
       assert.doesNotMatch(html, /\sstyle=|<style|<script|\son[a-z]+=|https?:|data:/i, 'el dibujo se salta la política de contenido');
       assert.deepEqual(accionesDe(html).find((a) => a.tipo === 'verDocumentos'), { tipo: 'verDocumentos' }, 'no se vuelve a Documentos');
 
+      // Con el teclado: cada punto se alcanza con el tabulador y se abre con Intro o con espacio.
+      assert.equal((html.match(/<g class="nodo" tabindex="0" role="button" aria-label="[^"]+"/g) || []).length, 4, 'los puntos no se alcanzan con el teclado');
+      const antesDeTeclear = p.enviados.length;
+      assert.equal(p.teclear('leerArticulo', 'a'), false, 'otra tecla hace algo');
+      assert.equal(p.enviados.length, antesDeTeclear);
+      assert.equal(p.teclear('leerArticulo', 'Enter'), true, 'Intro no abre el punto');
+      assert.equal(p.enviados[p.enviados.length - 1].tipo, 'leerArticulo');
+      assert.equal(p.teclear('leerArticulo', ' '), true, 'el espacio no abre el punto');
+      // Lo que viene de la wiki se escapa: un título con etiquetas no pinta nada.
+      const malo = '<b data-accion="x">Malo</b> < y >';
+      const conEtiquetas = montarPanel().mandar({ ...m, nodos: m.nodos.map((n, i) => (i ? n : { ...n, titulo: malo })), rotulos: [0] });
+      assert.doesNotMatch(conEtiquetas, /<b data-accion/, 'un título con etiquetas se pinta tal cual');
+      assert.match(conEtiquetas, /<title>&lt;b data-accion/, 'el título del punto no se escapa');
+      assert.match(conEtiquetas, /<text [^>]*>&lt;b data-accion/, 'el nombre escrito al lado no se escapa');
+      // Dos nombres que se pisarían: sale el del que más enlaza, el otro no.
+      const pisados = montarPanel().mandar({ ...m, nodos: m.nodos.map((n, i) => ({ ...n, x: 500 + i, y: 500 })), rotulos: [2, 0, 1, 3] });
+      assert.equal((pisados.match(/<text /g) || []).length, 1, 'se escriben nombres uno encima de otro');
+      assert.match(pisados, /<text [^>]*>Ciclo de facturación</, 'el que se queda no es el que más enlaza');
       // Cada punto abre su concepto, y desde él se vuelve a la foto.
       const puntos = accionesDe(html).filter((a) => a.tipo === 'leerArticulo');
       assert.deepEqual(puntos.map((a) => a.ruta).sort(), m.nodos.map((n) => n.ruta).sort(), 'un punto que no abre su concepto');
@@ -13029,6 +13336,9 @@ exec git "$@"
       assert.ok(dibujado.textos.includes('Conocimiento de tu trabajo'), `la foto no dice de quién es: ${dibujado.textos.join(' | ')}`);
       assert.ok(dibujado.textos.some((t) => /\d{4} · 4 conceptos · 1 enlace$/.test(t)), 'la foto no dice el día ni cuántos hay');
       assert.ok(dibujado.textos.includes('Ciclo de facturación'), 'la foto va sin nombres');
+      // Los puntos, debajo de lo que dice arriba y dentro de la foto.
+      assert.ok(dibujado.circulos.every((c) => c.arriba >= 130), 'un punto pisa lo que dice arriba de la foto');
+      assert.ok(dibujado.circulos.every((c) => c.abajo <= dibujado.lienzo.height), 'un punto se sale por abajo de la foto');
       await proveedor.manejar(pedido);
       const nombre = cargar('foto').nombreDeLaFoto(new Date());
       const guardada = ultimo();
@@ -13107,8 +13417,11 @@ exec git "$@"
       assert.match(sinEnlaces, /Todavía ningún concepto enlaza con otro\./);
       assert.match(accionesDe(sinEnlaces).find((a) => a.tipo === 'pedir').prompt, /enlaza entre sí/);
       assert.match(sinEnlaces, /Guardar la foto/, 'sin enlaces no se puede guardar');
-      // Con más de los que caben, se dice cuántos hay.
+      // Con más de los que caben, se dice cuántos hay; y si no se han leído todos los enlaces, también.
       assert.match(montarPanel().mandar({ ...ultimo(), total: 412 }), /Tiene 412 conceptos: para que se vea, la foto enseña los 2 con más enlaces\./);
+      assert.equal(ultimo().entera, true);
+      assert.doesNotMatch(sinEnlaces, /no está entera/, 'dice que no está entera sin serlo');
+      assert.match(montarPanel().mandar({ ...ultimo(), entera: false }), /Hay tantos enlaces que no los he leído todos: la foto no está entera\./, 'no dice que la foto no está entera');
       return `4 puntos y 1 línea, abiertos desde la foto, y «${nombre}» en Resultados`;
     } finally {
       proveedor.enviar = antes.enviar;

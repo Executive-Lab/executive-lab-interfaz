@@ -29,7 +29,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const frontmatter = require('./frontmatter');
 
 // Cuántos puntos caben en la foto. Una wiki de empresa anda por los cientos;
 // con más, la foto se vuelve una mancha y colocarlos tarda: se enseñan los que
@@ -42,6 +41,24 @@ const MAXIMO_FICHEROS = 2000;
 const MAXIMO_POR_FICHERO = 1024 * 1024;
 // Y entre todos: 2.000 de un mega serían dos gigas.
 const MAXIMO_EN_TOTAL = 64 * 1024 * 1024;
+// Cuántos enlaces se leen de un artículo, y cuántos se buscan entre todos. Sin
+// tope, un artículo de un mega con `[[x]]` repetido eran 200.000 búsquedas, y
+// todo esto corre en el hilo del editor: la ventana entera se quedaba quieta
+// (revisión de seguridad, M1). Pasado el tope, la foto lo dice.
+const MAXIMO_ENLACES_POR_ARTICULO = 2000;
+const MAXIMO_ENLACES_EN_TOTAL = 100000;
+// Los `aliases` de un artículo, y lo largo de un nombre: 5.000 alias en 2.000
+// ficheros eran 17 segundos (revisión de seguridad, M2).
+const MAXIMO_ALIASES = 50;
+const LARGO_DE_UN_NOMBRE = 200;
+// Dónde quedan las fotos, desde la carpeta de trabajo: dentro de la wiki, en su
+// `out/`, como los demás resultados. La wiki no la barre RSC buscando documentos
+// nuevos, porque es lo que sale de leer y no lo que entra: lo dice su protocolo
+// (`ingest-ignore-defaults.md`, en la 3.0.22) y lo cumple el asistente.
+// `02-DOCS/.rscignore` es donde lo escribe al empezar la wiki; no hay un
+// programa que lo impida (revisión de seguridad, B6). Una prueba lo mira en el
+// paquete, por si RSC lo cambia.
+const CARPETA = ['02-DOCS', 'wiki', 'out'];
 // El lado del dibujo, en sus propias unidades: el panel y la foto lo escalan.
 const LADO = 1000;
 const MARGEN = 70;
@@ -49,12 +66,17 @@ const MARGEN = 70;
 const ROTULOS = 40;
 
 // Quitar tildes, mayúsculas y signos: «Ciclo de facturación», «ciclo-de-facturacion»
-// y «Ciclo_de_Facturación» son el mismo nombre.
+// y «Ciclo_de_Facturación» son el mismo nombre. Las letras de cualquier
+// alfabeto se quedan: un nombre en cirílico o en chino se quedaba en nada y no
+// se podía enlazar (revisión de corrección, 4).
 const pelar = (texto) => String(texto || '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase()
-  .replace(/[^a-z0-9ñ]+/g, '-')
+  .replace(/[^\p{L}\p{N}]+/gu, '-')
   .replace(/^-+|-+$/g, '');
+// Una ruta para compararla sin fijarse en mayúsculas ni en cómo guarda las
+// tildes cada sistema: el Mac las guarda descompuestas (NFD).
+const comoRuta = (ruta) => String(ruta).normalize('NFC').toLowerCase();
 
 const humanizar = (texto) => {
   const limpio = String(texto).replace(/[-_]+/g, ' ').trim();
@@ -83,24 +105,40 @@ function sinCodigo(texto) {
 
 // Los `aliases` de la cabecera, en las dos formas que escribe la gente:
 // `aliases: [a, b]` y la lista con guiones debajo.
-function aliasesDe(texto) {
-  const campos = frontmatter.analizar(texto);
-  if (Array.isArray(campos.aliases)) return campos.aliases;
-  if (typeof campos.aliases === 'string' && campos.aliases) return [campos.aliases];
-  const bloque = String(texto || '').match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!bloque) return [];
-  const lista = bloque[1].match(/^aliases:\s*\r?\n((?:\s+-\s+.*\r?\n?)+)/m);
-  if (!lista) return [];
-  return lista[1].split('\n').map((l) => l.replace(/^\s*-\s+/, '').trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+// La cabecera, y un campo suyo sin leer los demás. `frontmatter.analizar` parte
+// todas las listas enteras, dos veces por fichero, y una de 5.000 alias en
+// 2.000 ficheros eran segundos (revisión de seguridad, M2).
+const cabeceraDe = (texto) => (String(texto || '').match(/^---\r?\n([\s\S]*?)\r?\n---/) || [])[1] || '';
+const sinComillas = (v) => String(v).trim().replace(/^["']|["']$/g, '').trim();
+function campo(cabecera, nombre) {
+  const linea = cabecera.match(new RegExp(`^${nombre}:[ \\t]*(.*)$`, 'm'));
+  return linea ? linea[1] : null;
+}
+
+// Sin repetidos, como mucho 50 y ninguno larguísimo, en las dos formas que
+// escribe la gente: `aliases: [a, b]` y la lista con guiones debajo. Se lee
+// solo lo que cabe en esos 50.
+function aliasesDe(texto, cabecera = cabeceraDe(texto)) {
+  const linea = cabecera ? campo(cabecera, 'aliases') : null;
+  if (linea === null) return [];
+  let lista;
+  if (linea.trim()) {
+    const valor = linea.trim().slice(0, MAXIMO_ALIASES * (LARGO_DE_UN_NOMBRE + 2));
+    lista = valor.startsWith('[') ? valor.replace(/^\[|\]$/g, '').split(',') : [valor];
+  } else {
+    const debajo = cabecera.match(/^aliases:[ \t]*\r?\n((?:[ \t]+-[ \t]+[^\n]*\n?){1,50})/m);
+    lista = debajo ? debajo[1].split('\n').map((l) => l.replace(/^[ \t]*-[ \t]+/, '')) : [];
+  }
+  return [...new Set(lista.map(sinComillas).filter((a) => a && a.length <= LARGO_DE_UN_NOMBRE))].slice(0, MAXIMO_ALIASES);
 }
 
 // El título: el de la cabecera, si no el primer `# `, y si no el nombre del
 // fichero en cristiano.
-function tituloDe(texto, ruta) {
-  const delCampo = frontmatter.analizar(texto || '').title;
-  if (typeof delCampo === 'string' && delCampo.trim()) return delCampo.trim();
+function tituloDe(texto, ruta, cabecera = cabeceraDe(texto)) {
+  const delCampo = sinComillas(campo(cabecera, 'title') || '');
+  if (delCampo) return delCampo.slice(0, LARGO_DE_UN_NOMBRE);
   const delTexto = (sinCabecera(texto).match(/^#\s+(.+)$/m) || [])[1];
-  return (delTexto && delTexto.trim()) || humanizar(path.posix.basename(ruta, '.md'));
+  return ((delTexto && delTexto.trim()) || humanizar(path.posix.basename(ruta, '.md'))).slice(0, LARGO_DE_UN_NOMBRE);
 }
 
 // ------------------------------------------------------------ los enlaces
@@ -109,37 +147,49 @@ function tituloDe(texto, ruta) {
 //
 // Las expresiones van con tope y sin corchetes dentro del destino: sin eso, un
 // fichero de un mega con `](` o `[[` repetidos las hacía volver atrás sin fin.
-function enlacesEscritos(texto) {
+// Y como mucho `tope` enlaces por artículo.
+function enlacesEscritos(texto, tope = MAXIMO_ENLACES_POR_ARTICULO) {
   const cuerpo = sinCodigo(sinCabecera(texto));
   const vistos = [];
-
-  // `[Texto](destino)`, `[Texto](<destino con espacios>)` y `[Texto](destino "título")`.
-  for (const [, crudo] of cuerpo.matchAll(/\]\(\s*(<[^<>\n]{1,1000}>|[^()[\]\s]{1,1000})(?:\s+["'(][^()\n]{0,300})?\)/g)) {
-    vistos.push({ forma: 'markdown', destino: crudo.replace(/^<|>$/g, '') });
-  }
-  // Las referencias al final: `[1]: destino`.
-  for (const [, crudo] of cuerpo.matchAll(/^ {0,3}\[[^[\]\n]{1,300}\]:[ \t]*(<[^<>\n]{1,1000}>|\S{1,1000})/gm)) {
-    vistos.push({ forma: 'markdown', destino: crudo.replace(/^<|>$/g, '') });
-  }
-  // `[[Destino]]`, `[[Destino|lo que se lee]]`, `[[Destino#Sección]]` y `![[Destino]]`.
-  for (const [, crudo] of cuerpo.matchAll(/\[\[([^[\]\n]{1,300})\]\]/g)) {
-    const destino = crudo.split('|')[0].split('#')[0].trim();
-    if (destino) vistos.push({ forma: 'wiki', destino });
+  const formas = [
+    // `[Texto](destino)`, `[Texto](<destino con espacios>)`, `[Texto](destino "título")`
+    // y `[Texto](Nota%20(2).md)`, con un nivel de paréntesis, como CommonMark.
+    ['markdown', /\]\(\s*(<[^<>\n]{1,1000}>|(?:[^()[\]\s]|\([^()[\]\s]{0,200}\)){1,1000})(?:\s+["'(][^()\n]{0,300})?\)/g],
+    // Las referencias al final: `[1]: destino`.
+    ['markdown', /^ {0,3}\[[^[\]\n]{1,300}\]:[ \t]*(<[^<>\n]{1,1000}>|\S{1,1000})/gm],
+    // `[[Destino]]`, `[[Destino|lo que se lee]]`, `[[Destino#Sección]]` y `![[Destino]]`.
+    ['wiki', /\[\[([^[\]\n]{1,300})\]\]/g],
+  ];
+  for (const [forma, expresion] of formas) {
+    for (const [, crudo] of cuerpo.matchAll(expresion)) {
+      if (vistos.length >= tope) return vistos;
+      const destino = forma === 'wiki' ? crudo.split('|')[0].split('#')[0].trim() : crudo.replace(/^<|>$/g, '');
+      if (destino) vistos.push({ forma, destino });
+    }
   }
   return vistos;
 }
 
 // Con qué se busca un artículo por su nombre: la ruta, el nombre del fichero,
-// sus `aliases` y su título, todo pelado. Varios con el mismo nombre se quedan
-// todos, y al buscar gana el de la misma carpeta.
+// sus `aliases` y su título, todo pelado. Con varios del mismo nombre gana el de
+// la misma carpeta, y si no hay, el primero por ruta. Los ganadores se deciden
+// aquí, una vez: antes se ordenaba la lista entera en cada `[[enlace]]`
+// (revisión de seguridad, M1).
+//
+// `articulos` llega ordenado por ruta, así que el primero que se apunta en cada
+// nombre, y en cada carpeta de ese nombre, es el que gana.
 function elIndice(articulos) {
   const rutas = new Set(articulos.map((a) => a.ruta));
+  // Las mismas, para cuando no casan tal cual: gana la primera por ruta.
+  const parecidas = new Map();
+  for (const a of articulos) if (!parecidas.has(comoRuta(a.ruta))) parecidas.set(comoRuta(a.ruta), a.ruta);
   const porNombre = new Map();
   const apuntar = (clave, ruta) => {
     if (!clave) return;
-    if (!porNombre.has(clave)) porNombre.set(clave, []);
-    const lista = porNombre.get(clave);
-    if (!lista.includes(ruta)) lista.push(ruta);
+    const carpeta = path.posix.dirname(ruta);
+    const hay = porNombre.get(clave);
+    if (!hay) porNombre.set(clave, { primero: ruta, porCarpeta: new Map([[carpeta, ruta]]) });
+    else if (!hay.porCarpeta.has(carpeta)) hay.porCarpeta.set(carpeta, ruta);
   };
   for (const a of articulos) {
     apuntar(pelar(a.ruta.replace(/\.md$/i, '')), a.ruta);
@@ -147,14 +197,13 @@ function elIndice(articulos) {
     for (const alias of a.aliases || []) apuntar(pelar(alias), a.ruta);
     apuntar(pelar(a.titulo), a.ruta);
   }
-  return { rutas, porNombre };
+  return { rutas, parecidas, porNombre };
 }
 
 function porNombre(nombre, desde, indice) {
-  const lista = indice.porNombre.get(pelar(nombre.replace(/\.md$/i, '')));
-  if (!lista || !lista.length) return null;
-  const carpeta = path.posix.dirname(desde);
-  return lista.find((r) => path.posix.dirname(r) === carpeta) || [...lista].sort()[0];
+  const hay = indice.porNombre.get(pelar(nombre.replace(/\.md$/i, '')));
+  if (!hay) return null;
+  return hay.porCarpeta.get(path.posix.dirname(desde)) || hay.primero;
 }
 
 // A qué artículo lleva un enlace, o null si no lleva a ninguno de la wiki: una
@@ -176,6 +225,11 @@ function resolver({ forma, destino }, desde, indice) {
   for (const candidata of [relativa, `${relativa}.md`]) {
     if (indice.rutas.has(candidata)) return candidata;
   }
+  // Escrita con otras mayúsculas, o con las tildes de otro sistema.
+  for (const candidata of [relativa, `${relativa}.md`]) {
+    const parecida = indice.parecidas.get(comoRuta(candidata));
+    if (parecida) return parecida;
+  }
   // Obsidian también escribe el camino más corto: solo el nombre, sin carpeta.
   if (!limpio.includes('/')) return porNombre(limpio, desde, indice);
   return null;
@@ -193,14 +247,25 @@ function delCerebro(articulos) {
     .filter((a) => a && typeof a.ruta === 'string' && a.ruta)
     .sort((a, b) => (a.ruta < b.ruta ? -1 : a.ruta > b.ruta ? 1 : 0))
     .filter((a, i, lista) => i === 0 || lista[i - 1].ruta !== a.ruta)
-    .map((a) => ({ ruta: a.ruta, texto: a.texto || '', titulo: tituloDe(a.texto, a.ruta), aliases: aliasesDe(a.texto) }));
+    .map((a) => {
+      const cabecera = cabeceraDe(a.texto);
+      return { ruta: a.ruta, texto: a.texto || '', titulo: tituloDe(a.texto, a.ruta, cabecera), aliases: aliasesDe(a.texto, cabecera) };
+    });
 
   const indice = elIndice(conTodo);
   const posicion = new Map(conTodo.map((a, i) => [a.ruta, i]));
   const pares = new Set();
+  // Lo que queda por buscar entre todos. Si se acaba, o algún artículo pasa de
+  // su tope, la foto no está entera, y se dice.
+  let quedan = MAXIMO_ENLACES_EN_TOTAL;
+  let entera = true;
 
   conTodo.forEach((a, i) => {
-    for (const enlace of enlacesEscritos(a.texto)) {
+    if (quedan <= 0) { if (a.texto) entera = false; return; }
+    const escritos = enlacesEscritos(a.texto, Math.min(MAXIMO_ENLACES_POR_ARTICULO, quedan));
+    if (escritos.length >= MAXIMO_ENLACES_POR_ARTICULO || escritos.length >= quedan) entera = false;
+    quedan -= escritos.length;
+    for (const enlace of escritos) {
       const destino = resolver(enlace, a.ruta, indice);
       if (!destino) continue;
       const j = posicion.get(destino);
@@ -218,6 +283,7 @@ function delCerebro(articulos) {
   return {
     nodos: conTodo.map((a, i) => ({ ruta: a.ruta, titulo: a.titulo, grado: grado[i] })),
     enlaces,
+    entera,
   };
 }
 
@@ -362,12 +428,12 @@ function leerSiCabe(completa) {
 
 // Todo junto, para el panel: lee los artículos (`rutas`, relativas a `wiki`),
 // arma el dibujo, se queda con lo que cabe y coloca cada punto.
-function laFoto(wiki, rutas, { tope = TOPE, enTotal = MAXIMO_EN_TOTAL } = {}) {
+function laFoto(wiki, rutas, { tope = TOPE, enTotal = MAXIMO_EN_TOTAL, ficheros = MAXIMO_FICHEROS } = {}) {
   const lista = [...new Set((rutas || []).filter((r) => typeof r === 'string' && /\.md$/i.test(r)))].sort();
   let leido = 0;
   const articulos = lista.map((ruta, i) => {
     // Pasado el tope de lectura, el concepto sale, pero sin leer sus enlaces.
-    const texto = wiki && i < MAXIMO_FICHEROS && leido < enTotal ? leerSiCabe(path.join(wiki, ...ruta.split('/'))) : '';
+    const texto = wiki && i < ficheros && leido < enTotal ? leerSiCabe(path.join(wiki, ...ruta.split('/'))) : '';
     leido += texto.length;
     return { ruta, texto };
   });
@@ -377,6 +443,8 @@ function laFoto(wiki, rutas, { tope = TOPE, enTotal = MAXIMO_EN_TOTAL } = {}) {
   return {
     lado: LADO,
     total,
+    // Si se leyeron todos los enlaces: con demasiados, la foto lo dice.
+    entera: entero.entera !== false,
     nodos: nodos.map((n, i) => ({ ...n, ...sitio[i], r: radio(n.grado, nodos.length) })),
     enlaces,
     rotulos: rotulos(nodos),
@@ -395,20 +463,50 @@ const dosCifras = (v) => String(v).padStart(2, '0');
 // «La foto del cerebro 15-10-2026.png»: el día como se escribe aquí.
 const nombreDeLaFoto = (cuando = new Date()) => `La foto del cerebro ${dosCifras(cuando.getDate())}-${dosCifras(cuando.getMonth() + 1)}-${cuando.getFullYear()}.png`;
 
+// Si `ruta` queda dentro de `raiz` de verdad, siguiendo los enlaces del disco.
+// De lo que aún no existe se mira la parte que sí: un `02-DOCS/wiki` que es un
+// enlace a otro sitio dejaba crear `out/` y la foto fuera de la carpeta, porque
+// solo se miraba el último trozo (revisión de seguridad, M3).
+function quedaDentro(raiz, ruta) {
+  if (!raiz || !ruta) return false;
+  try {
+    const base = fs.realpathSync(raiz);
+    let existe = path.resolve(ruta);
+    const falta = [];
+    for (;;) {
+      try {
+        fs.lstatSync(existe);
+        break;
+      } catch {
+        const arriba = path.dirname(existe);
+        if (arriba === existe) return false;
+        falta.unshift(path.basename(existe));
+        existe = arriba;
+      }
+    }
+    const relativa = path.relative(base, path.join(fs.realpathSync(existe), ...falta));
+    return relativa === '' || (!relativa.startsWith('..') && !path.isAbsolute(relativa));
+  } catch {
+    return false;
+  }
+}
+
 // Guarda lo que pinta el panel (un PNG en base64) en `carpeta`, sin pisar
 // ninguna: la segunda del mismo día lleva «(2)». Sirve para comparar el antes y
-// el después de pedirle que enlace lo que tiene suelto.
-function guardar(carpeta, png, cuando = new Date()) {
+// el después de pedirle que enlace lo que tiene suelto. Solo dentro de `raiz`,
+// la carpeta de trabajo: una carpeta traída de fuera no decide dónde escribe la
+// barra.
+function guardar(carpeta, png, { cuando = new Date(), raiz = null } = {}) {
   if (!carpeta || typeof png !== 'string' || !png) return { ok: false, motivo: 'sinDatos' };
   if (png.length > (MAXIMO_PNG * 4) / 3 + 4) return { ok: false, motivo: 'demasiado' };
   const datos = Buffer.from(png, 'base64');
   if (datos.length < FIRMA_PNG.length + 12 || !datos.subarray(0, FIRMA_PNG.length).equals(FIRMA_PNG)) return { ok: false, motivo: 'noEsUnaFoto' };
+  // Antes de crear nada, y otra vez después: entre una cosa y otra pudo cambiar.
+  if (!quedaDentro(raiz, carpeta)) return { ok: false, motivo: 'fuera' };
 
   try {
     fs.mkdirSync(carpeta, { recursive: true });
-    // Si la carpeta es un enlace a otro sitio del disco, ahí no se escribe: una
-    // carpeta traída de fuera no decide dónde guarda la barra.
-    if (!fs.lstatSync(carpeta).isDirectory()) return { ok: false, motivo: 'noEsUnaCarpeta' };
+    if (!fs.lstatSync(carpeta).isDirectory() || !quedaDentro(raiz, carpeta)) return { ok: false, motivo: 'fuera' };
     const nombre = nombreDeLaFoto(cuando);
     const base = nombre.slice(0, -'.png'.length);
     let fichero = nombre;
@@ -425,8 +523,8 @@ const tamano = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes
 
 // Las fotos que hay, de la más nueva a la más vieja, con la forma de un
 // resultado (`salidas.js`): para abrirlas o llevárselas.
-function lasFotos(carpeta) {
-  if (!carpeta) return [];
+function lasFotos(carpeta, raiz) {
+  if (!carpeta || !quedaDentro(raiz, carpeta)) return [];
   let dentro;
   try {
     dentro = fs.readdirSync(carpeta, { withFileTypes: true });
@@ -450,11 +548,11 @@ function lasFotos(carpeta) {
 
 // El fichero de una foto, solo si es una de las nuestras y está en su sitio. Lo
 // que llega del panel se trata como si viniera de fuera.
-function donde(carpeta, fichero) {
+function donde(carpeta, fichero, raiz) {
   if (!carpeta || typeof fichero !== 'string' || fichero !== path.basename(fichero) || !ES_FOTO.test(fichero)) return null;
   const completa = path.join(carpeta, fichero);
   try {
-    return fs.lstatSync(completa).isFile() ? completa : null;
+    return fs.lstatSync(completa).isFile() && quedaDentro(raiz, completa) ? completa : null;
   } catch {
     return null;
   }
@@ -463,6 +561,10 @@ function donde(carpeta, fichero) {
 module.exports = {
   TOPE,
   LADO,
+  CARPETA,
+  MAXIMO_ENLACES_POR_ARTICULO,
+  MAXIMO_ENLACES_EN_TOTAL,
+  MAXIMO_ALIASES,
   enlacesEscritos,
   delCerebro,
   recortar,
