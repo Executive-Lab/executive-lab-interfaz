@@ -8,7 +8,7 @@
 // se enseñen cero botones sin decir por qué, que un despacho sin conexiones no
 // enseñe la pantalla de una gestoría.
 //
-// Aquí se montan tres carpetas distintas y se pasan las dieciocho pantallas por
+// Aquí se montan tres carpetas distintas y se pasan las diecinueve pantallas por
 // cada una. Lo que se comprueba no es el contenido —eso es de `humo.js`— sino
 // que **ninguna revienta y ninguna cae en la pantalla de fallo**, que es la red
 // de seguridad y no un aprobado. Y que la principal sencilla, plegada, no pasa
@@ -106,6 +106,7 @@ for (const [nombre, montar] of TODAS) {
   anadir('huecos', { huecos: cargar('cerebro').loQueAunNoSabe(4) }, null);
   anadir('comandos', { comandos: cargar('acciones').todos() }, null);
   anadir('saberes', cargar('saberes').queSabe(ext, 'contabilidad facturas contratos'), null);
+  anadir('rutinas', { horarios: [], automatica: cargar('rutinas').automatica(cargar('asistentes').elDeAhora().id) }, 'Rutinas y horarios');
   anadir('conexiones', { proveedores: cargar('conexiones').proveedores(), sueltas: [] }, null);
   anadir('agentes', { agentes: cargar('agentes').queHay() }, null);
   anadir('proyectos', { montones: cargar('proyectos').queHay() }, null);

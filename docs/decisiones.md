@@ -5647,3 +5647,42 @@ de OpenAI instalada y sus fuentes oficiales, queda en la revisión del 15 de oct
 
 No cambia dónde RSC guarda las habilidades ni se inventa un adaptador de guardianes para Codex.
 Las pruebas cubren los fallos anteriores, el montaje con el paquete real y el cambio de asistente.
+
+## 155. Rutinas y horarios tiene pantalla y se gestiona sin escribir código
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«sigue, haz cosas, mejora la barra. Lo de las rutinas y tareas programadas está?»*.
+La decisión 144 ya había puesto el reloj y la detección de costumbres. Faltaba poder gestionarlos:
+solo se veían en Habilidades, con un botón para quitarlos.
+
+- **Rutinas y horarios**, dentro de Acciones en las dos barras, también accesible desde Habilidades
+  y desde la tarjeta del aviso. Muestra los horarios de esta carpeta, los pendientes primero y la
+  próxima fecha real, con la hora del ordenador. Los horarios que no se entienden se ven para
+  corregirlos; los meses sin el día elegido se saltan.
+- **Poner horario a una habilidad**: elegir una habilidad con botón, frecuencia diaria, laborable,
+  semanal o mensual, día si hace falta y hora. Se conserva `metadata.cuando` como contrato compartido
+  con el asistente. Cancelar conserva el archivo; cambiar o quitar vuelve a la misma pantalla.
+  **Crear una rutina nueva** le pide al asistente el trabajo y su habilidad, sin inventar tareas
+  de una empresa en el código de la barra.
+- **Hacerlo ahora** y **Ahora no**, con el comportamiento de la 144. El vigía y el reloj actualizan
+  la pantalla de rutinas sin devolver a la principal. La detección de hábitos usa el botón real:
+  en Codex, su invocación puede llevar un `name` diferente al nombre de la carpeta.
+- **Tareas que se hacen solas** explica dónde se programan y ofrece preparar el encargo, manteniendo
+  las instrucciones y el horario de la habilidad elegida. Estas tareas se crean, se verifican y se
+  revisan en el gestor oficial del asistente. La barra no las presenta como activas ni ejecuta el
+  modelo por debajo.
+- Se conserva el resto de la cabecera y del cuerpo al cambiar el horario, incluidos comentarios y
+  descripciones con varias líneas. Un formato de metadatos no soportado se deja para el asistente.
+  Una habilidad enlazada fuera de esta carpeta se puede leer, pero no cambiar desde el reloj.
+
+Fuentes contrastadas el 15-10-2026: [Scheduled tasks de OpenAI](https://learn.chatgpt.com/docs/automations)
+y [Routines de Claude](https://code.claude.com/docs/en/routines). Corrige la limitación descrita en la
+144: Codex también tiene tareas en la web, con documentos y conexiones accesibles allí. Para los
+archivos del ordenador, se usa la app de escritorio con el ordenador encendido y la app abierta.
+El editor no ofrece el gestor de tareas de Codex.
+
+Pruebas: creación, cambio, cancelación, cadencias, pendientes, nombre declarado de Codex, conservación
+del contenido, enlaces compartidos y fechas reales —incluido el cambio de hora y el año 2100—.
+La pantalla vacía también se prueba en las tres empresas de muestra. No se ha creado ninguna tarea
+en las cuentas personales de Claude o ChatGPT.

@@ -69,9 +69,32 @@ function ultimaVez(cron, ahora = Date.now()) {
     const minutos = [...c.minuto].sort((a, b) => b - a);
     for (const h of horas) {
       for (const m of minutos) {
-        const cuando = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m).getTime();
-        if (cuando <= ahora) return cuando;
+        const fecha = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m);
+        if (fecha.getHours() !== h || fecha.getMinutes() !== m || fecha.getDate() !== dia.getDate()) continue;
+        if (fecha.getTime() <= ahora) return fecha.getTime();
       }
+    }
+  }
+  return null;
+}
+
+// El siguiente aviso, estrictamente después de ahora. Se recorren días del
+// calendario local: sumar 24 horas se equivocaría al cambiar la hora. Ocho
+// años cubren incluso los dos 29 de febrero separados por un siglo no bisiesto.
+function proximaVez(cron, ahora = Date.now()) {
+  const c = leer(cron);
+  if (!c || !Number.isFinite(ahora)) return null;
+  const hoy = new Date(ahora);
+  const horas = [...c.hora].sort((a, b) => a - b);
+  const minutos = [...c.minuto].sort((a, b) => a - b);
+  for (let adelante = 0; adelante <= 8 * 366; adelante += 1) {
+    const dia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + adelante);
+    if (!tocaEseDia(c, dia)) continue;
+    for (const h of horas) for (const m of minutos) {
+      const fecha = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m);
+      // Una hora que no existe por el cambio de hora no se desplaza a otra.
+      if (fecha.getHours() !== h || fecha.getMinutes() !== m || fecha.getDate() !== dia.getDate()) continue;
+      if (fecha.getTime() > ahora) return fecha.getTime();
     }
   }
   return null;
@@ -140,4 +163,4 @@ function costumbre(veces = [], ahora = Date.now()) {
   return null;
 }
 
-module.exports = { valido, ultimaVez, enPalabras, costumbre };
+module.exports = { valido, ultimaVez, proximaVez, enPalabras, costumbre };

@@ -99,9 +99,9 @@ Los que ya haya siguen funcionando y no se tocan.
 **Si lo hace en un momento fijo** —«cada lunes», «el día 1 de cada mes», «todos los días al acabar»—,
 añade en su `metadata` un `cuando` con la hora, en el formato de cron (minuto, hora, día del mes, mes,
 día de la semana): `cuando: "0 9 * * 1"` es cada lunes a las 9, y `cuando: "0 9 1 * *"`, el día 1 a las
-9. A esa hora la barra se lo recuerda con un botón para hacerlo, también si tenía el editor cerrado.
+9. A esa hora la barra se lo recuerda con un botón para hacerlo; si el editor estaba cerrado, lo verá al volver.
 Díselo en una línea («Te lo recordaré cada lunes a las 9»). Para quitarlo, borra esa línea; él puede
-hacerlo desde *Habilidades (skills)*. La barra también lo pone sola cuando ve que pulsa un botón con
+hacerlo desde *Rutinas y horarios*, donde también puede cambiar el día y la hora sin escribirlos en el fichero. La barra también lo pone sola cuando ve que pulsa un botón con
 costumbre: si lo ves en su `metadata`, es eso.
 
 ### 2. Cada clave, en el `.env` de su herramienta — y solo ahí
@@ -289,8 +289,11 @@ línea exacta para que la mande, porque las pide él.
 - **Que pase aunque tenga el ordenador apagado**: con **Claude**, `/schedule`, que lo hace en su nube.
   Pide que la carpeta esté en GitHub («Subir a GitHub»), no ve lo que no se haya subido, y lo que hace
   lo deja allí, no en su ordenador: explícaselo antes, y ofrécelo solo si de verdad lo necesita. Con
-  **Codex** no se puede desde el editor: sus tareas programadas viven en la app de escritorio de
-  ChatGPT, con el ordenador encendido y la app abierta. No las prometas desde aquí.
+  **Codex**, prepara el encargo para su gestor de tareas programadas de ChatGPT: para trabajar con
+  los archivos de esta carpeta, la app de escritorio, con el ordenador encendido y la app abierta;
+  para documentos y conexiones accesibles en la web, también se pueden crear allí. El editor no
+  ofrece ese gestor. Desde *Rutinas y horarios* se prepara el encargo; la tarea queda activa cuando
+  se crea en el gestor del asistente y se comprueba allí. Sus ejecuciones y resultados se revisan allí.
 
 ## Cuando la barra falla o no se entiende
 
