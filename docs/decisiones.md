@@ -5213,3 +5213,34 @@ eso entraba en el historial, que no se deshace. Por eso poner copias seguía con
 - **Si `git status` fallaba, se guardaba sin tope.** Ahora no se guarda.
 - **Leer `git status`:** el nombre viejo de un renombrado se tomaba por un cambio más, y un enlace a un
   fichero grande contaba como pesado aunque git solo guarde el enlace. Las dos cosas, arregladas.
+
+## 148. Si el repositorio cambia de nombre, la barra se sigue poniendo al día
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho en el código; sale con la 0.52.0 · **Vía rápida** `el-sitio-se-llama-distinto`
+
+Jose, con la incidencia GR4ZCV: «No he podido ponerla» y *«No funciona»*. Ya en la organización, el
+repositorio pasó a llamarse `Executive-Lab/executive-vscode-interfaz`. GitHub redirige el nombre viejo y
+contesta, pero el paquete llega con la dirección nueva, que no estaba en `SITIOS`: la barra veía la 0.51.0
+y no la daba por buena (`sinPaquete`). Les pasa a todas las barras puestas. Es lo que la decisión 140
+quería evitar, esta vez por el nombre y no por la cuenta.
+
+- **El paquete vale si viene del repositorio de su propia versión publicada**, el que pone GitHub en la
+  dirección de la release (`html_url`), y si ese repositorio está en una de nuestras cuentas (`minarkap` o
+  `Executive-Lab`). Con eso, el próximo cambio de nombre no la para. El resto no cambia: la publica y sube
+  el fichero `minarkap`, y se comprueban su nombre, su tamaño y su huella.
+- **Estar en nuestras cuentas no basta.** En la organización también están los repositorios de los
+  alumnos: un paquete de un repositorio distinto al de su release no se instala.
+- `REPO` pasa al nombre nuevo, que entra en `SITIOS` para las incidencias y para limpiar los avisos.
+- **El informe de «Algo va mal» dice qué barra corre.** GR4ZCV venía de una ventana con la 0.46.0 sin
+  recargar, con la 0.51.0 ya instalada, y no lo decía en ningún sitio: parecía un fallo de la de hoy. Su
+  «Arreglarlo ahora» tampoco podía funcionar: el arnés de la 0.46.0 no conoce `connect-tool`. Recargando
+  la ventana se arreglan las dos cosas.
+
+Lo que no arregla: las barras puestas llevan la regla vieja dentro. Las 0.47–0.51 no se pondrán al día
+solas hasta que alguien les instale a mano una que lleve esta, o hasta que el repositorio vuelva a
+llamarse `executive-lab-interfaz`. La 0.46.0 y anteriores, ni así: solo aceptan la cuenta de Jose. El
+nombre lo decide Jose. La regla vale para los dos casos.
+
+**La revisión de seguridad** no encontró nada que bloquee. Para todo lo que probó siguen haciendo falta
+el autor, quien sube el fichero y la huella. Una nota: las cuentas salen de `SITIOS`, así que un sitio
+que se añada en otra cuenta la da por nuestra.
