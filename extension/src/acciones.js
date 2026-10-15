@@ -27,7 +27,9 @@ function habilidadesConBoton() {
   const carpeta = donde.carpetaDeBotones();
   if (!carpeta || !fs.existsSync(carpeta)) return [];
   const halladas = [];
-  for (const entrada of fs.readdirSync(carpeta, { withFileTypes: true })) {
+  let entradas;
+  try { entradas = fs.readdirSync(carpeta, { withFileTypes: true }); } catch { return []; }
+  for (const entrada of entradas) {
     if (entrada.name.startsWith('.') || !(entrada.isDirectory() || entrada.isSymbolicLink())) continue;
     const campos = frontmatter.leer(path.join(carpeta, entrada.name, 'SKILL.md'));
     const etiqueta = typeof campos.boton === 'string' ? campos.boton.trim() : '';

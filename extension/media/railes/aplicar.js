@@ -227,7 +227,8 @@ const yaNombrados = new Map();
 
 function nombrarLaHabilidad(quien, suyo) {
   if (!suyo.siempre) return `${quien} encuentra la habilidad solo`;
-  const suFichero = comoSeEscribe(suyo.siempre.fichero);
+  const partes = sitios.dondeVaLoDeSiempre(quien, destino) || suyo.siempre.fichero;
+  const suFichero = comoSeEscribe(partes);
   if (yaNombrados.has(suFichero)) return `${suFichero} ya apunta a la de ${yaNombrados.get(suFichero)}, que es la misma`;
 
   const dir = `${comoSeEscribe(suyo.habilidades)}/executive-lab`;
@@ -249,14 +250,20 @@ function nombrarLaHabilidad(quien, suyo) {
   // En una carpeta cuyo historial no creó la barra, un fichero suyo espera a su
   // sí (C-4), como el `CLAUDE.md` de Claude (revisión de F4, m6). Uno que solo
   // lleva lo de RSC, o que ya lleva lo nuestro, no es suyo.
-  const fichero = en(...suyo.siempre.fichero);
+  const fichero = en(...partes);
+  // Un override enlazado puede apuntar fuera de la empresa. Se puede leer,
+  // pero poner los raíles no debe escribir a través de él.
+  if (quien === 'codex' && partes[0] === 'AGENTS.override.md' && fs.lstatSync(fichero).isSymbolicLink()) {
+    pendientes.push('el bloque de Cómo se trabaja aquí');
+    return `${suFichero} es un enlace: no escribo a través de él`;
+  }
   if (ajena && !ponerBloque && esDeAlguien(fichero) && !ENTRE_MARCAS.test(leerSiHay(fichero))) {
     pendientes.push('el bloque de Cómo se trabaja aquí');
-    return `${comoSeEscribe(suyo.siempre.fichero)} (el trozo, pendiente: toca sus instrucciones, y se pide antes)`;
+    return `${suFichero} (el trozo, pendiente: toca sus instrucciones, y se pide antes)`;
   }
   ponerElTrozo(fichero, `${DESDE}\n${loQueDice}\n${HASTA}`);
   yaNombrados.set(suFichero, quien);
-  return `${comoSeEscribe(suyo.siempre.fichero)} (apunta a la habilidad)`;
+  return `${suFichero} (apunta a la habilidad)`;
 }
 
 

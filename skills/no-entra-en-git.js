@@ -56,6 +56,8 @@ const LO_QUE_NO_ENTRA = [
   // Los avisos para Executive Lab, mandados o no: llevan lo que la barra apuntó
   // por dentro, y lo que sale de aquí sale limpio y solo con su sí (decisión 131).
   '02-DOCS/raw/avisos/',
+  // Lo que el asistente le pide a la barra y lo que ella le contesta (decisión 150).
+  '02-DOCS/raw/pedidos/',
   // Los vídeos y las imágenes de disco, que pesan mucho y hacen el historial enorme
   // sin vuelta atrás (decisión 147). Aquí, y no solo al guardar desde la barra,
   // porque así tampoco entran cuando guarda el asistente. Con las dos formas de

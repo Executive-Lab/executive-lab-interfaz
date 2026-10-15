@@ -38,7 +38,7 @@ const DE_RSC = /^(\.rsc\.json$|\.rsc\/|\.claude\/rsc-bootstrap\.mjs$|.*\/\.rsc-s
 function comoSeDice(rel) {
   if (rel === '.gitignore') return 'la lista de lo que no entra en git';
   if (/^\.claude\/settings(\.local)?\.json$/.test(rel)) return 'los ajustes de Claude de esta carpeta';
-  if (/^(AGENTS|CLAUDE|GEMINI|CONVENTIONS)\.md$/.test(rel)) return 'Cómo se trabaja aquí';
+  if (/^(AGENTS(?:\.override)?|CLAUDE|GEMINI|CONVENTIONS)\.md$/.test(rel)) return 'Cómo se trabaja aquí';
   if (rel.startsWith('02-DOCS/wiki/harness/')) return 'el perfil y las decisiones del arnés';
   return `el fichero ${rel}`;
 }
@@ -58,8 +58,8 @@ function queChoca(rel, info) {
     if (comandos && path.posix.dirname(rel) === comandos && rel.endsWith('.md') && info.isFile()) {
       return { que: 'comando', id: path.posix.basename(rel, '.md') };
     }
-    if (agentes && path.posix.dirname(rel) === agentes && rel.endsWith('.md') && info.isFile()) {
-      return { que: 'agente', id: path.posix.basename(rel, '.md') };
+    if (agentes && path.posix.dirname(rel) === agentes && /\.(md|toml)$/.test(rel) && info.isFile()) {
+      return { que: 'agente', id: path.posix.basename(rel, path.posix.extname(rel)) };
     }
   }
   return null;
@@ -70,7 +70,7 @@ function queChoca(rel, info) {
 function nombreLibre(raiz, rel, que, id) {
   const carpeta = path.posix.dirname(rel);
   const final = que === 'habilidad' ? 'propia' : 'propio';
-  const extension = que === 'habilidad' ? '' : '.md';
+  const extension = que === 'habilidad' ? '' : path.posix.extname(rel);
   for (let n = 1; n < 100; n += 1) {
     const candidato = n === 1 ? `${id}-${final}` : `${id}-${final}-${n}`;
     if (!fs.existsSync(path.join(raiz, ...carpeta.split('/'), `${candidato}${extension}`))) return candidato;
@@ -110,6 +110,10 @@ function resumen(plan, raiz) {
     const dicho = comoSeDice('CLAUDE.md');
     if (!tocados.some((t) => t.enCristiano === dicho)) tocados.push({ fichero: 'CLAUDE.md', enCristiano: dicho });
   }
+  const conCodex = (plan.gestionados || []).some((g) => g.startsWith('.codex/'));
+  if (conCodex && require('./terreno').tieneTexto(path.join(raiz, 'AGENTS.override.md'))) {
+    tocados.push({ fichero: 'AGENTS.override.md', enCristiano: comoSeDice('AGENTS.override.md') });
+  }
   return { tocados, choques };
 }
 
@@ -118,6 +122,10 @@ function resumen(plan, raiz) {
 function cambiarElNombreDentro(fichero, nuevo) {
   if (!fs.existsSync(fichero)) return;
   const texto = fs.readFileSync(fichero, 'utf8');
+  if (fichero.endsWith('.toml')) {
+    fs.writeFileSync(fichero, require('./toml-campos').renombrar(texto, nuevo));
+    return;
+  }
   const cabecera = texto.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!cabecera || !/^name:.*$/m.test(cabecera[1])) return;
   const nueva = cabecera[0].replace(/^name:.*$/m, () => `name: ${nuevo}`);
@@ -139,12 +147,16 @@ const esUnEnlace = (fichero) => {
 // Si se puede renombrar sin tocar nada de fuera, o por qué no.
 function porQueNoSeRenombra(choque, raiz) {
   const desde = path.join(raiz, ...choque.fichero.split('/'));
-  const hacia = path.join(path.dirname(desde), `${choque.sugerido}${choque.que === 'habilidad' ? '' : '.md'}`);
+  const hacia = path.join(path.dirname(desde), `${choque.sugerido}${choque.que === 'habilidad' ? '' : path.extname(desde)}`);
   const conNombre = choque.que === 'habilidad' ? path.join(desde, 'SKILL.md') : desde;
   if (fs.existsSync(hacia)) return `ya existe ${path.basename(hacia)}`; // diccionario: interno
   // Cambiar el `name:` de un enlace escribe en el fichero al que apunta, fuera
   // de esta carpeta y quizá de otros proyectos (revisión de F2, I4).
   if (esUnEnlace(conNombre)) return `${path.basename(conNombre)} es un enlace a otro sitio`; // diccionario: interno
+  if (conNombre.endsWith('.toml')) {
+    try { require('./toml-campos').renombrar(fs.readFileSync(conNombre, 'utf8'), choque.sugerido); }
+    catch { return 'no se puede leer el nombre del agente'; } // diccionario: interno
+  }
   return null;
 }
 
@@ -160,7 +172,7 @@ function resolver(choques, elecciones, raiz) {
   for (const choque of choques) {
     if (elecciones[choque.fichero] !== 'renombrar') continue;
     const desde = path.join(raiz, ...choque.fichero.split('/'));
-    const extension = choque.que === 'habilidad' ? '' : '.md';
+    const extension = choque.que === 'habilidad' ? '' : path.extname(desde);
     const hacia = path.join(path.dirname(desde), `${choque.sugerido}${extension}`);
     try {
       fs.renameSync(desde, hacia);

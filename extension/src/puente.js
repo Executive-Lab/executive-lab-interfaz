@@ -27,14 +27,15 @@ async function primeroDisponible(candidatos) {
 }
 
 async function ejecutarSiExiste(candidatos) {
-  const comando = await primeroDisponible(candidatos);
-  if (!comando) return false;
-  try {
-    await vscode.commands.executeCommand(comando);
-    return true;
-  } catch {
-    return false;
+  const hay = await comandosDisponibles();
+  for (const comando of candidatos || []) {
+    if (!hay.includes(comando)) continue;
+    try {
+      await vscode.commands.executeCommand(comando);
+      return true;
+    } catch { /* el siguiente comando compatible, si lo hay */ }
   }
+  return false;
 }
 
 // OJO con esto: en Claude, `claude-vscode.focus` no pone el cursor en la caja.
@@ -93,13 +94,14 @@ const cabeEnElEnlace = (uri, plataforma = process.platform) => plataforma !== 'w
 
 // Al portapapeles, y se abre la conversación para pegarlo. Se dice por qué: no es
 // lo mismo un asistente al que no se le puede escribir que un texto largo.
-async function alPortapapeles(quien, texto, salida, porLargo = false) {
+async function alPortapapeles(quien, texto, salida, porLargo = false, plataforma = process.platform) {
   await vscode.env.clipboard.writeText(texto);
   await abrirConversacion();
   if (salida) salida.appendLine(`[puente] ${porLargo ? 'encargo largo en Windows' : `sin canal directo con ${quien.nombre}`}: al portapapeles`); // diccionario: interno
+  const pegar = plataforma === 'darwin' ? 'Cmd+V' : 'Ctrl+V';
   vscode.window.showWarningMessage(porLargo
-    ? `Es un texto largo: te lo he copiado para que llegue entero. Pégalo con Ctrl+V en la caja de ${quien.nombre} y dale a enviar.`
-    : `Con ${quien.nombre} no puedo escribirle yo. Te lo he copiado: pégalo con Ctrl+V en su caja y dale a enviar.`);
+    ? `Es un texto largo: te lo he copiado para que llegue entero. Pégalo con ${pegar} en la caja de ${quien.nombre} y dale a enviar.`
+    : `Con ${quien.nombre} no puedo escribirle yo. Te lo he copiado: pégalo con ${pegar} en su caja y dale a enviar.`);
   return 'copiado';
 }
 
@@ -123,7 +125,7 @@ async function enviar(texto, salida, { plataforma = process.platform } = {}) {
   // recoge: por eso se comprueba antes que su extensión está instalada.
   if (quien.enlace && asistentes.estaInstalado(quien)) {
     const uri = `${quien.enlace}?${quien.parametro}=${encodeURIComponent(texto)}`;
-    if (!cabeEnElEnlace(uri, plataforma)) return alPortapapeles(quien, texto, salida, true);
+    if (!cabeEnElEnlace(uri, plataforma)) return alPortapapeles(quien, texto, salida, true, plataforma);
     try {
       if (await vscode.env.openExternal(vscode.Uri.parse(uri))) return 'directo';
     } catch (error) {
@@ -142,7 +144,7 @@ async function enviar(texto, salida, { plataforma = process.platform } = {}) {
     }
   }
 
-  return alPortapapeles(quien, texto, salida);
+  return alPortapapeles(quien, texto, salida, false, plataforma);
 }
 
 // Vuelca lo que hay. Sirve para saber qué expone cada asistente sin leer código.

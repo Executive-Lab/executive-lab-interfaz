@@ -112,10 +112,12 @@ Todo sale del disco y de reglas (P5), en un módulo puro, `extension/src/ideas.j
   mutaciones, las 29 tumbadas**, entre ellas las que la revisión encontró vivas.
 - En total, **70 mutaciones a mano, las 70 tumbadas**: 28 de la primera entrega, 13 de los arreglos de seguridad y
   29 de los de corrección.
+- Con `main` traído (decisiones 150, 151, 153, 154 y 155): `humo.js` con 397 comprobaciones, y 405 con
+  `--con-arnes`. `contrato.js` con 14, `mapeos-codex.js` con 14, `empresas-distintas.js` con las tres empresas
+  enteras, y el diccionario y `revisar-powershell.js`, en verde.
 
 ## Next
 
-- **El emparejamiento de `consejos.js`.** Cuenta «cliente» y «clientes» como dos palabras distintas, y a
-  «llevar la contabilidad de mis clientes» le propone Ventas y oportunidades en vez de Contabilidad. Pasa
-  igual con el consejo de siempre, y cambiarlo mueve los consejos de todas las carpetas.
+- ~~**El emparejamiento de `consejos.js`.**~~ Contaba «cliente» y «clientes» como dos palabras distintas. Lo
+  arregló la PR #43, «El consejo cuenta cada palabra del texto una vez», ya traída a esta rama.
 - **Con personas.** Ver con un alumno, en una carpeta suya, si «Esto parece» le dice algo que reconoce.

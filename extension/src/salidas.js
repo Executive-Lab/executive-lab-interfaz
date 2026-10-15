@@ -115,7 +115,13 @@ async function abrir(herramienta, fichero) {
 async function guardarCopia(herramienta, fichero) {
   const completa = donde(herramienta, fichero);
   if (!completa) return { ok: false, mensaje: 'Ese archivo ya no está.' };
+  return llevarte(completa);
+}
 
+// Lo mismo para cualquier resultado que ya se sabe dónde está: lo usa también la
+// foto del cerebro (decisión 151).
+async function llevarte(completa) {
+  const fichero = path.basename(completa);
   const elegido = await vscode.window.showSaveDialog({
     defaultUri: vscode.Uri.file(path.join(require('node:os').homedir(), 'Desktop', fichero)),
     saveLabel: 'Guardar aquí',
@@ -141,4 +147,4 @@ async function abrirLaCarpeta(herramienta) {
   return { ok: true };
 }
 
-module.exports = { loQueHaProducido, abrir, guardarCopia, abrirLaCarpeta, TOPE };
+module.exports = { loQueHaProducido, abrir, guardarCopia, llevarte, abrirLaCarpeta, TOPE };

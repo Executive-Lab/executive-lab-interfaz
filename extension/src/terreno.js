@@ -235,7 +235,7 @@ const noEntra = require('../media/railes/no-entra-en-git');
 
 // Los cuatro ficheros de raíz que se llevan la peor parte de un merge y que un
 // asistente lee siempre. Si alguno tiene contenido, aquí había alguien.
-const FICHEROS_DE_ASISTENTE = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', 'CONVENTIONS.md', '.cursorrules'];
+const FICHEROS_DE_ASISTENTE = ['CLAUDE.md', 'AGENTS.md', 'AGENTS.override.md', 'GEMINI.md', 'CONVENTIONS.md', '.cursorrules'];
 
 const tieneAlgoDentro = (carpeta) => {
   if (!carpeta || !fs.existsSync(carpeta)) return 0;
@@ -368,8 +368,11 @@ function mirar() {
   // declara, descontadas las propias.
   const propias = new Set(['executive-lab', ...((declaracion && declaracion.ownSkills) || [])]);
   const deRsc = declaradas.filter((id) => !propias.has(id));
+  // Una habilidad nativa de Codex con el mismo nombre no completa la copia
+  // que RSC declaró en .codex/rsc. El diagnóstico mira esa copia concreta.
+  const delArnesEnDisco = rsc.habilidadesDelArnesEnDisco();
   const clonado = Boolean(declaracion) && (!proyecto.existe('.rsc')
-    || (deRsc.length > 0 && !deRsc.some((id) => enDisco.includes(id))));
+    || (deRsc.length > 0 && !deRsc.some((id) => delArnesEnDisco.includes(id))));
 
   return {
     raiz,
@@ -383,7 +386,7 @@ function mirar() {
       enDisco,
       // Declaradas y no montadas aquí: lo que RSC llama «what a fresh clone
       // looks like». Se arregla con `sync`, no volviendo a montar.
-      colgando: declaradas.filter((id) => !enDisco.includes(id)),
+      colgando: declaradas.filter((id) => !(propias.has(id) ? enDisco : delArnesEnDisco).includes(id)),
     },
     clonado,
     dentroDeOtro: queHayEncima(raiz),
@@ -499,7 +502,7 @@ function loDeSiempreDeCadaUno() {
   const declarados = declaracion && Array.isArray(declaracion.targets) && declaracion.targets.length
     ? declaracion.targets
     : [sitios.paraQuien(declaracion)];
-  return declarados.map((quien) => sitios.dondeVaLoDeSiempre(quien)).filter(Boolean).map((partes) => {
+  return declarados.map((quien) => sitios.dondeVaLoDeSiempre(quien, proyecto.raiz())).filter(Boolean).map((partes) => {
     let texto = null;
     try {
       texto = fs.readFileSync(proyecto.ruta(...partes), 'utf8');

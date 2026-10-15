@@ -162,9 +162,9 @@ hacerse solo, porque no se puede deshacer.
 - [x] 7. La prueba que dice que la clave puede escribir: conecta, se dice y se pregunta una vez.
 - [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [x] 9. Cuándo caduca una clave: decisión 149.
-- [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
-- [ ] 11. La foto del cerebro.
-- [ ] 12. Los datos de clientes, en Ayuda.
+- [x] 10. Añadir una habilidad sin mandar a nadie a la barra: decisión 150.
+- [x] 11. La foto del cerebro: decisión 151, `ftd/documentos-y-el-cerebro.md`.
+- [x] 12. Los datos de clientes, en Ayuda: `ftd/los-datos-de-clientes.md`, decisión 153.
 
 ## Evidence
 
@@ -260,10 +260,38 @@ hacerse solo, porque no se puede deshacer.
     - lo de caducar tapaba en la lista la pregunta de la clave que puede escribir;
     - una conexión a medio hacer preguntaba.
   - Cinco mutaciones vivas, y una más que salió después porque un paso nuevo vaciaba la prueba: 24 de 24.
+- **Punto 10** (decisión 150, 15-10): el asistente pregunta y deja `02-DOCS/raw/pedidos/<id>.habilidad`; la
+  barra la añade sola con la versión de la clase, o pregunta si no puede, y contesta siempre en `<id>.hecho`.
+  Con el arnés por delante le dice al asistente cómo, y si el nombre no existe, los que se parecen. El borrador
+  escribía a través de un `.hecho` enlazado a un fichero de la persona; ahora no sigue enlaces, probado con
+  enlaces de verdad. `humo.js` 376, contrato 14, las tres empresas y el diccionario en verde; 18 de 18
+  mutaciones (la carpeta y la respuesta con enlaces, el tope, la versión rara, sola sin confianza o sin
+  conocerla, el arnés por delante, un arreglo en marcha, el reloj, el vigía, cerrar la pregunta…).
+  Sin ejecutar: el vigía de VS Code de verdad (uno falso en su lugar, que no ve si avisa cuando `pedidos` se
+  crea después; el reloj del minuto lo cubre) y el `rsc add` de verdad (fingido; `rsc.anadir` no cambia y
+  tiene sus pruebas).
 
+- **Punto 11** (decisión 151, 15-10): la foto del cerebro, sin Obsidian. Un punto por concepto y una línea por
+  enlace, de markdown o `[[ ]]`; se pulsa un punto y se lee; «Guardar la foto» la deja en PNG en Resultados (out)
+  y lo dice en una frase. Se llega desde Documentos, que pasa a ser una pantalla (F7). `humo.js` 380, contrato 14,
+  diccionario, y 65 de 65 mutaciones.
+- **La revisión adversaria del punto 11** encontró seis fallos de seguridad (la foto congelaba el editor, se
+  escribía fuera a través de una wiki enlazada, un `.md` enlazado a `~/.ssh/config` se enseñaba…) y seis de
+  corrección (los avisos de Documentos y de la foto se los comía el vigía…), más 17 mutantes vivos. Arreglados
+  con su prueba: `humo.js` 385, las tres empresas con dieciocho pantallas, y 119 de 119 mutaciones.
+
+- **Punto 12** (decisión 153, 15-10): en Ayuda, «Si trabajas con datos de clientes», para leer: licencia de
+  empresa, dónde se apaga en Claude y en Codex, y lo que no se pega nunca. Sale de su tabla, comprobada ese día en
+  las páginas de Anthropic y OpenAI. La tarjeta lo dice una vez por carpeta, con la primera conexión puesta o el
+  primer documento, detrás de lo urgente. `humo.js` 375, contrato 14, diccionario, y 20 de 20 mutaciones.
+- **La revisión adversaria del punto 12** encontró que lo que deja la barra en `raw/` (los avisos, los informes)
+  contaba como documento entregado y gastaba la tarjeta. También que leerlo antes de tiempo la gastaba, cuatro
+  mutantes vivos y un nombre de menú de ChatGPT sin comprobar. Y uno de seguridad, de antes: la ruta `abrir` del
+  panel abría cualquier esquema y cualquier sitio, y la página de una conexión sale de su CREDENTIALS.md. Ahora
+  solo https, y lo que no es nuestro se pregunta con el sitio a la vista. `humo.js` 376 y 39 de 39 mutaciones.
 ## Next
 
-Del 1 al 9, hechos. Quedan del 10 al 12.
+Del 1 al 12, hechos.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la
