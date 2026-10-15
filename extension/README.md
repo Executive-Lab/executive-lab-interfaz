@@ -6,7 +6,7 @@ la vista, sin rutas, sin terminal y sin la palabra «commit».
 Está pensada para gente de pyme que no programa —y que a veces tiene poca soltura con el ordenador—
 y se apoya en [RSC](https://github.com/ericrisco/rsc-harness), que es quien monta el arnés de verdad.
 
-![La barra lateral](https://raw.githubusercontent.com/Executive-Lab/executive-lab-interfaz/main/docs/panel.png)
+![La barra lateral](https://raw.githubusercontent.com/Executive-Lab/executive-vscode-interfaz/main/docs/panel.png)
 
 ## Qué hace
 
@@ -48,7 +48,7 @@ el arnés viaja en la propia extensión.
 **Desde el editor:** busca «Executive Lab» en las extensiones.
 
 **Desde un `.vsix`:** descárgalo de
-[las releases](https://github.com/Executive-Lab/executive-lab-interfaz/releases) y arrástralo a VS Code,
+[las releases](https://github.com/Executive-Lab/executive-vscode-interfaz/releases) y arrástralo a VS Code,
 o `Ctrl+Shift+P` → *Extensions: Install from VSIX*.
 
 ## 🤖 Para agentes: «instálame esto»
@@ -58,7 +58,7 @@ que hay que hacer. **Pregunta antes de ejecutar nada** y no des por supuesta nin
 
 ```bash
 # 1. La extensión, desde el .vsix de la última release
-gh release download --repo Executive-Lab/executive-lab-interfaz --pattern '*.vsix' --dir /tmp
+gh release download --repo Executive-Lab/executive-vscode-interfaz --pattern '*.vsix' --dir /tmp
 code --install-extension /tmp/executive-lab-*.vsix --force
 ```
 

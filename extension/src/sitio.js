@@ -15,12 +15,27 @@
 // El traslado se hizo el 14 de octubre de 2026, con la 0.49.0 ya publicada: desde
 // la 0.50.0 se pregunta a la organización. La de antes se queda en `SITIOS`, por
 // los enlaces que ya estaban guardados.
+//
+// Después, ya en la organización, el repositorio cambió de nombre: de
+// `executive-lab-interfaz` a `executive-vscode-interfaz`. Pasó justo lo que se
+// quería evitar: ninguna barra puesta daba por bueno el paquete y ninguna se
+// ponía al día (incidencia GR4ZCV del 15 de octubre, decisión 148). Por eso, para el paquete, ya
+// no hace falta que el nombre esté en esta lista: basta con que sea el del
+// repositorio de su versión y esté en una de nuestras `CUENTAS` (ver
+// `version.js`).
 
-const REPO = 'Executive-Lab/executive-lab-interfaz';
-const SITIOS = ['minarkap/executive-lab-interfaz', 'Executive-Lab/executive-lab-interfaz'];
+const REPO = 'Executive-Lab/executive-vscode-interfaz';
+const SITIOS = ['minarkap/executive-lab-interfaz', 'Executive-Lab/executive-lab-interfaz', 'Executive-Lab/executive-vscode-interfaz'];
 const QUIEN_PUBLICA = 'minarkap';
 
 // En GitHub, `Executive-Lab` y `executive-lab` son el mismo sitio.
-const esNuestro = (sitio) => SITIOS.some((s) => s.toLowerCase() === String(sitio || '').toLowerCase());
+const mismoSitio = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+const esNuestro = (sitio) => SITIOS.some((s) => mismoSitio(s, sitio));
 
-module.exports = { REPO, SITIOS, QUIEN_PUBLICA, esNuestro };
+// Las cuentas donde ha vivido: la de Jose y la de la organización. En la
+// organización también están los repositorios de los alumnos, así que esto
+// solo no basta para fiarse de un sitio.
+const CUENTAS = [...new Set(SITIOS.map((s) => s.split('/')[0].toLowerCase()))];
+const enNuestrasCuentas = (sitio) => CUENTAS.includes(String(sitio || '').split('/')[0].toLowerCase());
+
+module.exports = { REPO, SITIOS, CUENTAS, QUIEN_PUBLICA, esNuestro, enNuestrasCuentas, mismoSitio };
