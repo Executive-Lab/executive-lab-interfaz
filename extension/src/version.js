@@ -27,7 +27,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const github = require('./github');
 
-const { REPO, QUIEN_PUBLICA, esNuestro } = require('./sitio');
+const { REPO, QUIEN_PUBLICA, esNuestro, enNuestrasCuentas, mismoSitio } = require('./sitio');
 const ULTIMA = `https://api.github.com/repos/${REPO}/releases/latest`;
 // Las de prueba no salen en `latest`: para quien se ofrece a probarlas, se mira
 // la lista entera, y de ahí la más nueva, sea o no de prueba (decisión 134).
@@ -112,7 +112,7 @@ function deUnaRelease(release) {
   // y tareas, que podrían cambiar el paquete de una versión que publicó otra
   // persona; GitHub daría la huella del cambiado (revisión de la decisión 140).
   const suyo = ((release && release.assets) || []).find((a) => a && a.name === nombre && a.uploader && a.uploader.login === DUENA);
-  const candidato = suyo ? { nombre, url: suyo.browser_download_url, tamano: suyo.size, huella: suyo.digest } : null;
+  const candidato = suyo ? { nombre, url: suyo.browser_download_url, tamano: suyo.size, huella: suyo.digest, sitio: sitioDeLaRelease(release) } : null;
   return { version, paquete: paqueteDeFiar(candidato, version) ? candidato : null, deprueba: Boolean(release.prerelease) };
 }
 
@@ -125,18 +125,32 @@ function laMasNueva(releases) {
     .reduce((mejor, r) => (!mejor || esMasNueva(r.version, mejor.version) ? r : mejor), null);
 }
 
+// De qué repositorio es una release, según la dirección que le pone GitHub.
+// Al preguntar por `REPO`, GitHub contesta con el repositorio de verdad aunque
+// le hayan cambiado el nombre o la cuenta.
+function sitioDeLaRelease(release) {
+  const m = String((release && release.html_url) || '').match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/releases\/tag\/[^/]+$/);
+  return m ? m[1] : null;
+}
+
 // Solo de nuestro sitio, de esa versión, y con huella. Lo que no cumpla las
-// tres no se baja: se ofrece la página. «Nuestro sitio» es cualquiera de los
-// dos, el de antes y el de después del traslado (decisión 140).
-function delPaqueteEnNuestroSitio(url, version) {
+// tres no se baja: se ofrece la página. «Nuestro sitio» es cualquiera de
+// `SITIOS` (decisión 140), o el repositorio de la propia release si está en una
+// de nuestras cuentas: así, si le vuelven a cambiar el nombre, las barras que
+// ya están puestas siguen poniéndose al día (decisión 148). Que esté en
+// nuestras cuentas no basta: en la organización están también los de los
+// alumnos.
+function delPaqueteEnNuestroSitio(url, version, sitioDeSuRelease) {
   const m = String(url || '').match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/releases\/download\/v([^/]+)\/([^/]+)$/);
-  return Boolean(m) && esNuestro(m[1]) && m[2] === version && m[3] === nombreDelPaquete(version);
+  if (!m) return false;
+  const nuestro = esNuestro(m[1]) || (enNuestrasCuentas(m[1]) && mismoSitio(m[1], sitioDeSuRelease));
+  return nuestro && m[2] === version && m[3] === nombreDelPaquete(version);
 }
 
 function paqueteDeFiar(paquete, version) {
   return Boolean(paquete)
     && paquete.nombre === nombreDelPaquete(version)
-    && delPaqueteEnNuestroSitio(paquete.url, version)
+    && delPaqueteEnNuestroSitio(paquete.url, version, paquete.sitio)
     && /^sha256:[0-9a-f]{64}$/.test(String(paquete.huella || ''))
     && Number.isInteger(paquete.tamano) && paquete.tamano > 0 && paquete.tamano <= TAMANO_MAXIMO;
 }
