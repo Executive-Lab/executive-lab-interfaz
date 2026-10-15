@@ -26,6 +26,10 @@
 // se usan con `--profile`, y esos no se tocan. En el `.codex/config.toml` de una
 // carpeta Codex no lee perfiles, así que ahí solo cuenta la línea de arriba.
 //
+// No usa `toml-campos.js` (decisión 154): ese lee los campos de arriba de un agente
+// y se para en la primera tabla, y aquí hace falta la línea entera y la tabla del
+// perfil. Este lee menos y, ante un texto de varias líneas, no toca nada.
+//
 // Quién y cuándo lo decide `extension.js`: al abrir, si la persona usa Codex.
 
 const fs = require('node:fs');

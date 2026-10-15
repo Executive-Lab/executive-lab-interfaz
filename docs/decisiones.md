@@ -5686,3 +5686,102 @@ Pruebas: creación, cambio, cancelación, cadencias, pendientes, nombre declarad
 del contenido, enlaces compartidos y fechas reales —incluido el cambio de hora y el año 2100—.
 La pantalla vacía también se prueba en las tres empresas de muestra. No se ha creado ninguna tarea
 en las cuentas personales de Claude o ChatGPT.
+
+## 157. Lo que traen los asistentes, y lo que se pone solo
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Jose: *«lo que pueda funcionar automático, mejor que funcione automático […] la interfaz es mejor que
+sugiera que lo haga sola en algunas cosas»*. Se investigó lo que traen hoy Claude Code, Codex y RSC
+3.0.22. Entra lo que es local, se deshace y no decide nada por nadie (P9). Lo demás queda en la tabla de
+abajo, con su porqué.
+
+- **El diagnóstico del arnés que sale con 1 se lee.** Desde la 2.0.19 (#277 de RSC), `doctor --json` sale
+  con 1 cuando falta algo, y aun así imprime el informe entero, con `healthy`. La barra lo tiraba por el
+  código. Así, justo con el arnés roto, «Algo va mal» decía «No he podido revisarlo entero» y «Qué falta
+  por montar» no veía lo que falta. Ahora un 1 con un informe es un informe, y está entero si lo dice
+  `healthy`. Lo que no es un informe, o sale con otro código, sigue sin saberse.
+- **Dos marcas más en las carpetas cuyo historial creó la barra** (`decidir.js`, P4), como la rama
+  principal abierta. Van justo antes de que la carpeta pase a la 3, y se quitan si la orden no sale.
+  - `.no-worktree-isolation`. Con dos conversaciones abiertas en la carpeta (una cuenta media hora desde
+    lo último que hizo), RSC manda al asistente a `.worktrees/<rama>/` y le dice que la persona abra el
+    proyecto desde allí, y su freno no deja cambiar de rama. Para un alumno es perderse. Es un `optOut`
+    del proyecto: RSC lo apunta en `.rsc.json` y un clon lo rehace. En Las reglas sale «Apagado a
+    propósito: todo se hace en esta carpeta».
+  - `.team-safe-3`. No es un interruptor: es lo que RSC deja tras soltar, en la primera conversación con
+    la 3, cuatro puntos sobre ramas, worktrees, FTD/SDD y `rsc/knowledge`. El cuarto, aquí, es falso:
+    compartir está apagado. Puesta antes, no se dice. Es de esta máquina y no viaja.
+  - Comprobado con el paquete: `rsc isolation status` dice `off` con la marca, el aviso de la 3 calla con
+    ella y sale sin ella, y `projectOptOuts` deja `worktree-isolation` y `audit` y no la de la barra.
+  - `.no-audit` no hace falta aquí. Los raíles lo ponen en todas las carpetas desde el 19-09-2026
+    (`CALLAR` en `aplicar.js`), y RSC lo apunta igual. Ponerlo en los dos sitios era tener dos dueños para
+    lo mismo.
+- **Los ajustes de Claude de esta persona, en esta carpeta** (`.claude/settings.local.json`,
+  `ajustes-locales.js`). Se ponen al montar, en el paso de los raíles, y en las carpetas ya montadas, al
+  abrir, como lo demás que se hace solo: con confianza y en una carpeta conocida. Solo si la carpeta está
+  montada para Claude y su historial lo creó la barra: en la de alguien, sus ajustes y su forma de
+  trabajar son suyos.
+  - `"language": "español"`. Claude lo pasa tal cual como la instrucción de contestar siempre en ese
+    idioma. En la clase del 13-10 el asistente se puso a hablar en catalán. No se pone si alguien ya ha
+    dicho un idioma, aquí, en los ajustes de la carpeta o en los suyos de usuario, porque este fichero
+    manda sobre los otros dos.
+  - `permissions.ask` con `Bash(git push *)` y `Bash(gh pr create *)`. Subir a GitHub sale del ordenador
+    en su nombre (P9), y en modo auto, con el que arranca Claude en el editor, se sube sin preguntar. Un
+    `ask` gana a cualquier `allow`, también al de `gitPermissions` de RSC, y pregunta aunque la orden vaya
+    encadenada a otra. No es una muralla: `git -C . push` no casa con la regla. Si la persona ya dijo algo
+    de esa regla, aquí o en sus ajustes de usuario, se respeta. La barra sube con su propio git, y no le
+    afecta.
+  - Con el cuidado del control remoto (decisión 143): nada más del fichero, entero o nada y con sus
+    permisos. Nunca a través de un enlace. Nada si no se entiende, ni si el fichero está en git, porque
+    entonces viaja. Y queda constancia en `.rsc/`, para quitar solo lo que puso la barra y solo si sigue
+    como lo dejó: `node extension/src/ajustes-locales.js --quitar <carpeta>`.
+  - Se dice una vez: «He dejado a Claude hablándote en español y preguntándote antes de subir nada a
+    GitHub.» Si al abrir se arregla algo más, las dos frases salen juntas.
+  - **Y no entra en git.** Claude lo deja fuera cuando lo crea él, pero aquí lo crean RSC (su memoria) y la
+    barra, y RSC solo lo excluye si había git al montar. Con «seguir sin copias» y «Ponerlas ahora»
+    después, entraba en la copia, y con él en git la memoria de RSC deja de engancharse. Ahora va en la
+    lista de lo que no entra (`no-entra-en-git.js`), así que los raíles de todas las carpetas se ponen al
+    día al abrir.
+- **Codex con una versión que ya no existe** (`retirados.js`). GPT-5.5 dejó de funcionar en Codex con
+  cuenta de ChatGPT el 14-10-2026; antes, GPT-5.4 y GPT-5.4 mini (31-08) y GPT-5.3-Codex-Spark (14-09). Con
+  `model = "gpt-5.5"` en su `config.toml`, el de `$CODEX_HOME` o el de `.codex/` de la carpeta, Codex no
+  contesta, y nada dice por qué.
+  - Si la persona usa Codex (lo tiene en el editor, o la carpeta está montada para él), la barra quita al
+    abrir esa línea, y la del perfil activo de antes de la 0.134.0, deja una copia al lado y lo dice:
+    «He arreglado Codex: tenía elegida una versión que ya no existe (GPT-5.5). Empieza una conversación
+    nueva para que lo coja.»
+  - El de la persona, como el control remoto; el de la carpeta, solo en una conocida y cuyo historial creó
+    la barra.
+  - La lista es una tabla con su fecha y su fuente (`media/modelos-retirados.json`, P5). Una fila con
+    fecha futura espera a su hora.
+  - No se toca con una clave de la API, porque ahí siguen funcionando; ni lo que no se entiende (un texto de
+    varias líneas, dos `model` en el mismo sitio); ni a través de un enlace.
+- Rutinas y tareas programadas: ver la 155.
+
+**Lo investigado que no se mete, y por qué:**
+
+| Qué | Valor | Por qué no ahora |
+|---|---|---|
+| Un aviso del sistema cuando Claude o Codex terminan (el enganche `Notification`/`Stop` de Claude, `notify` de Codex) | medio-alto | Va en los ajustes de la persona y pide una orden distinta por sistema operativo (`osascript`, PowerShell, `notify-send`). Es lo siguiente. |
+| Abrir Codex con el texto ya puesto (`vscode://openai.chatgpt/?prompt=`) | alto | No está documentado. Hay que probarlo con una persona antes de fiarse de él. |
+| `codex exec` o `claude -p` a una hora, sin nadie delante | alto | La norma de Anthropic no deja que un producto de terceros ofrezca el login de claude.ai ni sus límites sin su permiso (code.claude.com/docs/en/agent-sdk), y cada vuelta gasta el plan de la persona sin que nadie mire (P9: cuesta dinero). |
+| Elegir el modo auto de Claude por la persona | — | Ya arranca en él, y elegir cuánto pregunta es suyo («Qué puede hacer sin preguntarte»). Lo que faltaba es que subir siempre pregunte, y eso sí entra. |
+| La caja de arena de las órdenes (`sandbox`) | medio | Cambia lo que el asistente puede hacer en su ordenador, y pide medirlo en Mac y en Windows. |
+| Las memorias de Codex | bajo | La memoria entre conversaciones ya la pone RSC, con los dos. |
+| «Approve for me» y los permisos sueltos de Codex | — | Quitan preguntas en su nombre: lo contrario de P9. |
+| `.no-audit` desde `decidir.js` | — | Ya lo ponen los raíles en todas las carpetas. |
+
+**Lo que se propone y no se construye:**
+- En una carpeta de alguien, los ajustes de Claude y el Codex de la carpeta, ofrecidos con su botón, como
+  el freno (C-4).
+- Un interruptor en «Cómo quieres que trabaje» para quitar lo de Claude sin ir a mano.
+- `.team-safe-3` cuando una carpeta de la barra que ya va en la 3 se trae a otro ordenador: `.rsc/` no
+  viaja, `decidir.js` no toca una carpeta que ya va en la 3, y el aviso saldría una vez.
+- Mirar la tabla de retirados también con el editor abierto, no solo al abrir.
+
+**Un hallazgo de paso, sin tocar:** los raíles ponen `.no-audit`, `.no-worktree-cleanup` y `.no-gitmoji`
+también en las carpetas de alguien, y RSC los apunta en su `.rsc.json` la próxima vez que escribe. Es
+decidir por su equipo. Se apunta para revisarlo aparte.
+
+`humo.js`: 397 comprobaciones con main traído, seis nuevas. 33 mutaciones a mano, las 33 tumbadas (una, tras
+reforzar su prueba). `contrato.js`, `empresas-distintas.js`, `mapeos-codex.js` y el diccionario, en verde.
