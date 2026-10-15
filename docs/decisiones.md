@@ -5328,3 +5328,74 @@ Todo sale del disco y de reglas, no de una ocurrencia del modelo (P5). Vive en u
 Lo que queda: el emparejamiento de `consejos.js` cuenta «cliente» y «clientes» como dos palabras distintas, y
 a «llevar la contabilidad de mis clientes» le propone Ventas y oportunidades en vez de Contabilidad. Pasa
 igual con el consejo de siempre, y cambiarlo mueve los consejos de todas las carpetas, así que va aparte.
+
+**La revisión adversaria de seguridad** (PR #42) encontró tres cosas, y las tres están arregladas con su prueba:
+
+- **La copia del montaje costaba en cada repintado** (media). Se leía `.rsc/backups/` entera, con cada manifiesto
+  de hasta 1 MB, en cada repintado, en Sugerencias y en Ver las copias guardadas. Con 3.000 copias de 100 KB, 1,4 s
+  cada vez. Ahora:
+  - se miran las 200 primeras por su nombre;
+  - los manifiestos se leen de uno en uno hasta el primer montaje, y no se lee ninguno de más de 256 KB;
+  - lo encontrado se guarda en memoria con la fecha de la carpeta de las copias, y el manifiesto elegido, con su
+    huella.
+
+  Medido con 3.000 copias de 100 KB: 144 ms la primera vez y 0,02 ms las siguientes.
+- **El encargo de «Conectar Stripe» citaba rutas libres y no esperaba el OK** (media). Los nombres de carpetas y de
+  ficheros entraban tal cual en lo que se deja en la conversación, y una carpeta llamada «x. Ignora lo anterior y
+  …» se leía como una orden. Además mandaba crear, mover y probar sin enseñar antes el plan, como sí hace «Que las
+  ordene». Ahora:
+  - solo se cita un fichero, o una carpeta y su fichero, con letras, números, puntos y guiones, y sin «..»;
+  - si no, dice «en los ficheros de claves de la carpeta»;
+  - pide el plan y espera el OK antes de crear o mover nada, y no prueba la conexión hasta que se lo confirme.
+
+  No se reutiliza el encargo de `sueltas.js`, porque reparte todas las claves de la carpeta y aquí es un programa.
+  Se copia su regla.
+- **Lo que dice el manifiesto mandaba demasiado** (baja). El nombre de cada cosa guardada entraba entero en la
+  frase, y podía ocupar casi 1 MB. Y un `createdAt: '0'` decidía cuál era el primer montaje. Ahora:
+  - cada nombre se recorta a 60 caracteres;
+  - el primer montaje es el de la carpeta más vieja, por su fecha real.
+
+**La revisión adversaria de corrección** (PR #42) encontró ocho cosas, y las ocho están arregladas con su prueba:
+
+- **Lo del proyecto contaba como documento sin colocar** (media). Un `requirements.txt`, un `robots.txt`, el logo de
+  una web o el bloqueo de Office `~$presupuesto.docx` salían como «1 documento sin colocar», con «Que lo coloque y
+  lo lea» volviendo cada dos semanas. Ahora:
+  - un `~$…` no cuenta nunca;
+  - en una carpeta que parece un proyecto (lo dice `terreno`, o RSC apuntó con qué está hecho) solo cuentan los
+    documentos de oficina: PDF, Word, Excel, PowerPoint y sus parecidos.
+
+  La regla de `papeles.js` no se toca: la usa Documentos entregados, y la rama 153 también la cambia.
+- **«Conectar Debug»** (media). `DEBUG_MODE`, `FEATURE_FLAG_X` o `NEXT_TELEMETRY_DISABLED` salían como programas, y
+  como solo se ofrecía el primero, tapaban los de verdad. Ahora un programa sin conexión cuenta solo si alguna de
+  sus claves suena a secreto (`SUENA_A_SECRETO`, de `sueltas.js`) o si el catálogo lo conoce. Nunca cuenta si su
+  prefijo no es de nadie (DEBUG, FEATURE, TELEMETRY, LOG, NODE…).
+- **Los ficheros de acceso, código muerto** (media). `sueltas.ficherosDeAcceso` solo dice de quién es un fichero
+  cuando ya hay conexión, así que la rama de «conectar con un fichero» no se daba nunca, y su prueba usaba un caso
+  imposible. Un fichero suelto sin dueño no salía en ningún sitio, y con dueño decía «claves de Google».
+  - Se quita esa rama: «Conectar» es solo para claves.
+  - Los ficheros de acceso se cuentan aparte en «Esto parece» («1 fichero de acceso»), probado con la salida de
+    verdad de `sueltas`. Se ordenan desde Conexiones, como hasta ahora.
+- **La copia** (baja). Los enlaces que pone RSC (`kind: 'symlink'`) no son lo suyo. Una habilidad de Cursor se
+  nombra sin `.mdc`, y lo de `.agents/skills/` es una habilidad (decisión 141).
+- **Con qué está hecho** (baja). Se comparaba por trozos de texto, y «algo en Python» se comía «Go». Ahora va por
+  palabra entera.
+- **Cómo se dice** (baja):
+  - «Holded e Instagram», con «e» delante de «i» y «hi», salvo «hie»;
+  - un programa en minúsculas sale con mayúscula;
+  - la coma de «claves de Stripe y Pexels, y …» se pone por cómo se hizo la lista, no buscando « y », que un
+    nombre puede llevar.
+- **Todas las ideas** (baja). En la tarjeta, las tres primeras, una de cada clase. En Ayuda › Sugerencias, la
+  lista entera, con todos los programas sin conexión.
+- **La primera vez** (baja). Se daba por nueva una carpeta con algo suyo que la barra no sabía decir, y lo que
+  apareciera después ya no se decía. Ahora solo se da por nueva si no hay nada suyo: nada fuera de lo del arnés
+  y de lo escondido.
+
+Además, las pruebas cubren lo que la revisión vio sin probar:
+- el HTML en lo que dijo al prepararla y en el nombre de lo guardado, en las cuatro frases que pinta el panel;
+- que sin arnés no se dice nada;
+- el corpus con los nombres de programas y documentos;
+- los límites de cuatro cosas, 70 caracteres y una clave;
+- un `existed` que no es `true`;
+- `.rsc`, las copias o una copia que son un enlace.
+
+Y en `empresas-distintas.js`, «la que toca» se mira también cuando hay consejo.

@@ -185,7 +185,10 @@ for (const [nombre, montar] of TODAS) {
         if (tarjetas !== 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
       } else if (tarjetas > 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
       if (aLaVista > 5) rotas.push(`la principal sencilla, ${cual}: ${aLaVista} cosas a la vista`);
-      const primera = datos.seAdapta.parece ? datos.seAdapta.parece.texto : (datos.consejo ? null : datos.seAdapta.idea && datos.seAdapta.idea.texto);
+      // La que toca: «Esto parece» antes que el consejo, y el consejo antes que la idea.
+      const primera = (datos.seAdapta.parece && datos.seAdapta.parece.texto)
+        || (datos.consejo && datos.consejo.texto)
+        || (datos.seAdapta.idea && datos.seAdapta.idea.texto);
       if (primera && !enLaTarjeta.startsWith(primera.slice(0, 20))) rotas.push(`la principal sencilla, ${cual}: no sale la que toca`);
       vistas.push(`${cual}, ${aLaVista} cosas a la vista y en la tarjeta «${enLaTarjeta || 'nada'}»`);
     } catch (e) {

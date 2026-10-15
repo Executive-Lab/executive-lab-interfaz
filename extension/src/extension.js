@@ -692,8 +692,9 @@ ${cabecera}
   // ── Se adapta y da ideas (decisión 152) ──────────────────────────────
 
   // «Esto parece …», la primera vez, y la idea que toca. Si la primera vez no
-  // hay nada que decir —una carpeta nueva—, ya no se dirá: lo que crezca aquí
-  // después lo ha hecho ella, y «esto parece» le contaría lo que ya sabe.
+  // hay nada —una carpeta nueva—, ya no se dirá: lo que crezca aquí después lo
+  // ha hecho ella, y «esto parece» le contaría lo que ya sabe. Pero si hay algo
+  // suyo que la barra todavía no sabe decir, se espera (revisión de corrección, 8).
   async loQueSeAdapta() {
     try {
       if (!proyecto.arnesCompleto()) return null;
@@ -703,8 +704,8 @@ ${cabecera}
         silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
       });
       const yaSeDijo = this.almacen().get(CLAVE_LO_QUE_PARECE);
-      if (!yaSeDijo && !visto.parece) await this.almacen().update(CLAVE_LO_QUE_PARECE, 'nada');
-      return { parece: yaSeDijo ? null : visto.parece, idea: visto.ideas[0] || null };
+      if (!yaSeDijo && !visto.parece && !visto.hayAlgoSuyo) await this.almacen().update(CLAVE_LO_QUE_PARECE, 'nada');
+      return { parece: yaSeDijo ? null : visto.parece, idea: visto.idea };
     } catch (error) {
       // Como el consejo: es un extra, y si falla la barra sigue igual.
       this.salida.appendLine(`[ideas] ${error.stack || error.message}`); // diccionario: interno
@@ -1658,7 +1659,7 @@ ${cabecera}
     let ahora = [];
     try {
       ahora = consejos.consejos(await this.queVeoYo());
-      // Y las ideas de lo que hay aquí (decisión 152), sin repetir ninguna.
+      // Y las ideas de lo que hay aquí, todas (decisión 152), sin repetir ninguna.
       const visto = ideas.queSeVe({
         carpetaDeLaExtension: this.contexto.extensionPath,
         corpus: this.corpus(),

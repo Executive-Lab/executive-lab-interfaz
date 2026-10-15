@@ -84,6 +84,34 @@ Todo sale del disco y de reglas (P5), en un módulo puro, `extension/src/ideas.j
   - el «Ahora no» de la idea fuera de su tarjeta no se veía, porque solo se buscaba el botón.
 
   Las tres pruebas se reforzaron, y las tres mutaciones caen, más una cuarta en las tres empresas.
+- **La revisión adversaria de seguridad** (PR #42) encontró tres cosas, y las tres están arregladas con su prueba
+  (decisión 152):
+  - la copia del montaje se leía entera en cada repintado: 1,4 s con 3.000 copias. Ahora tiene topes (200 copias,
+    manifiestos de 256 KB como mucho, de uno en uno hasta el primer montaje) y se guarda en memoria: 144 ms la
+    primera vez y 0,02 ms después;
+  - el encargo de «Conectar» citaba rutas libres, donde cabía una orden, y no esperaba el OK. Ahora solo cita
+    rutas sencillas, y si no dice «los ficheros de claves de la carpeta». Pide el plan antes de crear o mover nada
+    y no prueba la conexión sin que se lo confirme;
+  - el nombre de lo guardado entraba entero, y un `createdAt` falso elegía la copia. Ahora se recorta a 60
+    caracteres, y cuenta la fecha real de la carpeta.
+
+  Con una comprobación nueva en `humo.js` y las de antes reforzadas. **13 mutaciones, las 13 tumbadas.**
+- **La revisión adversaria de corrección** (PR #42) encontró ocho cosas, y las ocho están arregladas con su prueba
+  (decisión 152):
+  - lo del proyecto (`requirements.txt`, el logo de la web, `~$…`) contaba como documento sin colocar;
+  - «Conectar Debug» por `DEBUG_MODE`, que además tapaba los programas de verdad;
+  - la rama de los ficheros de acceso no se daba nunca. Se quita, y se cuentan aparte en «Esto parece»;
+  - los enlaces de RSC salían como suyos en la copia, y los nombres de Cursor y de los botones salían mal;
+  - «algo» se comía «Go»;
+  - «Holded e Instagram», la mayúscula y la coma;
+  - Sugerencias no tenía la lista entera;
+  - la primera vez daba por nueva una carpeta con algo suyo.
+
+  Una comprobación nueva en `humo.js` («lo que lee del disco»), con la salida de verdad de `terreno`, `sueltas` y
+  `papeles`, el HTML escapado en las cuatro frases y la carpeta sin arnés. Las de antes, reforzadas. **29
+  mutaciones, las 29 tumbadas**, entre ellas las que la revisión encontró vivas.
+- En total, **70 mutaciones a mano, las 70 tumbadas**: 28 de la primera entrega, 13 de los arreglos de seguridad y
+  29 de los de corrección.
 
 ## Next
 
