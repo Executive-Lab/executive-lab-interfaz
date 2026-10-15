@@ -204,6 +204,8 @@ function bloqueAviso(cual = aviso) {
   const manda = cual.malo && /Algo va mal/.test(cual.texto || '');
   return `<div class="aviso ${cual.malo ? 'malo' : ''}">${texto(cual.texto)}</div>`
     + (cual.boton && cual.boton.etiqueta && cual.boton.accion ? boton({ etiqueta: cual.boton.etiqueta, icono: '▸', pequeno: true, accion: cual.boton.accion }) : '')
+    // O varios, cuando lo que dice es una pregunta y cada uno es una respuesta.
+    + (Array.isArray(cual.botones) ? cual.botones.filter((b) => b && b.etiqueta && b.accion).map((b) => boton({ etiqueta: b.etiqueta, icono: '▸', pequeno: true, accion: b.accion })).join('') : '')
     + (manda ? boton({ etiqueta: 'Algo va mal', icono: '🆘', accion: { tipo: 'algoVaMal' } }) : '');
 }
 
@@ -2289,11 +2291,14 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
             // Lo que dijo su última prueba, mientras sus claves sigan igual
             // (decisión 146): «conectada», o por qué falla, en una frase.
             : (p.prueba
-              ? (p.prueba.ok ? `${p.etiqueta} — conectada · probada ${p.prueba.cuando}` : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
+              ? (p.prueba.ok
+                // Conecta con una clave que puede escribir, y no ha dicho qué hace con ella.
+                ? (p.prueba.puedeEscribir ? `${p.etiqueta} — conecta, pero puede cambiar y borrar` : `${p.etiqueta} — conectada · probada ${p.prueba.cuando}`)
+                : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
               // Se autentica con un fichero y no con claves: decir su nombre a
               // secas dejaría pensando que no tiene nada puesto (decisión 105).
               : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta)))),
-      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.fueraDeSitio ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●'))),
+      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.fueraDeSitio || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●'))),
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}
     ${porMontar}
