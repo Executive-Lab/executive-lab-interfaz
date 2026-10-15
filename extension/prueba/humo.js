@@ -2303,6 +2303,10 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     get(k) { return this.datos.get(k); },
     async update(k, v) { this.datos.set(k, v); },
   };
+  // La tarjeta de los datos de clientes sale una vez, al entrar los primeros datos
+  // (decisión 153), y la empresa de mentira ya tiene Holded puesta: las pruebas de
+  // siempre no la esperan. Se da por dicha; la suya la quita y la vuelve a poner.
+  contexto.workspaceState.datos.set('executiveLab.datosDeClientesDicho', 1);
 
   await comprobar('una carpeta que no es una empresa no se toca', async () => {
     const otroProyecto = fs.mkdtempSync(path.join(os.tmpdir(), 'otro-proyecto-'));
@@ -13464,6 +13468,272 @@ exec git "$@"
       for (const [i, k] of CLAVES.entries()) await almacen.update(k, antes.guardado[i]);
       proveedor.enviar = antes.enviar;
       vscode.guion.raiz = antes.raiz;
+      vscode.guion.eleccion = antes.eleccion;
+    }
+  });
+
+  await comprobar('los datos de clientes: en Ayuda para leer, dichos una vez al entrar los primeros datos, sin tapar lo urgente y con los enlaces oficiales', async () => {
+    // Decisión 153, el punto 12 de la 142. Eric, en la clase del 13-10: con datos de
+    // clientes, licencia de empresa, y dónde se apaga que se usen tus datos. Es para
+    // leer; lo que la barra hace sola es decirlo a tiempo, una vez por carpeta.
+    const clientesM = cargar('clientes');
+    const asistentesM = cargar('asistentes');
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const tabla = JSON.parse(fs.readFileSync(path.join(RAIZ, 'media', 'datos-de-clientes.json'), 'utf8'));
+    const enviados = [];
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, dicho: almacen.get(clientesM.CLAVE), completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'], donde: proveedor.contexto.extensionPath };
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const desescapar = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    // Cada botón, con lo que hace: [rótulo, acción].
+    const botones = (html) => [...html.matchAll(/<button[^>]*data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)]
+      .map(([, accion, dentro]) => [dentro.replace(/<span class="icono"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), JSON.parse(desescapar(accion))]);
+    const lleva = (html, etiqueta) => (botones(html).find(([e]) => e === etiqueta) || [])[1];
+    try {
+      // ── Lo que dice, de su tabla: las tres cosas, y cada asistente de la barra con su camino.
+      assert.equal(tabla.titulo, 'Si trabajas con datos de clientes');
+      assert.deepEqual(tabla.partes.map((p) => p.titulo), ['Con datos de clientes, una licencia de empresa', 'Dónde se apaga que se usen tus datos', 'Lo que no se pega nunca'], 'faltan o sobran partes');
+      const [licencia, apagar, nunca] = tabla.partes.map((p) => p.lineas.map((l) => l.texto).join(' '));
+      for (const plan of ['Team', 'Enterprise', 'Education', 'Business', 'Edu']) assert.match(licencia, new RegExp(`\\b${plan}\\b`), `la licencia de empresa no nombra ${plan}`);
+      assert.match(licencia, /plan personal.*depende de un ajuste/, 'no dice que con un plan personal depende de un ajuste');
+      const de = Object.fromEntries(tabla.partes[1].lineas.map((l) => [l.asistente, l]));
+      assert.deepEqual(Object.keys(de).sort(), asistentesM.ASISTENTES.map((a) => a.id).sort(), 'no dice dónde se apaga en cada asistente de la barra');
+      assert.match(de.claude.texto, /Configuración › Privacidad, y apaga «Ayudar a mejorar nuestros modelos de IA»/);
+      // En ChatGPT, los nombres como los da la fuente comprobada, en inglés: la ayuda en
+      // español no se deja leer (403), así que su traducción no se da por el menú (revisión).
+      assert.match(de.codex.texto, /Settings › Data controls .*apaga «Improve the model for everyone»/);
+      assert.doesNotMatch(de.codex.texto, /«Mejorar el modelo para todos»/, 'da por nombre del menú uno que no está comprobado');
+      // Y vale para las tareas de Codex, no para todo Codex: el de la nube tiene su ajuste aparte.
+      assert.match(de.codex.texto, /Vale también para las tareas de Codex\./);
+      for (const que of [/Claves de acceso y contraseñas/, /tarjeta o de cuenta del banco/, /salud o documentos de identidad/, /pulgar/]) assert.match(nunca, que, `lo que no se pega no dice ${que}`);
+      // Los enlaces: los de ajustes, los comprobados; y todos, https y de Anthropic u OpenAI.
+      assert.equal(de.claude.url, 'https://claude.ai/settings/data-privacy-controls', 'los ajustes de Claude no son los oficiales');
+      assert.equal(de.codex.url, 'https://chatgpt.com/#settings/DataControls', 'los ajustes de ChatGPT no son los oficiales');
+      const OFICIALES = { 'claude.ai': 'Anthropic', 'privacy.claude.com': 'Anthropic', 'chatgpt.com': 'OpenAI', 'help.openai.com': 'OpenAI' };
+      const urls = JSON.stringify(tabla).match(/[a-z]+:\/\/[^"\s]+/g) || [];
+      for (const u of urls) {
+        const { protocol, hostname } = new URL(u);
+        assert.equal(protocol, 'https:', `«${u}» no va por https`);
+        assert.ok(OFICIALES[hostname], `«${u}» no es una página de Anthropic ni de OpenAI`);
+      }
+      assert.deepEqual(tabla.fuentes.map((f) => OFICIALES[new URL(f.url).hostname]), ['Anthropic', 'OpenAI'], 'falta lo que dice una de las dos');
+      // La fecha del pie es la de «comprobado».
+      const comprobado = `el ${new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${tabla.comprobado}T12:00:00`))}`;
+      assert.ok(tabla.pie.startsWith(`Comprobado ${comprobado} `), `el pie no dice la fecha de «comprobado» (${comprobado})`);
+      // Y el diccionario la mira: una palabra prohibida en la tabla se caza.
+      const sembrada = fs.mkdtempSync(path.join(os.tmpdir(), 'diccionario-clientes-'));
+      fs.mkdirSync(path.join(sembrada, 'docs'));
+      fs.copyFileSync(path.join(RAIZ, '..', 'docs', 'diccionario.md'), path.join(sembrada, 'docs', 'diccionario.md'));
+      fs.mkdirSync(path.join(sembrada, 'extension', 'media'), { recursive: true });
+      const mala = JSON.parse(JSON.stringify(tabla));
+      mala.partes[2].lineas[0].texto = 'Nunca pegues la clave de la API.';
+      fs.writeFileSync(path.join(sembrada, 'extension', 'media', 'datos-de-clientes.json'), JSON.stringify(mala));
+      const cazadas = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js')).revisarTodo(sembrada);
+      assert.ok(cazadas.some((f) => f.fichero === 'extension/media/datos-de-clientes.json' && f.mala === 'api'), 'el diccionario no mira la tabla de los datos de clientes');
+
+      // ── En Ayuda: en la sencilla y en «Más ayuda», con el nombre de su pantalla.
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+      await proveedor.refrescar(true);
+      assert.equal(lleva(pintar(ultimo('estado')), tabla.titulo).tipo, 'verDatosDeClientes', 'no sale en la Ayuda de la sencilla');
+      await proveedor.manejar({ tipo: 'verAyuda' });
+      assert.equal(lleva(pintar(ultimo('ayuda')), tabla.titulo).tipo, 'verDatosDeClientes', 'no sale en Más ayuda');
+      await almacen.update(clientesM.CLAVE, undefined);
+      await proveedor.manejar({ tipo: 'verDatosDeClientes' });
+      const pantalla = pintar(ultimo('datosDeClientes'));
+      for (const t of [tabla.titulo, tabla.entradilla, tabla.pie, ...tabla.partes.flatMap((p) => [p.titulo, ...p.lineas.map((l) => l.texto)])]) {
+        assert.ok(pantalla.includes(t.replace(/&/g, '&amp;')), `la pantalla no dice «${t.slice(0, 50)}»`);
+      }
+      for (const l of [...tabla.partes[1].lineas, ...tabla.fuentes]) assert.deepEqual(lleva(pantalla, l.boton), { tipo: 'abrir', url: l.url }, `«${l.boton}» no abre su página`);
+      assert.deepEqual(lleva(pantalla, 'Volver'), { tipo: 'verAyuda' }, '«Volver» no vuelve a Ayuda');
+      // Leerlo, desde Ayuda, cuenta como dicho; y en esta carpeta, no en todas.
+      assert.ok(proveedor.contexto.workspaceState.get(clientesM.CLAVE), 'leerlo no lo da por dicho en esta carpeta');
+      assert.equal(proveedor.contexto.globalState.get(clientesM.CLAVE), undefined, 'se da por dicho en todas las carpetas');
+      // Sin la tabla no se pinta nada a medias: se dice, y queda apuntado.
+      proveedor.contexto.extensionPath = path.join(os.tmpdir(), 'no-existe-esta-barra');
+      await proveedor.manejar({ tipo: 'verDatosDeClientes' });
+      assert.deepEqual([ultimo('aviso').texto, ultimo('aviso').malo], ['No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', true]);
+      proveedor.contexto.extensionPath = antes.donde;
+
+      // ── Una vez por carpeta, al entrar los primeros datos de verdad.
+      const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'datos-de-clientes-'));
+      const agenda = path.join(carpeta, '01-TOOLS', 'Agenda');
+      fs.mkdirSync(agenda, { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      fs.writeFileSync(path.join(agenda, '.env.example'), 'AGENDA_API_KEY=\nAGENDA_CUENTA=\n');
+      const inbox = path.join(carpeta, '02-DOCS', 'inbox');
+      fs.mkdirSync(path.join(inbox, '_processed'), { recursive: true });
+      fs.mkdirSync(path.join(carpeta, '02-DOCS', 'raw', 'worklog'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '02-DOCS', 'raw', 'worklog', '2026-10-15-un-dia.md'), '# Un día\n');
+      vscode.guion.raiz = carpeta;
+      await almacen.update(clientesM.CLAVE, undefined);
+      const tarjeta = () => proveedor.laTarjetaDeLosDatos();
+      assert.equal(tarjeta(), null, 'sale sin que entre nada: el diario del arnés no es un documento');
+      // Lo que deja la barra en `raw/` tampoco es un documento entregado: ni sale la
+      // tarjeta ni sale en «Documentos entregados» (revisión de la 153).
+      const raw = path.join(carpeta, '02-DOCS', 'raw');
+      const deLaBarra = [['avisos', '2026-10-15-un-fallo.md'], ['pedidos', 'uno.md'], ['incidencias', 'ABC123.md'], ['.', 'que-hay-montado-2026-10-15.md']];
+      for (const [sub, nombre] of deLaBarra) {
+        fs.mkdirSync(path.join(raw, sub), { recursive: true });
+        fs.writeFileSync(path.join(raw, sub, nombre), 'x');
+      }
+      assert.equal(tarjeta(), null, 'lo que deja la barra en raw/ cuenta como un documento');
+      assert.deepEqual(cargar('papeles').queHay().originales, [], 'lo que deja la barra sale en Documentos entregados');
+      // Y una carpeta suya que se llama igual, más abajo, sí cuenta.
+      fs.mkdirSync(path.join(raw, 'migrated', 'avisos'), { recursive: true });
+      fs.writeFileSync(path.join(raw, 'migrated', 'avisos', 'carta.pdf'), 'x');
+      assert.equal(cargar('papeles').queHay().originales.length, 1, 'una carpeta suya llamada «avisos» no sale');
+      assert.ok(tarjeta(), 'una carpeta suya llamada «avisos» no cuenta');
+      fs.rmSync(path.join(raw, 'migrated'), { recursive: true });
+      // Leerlo desde Ayuda antes de que entre nada no gasta la tarjeta: sale igual
+      // cuando entren (revisión de la 153).
+      await proveedor.manejar({ tipo: 'verDatosDeClientes' });
+      assert.equal(almacen.get(clientesM.CLAVE), undefined, 'leerlo antes de que entre nada la gasta');
+      // Una conexión con su fichero de acceso y sin claves, puesta; sin fichero, no.
+      const drive = path.join(carpeta, '01-TOOLS', 'Drive');
+      fs.mkdirSync(path.join(drive, 'keys'), { recursive: true });
+      fs.writeFileSync(path.join(drive, '.env.example'), '');
+      assert.equal(tarjeta(), null, 'una conexión sin claves ni fichero cuenta como puesta');
+      fs.writeFileSync(path.join(drive, 'keys', 'drive-service-account.json'), JSON.stringify({ type: 'service_account', client_email: 'robot@mi-proyecto.iam.gserviceaccount.com' }));
+      assert.deepEqual(tarjeta(), { texto: tabla.tarjeta.conexion, detalle: tabla.tarjeta.detalle }, 'una conexión con su fichero de acceso no cuenta');
+      fs.rmSync(path.join(drive, 'keys'), { recursive: true });
+      assert.equal(tarjeta(), null);
+      fs.writeFileSync(path.join(agenda, '.env'), 'AGENDA_API_KEY=una\n');
+      assert.equal(tarjeta(), null, 'sale con una conexión a la que le falta una clave');
+      fs.writeFileSync(path.join(agenda, '.env.example'), 'AGENDA_API_KEY=\nAGENDA_CUENTA=\n<OTRA_CLAVE>=\n');
+      fs.writeFileSync(path.join(agenda, '.env'), 'AGENDA_API_KEY=una\nAGENDA_CUENTA=otra\n');
+      assert.equal(tarjeta(), null, 'sale con una conexión a medio hacer');
+      fs.writeFileSync(path.join(agenda, '.env.example'), 'AGENDA_API_KEY=\nAGENDA_CUENTA=\n');
+      // Con otra a medias al lado (Drive, sin nada): basta con una puesta.
+      assert.deepEqual(tarjeta(), { texto: tabla.tarjeta.conexion, detalle: tabla.tarjeta.detalle }, 'con la primera conexión puesta no se dice');
+      // «Entendido» no la deja volver.
+      await proveedor.manejar({ tipo: 'entendidoLoDeLosDatos' });
+      assert.ok(almacen.get(clientesM.CLAVE), '«Entendido» no lo apunta');
+      assert.equal(tarjeta(), null, 'vuelve después de «Entendido»');
+      // Por los documentos: los sin leer, los leídos y los originales, los tres.
+      fs.rmSync(path.join(agenda, '.env'));
+      for (const [donde, nombre] of [[inbox, 'factura.pdf'], [path.join(inbox, '_processed'), 'contrato.pdf'], [path.join(carpeta, '02-DOCS', 'raw', 'migrated'), 'clientes.xlsx']]) {
+        await almacen.update(clientesM.CLAVE, undefined);
+        assert.equal(tarjeta(), null, 'sale sin nada');
+        fs.mkdirSync(donde, { recursive: true });
+        fs.writeFileSync(path.join(donde, nombre), 'x');
+        assert.deepEqual(tarjeta(), { texto: tabla.tarjeta.documentos, detalle: tabla.tarjeta.detalle }, `con «${nombre}» entregado no se dice`);
+        // Leerla desde la tarjeta tampoco la deja volver.
+        await proveedor.manejar({ tipo: 'verDatosDeClientes' });
+        assert.equal(tarjeta(), null, 'vuelve después de leerla');
+        fs.rmSync(path.join(donde, nombre));
+      }
+
+      // ── Sin tapar lo urgente: lo que impide trabajar y lo que tiene su hora, antes; lo demás, detrás.
+      vscode.guion.raiz = antes.raiz;
+      await almacen.update(clientesM.CLAVE, undefined);
+      await proveedor.refrescar(true);
+      const m = ultimo('estado');
+      assert.equal(m.datosDeClientes && m.datosDeClientes.texto, tabla.tarjeta.conexion, 'la extensión no la manda');
+      const conLaTarjeta = pintar(m);
+      assert.match(conLaTarjeta, new RegExp(tabla.tarjeta.conexion.slice(0, 40)), 'la principal no la enseña');
+      assert.equal(lleva(conLaTarjeta, 'Leerlo').tipo, 'verDatosDeClientes');
+      assert.equal(lleva(conLaTarjeta, 'Entendido').tipo, 'entendidoLoDeLosDatos');
+      const sale = (html) => html.includes(tabla.tarjeta.conexion.slice(0, 40));
+      const con = (estado, alLado = {}) => pintar({ ...m, ...alLado, estado: { ...m.estado, ...estado } });
+      for (const [que, html] of [
+        ['sin git', con({ faltaGit: true, comoSeInstalaGit: 'x' })],
+        ['sin el asistente', con({ faltaElAsistente: 'Claude' })],
+        ['sin cuenta', con({ primerPaso: { instalado: true, asistente: 'Claude' } })],
+        ['sin ajustar', con({ sinAjustar: 'ponerAlDia' })],
+        ['un recordatorio a su hora', con({}, { recordatorio: { nombre: 'r', etiqueta: 'EL RESUMEN', enPalabras: 'cada lunes a las 9:00' } })],
+        ['una versión puesta sin recargar', con({}, { hayVersionNueva: '9.9.9', versionPuesta: '9.9.9' })],
+      ]) assert.ok(!sale(html), `tapa lo urgente: ${que}`);
+      for (const [que, alLado] of [
+        ['lo nuevo de la versión', { queTrae: { version: '9.9.9', cosas: ['LO NUEVO'] } }],
+        ['la costumbre', { costumbrePuesta: { nombre: 'r', etiqueta: 'EL RESUMEN', enPalabras: 'cada lunes a las 9:00' } }],
+        ['un consejo', { consejo: { id: 'x', texto: 'UN CONSEJO', boton: 'Hacerlo', accion: { tipo: 'verCerebro' } } }],
+        ['un aviso para Executive Lab', { avisoParaExecutiveLab: { fichero: '/x/a.md', nombre: 'a.md', titulo: 'Un aviso', origen: 'asistente', cuantos: 1 } }],
+        ['lo que contó', { arreglado: { como: 'hecho', tipo: 'falla', titulo: 'T', enlace: 'https://github.com/x', numero: 1 } }],
+        ['una versión nueva', { hayVersionNueva: '9.9.9', versionPuesta: null }],
+      ]) {
+        const html = con({}, alLado);
+        assert.ok(sale(html), `se queda detrás de ${que}`);
+        assert.equal((html.match(/class="consejo"/g) || []).length, 1, `con ${que} salen dos tarjetas`);
+      }
+      // En la completa, con las demás.
+      assert.ok(sale(pintar({ ...m, barraCompleta: true })), 'la completa no la enseña');
+      // «Entendido» la quita de la pantalla en el momento: se repinta sin ella.
+      const antesDeEntendido = enviados.length;
+      await proveedor.manejar({ tipo: 'entendidoLoDeLosDatos' });
+      const repintado = enviados.slice(antesDeEntendido).find((x) => x.tipo === 'estado');
+      assert.ok(repintado, '«Entendido» no repinta: la tarjeta se queda en pantalla');
+      assert.equal(repintado.datosDeClientes, null, 'tras «Entendido» se sigue mandando la tarjeta');
+      assert.ok(!sale(pintar(repintado)), 'tras «Entendido» la tarjeta sigue en pantalla');
+      return 'en Ayuda y en Más ayuda · una vez por carpeta, al poner la primera conexión o al darle documentos · detrás de lo que impide trabajar · enlaces de Anthropic y OpenAI';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.contexto.extensionPath = antes.donde;
+      vscode.guion.raiz = antes.raiz;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      await almacen.update(clientesM.CLAVE, antes.dicho);
+    }
+  });
+
+  await comprobar('abrir una página: solo https, y lo que no es nuestro se pregunta con el sitio a la vista', async () => {
+    // Revisión de seguridad de la 153. La dirección llega del panel, y la página de
+    // una conexión sale de su CREDENTIALS.md: la ruta `abrir` abría cualquier cosa.
+    const proveedor = vscode.registrado.proveedor;
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, eleccion: vscode.guion.eleccion };
+    proveedor.enviar = (m) => enviados.push(m);
+    const abrir = async (url, eleccion) => {
+      vscode.registrado.abiertos.length = 0;
+      enviados.length = 0;
+      vscode.guion.eleccion = eleccion;
+      const desde = vscode.registrado.mensajes.length;
+      await proveedor.manejar({ tipo: 'abrir', url });
+      return {
+        abierto: [...vscode.registrado.abiertos],
+        pregunta: vscode.registrado.mensajes.slice(desde).filter((l) => /^WARN /.test(l)),
+        aviso: enviados.find((m) => m.tipo === 'aviso'),
+      };
+    };
+    try {
+      // Lo que no va por https no se abre, ni preguntando: se dice.
+      for (const mala of ['javascript:alert(1)', 'file:///etc/passwd', 'http://app.holded.com/api', 'vscode://anthropic.claude-code/open?prompt=hola', 'no es una dirección', undefined]) {
+        const { abierto, pregunta, aviso } = await abrir(mala, 'Abrirlo');
+        assert.deepEqual(abierto, [], `abre «${mala}»`);
+        assert.deepEqual(pregunta, [], `pregunta por «${mala}»: no se abre ni con un sí`);
+        assert.deepEqual(aviso && [aviso.texto, aviso.malo], ['No abro esa página: no es segura. Díselo a tu tutor.', true], `con «${mala}» no se dice nada`);
+      }
+      // Lo nuestro, sin preguntar: la barra en GitHub y las páginas de Anthropic y OpenAI de la tabla.
+      for (const buena of [
+        'https://github.com/Executive-Lab/executive-vscode-interfaz/issues/3',
+        'https://github.com/minarkap/executive-lab-interfaz/releases',
+        'https://claude.ai/settings/data-privacy-controls',
+        'https://chatgpt.com/#settings/DataControls',
+        'https://help.openai.com/es-es/articles/7730893-preguntas-frecuentes-sobre-los-controles-de-datos',
+      ]) {
+        const { abierto, pregunta } = await abrir(buena, undefined);
+        assert.deepEqual(pregunta, [], `pregunta por «${buena}», que es nuestro`);
+        assert.deepEqual(abierto, [buena], `no abre «${buena}»`);
+      }
+      // Lo de fuera se pregunta con el sitio a la vista, y sin su sí no se abre.
+      for (const [ajena, sitio] of [
+        ['https://claves-holded.example/sacar-la-clave', 'claves-holded.example'],
+        ['https://github.com/alguien/otra-cosa', 'github.com'],
+        ['https://github.com/Executive-Lab/executive-vscode-interfaz/../../alguien/otra', 'github.com'],
+        ['https://evilclaude.ai/settings', 'evilclaude.ai'],
+        ['https://claude.ai.example.com/settings', 'claude.ai.example.com'],
+        ['https://app.holded.com/api', 'app.holded.com'],
+      ]) {
+        const no = await abrir(ajena, undefined);
+        assert.deepEqual(no.pregunta, [`WARN Voy a abrir ${sitio}. ¿Lo abro?`], `«${ajena}» no pregunta con su sitio`);
+        assert.deepEqual(no.abierto, [], `«${ajena}» se abre sin su sí`);
+        const si = await abrir(ajena, 'Abrirlo');
+        assert.equal(si.abierto.length, 1, `«${ajena}» no se abre con su sí`);
+        assert.equal(new URL(si.abierto[0]).hostname, sitio, 'se abre otro sitio del que se pregunta');
+      }
+      return 'ni javascript:, ni file:, ni http: · lo nuestro, directo · lo de fuera, con su sitio y su sí';
+    } finally {
+      proveedor.enviar = antes.enviar;
       vscode.guion.eleccion = antes.eleccion;
     }
   });

@@ -1155,6 +1155,7 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
       icono: '📖',
       accion: { tipo: 'pedir', prompt: 'Explícame de cero cómo funciona esto: qué es esta carpeta, qué haces tú, qué hago yo, y qué gano. Sin palabras técnicas y con ejemplos de mi trabajo.' },
     })}
+    ${boton({ etiqueta: 'Si trabajas con datos de clientes', icono: '🔒', accion: { tipo: 'verDatosDeClientes' } })}
     ${/* Qué barra es esta, y si hay otra. Sale aunque la de la principal se
           apartara con «Ahora no»: aquí es donde se viene a buscarla. */''}
     ${version && version.esta ? `
@@ -1180,6 +1181,33 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
         ${boton({ etiqueta: 'Probar las versiones nuevas antes', icono: '🧪', pequeno: true, discreto: true, accion: { tipo: 'probarAntes', cual: true } })}
         <p class="detalle">Te llegan antes que a nadie, para ver si van bien. Alguna puede fallar.</p>`}` : ''}
 
+  `;
+}
+
+// Si trabajas con datos de clientes (decisión 153). Es para leer: la licencia y los
+// ajustes de su cuenta son suyos. Todo sale de `media/datos-de-clientes.json`,
+// comprobado en las páginas de Anthropic y OpenAI; aquí solo se pinta. Cada
+// enlace, a la página de ajustes de su asistente o a lo que dicen ellos.
+function pantallaDatosDeClientes({ titulo = '', entradilla = '', partes = [], pie = '', fuentes = [] } = {}) {
+  const enlace = (etiqueta, url, extra = {}) => (etiqueta && url
+    ? boton({ etiqueta, icono: '↗', pequeno: true, ...extra, accion: { tipo: 'abrir', url } }) : '');
+  return `
+    ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Ayuda', accion: { tipo: 'verAyuda' } }, { etiqueta: titulo }])}
+    ${bloqueAviso()}
+    ${volver({ tipo: 'verAyuda' })}
+
+    <div class="brujula">
+      <h2>${texto(titulo)}</h2>
+      <p class="hiciste">${texto(entradilla)}</p>
+    </div>
+    ${partes.map((parte) => `
+      <hr class="separador">
+      <h2>${texto(parte.titulo)}</h2>
+      ${(parte.lineas || []).map((l) => `<p class="detalle">${texto(l.texto)}</p>${enlace(l.boton, l.url)}`).join('')}`).join('')}
+
+    <hr class="separador">
+    <p class="detalle">${texto(pie)}</p>
+    ${fuentes.map((f) => enlace(f.boton, f.url, { discreto: true })).join('')}
   `;
 }
 
@@ -1667,6 +1695,7 @@ function pantallaPrincipalSencilla() {
     t.sinAsistente, t.primerPaso, t.sinAjustar,
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
+    t.losDatos,
     t.loNuevo, t.laCostumbre, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
     recargar ? '' : t.versionNueva,
   ].filter(Boolean);
@@ -1747,6 +1776,7 @@ function grupoAyudaSencillo() {
       ${boton({ etiqueta: 'Dime qué hago ahora', icono: '🧭', pequeno: true, accion: { tipo: 'pedir', prompt: 'Mira cómo está esto y dime qué hago ahora: qué tengo a medias, qué sería lo siguiente y por qué. Dame dos o tres opciones concretas, no una lista larga.' } })}
       ${boton({ etiqueta: 'Pedir ayuda en el foro', icono: '🙋', pequeno: true, accion: { tipo: 'pedirAyudaEnElForo' } })}
       ${boton({ etiqueta: 'Sugerencias', icono: '✨', pequeno: true, accion: { tipo: 'verSugerencias' } })}
+      ${boton({ etiqueta: 'Si trabajas con datos de clientes', icono: '🔒', pequeno: true, accion: { tipo: 'verDatosDeClientes' } })}
       ${boton({ etiqueta: 'Más ayuda', icono: '🆘', pequeno: true, discreto: true, accion: { tipo: 'verAyuda' } })}`,
   });
 }
@@ -1798,7 +1828,7 @@ function pantallaPrincipalCompleta() {
 
   const {
     versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos,
-    elRecordatorio, laCostumbre,
+    elRecordatorio, laCostumbre, losDatos,
   } = lasTarjetas();
 
   return `
@@ -1816,6 +1846,7 @@ function pantallaPrincipalCompleta() {
     ${sinAjustar}
     ${primerPaso}
     ${elRecordatorio}
+    ${losDatos}
     ${loNuevo}
     ${laCostumbre}
     ${elConsejo}
@@ -1994,7 +2025,19 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'No hace falta', discreto: true, accion: { tipo: 'noHaceFaltaLaCostumbre', nombre: c.nombre } })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre };
+  // Los datos de clientes, dichos a tiempo y una vez (decisión 153): al entrar los
+  // primeros datos de verdad. Lleva al texto de Ayuda, y leerlo o «Entendido» no
+  // la deja volver en esta carpeta. La frase sale de su tabla.
+  const d = estado.datosDeClientes;
+  const losDatos = !d ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(d.texto)}</p>
+      ${d.detalle ? `<p class="detalle">${texto(d.detalle)}</p>` : ''}
+      ${boton({ etiqueta: 'Leerlo', icono: '🔒', principal: true, accion: { tipo: 'verDatosDeClientes' } })}
+      ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
+    </div>`;
+
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, losDatos };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2856,7 +2899,7 @@ function atender(data) {
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
-          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta']) {
+          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }
@@ -2886,6 +2929,7 @@ function atender(data) {
     case 'papeles': return pintar(pantallaPapeles(data));
     case 'fijadas': return pintar(pantallaFijadas(data));
     case 'ayuda': return pintar(pantallaAyuda(data));
+    case 'datosDeClientes': return pintar(pantallaDatosDeClientes(data.tabla));
     case 'reglas': return pintar(pantallaReglas(data));
     case 'asistente': return pintar(pantallaAsistente(data));
     case 'comoTrabaja': return pintar(pantallaComoTrabaja(data));
