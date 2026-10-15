@@ -11643,6 +11643,311 @@ exec git "$@"
     return `${alLado.length} al lado, todos leídos`;
   });
 
+  // ── Se adapta y da ideas (F6, decisión 152) ──────────────────────────────
+
+  await comprobar('se adapta: «Esto parece» dice lo que la barra sabe leer, y nada más', () => {
+    // P5: la frase sale de reglas y del disco. Se prueba con situaciones
+    // inventadas, sin abrir nada.
+    const ideas = cargar('ideas');
+    const catalogo = [{ id: 'react', nombre: 'React' }, { id: 'nextjs', nombre: 'Next.js' }, { id: 'python', nombre: 'Python' }];
+    // El ejemplo de la propuesta, tal cual.
+    assert.equal(ideas.loQueParece({ parece: 'una web', stacks: ['react'], catalogo, programas: ['Stripe'], documentos: 40 }),
+      'Esto parece una web hecha con React, con claves de Stripe y 40 documentos sin colocar.');
+    // Lo que el catálogo no nombra (`node` a secas) no se dice; y con dos, los dos.
+    assert.equal(ideas.loQueParece({ parece: 'una aplicación', stacks: ['nextjs', 'node', 'react'], catalogo }), 'Esto parece una aplicación hecha con Next.js y React.');
+    // «algo en Python hecho con Python», no.
+    assert.equal(ideas.loQueParece({ parece: 'algo en Python', stacks: ['python'], catalogo }), 'Esto parece algo en Python.');
+    assert.equal(ideas.loQueParece({ parece: 'varios servicios', stacks: ['react'], catalogo }), 'Esto parece varios servicios hechos con React.');
+    assert.equal(ideas.loQueParece({ stacks: ['react'], catalogo, documentos: 1 }), 'Esto parece algo hecho con React, con 1 documento sin colocar.');
+    // Sin saber de qué parece, lo que hay; y con muchos programas, cuántos más.
+    assert.equal(ideas.loQueParece({ programas: ['Stripe', 'Pexels', 'Holded', 'Resend'], documentos: 3 }),
+      'Aquí ya había trabajo tuyo: claves de Stripe, Pexels y 2 más, y 3 documentos sin colocar.');
+    assert.equal(ideas.loQueParece({ programas: ['Stripe', 'Pexels', 'Holded'] }), 'Aquí ya había trabajo tuyo: claves de Stripe, Pexels y Holded.');
+    assert.equal(ideas.loQueParece({ clavesSinDueno: 2 }), 'Aquí ya había trabajo tuyo: 2 claves sueltas.');
+    assert.equal(ideas.loQueParece({ programas: ['Stripe'], clavesSinDueno: 4 }), 'Aquí ya había trabajo tuyo: claves de Stripe.', 'las sin dueño tapan los nombres');
+    // Sin nada que decir, nada.
+    assert.equal(ideas.loQueParece({ stacks: ['node'], catalogo }), null, 'sin nada que decir, dice algo');
+    assert.equal(ideas.loQueParece({}), null);
+
+    // Los programas, por el nombre de sus claves.
+    assert.equal(ideas.comoSeLlama('STRIPE'), 'Stripe');
+    assert.equal(ideas.comoSeLlama('Google-Drive'), 'Google Drive', 'el nombre de su carpeta se deja como está');
+
+    // La copia del montaje, cada cosa por su nombre.
+    assert.equal(ideas.queSeDiceDeLaCopia(['la lista de lo que no entra en git', 'la habilidad «review»']),
+      'Antes de cambiar lo tuyo, el arnés guardó una copia: la lista de lo que no entra en git y la habilidad «review».');
+    assert.match(ideas.queSeDiceDeLaCopia(['a', 'b', 'c', 'd', 'e']), /: a, b y 3 cosas más\.$/);
+    assert.equal(ideas.queSeDiceDeLaCopia([]), null);
+
+    // Ni una palabra prohibida en lo que pinta.
+    const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
+    for (const frase of [
+      ideas.loQueParece({ parece: 'una web', stacks: ['react'], catalogo, programas: ['Stripe'], documentos: 4 }),
+      ideas.queSeDiceDeLaCopia(['Cómo se trabaja aquí', 'los ajustes de Claude de esta carpeta']),
+    ]) assert.equal(tieneUnaProhibida(frase), null, frase);
+    return 'el ejemplo de la propuesta · sin repetir · sin nada, nada';
+  });
+
+  await comprobar('se adapta: dos o tres ideas de lo que hay, de una en una, y en una carpeta nueva, de lo que dijo', () => {
+    const ideas = cargar('ideas');
+    const cap = (id, nombre) => ({ id, nombre, frase: `${nombre} hace lo suyo.` });
+    const stripe = { herramienta: 'STRIPE', claves: ['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY'], donde: ['.env.local'] };
+    const pexels = { herramienta: 'PEXELS', claves: ['PEXELS_API_KEY'], donde: ['.env'] };
+
+    // Una carpeta que ya tenía cosas: un programa sin conexión, documentos tirados y una habilidad que encaja.
+    const brown = ideas.lasIdeas({ porMontar: [stripe, pexels], documentos: 12, deLoQueHay: [cap('stripe', 'Stripe'), cap('invoicing', 'Facturación')] });
+    assert.deepEqual(brown.map((i) => i.id), ['conectar-STRIPE', 'colocar-documentos', 'capacidad-stripe'], 'tres, una de cada');
+    assert.equal(brown[0].texto, 'Ya usas Stripe: sus claves están en la carpeta, pero todavía no tiene su conexión.');
+    assert.equal(brown[0].boton, 'Conectar Stripe');
+    assert.equal(brown[0].accion.tipo, 'pedir');
+    assert.match(brown[0].accion.prompt, /las claves STRIPE_SECRET_KEY, STRIPE_PUBLIC_KEY, en \.env\.local/, 'no dice qué claves ni dónde');
+    assert.match(brown[0].accion.prompt, /01-TOOLS\/STRIPE/);
+    assert.match(brown[0].accion.prompt, /connect-tool/);
+    assert.match(brown[0].accion.prompt, /No imprimas ni me pegues ningún valor/);
+    assert.equal(brown[1].texto, 'Hay 12 documentos sin colocar en la carpeta. Todavía no ha sacado nada de ellos.');
+    assert.equal(brown[1].boton, 'Que los coloque y los lea', 'no se llama como en Documentos entregados');
+    assert.equal(ideas.lasIdeas({ documentos: 1 })[0].boton, 'Que lo coloque y lo lea');
+    assert.match(brown[2].texto, /^Por lo que hay aquí, te vendría bien la habilidad \(skill\) Stripe\. Stripe hace lo suyo\.$/);
+    // La misma acción y el mismo `id` que el consejo: su «Ahora no» vale para los dos.
+    assert.deepEqual(brown[2].accion, { tipo: 'aprenderCapacidad', capacidad: 'stripe', nombre: 'Stripe' });
+    // Con solo un fichero de acceso.
+    const google = ideas.lasIdeas({ porMontar: [{ herramienta: 'GOOGLE', claves: [], donde: ['credentials.json'], conFichero: true }] })[0];
+    assert.equal(google.texto, 'Ya usas Google: su fichero de acceso está en la carpeta, pero todavía no tiene su conexión.');
+    assert.match(google.accion.prompt, /el fichero de acceso a su carpeta keys/);
+    assert.doesNotMatch(google.accion.prompt, /sus claves a su \.env/, 'pide mover claves que no hay');
+
+    // Una carpeta nueva: de lo que dijo al prepararla, y sin repetir.
+    const nueva = ideas.lasIdeas({
+      objetivo: 'llevar las facturas de mis clientes.',
+      delObjetivo: [cap('invoicing', 'Facturación'), cap('crm', 'Clientes')],
+      deLoQueHay: [cap('invoicing', 'Facturación'), cap('bookkeeping', 'Contabilidad'), cap('otra', 'Otra')],
+    });
+    assert.deepEqual(nueva.map((i) => i.id), ['capacidad-invoicing', 'capacidad-crm', 'capacidad-bookkeeping'], 'no son tres, o se repite');
+    assert.match(nueva[0].texto, /^Para «llevar las facturas de mis clientes», te vendría bien la habilidad \(skill\) Facturación\./);
+    assert.match(nueva[2].texto, /^Por lo que hay aquí/);
+    const larga = ideas.lasIdeas({ objetivo: 'a'.repeat(200), delObjetivo: [cap('x', 'X')] })[0].texto;
+    assert.equal((larga.match(/«([^»]*)»/) || [])[1], `${'a'.repeat(69)}…`, 'lo que dijo sale entero aunque sea larguísimo');
+    assert.deepEqual(ideas.lasIdeas({}), [], 'sin nada, da ideas');
+
+    // «Ahora no»: dos semanas, como los consejos; y deja ver la siguiente, no una cuarta.
+    const DIA_ = 24 * 60 * 60 * 1000;
+    const ahora = Date.parse('2026-10-15T12:00:00Z');
+    const conLaPrimeraApartada = (hace) => ideas.lasIdeas({
+      porMontar: [stripe, pexels], documentos: 3, deLoQueHay: [cap('stripe', 'Stripe'), cap('invoicing', 'Facturación')],
+      silenciados: { 'conectar-STRIPE': ahora - hace * DIA_ }, ahora,
+    }).map((i) => i.id);
+    assert.deepEqual(conLaPrimeraApartada(13), ['colocar-documentos', 'capacidad-stripe'], 'apartada hace 13 días, sale, o sale una cuarta en su sitio');
+    assert.deepEqual(conLaPrimeraApartada(15), ['conectar-STRIPE', 'colocar-documentos', 'capacidad-stripe'], 'pasadas las dos semanas, no vuelve');
+
+    // De quién son las claves sueltas, y cuáles no tienen conexión: la de más claves primero.
+    const claves = ideas.lasClaves({
+      reparto: [
+        { herramienta: 'HOLDED', existe: true, claves: ['HOLDED_API_KEY'], donde: ['.env'] },
+        { herramienta: 'PEXELS', existe: false, claves: ['PEXELS_API_KEY'], donde: ['.env'] },
+        { herramienta: 'STRIPE', existe: false, claves: ['STRIPE_A_KEY', 'STRIPE_B_KEY'], donde: ['.env.local'] },
+      ],
+      ficherosDeAcceso: [{ herramienta: 'GOOGLE', existe: false, donde: 'credentials.json' }, { herramienta: null, donde: 'x.pem' }],
+      sinDueno: [{ nombre: 'TOKEN' }],
+    });
+    assert.deepEqual(claves.programas, ['Holded', 'Pexels', 'Stripe', 'Google']);
+    assert.deepEqual(claves.porMontar.map((p) => p.herramienta), ['STRIPE', 'PEXELS', 'GOOGLE'], 'la que tiene conexión sale como por montar, o no va primero la de más claves');
+    assert.equal(claves.porMontar[2].conFichero, true);
+    assert.equal(claves.sinDueno, 1);
+    assert.deepEqual(ideas.lasClaves(null), { programas: [], porMontar: [], sinDueno: 0 });
+
+    const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
+    for (const idea of [...brown, ...nueva, google]) {
+      assert.equal(tieneUnaProhibida(idea.texto), null, idea.texto);
+      assert.equal(tieneUnaProhibida(idea.boton), null, idea.boton);
+    }
+    return `${brown.length} en una carpeta con cosas · ${nueva.length} en una nueva · «Ahora no», dos semanas`;
+  });
+
+  await comprobar('se adapta: la copia que guardó el arnés al montarse se encuentra, y solo la de lo suyo', () => {
+    // Punto 8 de la decisión 142. RSC guarda en `.rsc/backups/` lo que va a
+    // tocar antes de montar (`onboarding-transaction`). La del primer montaje es
+    // la de lo suyo: antes de él, nada era del arnés.
+    const ideas = cargar('ideas');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'copia-del-montaje-'));
+    assert.equal(ideas.laCopiaDelMontaje(carpeta), null, 'sin copias, se inventa una');
+    const copia = (id, operation, createdAt, entries) => {
+      fs.mkdirSync(path.join(carpeta, '.rsc', 'backups', id, 'files'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.rsc', 'backups', id, 'manifest.json'), JSON.stringify({ id, operation, createdAt, entries }));
+    };
+    // Un arreglo de antes, que no es un montaje.
+    copia('20261001-090000-repair-claude', 'repair', '2026-10-01T09:00:00Z', [{ path: 'CLAUDE.md', existed: true, kind: 'file' }]);
+    // El primer montaje: lo suyo y lo que no existía.
+    copia('20261002-100000-onboarding-transaction-claude', 'onboarding-transaction', '2026-10-02T10:00:00Z', [
+      { path: '.gitignore', existed: true, kind: 'file' },
+      { path: '.claude/skills/review', existed: true, kind: 'dir' },
+      { path: 'AGENTS.md', existed: true, kind: 'file' },
+      { path: '.rsc.json', existed: true, kind: 'file' },
+      { path: '.claude/settings.json', existed: false, kind: 'missing' },
+    ]);
+    // Uno después, con lo del arnés ya puesto: no es de esa persona.
+    copia('20261010-100000-onboarding-transaction-claude', 'onboarding-transaction', '2026-10-10T10:00:00Z', [
+      { path: '.claude/skills/orient', existed: true, kind: 'dir' },
+    ]);
+    // Y uno que no se puede leer.
+    fs.mkdirSync(path.join(carpeta, '.rsc', 'backups', 'roto'), { recursive: true });
+    fs.writeFileSync(path.join(carpeta, '.rsc', 'backups', 'roto', 'manifest.json'), '{ esto no es');
+
+    const vista = ideas.laCopiaDelMontaje(carpeta);
+    assert.ok(vista, 'no encuentra la copia del montaje');
+    assert.deepEqual(vista.cosas, ['la lista de lo que no entra en git', 'la habilidad «review»', 'Cómo se trabaja aquí'], 'no es lo suyo, o no lo dice como al pedir el sí');
+    assert.equal(vista.carpeta, path.join(carpeta, '.rsc', 'backups', '20261002-100000-onboarding-transaction-claude', 'files'), 'no es la del primer montaje');
+    // Lo que pinta la pantalla no lleva la ruta: la extensión la vuelve a buscar.
+    assert.deepEqual(ideas.laCopiaEnPantalla(vista), {
+      texto: 'Antes de cambiar lo tuyo, el arnés guardó una copia: la lista de lo que no entra en git, la habilidad «review» y Cómo se trabaja aquí.',
+      accion: { tipo: 'verLaCopiaDelMontaje' },
+    });
+    assert.equal(ideas.laCopiaEnPantalla(null), null);
+
+    // Un enlace en vez de la carpeta de la copia no se abre: podría abrir un programa.
+    const primero = path.join(carpeta, '.rsc', 'backups', '20261002-100000-onboarding-transaction-claude');
+    fs.rmSync(path.join(primero, 'files'), { recursive: true });
+    let conEnlace = false;
+    try {
+      fs.symlinkSync(os.tmpdir(), path.join(primero, 'files'), 'junction');
+      conEnlace = true;
+    } catch { /* sin permiso para enlaces: se prueba lo demás */ }
+    if (conEnlace) assert.equal(ideas.laCopiaDelMontaje(carpeta), null, 'abre un enlace a otro sitio');
+    fs.rmSync(path.join(primero, 'files'), { recursive: true, force: true });
+    fs.mkdirSync(path.join(primero, 'files'));
+
+    // Solo lo del arnés, nada que decir.
+    fs.writeFileSync(path.join(primero, 'manifest.json'), JSON.stringify({ operation: 'onboarding-transaction', createdAt: '2026-10-02T10:00:00Z', entries: [{ path: '.rsc.json', existed: true }, { path: '.rsc/sello.mjs', existed: true }] }));
+    assert.equal(ideas.laCopiaDelMontaje(carpeta), null, 'cuenta lo del arnés como suyo');
+    fs.rmSync(carpeta, { recursive: true, force: true });
+    return `${vista.cosas.length} cosas suyas, de la del primer montaje${conEnlace ? ' · un enlace no se abre' : ''}`;
+  });
+
+  await comprobar('se adapta: la barra lo dice la primera vez, lo apunta, y las ideas van de una en una hasta Sugerencias', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const ideas = cargar('ideas');
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, raiz: vscode.guion.raiz, completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'] };
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const almacen = proveedor.almacen();
+    const guardado = { parece: almacen.get('executiveLab.loQueParece'), apartados: almacen.get('executiveLab.consejosApartados') };
+    const limpiar = async () => {
+      await almacen.update('executiveLab.loQueParece', undefined);
+      await almacen.update('executiveLab.consejosApartados', {});
+    };
+    // Una copia de la empresa de mentira, con lo que trae una carpeta que ya tenía cosas.
+    const copia = fs.mkdtempSync(path.join(os.tmpdir(), 'se-adapta-'));
+    fs.cpSync(empresa, copia, { recursive: true });
+    const poner = (rel, txt) => {
+      fs.mkdirSync(path.dirname(path.join(copia, rel)), { recursive: true });
+      fs.writeFileSync(path.join(copia, rel), txt);
+    };
+    // La clave, hecha aquí: ningún valor de verdad, ni en el código.
+    const valor = ['sk', 'live', require('node:crypto').randomBytes(8).toString('hex')].join('_');
+    try {
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+
+      // Sin nada que decir la primera vez, se apunta y ya no se dirá.
+      vscode.guion.raiz = copia;
+      await limpiar();
+      await proveedor.refrescar(true);
+      assert.equal(ultimo('estado').seAdapta.parece, null, 'en una carpeta sin nada, dice algo');
+      assert.equal(almacen.get('executiveLab.loQueParece'), 'nada', 'no apunta que la primera vez no había nada');
+
+      // Lo que crece después no lo vuelve a sacar…
+      poner('package.json', '{"name":"lo-suyo"}\n');
+      poner('.env.local', `STRIPE_SECRET_KEY=${valor}\nSTRIPE_WEBHOOK_SECRET=${valor}\n`);
+      poner('presupuesto-obra.pdf', 'un presupuesto');
+      const recibo = JSON.parse(fs.readFileSync(path.join(copia, '.rsc.json'), 'utf8'));
+      recibo.onboarding.plan.evidence = { schemaVersion: 1, signals: ['manifest:package.json'], stacks: ['node', 'react'] };
+      fs.writeFileSync(path.join(copia, '.rsc.json'), JSON.stringify(recibo, null, 2));
+      fs.mkdirSync(path.join(copia, '.rsc', 'backups', '20261015-100000-onboarding-transaction-claude', 'files'), { recursive: true });
+      fs.writeFileSync(path.join(copia, '.rsc', 'backups', '20261015-100000-onboarding-transaction-claude', 'manifest.json'), JSON.stringify({
+        operation: 'onboarding-transaction', createdAt: '2026-10-15T10:00:00Z', entries: [{ path: '.gitignore', existed: true, kind: 'file' }],
+      }));
+      await proveedor.refrescar(true);
+      assert.equal(ultimo('estado').seAdapta.parece, null, 'lo que creció después de la primera vez sale como «Esto parece»');
+
+      // …y la primera vez en una carpeta que ya tenía cosas, sí.
+      await limpiar();
+      await proveedor.refrescar(true);
+      const { seAdapta } = ultimo('estado');
+      assert.equal(seAdapta.parece.texto, 'Esto parece una aplicación hecha con React, con claves de Stripe y 1 documento sin colocar.');
+      assert.equal(seAdapta.parece.copia.texto, 'Antes de cambiar lo tuyo, el arnés guardó una copia: la lista de lo que no entra en git.');
+      assert.equal(seAdapta.idea.id, 'conectar-STRIPE');
+      assert.ok(!JSON.stringify(ultimo('estado')).includes(valor), 'el valor de una clave sale de su fichero');
+
+      // En la principal, una tarjeta: «Esto parece», con la copia y su botón.
+      const conTodo = { ...ultimo('estado'), consejo: { id: 'x', texto: 'UN CONSEJO', boton: 'Hacerlo', accion: { tipo: 'verCerebro' } } };
+      const principal = pintar(conTodo);
+      assert.equal((principal.match(/class="consejo"/g) || []).length, 1, 'salen varias tarjetas a la vez');
+      assert.match(principal, /Esto parece una aplicación hecha con React/, '«Esto parece» no va antes que el consejo');
+      assert.match(principal, /Antes de cambiar lo tuyo, el arnés guardó una copia/);
+      assert.match(principal, /verLaCopiaDelMontaje[\s\S]*Ver la copia/, 'la copia sin su botón');
+      assert.doesNotMatch(principal, /Conectar Stripe|UN CONSEJO/, 'la idea o el consejo pasan por delante');
+
+      // Ver la copia abre la carpeta de la copia, no otra.
+      vscode.registrado.abiertos.length = 0;
+      await proveedor.manejar({ tipo: 'verLaCopiaDelMontaje' });
+      assert.deepEqual(vscode.registrado.abiertos, [path.join(copia, '.rsc', 'backups', '20261015-100000-onboarding-transaction-claude', 'files')]);
+
+      // Entendido: se apunta, y no vuelve.
+      await proveedor.manejar({ tipo: 'entendidoLoQueParece' });
+      assert.equal(typeof almacen.get('executiveLab.loQueParece'), 'number', 'no se apunta que ya se dijo');
+      assert.equal(ultimo('estado').seAdapta.parece, null, 'vuelve después de «Entendido»');
+
+      // Después, las ideas, de una en una, al final de la fila.
+      const sinConsejo = { ...ultimo('estado'), consejo: null };
+      const conIdea = pintar(sinConsejo);
+      assert.equal((conIdea.match(/class="consejo"/g) || []).length, 1);
+      assert.match(conIdea, /Ya usas Stripe: sus claves están en la carpeta, pero todavía no tiene su conexión\./);
+      assert.match(conIdea, /Conectar Stripe/);
+      const laTarjeta = (conIdea.match(/<div class="consejo">[\s\S]*?<\/div>/) || [''])[0];
+      assert.match(laTarjeta, /Conectar Stripe[\s\S]*&quot;ahoraNo&quot;,&quot;id&quot;:&quot;conectar-STRIPE&quot;/, 'la idea sin su «Ahora no» dentro de la tarjeta');
+      assert.match(pintar({ ...sinConsejo, consejo: { id: 'x', texto: 'UN CONSEJO', boton: 'Hacerlo', accion: { tipo: 'verCerebro' } } }), /UN CONSEJO/, 'la idea pasa por delante del consejo');
+      assert.match(pintar({ ...sinConsejo, hayVersionNueva: '9.9.9' }), /Hay una versión nueva/, 'la idea pasa por delante de la versión nueva');
+
+      // «Ahora no»: la siguiente.
+      await proveedor.manejar({ tipo: 'ahoraNo', id: 'conectar-STRIPE' });
+      assert.equal(ultimo('estado').seAdapta.idea.id, 'colocar-documentos', '«Ahora no» no deja ver la siguiente');
+
+      // Y en Sugerencias, todas las que quedan, sin repetir ninguna.
+      await proveedor.manejar({ tipo: 'verSugerencias' });
+      const lista = ultimo('sugerencias').ahora;
+      const ids = lista.map((s) => s.id);
+      assert.ok(ids.includes('colocar-documentos'), 'las ideas no están en Sugerencias');
+      assert.ok(!ids.includes('conectar-STRIPE'), 'lo apartado sale en Sugerencias');
+      assert.equal(new Set(ids).size, ids.length, `se repite una: ${ids.join(', ')}`);
+      assert.match(pintar(ultimo('sugerencias')), /Que lo coloque y lo lea/);
+
+      // En Ver las copias guardadas, la del arnés también, con su botón.
+      await proveedor.manejar({ tipo: 'verCopias' });
+      const pantallaDeCopias = pintar(ultimo('copias'));
+      assert.match(pantallaDeCopias, /Copias que guarda el arnés/);
+      assert.match(pantallaDeCopias, /la lista de lo que no entra en git/);
+      assert.match(pantallaDeCopias, /verLaCopiaDelMontaje[\s\S]*Ver la copia/);
+      const conLasDeGit = pintar({ ...ultimo('copias'), copias: [{ id: 'abc', etiqueta: 'Como estaba ayer' }] });
+      assert.match(conLasDeGit, /Como estaba ayer[\s\S]*Copias que guarda el arnés[\s\S]*Ver la copia/, 'con copias de git, la del arnés no sale');
+
+      // Sin la copia, se dice, sin abrir nada.
+      fs.rmSync(path.join(copia, '.rsc', 'backups'), { recursive: true });
+      vscode.registrado.abiertos.length = 0;
+      await proveedor.manejar({ tipo: 'verLaCopiaDelMontaje' });
+      assert.equal(vscode.registrado.abiertos.length, 0);
+      assert.equal(ultimo('aviso').texto, 'Esa copia ya no está.');
+      assert.equal(ideas.laCopiaEnPantalla(ideas.laCopiaDelMontaje(copia)), null);
+      return 'la primera vez, una vez · Ver la copia · Entendido · de una en una · Sugerencias · Ver las copias guardadas';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      await almacen.update('executiveLab.loQueParece', guardado.parece);
+      await almacen.update('executiveLab.consejosApartados', guardado.apartados);
+      fs.rmSync(copia, { recursive: true, force: true });
+    }
+  });
+
   await comprobar('contárselo a Executive Lab, de principio a fin: sin cuenta se guarda, con su sí sale, y lo que no quiere no vuelve', async () => {
     // Decisión 131. Por los manejadores de verdad, con la red fingida: lo que
     // importa es qué sale, con qué cuenta, y qué queda en su carpeta.
@@ -12478,6 +12783,8 @@ exec git "$@"
         hayAgentes: false,
         copias: null,
         versionDeLaBarra: '0.46.0',
+        // Las ideas de lo que hay tienen su prueba (decisión 152).
+        seAdapta: null,
       };
       const sencilla = pintar(conTodo);
       assert.equal(cuantas(sencilla, 'consejo'), 1, 'salen varias tarjetas a la vez');
@@ -13787,6 +14094,51 @@ exec git "$@"
         if (antes === undefined) delete process.env.GIT_CONFIG_GLOBAL;
         else process.env.GIT_CONFIG_GLOBAL = antes;
         vscode.guion.raiz = empresa;
+      }
+    });
+
+    await comprobar('sobre un proyecto de alguien, la copia que guarda el arnés se ve, y la barra dice lo que parece', async () => {
+      // Decisión 152 y punto 8 de la 142, con el RSC de verdad: una web suya con
+      // claves de Stripe, un presupuesto suelto y una habilidad `review` suya, que
+      // deja ocupar a la del arnés. RSC guarda lo suyo antes de montar; la barra
+      // lo encuentra, lo dice y lo deja ver. Medido con la 3.0.22: su `.gitignore`
+      // no lo gestiona RSC en este plan, y lo que la barra apaga antes de montar
+      // (`.rsc/.no-trunk-guard`) también va en la copia, y no es suyo.
+      const ideas = cargar('ideas');
+      const suya = fs.mkdtempSync(path.join(os.tmpdir(), 'se-adapta-real-'));
+      const poner = (rel, txt) => {
+        fs.mkdirSync(path.dirname(path.join(suya, rel)), { recursive: true });
+        fs.writeFileSync(path.join(suya, rel), txt);
+      };
+      const valor = ['sk', 'test', require('node:crypto').randomBytes(8).toString('hex')].join('_');
+      poner('package.json', '{"name":"la-web","dependencies":{"react":"18.3.1"}}\n');
+      poner('src/app.js', 'console.log("hola");\n');
+      poner('.env.local', `STRIPE_SECRET_KEY=${valor}\n`);
+      poner('presupuesto.pdf', 'un presupuesto');
+      poner('.claude/skills/review/SKILL.md', SU_REVIEW);
+      try {
+        vscode.guion.raiz = suya;
+        const { hecho } = await conRespuestas({
+          ...SI_AL_PERMISO,
+          'Aquí ya hay cosas tuyas': 'Sí, móntalo encima',
+          'Ya tienes una habilidad que se llama «review»': 'Que la del arnés ocupe su sitio',
+        }, () => cargar('arrancar').arrancar(contexto, vscode.window.createOutputChannel()));
+        assert.equal(hecho.ok, true, hecho.mensaje || 'se canceló');
+
+        const copia = ideas.laCopiaDelMontaje(suya);
+        assert.ok(copia, 'RSC no guardó nada suyo, o la barra no lo encuentra');
+        assert.deepEqual(copia.cosas, ['la habilidad «review»'], 'no es lo suyo, o cuenta lo del arnés como suyo');
+        assert.equal(fs.readFileSync(path.join(copia.carpeta, '.claude', 'skills', 'review', 'SKILL.md'), 'utf8'), SU_REVIEW, 'lo que hay en la copia no es la suya');
+
+        const visto = ideas.queSeVe({ carpetaDeLaExtension: RAIZ });
+        assert.match(visto.parece.texto, /^Esto parece una aplicación hecha con React, con claves de Stripe y 1 documento sin colocar\.$/);
+        assert.match(visto.parece.copia.texto, /la habilidad «review»/);
+        assert.equal(visto.ideas[0].id, 'conectar-STRIPE');
+        assert.ok(!JSON.stringify(visto).includes(valor), 'el valor de una clave sale de su fichero');
+        return `${copia.cosas.join(', ')} · «${visto.parece.texto}»`;
+      } finally {
+        vscode.guion.raiz = empresa;
+        fs.rmSync(suya, { recursive: true, force: true });
       }
     });
 

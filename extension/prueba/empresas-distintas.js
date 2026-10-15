@@ -79,6 +79,19 @@ function reciencita() {
   return r;
 }
 
+// Cuántas cosas se ven en la principal con todo plegado: la tarjeta, cada fila
+// plegada y lo que quede suelto. Lo de abajo, en pequeño —la versión y Cambiar de
+// proyecto—, no cuenta (propuesta de simplificar la barra: «5 cosas a la vista
+// como mucho»).
+function cosasALaVista(html) {
+  let resto = html.replace(/<div class="fila pie">[\s\S]*?<\/div>/g, '');
+  const filas = (resto.match(/<details/g) || []).length;
+  resto = resto.replace(/<details[\s\S]*?<\/details>/g, '');
+  const tarjetas = (resto.match(/<div class="(consejo|aviso)/g) || []).length;
+  resto = resto.replace(/<div class="(consejo|aviso)[^"]*">[\s\S]*?<\/div>/g, '');
+  return filas + tarjetas + (resto.match(/<button/g) || []).length;
+}
+
 // ---- probar cada una -----------------------------------------------------
 
 const TODAS = [['Gestoría Pérez', gestoria], ['Despacho Ruiz (Codex)', despacho], ['recién montada', reciencita]];
@@ -134,7 +147,51 @@ for (const [nombre, montar] of TODAS) {
     puedeTenerBotones: cargar('donde').puedeTenerBotones(),
   }, null);
 
+  // La principal sencilla con lo de esta carpeta (decisión 152): «Esto parece»
+  // y las ideas, más un consejo y una versión nueva que también quieren salir.
+  // Sale una tarjeta, y no más de cinco cosas a la vista.
+  const visto = cargar('ideas').queSeVe({ carpetaDeLaExtension: ext });
+  const seAdapta = { parece: visto.parece, idea: visto.ideas[0] || null };
+  const sencilla = {
+    estado: {
+      listo: true,
+      sabe: cargar('cerebro').cuantoSabe(),
+      conectados: cargar('conexiones').proveedores().length,
+    },
+    barraCompleta: false,
+    piezas: JSON.parse(fs.readFileSync(path.join(ext, 'media', 'piezas.json'), 'utf8')),
+    consejo: { id: 'x', texto: 'Un consejo que también quiere salir.', boton: 'Hacerlo', accion: { tipo: 'verSugerencias' } },
+    hayVersionNueva: '9.9.9',
+    copias: { hace: 'hace un momento', sinGuardar: false, subir: false },
+    versionDeLaBarra: '0.0.0',
+    seAdapta,
+    modo: 'sencillo',
+    pulso: [],
+  };
+  // Y después de «Entendido», sin nada más delante: la idea, sola.
+  const variantes = [
+    ['con todo', sencilla],
+    ['después de «Entendido»', { ...sencilla, consejo: null, hayVersionNueva: null, seAdapta: { parece: null, idea: seAdapta.idea } }],
+  ];
   const rotas = [];
+  const vistas = [];
+  for (const [cual, datos] of variantes) {
+    try {
+      const pintada = panel.mandar({ tipo: 'estado', ...datos });
+      const tarjetas = (pintada.match(/<div class="(consejo|aviso)/g) || []).length;
+      const aLaVista = cosasALaVista(pintada);
+      const enLaTarjeta = (pintada.match(/<div class="consejo">\s*<p class="que">([^<]*)</) || [])[1] || '';
+      if (datos.seAdapta.idea || datos.consejo) {
+        if (tarjetas !== 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
+      } else if (tarjetas > 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
+      if (aLaVista > 5) rotas.push(`la principal sencilla, ${cual}: ${aLaVista} cosas a la vista`);
+      const primera = datos.seAdapta.parece ? datos.seAdapta.parece.texto : (datos.consejo ? null : datos.seAdapta.idea && datos.seAdapta.idea.texto);
+      if (primera && !enLaTarjeta.startsWith(primera.slice(0, 20))) rotas.push(`la principal sencilla, ${cual}: no sale la que toca`);
+      vistas.push(`${cual}, ${aLaVista} cosas a la vista y en la tarjeta «${enLaTarjeta || 'nada'}»`);
+    } catch (e) {
+      rotas.push(`la principal sencilla, ${cual}: ${e.message}`);
+    }
+  }
   for (const [tipo, datos] of mensajes) {
     let pintado;
     try {
@@ -162,6 +219,7 @@ for (const [nombre, montar] of TODAS) {
     console.log(`✗ ${nombre}\n    ${rotas.join('\n    ')}`);
   } else {
     console.log(`✓ ${nombre} — ${mensajes.length} pantallas · ${resumen}`);
+    for (const vista of vistas) console.log(`    ${vista}`);
   }
 }
 
