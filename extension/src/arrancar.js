@@ -129,8 +129,11 @@ async function preguntarObjetivo(kind, { empezada = false } = {}) {
 }
 
 // Con qué asistente va a trabajar. Solo se pregunta si hay más de uno
-// instalado: si solo tiene uno, preguntarlo es una pantalla de más.
+// instalado: si solo tiene uno, preguntarlo es una pantalla de más. Y si ya lo
+// dijo en los ajustes, no se pregunta (decisión 158).
 async function preguntarAsistente() {
+  const ajuste = asistentes.elAjuste();
+  if (ajuste !== 'automatico') return conElAjuste(ajuste);
   const puestos = asistentes.ASISTENTES.filter(asistentes.estaInstalado);
   if (puestos.length === 1) return puestos[0].id;
   if (!puestos.length) return ponerUnAsistente();
@@ -154,13 +157,45 @@ async function ponerUnAsistente() {
   );
   const cual = opciones.find((o) => o.boton === elegido);
   if (!cual) return null;
+  return (await ponerElAsistente(cual.asistente)) ? cual.asistente.id : null;
+}
+
+// Ponerlo en el ordenador, con su botón ya pulsado. Si no se puede, se dice.
+async function ponerElAsistente(asistente) {
   try {
-    await vscode.commands.executeCommand('workbench.extensions.installExtension', cual.asistente.extension);
+    await vscode.commands.executeCommand('workbench.extensions.installExtension', asistente.extension);
+    return true;
   } catch {
-    await vscode.window.showWarningMessage(`No he podido poner ${cual.asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
-    return null;
+    await vscode.window.showWarningMessage(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    return false;
   }
-  return cual.asistente.id;
+}
+
+// Lo que dice el ajuste (decisión 158): para uno, o para los dos, sin preguntar.
+// Si falta alguno en este ordenador, se ofrece ponerlo, como sin ninguno (A9), y
+// con el que sí está se puede seguir. Devuelve lo que va a `--target`: un
+// asistente, o los dos separados por una coma, que RSC acepta así.
+async function conElAjuste(ajuste) {
+  const queridos = ajuste === 'losDos' ? asistentes.ASISTENTES : [asistentes.porId(ajuste)].filter(Boolean);
+  const faltan = queridos.filter((a) => !asistentes.estaInstalado(a));
+  if (!faltan.length) return queridos.map((a) => a.id).join(',');
+
+  const puesto = asistentes.ASISTENTES.find(asistentes.estaInstalado);
+  const losDos = ajuste === 'losDos';
+  const poner = faltan.length > 1 ? 'Poner los dos' : `Poner ${faltan[0].nombre}`;
+  const seguir = puesto ? `${losDos ? 'Seguir solo con' : 'Seguir con'} ${puesto.nombre}` : null;
+  const elegiste = losDos ? 'los dos asistentes' : faltan[0].nombre;
+  const mensaje = faltan.length > 1
+    ? `En los ajustes elegiste ${elegiste}, y no tienes ninguno en este ordenador. ¿Los pongo?`
+    : `En los ajustes elegiste ${elegiste}, y ${losDos ? `${faltan[0].nombre} no está` : 'no está'} en este ordenador. ¿Lo pongo?`;
+  const elegido = await vscode.window.showWarningMessage(mensaje, { modal: true }, poner, ...(seguir ? [seguir] : []));
+
+  if (seguir && elegido === seguir) return puesto.id;
+  if (elegido !== poner) return null;
+  for (const asistente of faltan) {
+    if (!(await ponerElAsistente(asistente))) return null;
+  }
+  return queridos.map((a) => a.id).join(',');
 }
 
 // Cómo se llama esto. Dos nombres, y los pone el alumno: para qué es esta
@@ -669,7 +704,11 @@ async function ponerElBloque(contexto) {
 //     suyo que se llama como uno del arnés se pregunta como al montar, y en una
 //     carpeta de alguien se enseña además lo suyo que se toca (I1);
 //   · lo que dice el arnés cuando falla vuelve en `detalle`, para el registro (I3).
-async function prepararTambienPara(id, contexto) {
+//
+// `sinNadieDelante`: la barra lo hace sola, por el ajuste de los dos asistentes
+// (decisión 158). Entonces lo que toca algo suyo no se pregunta ni se hace:
+// vuelve con `esperaASuBoton`, sin haber escrito nada (P4, P9).
+async function prepararTambienPara(id, contexto, { sinNadieDelante = false } = {}) {
   if (rsc.vaPorDelante()) return { ok: false, porDelante: true };
   const enSeco = await rsc.correr(['sync', '--target', id, '--dry-run'], { tiempoMaximo: 300000 });
   if (enSeco.codigo !== 0) return { ok: false, detalle: loQuePaso('al mirar qué se toca', enSeco) };
@@ -677,6 +716,7 @@ async function prepararTambienPara(id, contexto) {
   const { tocados, choques } = ajena.resumen(plan, proyecto.raiz());
   let renombrados = [];
   if (choques.length || (tocados.length && await sinSuSi(null))) {
+    if (sinNadieDelante) return { ok: false, esperaASuBoton: true };
     const decidido = await confirmarLoQueSeToca(plan);
     if (!decidido.seguir) return { ok: false, cancelado: true };
     if (decidido.fallo) {
@@ -1367,7 +1407,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 module.exports = {
   arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
-  prepararTambienPara, ponerElBloque,
+  prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
   COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
   COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO,

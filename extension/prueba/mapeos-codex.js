@@ -223,3 +223,22 @@ test('conversación nueva usa los comandos reales de Codex y prueba el repuesto 
     assert.equal(await puente.conversacionNueva(), false);
   } finally { vscode.commands.executeCommand = ejecutar; }
 });
+
+test('con el ajuste en Codex, una carpeta montada para los dos mira e invoca lo de Codex', () => {
+  // Decisión 158: en una carpeta montada para los dos, sin nada elegido en ella,
+  // los botones son los de Codex y se piden como en Codex. Sin el ajuste, los de Claude.
+  declaracion({ targets: ['claude', 'codex'] });
+  vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+  habilidad('.agents/skills/resumen', 'resumen-semanal', 'Preparar el resumen');
+  habilidad('.claude/skills/informe', 'informe', 'Preparar el informe');
+  try {
+    assert.equal(cargar('donde').paraQuien(), 'claude');
+    assert.deepEqual(cargar('acciones').acciones().map((a) => a.prompt), ['/informe']);
+    vscode.registrado.ajustes.global['executiveLab.asistente'] = 'codex';
+    assert.equal(cargar('donde').paraQuien(), 'codex');
+    assert.deepEqual(cargar('acciones').acciones().map((a) => a.prompt), ['$resumen-semanal']);
+    assert.match(cargar('saberes').comoSePide('bro'), /Usa la habilidad «bro»/);
+  } finally {
+    delete vscode.registrado.ajustes.global['executiveLab.asistente'];
+  }
+});

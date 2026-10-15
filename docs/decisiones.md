@@ -5686,3 +5686,61 @@ Pruebas: creación, cambio, cancelación, cadencias, pendientes, nombre declarad
 del contenido, enlaces compartidos y fechas reales —incluido el cambio de hora y el año 2100—.
 La pantalla vacía también se prueba en las tres empresas de muestra. No se ha creado ninguna tarea
 en las cuentas personales de Claude o ChatGPT.
+
+## 158. Con qué asistente, en los ajustes
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«¿meterías en ajustes si se usa Claude Code, Codex o ambas en la extensión?»*. Sí, y uno solo:
+**`executiveLab.asistente`**, en los ajustes del editor, con cuatro valores. Cada uno lleva su rótulo y una
+frase debajo.
+
+- **Automático**, de fábrica: como hasta ahora. Con uno puesto en el ordenador, ese; con los dos, se pregunta
+  al preparar la carpeta.
+- **Claude** o **Codex**: se prepara para ese sin preguntar. Si no está en el ordenador, se ofrece ponerlo,
+  como cuando no hay ninguno (A9), o seguir con el que hay. En una carpeta montada para los dos, y sin nada
+  elegido en ella, los botones le hablan a ese.
+- **Los dos**: se prepara con `--target claude,codex`, que RSC acepta así; `contrato.js` lo monta de verdad
+  con la 3.0.22. En una carpeta montada para uno, la barra la prepara sola también para el otro
+  (`prepararTambienPara`) y lo dice en una frase. Sin el otro en el ordenador, se ofrece ponerlo.
+
+Lo que se eligió en una carpeta, en «Tu asistente», sigue mandando en ella. `conQuien` mira primero eso,
+después el ajuste, y el ajuste solo cuenta si la carpeta está montada para él y está en el ordenador:
+hablar con uno sin montar es hablar sin sus habilidades.
+
+**Lo que se hace solo, con las guardas de P9.** Preparar para el otro es de este ordenador y se deshace.
+Se hace solo con la carpeta de confianza, en una que este ordenador ya conoce y con un arnés que no va
+por delante. Si el arnés está ocupado, espera. Lo que tocaría algo suyo no se hace solo (P4): un nombre
+que choca, o sus ficheros en una carpeta cuyo historial no creó la barra. Entonces sale un aviso con
+«Prepararla también para Codex», que enseña qué se toca, como al montar. Cada oferta sale una vez por
+carpeta y por sesión, y otra vez si se cambia el ajuste. Si falla, se dice, con el código para el tutor.
+
+**Preparar no es cambiar de asistente.** RSC ordena `targets`, así que al sumar Claude a una carpeta de
+Codex los botones habrían pasado a Claude sin que nadie lo pidiera. La barra apunta el de antes como lo
+elegido en esa carpeta (`seguirCon`).
+
+**En caliente.** Al cambiar el ajuste con la barra abierta, se repinta lo que se tiene delante, también
+«Tu asistente», que sigue quieta para el vigía. El vigía pasa a mirar lo del asistente de ahora. Con
+«Los dos», se prepara la carpeta.
+
+**En la barra sencilla no hay pantalla nueva.** El ajuste del editor basta. «Tu asistente» lo dice en una
+línea, dice que lo elegido ahí manda en esa carpeta, y «Cambiar el ajuste» lo abre
+(`workbench.action.openSettings`). El comprobador del diccionario mira también los rótulos de cada valor
+(`enumItemLabels`).
+
+Lo que se decidió por el camino:
+
+- **Para todo el editor (`application`)**, como `probarAntes` y `actualizarSola`. Una carpeta traída de
+  fuera no lo puede poner por su cuenta, y lo de cada carpeta ya tiene su sitio.
+- **«Seguir con Claude» al montar** cuando falta el del ajuste. Cerrar la pregunta sigue siendo no montar,
+  como sin ninguno.
+- **Con Claude o Codex en el ajuste, nada se prepara solo.** Una carpeta montada solo para el otro sigue
+  hablando con el otro; «Tu asistente» ofrece cambiar. Solo «Los dos» pide tener los dos.
+- **Lo apuntado con `seguirCon` cuenta como elegido en esa carpeta.** Si después se pone Claude en el
+  ajuste, en esa carpeta sigue Codex hasta que se cambie en «Tu asistente».
+
+Pruebas: en `humo.js`, siete nuevas y una ampliada (el diccionario). Cubren cada valor al montar y en una
+carpeta montada, lo elegido en la carpeta, el cambio en caliente, sin el otro en el ordenador, las guardas
+y lo suyo a un clic. Una más en `mapeos-codex.js`, y otra en `contrato.js`, que monta para los dos con el
+RSC de dentro. Mutaciones a mano: 45, cada una en una copia del árbol, y las 45 tumbadas por la
+comprobación que les toca; la copia sin mutar pasa entera.

@@ -308,6 +308,34 @@ async function main() {
     return 'operaciones';
   });
 
+  // ── Con el ajuste de los dos asistentes (decisión 158) ─────────────────
+  //
+  // El arranque no pregunta y le manda a RSC `--target claude,codex`. Que RSC
+  // acepte la lista con coma lo dice su ayuda; aquí se monta de verdad.
+  await comprobar('con el ajuste de los dos asistentes, el arranque no pregunta y RSC monta para los dos', async () => {
+    const antes = { instaladas: vscode.guion.extensionesInstaladas, ajuste: vscode.registrado.ajustes.global['executiveLab.asistente'] };
+    vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+    vscode.registrado.ajustes.global['executiveLab.asistente'] = 'losDos';
+    try {
+      const { respuestas, vistas } = await jugar({});
+      assert.ok(!vistas.some((v) => v.id === 'asistente'), 'con el ajuste puesto, se pregunta con cuál');
+      assert.equal(respuestas.asistente, 'claude,codex');
+      const carpeta = carpetaConGit('contrato-los-dos-');
+      vscode.guion.raiz = carpeta;
+      const hecho = await arrancar.COMO_SE_HACE.montarElArnes({ respuestas: { ...MONTAJE, asistente: respuestas.asistente, kind: 'operations', objetivo: 'Organizar el papeleo' } });
+      assert.equal(hecho.ok, true, hecho.detalle);
+      const { targets } = JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8'));
+      assert.deepEqual([...targets].sort(), ['claude', 'codex'], `RSC lo ha montado para ${targets.join(', ')}`);
+      assert.ok(fs.existsSync(path.join(carpeta, '.codex', 'rsc')), 'sin las habilidades de Codex');
+      assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'skills')), 'sin las de Claude');
+      return `montado para ${targets.join(' y ')}`;
+    } finally {
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      if (antes.ajuste === undefined) delete vscode.registrado.ajustes.global['executiveLab.asistente'];
+      else vscode.registrado.ajustes.global['executiveLab.asistente'] = antes.ajuste;
+    }
+  });
+
   await comprobar('un plan que practica SDD queda montado y listo, con el borrador de los innegociables', async () => {
     // Con la 2, RSC dejaba los innegociables por escribir y el montaje quedaba con
     // el suelo a medias (A3). La 3 deja un borrador, y el arnés queda listo.
