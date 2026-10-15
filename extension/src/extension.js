@@ -1098,7 +1098,7 @@ ${cabecera}
   loQueDijoLaPrueba(proveedor, hecho) {
     if (hecho.noVale) {
       const una = this.cuandoCaduca(proveedor);
-      if (una && una.hasta && Date.now() >= una.hasta - UN_DIA) return { texto: `La clave no vale: caducó ${elDia(una.hasta)}. Saca una nueva donde te la dieron y pégala entera.`, malo: true };
+      if (una && una.hasta && Date.now() >= una.hasta) return { texto: `La clave no vale: caducó ${elDia(una.hasta)}. Saca una nueva donde te la dieron y pégala entera.`, malo: true };
     }
     if (!hecho.puedeEscribir) return { texto: hecho.mensaje, malo: !hecho.ok };
     if (this.laDejoAsi(proveedor)) return { texto: 'Conectado. Funciona. Esta clave puede cambiar y borrar, como elegiste.', malo: false };
@@ -1131,13 +1131,14 @@ ${cabecera}
 
   queDecirDeCuandoCaduca(proveedor, datos, aviso) {
     const puestas = datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero);
-    if (!puestas) return null;
+    if (!puestas || datos.proveedor.aMedioHacer) return null;
     const una = this.cuandoCaduca(proveedor);
     if (!una) return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };
+    // También «No lo sé» se dice, para que tenga su «Cambiar» (revisión de la 149).
     const texto = una.hasta
       ? `${Date.now() < una.hasta ? 'Caduca' : 'Caducó'} ${elDia(una.hasta)}.${Date.now() < una.hasta ? ' Te aviso una semana antes.' : ''}`
-      : (una.nunca ? 'No caduca.' : null);
-    return texto ? { texto } : null;
+      : (una.nunca ? 'No caduca.' : 'Sin fecha de caducidad.');
+    return { texto };
   }
 
   async apuntarCuandoCaduca(proveedor, en, laVista) {
@@ -1176,15 +1177,18 @@ ${cabecera}
     if (!tocan.length) return;
     for (const p of tocan) avisadas[p] = todas[p].hasta;
     await this.almacen().update(CLAVE_CADUCAN_AVISADAS, avisadas);
-    await Promise.all(tocan.map(async (p) => {
+    // Sin esperar a que lo cierre: los recordatorios de este minuto no esperan a nadie.
+    for (const p of tocan) {
       const datos = conexiones.claves(p);
-      const nombre = String((datos && datos.proveedor && datos.proveedor.etiqueta) || p).slice(0, 60);
-      const quiere = await vscode.window.showWarningMessage(`La clave de ${nombre} ${this.loQueCaduca(p).texto}. Saca una nueva y pégala en su conexión.`, 'Ver la conexión');
-      if (quiere === 'Ver la conexión') {
+      // Sale de la primera línea de su README: sin lo que el editor pintaría como enlace.
+      const nombre = String((datos && datos.proveedor && datos.proveedor.etiqueta) || p).replace(/[[\]()<>`*_]/g, '').slice(0, 60);
+      const texto = `La clave de ${nombre} ${this.loQueCaduca(p).texto}. Saca una nueva y pégala en su conexión.`;
+      Promise.resolve(vscode.window.showWarningMessage(texto, 'Ver la conexión')).then(async (quiere) => {
+        if (quiere !== 'Ver la conexión') return;
         await vscode.commands.executeCommand('executiveLab.panel.focus');
         this.verConexion(p);
-      }
-    }));
+      }).catch((error) => this.salida.appendLine(`[caducidades] ${error.message}`)); // diccionario: interno
+    }
   }
 
   laDejoAsi(proveedor) {
@@ -1212,6 +1216,14 @@ ${cabecera}
     const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
     pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
     await this.almacen().update(CLAVE_PRUEBAS, pruebas);
+    // Conecta pasada la fecha apuntada: la fecha estaba mal. Se olvida, y se vuelve
+    // a preguntar, en vez de dejar «caducó» en la lista de una que funciona.
+    const caducaba = this.cuandoCaduca(proveedor);
+    if (hecho.ok && caducaba && caducaba.hasta && Date.now() >= caducaba.hasta) {
+      const todas = { ...(this.almacen().get(CLAVE_CADUCAN) || {}) };
+      delete todas[proveedor];
+      await this.almacen().update(CLAVE_CADUCAN, todas);
+    }
     return { ...hecho, huella };
   }
 

@@ -13347,8 +13347,21 @@ exec git "$@"
       await proveedor.mirarLosRecordatorios();
       assert.ok(!vscode.registrado.mensajes.some((m) => /La clave de Agenda/.test(m)), 'avisa con un mes de margen');
 
-      // A tres días: la lista lo dice, y el editor avisa una vez, con su botón.
-      const pronto = Date.now() + 3 * DIA;
+      // La semana, por los dos lados: a ocho días, nada; a seis, sí.
+      await moverLaFecha(Date.now() + 8 * DIA);
+      await proveedor.mirarLosRecordatorios();
+      assert.ok(!vscode.registrado.mensajes.some((m) => /La clave de Agenda/.test(m)), 'avisa con ocho días');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.match(panel.mandar(ultimo('conexiones')), /Agenda — conectada · probada hoy/, 'la lista lo dice con ocho días');
+      // Una clave que no vale con la fecha aún por llegar: lo de siempre, sin «caducó».
+      conPrueba(true);
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Agenda' });
+      assert.equal(ultimo('conexion').aviso.texto, 'La clave no vale: puede que haya caducado o que no esté entera. Sácala otra vez donde te la dieron y pégala entera.');
+      conPrueba(false);
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Agenda' });
+
+      // A seis días: la lista lo dice, y el editor avisa una vez, con su botón.
+      const pronto = Date.now() + 6 * DIA;
       await moverLaFecha(pronto);
       await proveedor.manejar({ tipo: 'verConexiones' });
       html = panel.mandar(ultimo('conexiones'));
@@ -13357,6 +13370,7 @@ exec git "$@"
       vscode.guion.eleccion = 'Ver la conexión';
       vscode.registrado.ejecutados.length = 0;
       await proveedor.mirarLosRecordatorios();
+      await new Promise((r) => setImmediate(r));
       const avisos = vscode.registrado.mensajes.filter((m) => /La clave de Agenda/.test(m));
       assert.deepEqual(avisos, [`WARN La clave de Agenda caduca ${elDia(pronto)}. Saca una nueva y pégala en su conexión.`]);
       assert.ok(vscode.registrado.ejecutados.some((e) => e.id === 'executiveLab.panel.focus'), '«Ver la conexión» no saca la barra');
@@ -13383,7 +13397,8 @@ exec git "$@"
       assert.equal(ultimo('conexion').caduca.pregunta, true, '«Cambiar» no vuelve a preguntar');
       await proveedor.manejar({ tipo: 'cuandoCaduca', proveedor: 'Agenda', en: 'noSe', huella: ultimo('conexion').caduca.huella });
       assert.equal(ultimo('conexion').aviso.texto, 'Apuntado. Si un día deja de funcionar, te diré que puede haber caducado.');
-      assert.equal(ultimo('conexion').caduca, null);
+      assert.equal(ultimo('conexion').caduca.texto, 'Sin fecha de caducidad.');
+      assert.match(panel.mandar(ultimo('conexion')), />\s*Cambiar\s*</, '«No lo sé» no se puede cambiar');
       await proveedor.manejar({ tipo: 'probar', proveedor: 'Agenda' });
       assert.equal(ultimo('conexion').aviso.texto, 'La clave no vale: puede que haya caducado o que no esté entera. Sácala otra vez donde te la dieron y pégala entera.');
       // «No caduca».
@@ -13391,13 +13406,45 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'cuandoCaduca', proveedor: 'Agenda', en: 'nunca', huella: ultimo('conexion').caduca.huella });
       assert.equal(ultimo('conexion').aviso.texto, 'Apuntado: no caduca.');
       assert.equal(ultimo('conexion').caduca.texto, 'No caduca.');
+      // «En un año»: con el año, que no es este.
+      await proveedor.manejar({ tipo: 'cuandoCaduca', proveedor: 'Agenda', en: 'otraVez' });
+      await proveedor.manejar({ tipo: 'cuandoCaduca', proveedor: 'Agenda', en: '365', huella: ultimo('conexion').caduca.huella });
+      const dentroDeUnAno = apuntado().hasta;
+      assert.match(ultimo('conexion').aviso.texto, new RegExp(`^Apuntado: caduca el \\d+ de \\p{L}+ de ${new Date(dentroDeUnAno).getFullYear()}\\.`, 'u'), 'sin el año');
+      // Si conecta pasada la fecha, la fecha estaba mal: se olvida y se vuelve a preguntar.
+      conPrueba(false);
+      await moverLaFecha(Date.now() - 2 * DIA);
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Agenda' });
+      assert.equal(apuntado(), undefined, 'conecta y sigue apuntado que caducó');
+      assert.equal(ultimo('conexion').caduca.pregunta, true);
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.doesNotMatch(panel.mandar(ultimo('conexiones')), /caducó/, 'la lista dice que caducó una que funciona');
+      // Lo de escribir va antes que lo de caducar, en la lista.
+      assert.match(panel.mandar({ tipo: 'conexiones', proveedores: [{ id: 'X', etiqueta: 'Holded', faltan: 0, caduca: { texto: 'caduca el 20 de octubre' }, prueba: { ok: true, puedeEscribir: true, mensaje: 'x', cuando: 'hoy' } }] }), /Holded — conecta, pero puede cambiar y borrar/);
 
-      // Con otra clave, se pregunta otra vez; y no mientras haya otra pregunta en pantalla.
+      // Con otra clave, se pregunta otra vez —aunque la de antes tuviera respuesta—; y no
+      // mientras haya otra pregunta en pantalla.
+      await proveedor.manejar({ tipo: 'cuandoCaduca', proveedor: 'Agenda', en: 'nunca', huella: ultimo('conexion').caduca.huella });
+      assert.ok(apuntado(), 'antes de cambiar de clave no queda nada apuntado: la prueba no prueba nada');
       conPrueba(false);
       await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Agenda', clave: 'AGENDA_API_KEY', valor: 'buena-nueva' });
       assert.equal(ultimo('conexion').caduca && ultimo('conexion').caduca.pregunta, true, 'con otra clave no se pregunta');
       const datos = cargar('conexiones').claves('Agenda');
       assert.equal(proveedor.queDecirDeCuandoCaduca('Agenda', datos, { texto: 'x', botones: [{}] }), null, 'dos preguntas a la vez');
+      // A medio hacer no se pregunta.
+      fs.writeFileSync(path.join(suya, '.env.example'), 'AGENDA_API_KEY=\n<OTRA_CLAVE>=\n');
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Agenda' });
+      assert.equal(ultimo('conexion').caduca, null, 'se pregunta en una conexión a medio hacer');
+      fs.writeFileSync(path.join(suya, '.env.example'), 'AGENDA_API_KEY=\n');
+      // Un .env que no acaba no cuelga la huella, que ahora se mira cada minuto.
+      if (process.platform !== 'win32') {
+        fs.rmSync(path.join(suya, '.env'));
+        fs.symlinkSync('/dev/zero', path.join(suya, '.env'));
+        const empieza = Date.now();
+        assert.ok(cargar('conexiones').huella('Agenda'));
+        assert.ok(Date.now() - empieza < 2000, 'la huella lee un .env que no acaba');
+        fs.rmSync(path.join(suya, '.env'));
+      }
       return 'se pregunta con la clave puesta; a una semana, la lista y el editor lo dicen una vez; caducada, la prueba lo dice con la fecha';
     } finally {
       for (const [i, k] of CLAVES.entries()) await almacen.update(k, antes.guardado[i]);

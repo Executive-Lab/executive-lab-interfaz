@@ -2290,7 +2290,10 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
             ? `${p.etiqueta} — puesta, pero fuera de su sitio`
             // Lo que dijo su última prueba, mientras sus claves sigan igual
             // (decisión 146): «conectada», o por qué falla, en una frase.
-            // Una clave que caduca esta semana, o que ya caducó (decisión 149).
+            // Conecta con una clave que puede escribir y no ha dicho qué hace: primero
+            // eso, que es una pregunta. Después, una clave que caduca esta semana o
+            // que ya caducó (decisión 149).
+            : (p.prueba && p.prueba.ok && p.prueba.puedeEscribir ? `${p.etiqueta} — conecta, pero puede cambiar y borrar`
             : (p.caduca ? `${p.etiqueta} — ${p.caduca.texto}` : (p.prueba
               ? (p.prueba.ok
                 // Conecta con una clave que puede escribir, y no ha dicho qué hace con ella.
@@ -2298,7 +2301,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
                 : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
               // Se autentica con un fichero y no con claves: decir su nombre a
               // secas dejaría pensando que no tiene nada puesto (decisión 105).
-              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta))))),
+              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta)))))),
       icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.caduca && p.caduca.caducada ? '✕' : (p.fueraDeSitio || p.caduca || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●')))),
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}

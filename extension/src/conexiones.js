@@ -823,8 +823,13 @@ function huella(proveedorId) {
   const carpeta = carpetaDe(proveedorId);
   if (!carpeta) return null;
   const suma = require('node:crypto').createHash('sha256');
+  // Sin seguir enlaces ni leer lo que no acaba: desde la decisión 149 la huella se
+  // calcula cada minuto, y un `.env` que fuera un enlace a /dev/zero colgaba el
+  // editor (revisión de seguridad, reproducido).
   try {
-    suma.update(fs.readFileSync(path.join(carpeta, '.env'), 'utf8'));
+    const env = path.join(carpeta, '.env');
+    const datos = fs.lstatSync(env);
+    if (datos.isFile() && datos.size <= 1024 * 1024) suma.update(fs.readFileSync(env, 'utf8'));
   } catch { /* sin claves todavía */ }
   try {
     const llaves = path.join(carpeta, 'keys');

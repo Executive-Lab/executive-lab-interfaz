@@ -244,6 +244,17 @@ hacerse solo, porque no se puede deshacer.
   caduca la clave, con cinco opciones. Una semana antes avisa el editor, una vez por fecha, con «Ver la conexión», y
   la lista lo dice. Si la prueba dice que no vale, dice que puede haber caducado, y la fecha si ya pasó.
   `humo.js` 374, contrato 14, diccionario, y 17 de 17 mutaciones.
+- **La revisión adversaria del punto 9.**
+  - Seguridad: la huella, ahora mirada cada minuto, se colgaba con un `.env` enlazado a `/dev/zero`. Ya no
+    sigue enlaces ni lee lo enorme.
+  - Corrección:
+    - «No lo sé» no tenía «Cambiar»;
+    - una fecha equivocada dejaba «caducó» en la lista de una clave que funciona, y ahora se olvida y se
+      vuelve a preguntar;
+    - «caducó» salía con la fecha aún por llegar;
+    - lo de caducar tapaba en la lista la pregunta de la clave que puede escribir;
+    - una conexión a medio hacer preguntaba.
+  - Cinco mutaciones vivas, y una más que salió después porque un paso nuevo vaciaba la prueba: 24 de 24.
 
 ## Next
 
