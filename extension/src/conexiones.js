@@ -513,8 +513,10 @@ const sinPython = (proveedorId, fichero, queEs) => ({
 // Se mira en el orden en que importa, y lo que no se reconoce no culpa a nadie.
 const ESTA_ROTA = [/traceback|syntaxerror|modulenotfounderror|command not found|no such file or directory|cannot find module|referenceerror/i,
   'La prueba de esta conexión está rota, y eso no es cosa tuya. Pídeselo al asistente.'];
+// Una clave que no vale muchas veces es una que caducó (decisión 149): se dice, y
+// si se sabe la fecha, `extension.js` la pone.
 const NO_VALE = [/\b(401|403)\b|unauthorized|forbidden|invalid.{0,15}(key|token|credential)|authentication failed|bad credentials/i,
-  'La clave no vale. Sácala otra vez donde te la dieron y pégala entera.'];
+  'La clave no vale: puede que haya caducado o que no esté entera. Sácala otra vez donde te la dieron y pégala entera.'];
 const PORQUE_FALLA = [
   [/getaddrinfo|could not resolve|name or service not known|enotfound|network is unreachable|no route to host|econnrefused|connection refused/i,
     'No he podido salir a internet. Mira que tengas conexión y vuelve a probar.'],
@@ -605,7 +607,7 @@ async function probar(proveedorId) {
     return { ok: false, mensaje: 'Una clave de esta conexión tiene caracteres que la prueba lee mal. Pégala otra vez y guárdala: ahora la guardo bien.' };
   }
   // Sin internet no dice nada de la conexión: es pasajero, y no se recuerda (decisión 146).
-  if (porque) return { ok: false, mensaje: porque[1], pasajero: porque === PORQUE_FALLA[0] };
+  if (porque) return { ok: false, mensaje: porque[1], pasajero: porque === PORQUE_FALLA[0], ...(porque === NO_VALE ? { noVale: true } : {}) };
 
   // Y si no se reconoce, no se señala a la clave: se dice lo que se sabe.
   return { ok: false, mensaje: 'No conecta, y no sé decirte por qué. Pídeselo al asistente, que puede mirar el detalle.' };
@@ -821,8 +823,13 @@ function huella(proveedorId) {
   const carpeta = carpetaDe(proveedorId);
   if (!carpeta) return null;
   const suma = require('node:crypto').createHash('sha256');
+  // Sin seguir enlaces ni leer lo que no acaba: desde la decisión 149 la huella se
+  // calcula cada minuto, y un `.env` que fuera un enlace a /dev/zero colgaba el
+  // editor (revisión de seguridad, reproducido).
   try {
-    suma.update(fs.readFileSync(path.join(carpeta, '.env'), 'utf8'));
+    const env = path.join(carpeta, '.env');
+    const datos = fs.lstatSync(env);
+    if (datos.isFile() && datos.size <= 1024 * 1024) suma.update(fs.readFileSync(env, 'utf8'));
   } catch { /* sin claves todavía */ }
   try {
     const llaves = path.join(carpeta, 'keys');
