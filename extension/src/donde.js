@@ -91,12 +91,20 @@ const ficheroDeLaHabilidad = (id) => {
   const aqui = path.join(carpeta, id, 'SKILL.md');
   // Con Codex, las de botón están en `.agents/skills`, no con las de RSC.
   const otra = carpetaDeBotones() ? path.join(carpetaDeBotones(), id, 'SKILL.md') : null;
-  return !fs.existsSync(aqui) && otra && fs.existsSync(otra) ? otra : aqui;
+  // La que se invoca con `$` es la nativa. Su ficha debe leer ese mismo
+  // fichero aunque RSC tenga otra con el mismo identificador.
+  return otra && fs.existsSync(otra) ? otra : aqui;
 };
 
 // Las habilidades con botón (decisión 141): dónde están, y cómo se piden.
 const carpetaDeBotones = () => carpetaDe('botones');
-const elBoton = (nombre) => ({ nombre, prompt: `${susSitios().botonSePideCon || '/'}${nombre}` });
+const elBoton = (nombre) => {
+  const carpeta = carpetaDeBotones();
+  const campos = carpeta ? require('./frontmatter').leer(path.join(carpeta, nombre, 'SKILL.md')) : {};
+  const declarado = typeof campos.name === 'string' ? campos.name.trim() : '';
+  const invocacion = paraQuien() === 'codex' && declarado ? declarado : nombre;
+  return { nombre, prompt: `${susSitios().botonSePideCon || '/'}${invocacion}` };
+};
 const acabaUnComando = () => susSitios().comandoAcabaEn || '.md';
 // De un fichero de la carpeta de comandos, el comando y cómo se pide; o null si
 // no es uno de este asistente.

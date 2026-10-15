@@ -56,6 +56,8 @@ const LO_QUE_NO_ENTRA = [
   // Los avisos para Executive Lab, mandados o no: llevan lo que la barra apuntó
   // por dentro, y lo que sale de aquí sale limpio y solo con su sí (decisión 131).
   '02-DOCS/raw/avisos/',
+  // Lo que el asistente le pide a la barra y lo que ella le contesta (decisión 150).
+  '02-DOCS/raw/pedidos/',
   // Los ajustes de Claude de esta persona en este ordenador (decisión 157). Claude
   // lo deja fuera de git cuando lo crea él, pero aquí lo crean RSC, para su memoria,
   // y la barra. RSC solo lo excluye en `.git/info/exclude` si ya había git al
