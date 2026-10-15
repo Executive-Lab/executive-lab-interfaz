@@ -524,6 +524,17 @@ const PORQUE_FALLA = [
   ESTA_ROTA,
 ];
 
+// ── Conecta, y la clave puede escribir ──────────────────────────────────
+//
+// `connect-tool` (RSC 3) empieza toda conexión en solo lectura, y su prueba no
+// solo lee: demuestra que escribir falla. Si la clave puede escribir, termina con
+// `FAIL — this user can write`, y aquí se contestaba «No conecta, y no sé decirte
+// por qué», cuando sí conecta (punto 7 de la decisión 142, en la clase del 13-10).
+// No es un fallo: es más permiso del que se pidió, y quedárselo o no lo decide su
+// negocio. Así que conecta (`ok`), y `extension.js` pregunta una vez. Solo con
+// FAIL delante: un «OK — writes refused» es lo contrario.
+const PUEDE_ESCRIBIR = /\bFAIL\b[^\n]*?(\bcan write\b|\bwrite scopes?\b|\bwrites? (?:are |is )?(?:allowed|accepted)\b|\bpuede escribir\b|\bpermisos? de escritura\b)/i;
+
 // Una clave escrita sin comillas con algo que bash no lee tal cual: la prueba
 // hace `source .env`, y con un `;`, un espacio o un `$` fuera de comillas se
 // corta o se ejecuta. La barra ya las guarda bien (F3); las de antes, o escritas
@@ -558,6 +569,10 @@ async function probar(proveedorId) {
   const error = `${resultado.error || ''}\n${resultado.salida || ''}`;
 
   if (resultado.codigo === 0) return { ok: true, mensaje: 'Conectado. Funciona.' };
+  if (PUEDE_ESCRIBIR.test(error)) {
+    const nombre = etiquetaDeProveedor(proveedorId, carpeta);
+    return { ok: true, puedeEscribir: true, mensaje: `Conecta, pero esta clave puede cambiar y borrar cosas en ${nombre}, no solo mirarlas.` };
+  }
 
   // Si la clave existe pero en otro sitio, decir «falta» manda a rellenar algo
   // que esa persona ya tiene. Se dice lo que pasa de verdad (decisión 104).

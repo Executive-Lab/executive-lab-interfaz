@@ -13133,6 +13133,95 @@ exec git "$@"
     }
   });
 
+  await comprobar('una clave que puede cambiar y borrar: conecta, se dice, y se pregunta una vez', async () => {
+    // Punto 7 de la decisión 142. `connect-tool` empieza en solo lectura, y su prueba
+    // demuestra que escribir falla: con una clave que puede, dice `FAIL — this user
+    // can write`, y la barra contestaba «No conecta, y no sé decirte por qué».
+    const conexionesM = cargar('conexiones');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'escribe-'));
+    const suya = path.join(carpeta, '01-TOOLS', 'Contabilidad');
+    fs.mkdirSync(suya, { recursive: true });
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    fs.writeFileSync(path.join(suya, '.env.example'), 'CONTA_API_KEY=\n');
+    const conPrueba = (fallo) => fs.writeFileSync(path.join(suya, 'test_connection.js'), [
+      "const fs = require('node:fs'); const path = require('node:path');",
+      "const env = fs.existsSync(path.join(__dirname, '.env')) ? fs.readFileSync(path.join(__dirname, '.env'), 'utf8') : '';",
+      "if (/CONTA_API_KEY=lectura/.test(env)) { console.log('OK — read 3 invoices'); console.log('OK — writes refused'); process.exit(0); }",
+      `console.log('OK — read 3 invoices'); console.error(${JSON.stringify(fallo)}); process.exit(1);`,
+    ].join('\n'));
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, pruebas: almacen.get('executiveLab.pruebasDeConexion'), asi: almacen.get('executiveLab.clavesQuePuedenEscribir') };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    vscode.guion.raiz = carpeta;
+    try {
+      await almacen.update('executiveLab.pruebasDeConexion', {});
+      await almacen.update('executiveLab.clavesQuePuedenEscribir', {});
+      // Lo que dice la prueba de connect-tool, y las formas de decirlo; lo contrario no.
+      fs.writeFileSync(path.join(suya, '.env'), 'CONTA_API_KEY=admin\n');
+      for (const fallo of ['FAIL — this user can write', 'FAIL: token has a write scope', 'FAIL — este usuario puede escribir']) {
+        conPrueba(fallo);
+        const hecho = await conexionesM.probar('Contabilidad');
+        assert.deepEqual([hecho.ok, hecho.puedeEscribir], [true, true], `«${fallo}» no se lee como que conecta y puede escribir: ${hecho.mensaje}`);
+        assert.equal(hecho.mensaje, 'Conecta, pero esta clave puede cambiar y borrar cosas en Contabilidad, no solo mirarlas.');
+      }
+      for (const fallo of ['FAIL — unexpected error: permission denied for table x', 'OK — writes refused', 'HTTP 401 Unauthorized']) {
+        conPrueba(fallo);
+        assert.ok(!(await conexionesM.probar('Contabilidad')).puedeEscribir, `«${fallo}» se lee como que puede escribir`);
+      }
+
+      // Al guardarla se prueba sola, y se pregunta, con las dos salidas.
+      conPrueba('FAIL — this user can write');
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Contabilidad' });
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Contabilidad', clave: 'CONTA_API_KEY', valor: 'admin' });
+      let aviso = ultimo('conexion').aviso;
+      assert.equal(aviso.texto, 'Guardada. Conecta, pero esta clave puede cambiar y borrar cosas en Contabilidad, no solo mirarlas. ¿La dejas así o la cambias por una de solo lectura?');
+      assert.equal(aviso.malo, false, 'se dice como un fallo');
+      assert.deepEqual(aviso.botones.map((b) => [b.etiqueta, b.accion.tipo]), [['Dejarla así', 'dejarLaClaveAsi'], ['Cambiarla por una de solo lectura', 'pedir']]);
+      assert.match(aviso.botones[1].accion.prompt, /01-TOOLS\/Contabilidad\/[\s\S]*solo lectura[\s\S]*CREDENTIALS\.md/);
+      const panel = require('./panel-falso').montarPanel();
+      const pantalla = panel.mandar(ultimo('conexion'));
+      assert.match(pantalla, /Dejarla así/, 'la pregunta sale sin su primera respuesta');
+      assert.match(pantalla, /Cambiarla por una de solo lectura/, 'la pregunta sale sin su segunda respuesta');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      let enLaLista = ultimo('conexiones').proveedores.find((p) => p.id === 'Contabilidad');
+      assert.equal(enLaLista.prueba.puedeEscribir, true);
+      assert.match(panel.mandar(ultimo('conexiones')), /Contabilidad — conecta, pero puede cambiar y borrar/);
+
+      // «Dejarla así»: no se vuelve a preguntar con esa clave, y la lista dice «conectada».
+      await proveedor.manejar({ tipo: 'dejarLaClaveAsi', proveedor: 'Contabilidad' });
+      assert.equal(ultimo('conexion').aviso.texto, 'Hecho. Mientras sea esta clave, no te lo vuelvo a preguntar.');
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Contabilidad' });
+      aviso = ultimo('conexion').aviso;
+      assert.equal(aviso.texto, 'Conectado. Funciona. Esta clave puede cambiar y borrar, como elegiste.');
+      assert.ok(!aviso.botones, 'se pregunta otra vez con la misma clave');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      assert.match(panel.mandar(ultimo('conexiones')), /Contabilidad — conectada · probada hoy/);
+
+      // Con otra clave se pregunta otra vez; con una de solo lectura, conecta y ya.
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Contabilidad' });
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Contabilidad', clave: 'CONTA_API_KEY', valor: 'admin2' });
+      assert.equal(ultimo('conexion').aviso.botones && ultimo('conexion').aviso.botones.length, 2, 'con otra clave no se pregunta');
+      await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Contabilidad', clave: 'CONTA_API_KEY', valor: 'lectura' });
+      assert.equal(ultimo('conexion').aviso.texto, 'Guardada. Conectado. Funciona.');
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      enLaLista = ultimo('conexiones').proveedores.find((p) => p.id === 'Contabilidad');
+      assert.ok(!enLaLista.prueba.puedeEscribir);
+
+      // Y un nombre que no es una conexión no se apunta.
+      await proveedor.manejar({ tipo: 'dejarLaClaveAsi', proveedor: '../fuera' });
+      assert.deepEqual(Object.keys(almacen.get('executiveLab.clavesQuePuedenEscribir')), ['Contabilidad']);
+      return 'conecta y se dice; se pregunta una vez con dos salidas; con otra clave, otra vez';
+    } finally {
+      await almacen.update('executiveLab.pruebasDeConexion', antes.pruebas);
+      await almacen.update('executiveLab.clavesQuePuedenEscribir', antes.asi);
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
   await comprobar('todo tipo que manda el panel se despacha sin excepción', async () => {
     // G1 e I2. «Resolver una incidencia» reventaba siempre: `encargos` se usaba y
     // no se importaba, y ninguna prueba pasaba por los manejadores del panel. La

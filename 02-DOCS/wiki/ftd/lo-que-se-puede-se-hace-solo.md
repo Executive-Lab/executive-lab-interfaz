@@ -159,7 +159,7 @@ hacerse solo, porque no se puede deshacer.
 - [x] 5. Lo que se puede, al abrir la carpeta y dicho en una frase. Son cinco de los siete, y los otros
   dos se quedan con su botón, cada uno por su motivo.
 - [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
-- [ ] 7. La prueba que dice que la clave puede escribir.
+- [x] 7. La prueba que dice que la clave puede escribir: conecta, se dice y se pregunta una vez.
 - [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [ ] 9. Cuándo caduca una clave.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
@@ -229,11 +229,15 @@ hacerse solo, porque no se puede deshacer.
     tope si `git status` fallaba; y los renombrados.
   - La prueba nueva usa git de verdad y comprueba que la trampa salta con git a pelo. Las mutaciones
     caen 12 de 12, también la del renombrado que antes vivía.
+- **Punto 7** (15-10): la prueba de `connect-tool` que termina con `FAIL — this user can write` (o «write
+  scope», o «puede escribir») ya no es «No conecta, y no sé decirte por qué». Conecta, se dice que la clave
+  puede cambiar y borrar, y se pregunta una vez con dos salidas: dejarla así, que se recuerda con la huella
+  de la clave, o pedirle al asistente una de solo lectura. La lista lo dice mientras no se elija.
+  `humo.js` 372, contrato 14, diccionario, y 11 de 11 mutaciones.
 
 ## Next
 
-Del 1 al 6 y el 8, hechos. Por orden:
-- el 7, la prueba que dice que la clave puede escribir;
+Del 1 al 8, hechos. Por orden:
 - el 9, cuándo caduca una clave;
 - y del 10 al 12.
 
@@ -241,7 +245,8 @@ Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la
   2.0.15 y la 2.0.20 borran; desde la 2.1.0 se para). Como la barra pasa a la 3, Jose decidió no
   contarlo (14-10).
-- **Lo que la barra lanza con git, sin `core.fsmonitor` ni los ganchos de la carpeta.** Ya pasaba antes
-  de este cambio, y es poco probable, pero una carpeta traída con su `.git` podría ejecutar algo suyo.
+- **Lo que la barra lanza con git, sin los ganchos de la carpeta.** El `core.fsmonitor`, ya apagado (decisión
+  147). Quedan los ganchos: «Guardar en git» en una carpeta traída con su `.git` corre su `pre-commit`. Es
+  poco probable y ya pasaba antes; apagarlos en un repositorio de alguien también le quita los suyos.
 - **Mirar `--dry-run` antes de un `repair` solo**, por si algún día una pieza con arreglo automático
   sale sin `.rsc.json`.

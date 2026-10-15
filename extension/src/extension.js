@@ -95,6 +95,9 @@ const CLAVE_PETICIONES = 'executiveLab.peticiones';
 // Lo que dijo la última prueba de cada conexión, con la huella de sus claves
 // (decisión 146): la lista lo enseña mientras las claves sigan igual.
 const CLAVE_PRUEBAS = 'executiveLab.pruebasDeConexion';
+// Las conexiones cuya clave puede escribir y que esa persona eligió dejar así, con
+// la huella de sus claves: con otra clave se pregunta otra vez (punto 7 de la 142).
+const CLAVE_PUEDEN_ESCRIBIR = 'executiveLab.clavesQuePuedenEscribir';
 const CLAVE_USOS = 'executiveLab.usosDeBotones';
 const CLAVE_RECORDATORIOS = 'executiveLab.recordatoriosHechos';
 const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
@@ -694,6 +697,7 @@ ${cabecera}
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
+      dejarLaClaveAsi: () => this.dejarLaClaveAsi(mensaje.proveedor),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
@@ -1060,13 +1064,44 @@ ${cabecera}
     // ya está apuntado y la lista lo dice.
     const sigueAqui = this.donde && this.donde.tipo === 'conexion' && this.donde.proveedor === proveedor;
     if (!sigueAqui) return this.donde && this.donde.tipo === 'conexiones' ? this.verConexiones() : undefined;
-    return this.verConexion(proveedor, { texto: `Guardada. ${prueba.mensaje}`, malo: !prueba.ok });
+    const aviso = this.loQueDijoLaPrueba(proveedor, prueba);
+    return this.verConexion(proveedor, { ...aviso, texto: `Guardada. ${aviso.texto}` });
   }
 
   async probar(proveedor) {
     this.enviar({ tipo: 'esperando', que: 'Probando la conexión…' });
-    const { ok, mensaje } = await this.probarYApuntar(proveedor);
-    this.verConexion(proveedor, { texto: mensaje, malo: !ok });
+    const hecho = await this.probarYApuntar(proveedor);
+    this.verConexion(proveedor, this.loQueDijoLaPrueba(proveedor, hecho));
+  }
+
+  // Lo que se dice de una prueba. Si conecta y la clave puede cambiar y borrar,
+  // se pregunta una vez, con las dos salidas: lo decide su negocio (P9, «loDecide»).
+  // Si ya eligió dejarla así, se dice sin preguntar, mientras sea esa clave.
+  loQueDijoLaPrueba(proveedor, hecho) {
+    if (!hecho.puedeEscribir) return { texto: hecho.mensaje, malo: !hecho.ok };
+    if (this.laDejoAsi(proveedor)) return { texto: 'Conectado. Funciona. Esta clave puede cambiar y borrar, como elegiste.', malo: false };
+    const datos = conexiones.claves(proveedor);
+    const nombre = (datos && datos.proveedor && datos.proveedor.etiqueta) || proveedor;
+    return {
+      texto: `${hecho.mensaje} ¿La dejas así o la cambias por una de solo lectura?`,
+      malo: false,
+      botones: [
+        { etiqueta: 'Dejarla así', accion: { tipo: 'dejarLaClaveAsi', proveedor } },
+        { etiqueta: 'Cambiarla por una de solo lectura', accion: { tipo: 'pedir', prompt: `La conexión con ${nombre} (01-TOOLS/${proveedor}/) funciona, pero su clave puede cambiar y borrar, y quiero una de solo lectura. Guíame paso a paso para sacarla en ${nombre}: mira su CREDENTIALS.md y la documentación oficial, y dime qué permisos marcar y cuáles no. Cuando la tenga, la pego en la barra, en esta conexión, y la barra la prueba.` } }, // diccionario: interno
+      ],
+    };
+  }
+
+  laDejoAsi(proveedor) {
+    const huella = conexiones.huella(proveedor);
+    return Boolean(huella) && (this.almacen().get(CLAVE_PUEDEN_ESCRIBIR) || {})[proveedor] === huella;
+  }
+
+  async dejarLaClaveAsi(proveedor) {
+    const huella = conexiones.huella(proveedor);
+    if (!huella) return this.verConexiones();
+    await this.almacen().update(CLAVE_PUEDEN_ESCRIBIR, { ...(this.almacen().get(CLAVE_PUEDEN_ESCRIBIR) || {}), [proveedor]: huella });
+    return this.verConexion(proveedor, { texto: 'Hecho. Mientras sea esta clave, no te lo vuelvo a preguntar.', malo: false });
   }
 
   async probarYApuntar(proveedor) {
@@ -1078,7 +1113,7 @@ ${cabecera}
     // se recuerda, y se queda lo que hubiera.
     if (hecho.pasajero) return hecho;
     const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
-    pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella };
+    pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
     await this.almacen().update(CLAVE_PRUEBAS, pruebas);
     return hecho;
   }
@@ -1087,7 +1122,13 @@ ${cabecera}
   laUltimaPrueba(proveedor) {
     const una = (this.almacen().get(CLAVE_PRUEBAS) || {})[proveedor];
     if (!una || una.huella !== conexiones.huella(proveedor)) return null;
-    return { ok: una.ok, mensaje: una.mensaje, cuando: copias.haceCuanto(new Date(una.cuando).toISOString()) };
+    return {
+      ok: una.ok,
+      mensaje: una.mensaje,
+      cuando: copias.haceCuanto(new Date(una.cuando).toISOString()),
+      // Conecta, pero la clave puede escribir y no ha dicho qué hace con ella.
+      ...(una.puedeEscribir && !this.laDejoAsi(proveedor) ? { puedeEscribir: true } : {}),
+    };
   }
 
   // La guía, de paso en paso. Se recuerda mientras dure la ventana.
