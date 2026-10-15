@@ -63,9 +63,9 @@ Lo elegido en «Tu asistente» para una carpeta manda en ella.
 
 ## Evidence
 
-Observado el 15-10-2026 en la rama `el-ajuste-del-asistente`.
+Observado el 15-10-2026 en la rama `el-ajuste-del-asistente`, después de traer `origin/main` (con la 152).
 
-- `humo.js`: {HUMO} comprobaciones pasadas. Las siete nuevas:
+- `humo.js`: 404 comprobaciones pasadas. Las siete nuevas:
   «el ajuste del asistente: cuatro valores, automático de fábrica y para todo el editor» ·
   «al montar, el ajuste dice para cuál, sin preguntar» ·
   «al montar, sin el que pide el ajuste se ofrece ponerlo, o seguir con el que hay» ·
@@ -74,12 +74,12 @@ Observado el 15-10-2026 en la rama `el-ajuste-del-asistente`.
   «cambiar el ajuste con la barra abierta se nota sin recargar» ·
   «con «Los dos», una carpeta montada para uno se prepara sola para el otro, con las guardas, y lo dice».
   Y la del diccionario siembra un `enumItemLabels` con una palabra prohibida.
-- `mapeos-codex.js`: {MAPEOS} pasadas, con «con el ajuste en Codex, una carpeta montada para los dos mira e
+- `mapeos-codex.js`: 15 de 15 pasadas, con «con el ajuste en Codex, una carpeta montada para los dos mira e
   invoca lo de Codex».
-- `contrato.js`: {CONTRATO} pasadas. «con el ajuste de los dos asistentes, el arranque no pregunta y RSC monta
-  para los dos — montado para claude y codex», con la 3.0.22 de dentro.
-- `empresas-distintas.js`: {EMPRESAS}. `comprobar-diccionario.js`: «Todo el texto de pantalla respeta el
-  diccionario».
+- `contrato.js`: 15 comprobaciones pasadas. «con el ajuste de los dos asistentes, el arranque no pregunta
+  y RSC monta para los dos — montado para claude y codex», con la 3.0.22 de dentro.
+- `empresas-distintas.js`: «las tres empresas, enteras». `comprobar-diccionario.js`: «Todo el texto de
+  pantalla respeta el diccionario».
 - Mutaciones: 45, en copias del árbol, cuatro a la vez. Cada una tumbada por la comprobación que le toca:
   el ajuste sin validar, el orden de `conQuien`, el ajuste sin mirar si está montada, `comoEstamos` sin
   ajuste, `seguirCon` sin guardar; `preguntarAsistente` sin ajuste, los dos como uno, sin «Seguir con»,
