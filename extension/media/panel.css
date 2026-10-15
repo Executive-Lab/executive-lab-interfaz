@@ -309,6 +309,21 @@ button.discreto:hover { background: var(--superficie-2, var(--superficie)); colo
 
 .conexion .nombre { margin: 0; font-weight: 700; }
 
+/* Cada rutina mantiene su horario y sus acciones juntos, también en una
+   barra estrecha y con nombres largos de las habilidades del alumno. */
+.rutina {
+  padding: 13px 14px;
+  margin-bottom: var(--hueco);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  overflow-wrap: anywhere;
+}
+.rutina h3 { margin: 0 0 5px; font-size: 15px; }
+.rutina .detalle, .rutina .pista { margin: 5px 0 9px; }
+.rutina .pendiente { color: var(--texto-fuerte); font-weight: 700; margin: 8px 0; }
+.rutina .fila { flex-wrap: wrap; }
+
 .conexion .pista { margin: 2px 0 9px; font-size: 13px; color: var(--apagado); }
 
 /* De dónde se saca esta clave en concreto, tal y como lo dejó escrito el

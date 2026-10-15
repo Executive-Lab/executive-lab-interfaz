@@ -81,7 +81,7 @@ async function main() {
   console.log(`Empresa de mentira en ${empresa}\n`);
 
   // ---------------------------------------------------- los módulos cargan
-  const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar',
+  const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar', 'cuando', 'recordatorios', 'rutinas',
     'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'extension'];
   await comprobar('todos los módulos cargan', () => {
     modulos.forEach(cargar);
@@ -3987,7 +3987,8 @@ exec git "$@"
       for (const [que, porque] of [[/no son las mismas/, 'que cada asistente tiene las suyas'], [/igual\s+con los dos/, 'que el recordatorio vale para los dos'],
         [/`\/goal <cuándo está terminado>`/, 'el /goal'], [/Está en los dos/, 'que /goal está en Claude y en Codex'], [/`\/goal clear`/, 'cómo se para el /goal'],
         [/`\/loop 30m <qué mirar>`/, 'el /loop'], [/Solo con Claude/, 'que el /loop es solo de Claude'],
-        [/`\/schedule`[\s\S]*GitHub/, 'que /schedule pide GitHub'], [/Codex[\*]* no se puede desde el editor/, 'que con Codex no se programa desde el editor']]) {
+        [/`\/schedule`[\s\S]*GitHub/, 'que /schedule pide GitHub'], [/El editor no\s+ofrece ese gestor/, 'que el gestor de Codex está fuera del editor'],
+        [/accesibles en la web, también se pueden crear allí/, 'que las tareas de la web no necesitan archivos locales']]) {
         assert.match(largo, que, `no explica ${porque}`);
       }
       // Y la barra la lee: lo que se enseña a escribir es lo que `acciones.js` encuentra.
@@ -13893,6 +13894,143 @@ exec git "$@"
       vscode.guion.raiz = antes.raiz;
       vscode.guion.eleccion = antes.eleccion;
       cargar('terreno').saberDondeEstamos(null);
+    }
+  });
+
+  await comprobar('el próximo aviso respeta días reales, años bisiestos y la hora local', () => {
+    const c = cargar('cuando');
+    const f = (a, m, d, h = 9, min = 0) => new Date(a, m - 1, d, h, min).getTime();
+    assert.equal(c.proximaVez('0 9 * * 1', f(2026, 10, 16)), f(2026, 10, 19));
+    assert.equal(c.proximaVez('0 9 * * 1-5', f(2026, 10, 16)), f(2026, 10, 19), 'el viernes a esa hora ya pasó');
+    assert.equal(c.proximaVez('0 9 31 * *', f(2026, 4, 15)), f(2026, 5, 31), 'no convierte el 31 de abril en el 1 de mayo');
+    assert.equal(c.proximaVez('0 9 1 1 *', f(2026, 10, 15)), f(2027, 1, 1));
+    assert.equal(c.proximaVez('0 9 29 2 *', f(2096, 2, 29)), f(2104, 2, 29), '2100 no es bisiesto');
+    assert.equal(c.proximaVez('0 9 31 2 *', f(2026, 10, 15)), null);
+    assert.equal(c.proximaVez('no es un horario', f(2026, 10, 15)), null);
+    const cp = require('node:child_process');
+    const cambio = cp.spawnSync(process.execPath, ['-e', `
+      const c = require(${JSON.stringify(path.join(RAIZ, 'src', 'cuando.js'))});
+      const siguiente = new Date(c.proximaVez('30 2 * * *', new Date(2026, 2, 28, 12).getTime()));
+      const anterior = new Date(c.ultimaVez('30 2 * * *', new Date(2026, 2, 29, 4).getTime()));
+      process.stdout.write([siguiente.getDate(), siguiente.getHours(), siguiente.getMinutes(), anterior.getDate()].join(','));
+    `], { env: { ...process.env, TZ: 'Europe/Madrid' }, encoding: 'utf8' });
+    assert.equal(cambio.status, 0, cambio.stderr);
+    assert.equal(cambio.stdout, '30,2,30,28', 'el 29 de marzo no existe la hora 2:30 en Madrid: ni próxima fecha ni aviso pendiente');
+    return 'próxima fecha real · fin de mes · 29 de febrero · cambio de hora';
+  });
+
+  await comprobar('rutinas: crear y cambiar horarios sin código, pendientes visibles y entrega fiel al asistente', async () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'rutinas-'));
+    const poner = (rel, texto) => {
+      const f = path.join(carpeta, rel);
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, texto);
+      return f;
+    };
+    poner('.rsc.json', JSON.stringify({ version: 1, targets: ['codex'] }));
+    const habilidad = poner('.agents/skills/carpeta-del-resumen/SKILL.md', '---\nname: resumen-de-verdad\ndescription: Resumen semanal de la empresa.\nmetadata:\n  boton: Resumen semanal\n---\nConservar estas instrucciones y sus $$.\n');
+    poner('.agents/skills/aviso-roto/SKILL.md', '---\nname: aviso-roto\nmetadata:\n  boton: Un horario por corregir\n  cuando: no se entiende\n---\n');
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const claves = ['executiveLab.usosDeBotones', 'executiveLab.recordatoriosHechos', 'executiveLab.recordatoriosVistos', 'executiveLab.recordatoriosAvisados', 'executiveLab.costumbresPuestas'];
+    const guardado = Object.fromEntries(claves.map((k) => [k, almacen.get(k)]));
+    const antes = { raiz: vscode.guion.raiz, respuestas: vscode.guion.respuestas, escrito: vscode.guion.escrito, eleccion: vscode.guion.eleccion,
+      enviar: proveedor.enviar, pedir: proveedor.pedir, donde: proveedor.donde };
+    const mensajes = [], peticiones = [];
+    const ultima = () => mensajes.filter((m) => m.tipo === 'rutinas').at(-1);
+    const rec = cargar('recordatorios');
+    const ru = cargar('rutinas');
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.guion.eleccion = undefined;
+      vscode.guion.escrito = undefined;
+      proveedor.enviar = (m) => mensajes.push(m);
+      proveedor.pedir = async (p) => peticiones.push(p);
+      for (const k of claves) await almacen.update(k, undefined);
+      await proveedor.manejar({ tipo: 'verRutinas' });
+      assert.equal(ultima().horarios[0].etiqueta, 'Un horario por corregir', 'el horario inválido se esconde');
+      assert.equal(ultima().horarios[0].proxima, null);
+
+      vscode.guion.respuestas = ['Resumen semanal', 'Un día de la semana', 'lunes', '08:45'];
+      await proveedor.manejar({ tipo: 'ponerHorario' });
+      assert.match(fs.readFileSync(habilidad, 'utf8'), /cuando: "45 8 \* \* 1"/);
+      assert.match(fs.readFileSync(habilidad, 'utf8'), /Conservar estas instrucciones y sus \$\$\./);
+      assert.equal(ultima().horarios.find((r) => r.nombre === 'carpeta-del-resumen').pendiente, false);
+      assert.ok(ultima().horarios.find((r) => r.nombre === 'carpeta-del-resumen').proxima);
+      assert.match(ultima().aviso.texto, /cada lunes a las 8:45/);
+
+      const textoAntes = fs.readFileSync(habilidad, 'utf8');
+      for (const respuestas of [[], ['Un día de la semana'], ['Un día de la semana', 'martes']]) {
+        vscode.guion.respuestas = respuestas;
+        await proveedor.manejar({ tipo: 'ponerHorario', nombre: 'carpeta-del-resumen' });
+        assert.equal(fs.readFileSync(habilidad, 'utf8'), textoAntes, 'cancelar una pregunta cambia el archivo');
+      }
+      vscode.guion.respuestas = ['De lunes a viernes', '17:20'];
+      await proveedor.manejar({ tipo: 'ponerHorario', nombre: 'carpeta-del-resumen' });
+      assert.equal(rec.losQueHay()[0].cuando, '20 17 * * 1-5');
+
+      await almacen.update('executiveLab.recordatoriosHechos', { 'carpeta-del-resumen': Date.now() - 8 * 86400000 });
+      await proveedor.repintarLoQueHaya();
+      assert.equal(ultima().horarios[0].pendiente, true);
+      assert.equal(proveedor.donde.tipo, 'rutinas', 'el vigía expulsa de la pantalla');
+      const html = require('./panel-falso').montarPanel().mandar(ultima());
+      for (const frase of ['Rutinas y horarios', 'Tienes un aviso pendiente', 'Próximo aviso', 'Cambiar horario', 'Tareas que se hacen solas', 'gestor del asistente']) assert.ok(html.includes(frase), frase);
+      assert.match(html, /ponerHorario/);
+      assert.match(html, /prepararTareaProgramada/);
+      assert.doesNotMatch(html, /cuando:|\* \* 1-5/);
+
+      await proveedor.manejar({ tipo: 'hacerElRecordatorio', nombre: 'carpeta-del-resumen' });
+      assert.equal(peticiones.at(-1), '$resumen-de-verdad');
+      assert.equal(proveedor.donde.tipo, 'rutinas');
+      assert.equal(ultima().horarios.find((r) => r.nombre === 'carpeta-del-resumen').pendiente, false);
+      await proveedor.anotarElUso('$resumen-de-verdad');
+      assert.deepEqual(almacen.get('executiveLab.usosDeBotones').map((u) => u.nombre), ['carpeta-del-resumen']);
+      await proveedor.manejar({ tipo: 'prepararTareaProgramada', nombre: 'carpeta-del-resumen' });
+      assert.match(peticiones.at(-1), /app de escritorio de ChatGPT/);
+      assert.match(peticiones.at(-1), /\$resumen-de-verdad/);
+      assert.match(peticiones.at(-1), /de lunes a viernes a las 17:20/);
+      assert.match(ru.automatica('claude').texto, /GitHub/);
+      assert.doesNotMatch(ru.automatica('claude').prompt, /Codex|ChatGPT/);
+
+      for (const [respuestas, esperado] of [[['Cada día', '09:10'], '10 9 * * *'], [['Un día del mes', 'El día 31', '23:59'], '59 23 31 * *']]) {
+        vscode.guion.respuestas = respuestas;
+        assert.equal(await ru.elegirHorario('Otra'), esperado);
+      }
+      for (const hora of ['24:00', '12:60', '9', '9:1', '-1:30']) assert.equal(ru.aCron('diaria', null, hora), null);
+
+      // Solo se cambia el horario propio, conservando descripciones y otras claves.
+      const conMetadatos = '---\nname: resumen\ndescription: |\n  cuando: parte de mi descripción\nmetadata:\n  boton: Resumen\n  otro:\n    cuando: parte de otro dato\n  cuando: "0 9 * * *"\n---\nMi cuerpo.\n';
+      const cambiado = rec.conCuando(conMetadatos, '30 10 * * *', true);
+      assert.match(cambiado, /  cuando: parte de mi descripción/);
+      assert.match(cambiado, /    cuando: parte de otro dato/);
+      assert.doesNotMatch(cambiado, /"0 9 \* \* \*"/);
+      assert.match(cambiado, /  cuando: "30 10 \* \* \*"/);
+      assert.equal(rec.conCuando('---\nmetadata: {boton: Resumen}\n---\n', '0 9 * * *', true), null, 'un formato no soportado se reescribe a ciegas');
+      assert.match(rec.conCuando('---\nmetadata:\n# Mi comentario\n  boton: Resumen\n---\n', '0 9 * * *', true), /metadata:\n# Mi comentario\n  boton: Resumen\n  cuando:/, 'un comentario deja los campos sin su metadata');
+      assert.equal(proveedor.esUnaPaginaNuestra(new URL(ru.automatica('codex').guia)), true);
+      assert.equal(proveedor.esUnaPaginaNuestra(new URL('https://learn.chatgpt.com/otra-pagina')), false);
+
+      if (process.platform !== 'win32') {
+        const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'rutina-compartida-'));
+        const compartida = '---\nname: compartida\nmetadata:\n  boton: Compartida\n---\n';
+        try {
+          fs.writeFileSync(path.join(fuera, 'SKILL.md'), compartida);
+          fs.symlinkSync(fuera, path.join(carpeta, '.agents/skills/compartida'));
+          assert.deepEqual(rec.ponerCuando('compartida', '0 9 * * *'), { ok: false, motivo: 'fueraDeLaCarpeta' });
+          assert.equal(fs.readFileSync(path.join(fuera, 'SKILL.md'), 'utf8'), compartida);
+        } finally { fs.rmSync(fuera, { recursive: true, force: true }); }
+      }
+
+      await proveedor.manejar({ tipo: 'quitarRecordatorio', nombre: 'carpeta-del-resumen' });
+      assert.doesNotMatch(fs.readFileSync(habilidad, 'utf8'), /cuando:/);
+      assert.equal(proveedor.donde.tipo, 'rutinas');
+      assert.equal(ultima().horarios.length, 1, 'queda visible el horario por corregir');
+      return 'diario · laborables · semanal · mensual · cancelación · pendientes · Codex y Claude';
+    } finally {
+      for (const [k, v] of Object.entries(guardado)) await almacen.update(k, v);
+      Object.assign(vscode.guion, { raiz: antes.raiz, respuestas: antes.respuestas, escrito: antes.escrito, eleccion: antes.eleccion });
+      proveedor.enviar = antes.enviar; proveedor.pedir = antes.pedir; proveedor.donde = antes.donde;
+      fs.rmSync(carpeta, { recursive: true, force: true });
     }
   });
 
