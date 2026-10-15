@@ -5266,3 +5266,53 @@ lo demás lo hace sola (P9).
 
 Lo apuntado vive en el almacén de la barra, en el ordenador de esa persona, como la última prueba de cada
 conexión (decisión 146).
+
+## 150. El asistente le pide la habilidad a la barra
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho
+
+Es el punto 10 de la decisión 142. La regla 7 de los raíles decía «dile que la busque en *Habilidades
+(skills)* y la pulse»: el alumno, que estaba hablando con el asistente, tenía que irse a otra pantalla a buscar
+un botón. Y el asistente no puede añadirla él con `npx`, que traería la última versión publicada y no la de la
+clase (decisión 145).
+
+- **El asistente pregunta, y con el sí deja un pedido**: un fichero vacío
+  `02-DOCS/raw/pedidos/<id>.habilidad`, con el identificador del catálogo. Lo dice la regla 7 en las dos copias
+  de `siempre.md`.
+- **La barra lo ve** por el vigía de la carpeta, y por el reloj de cada minuto por si el vigía no lo vio, y la
+  añade como el botón: con su arnés, la versión de la clase y lo que el equipo apagó (`rsc.anadir`). Lo cuenta
+  en una frase («He añadido Facturación, que te ha pedido el asistente. Se pide con /invoicing.») y **contesta
+  siempre** en `<id>.hecho`, que el asistente lee y le dice en una línea.
+- **Sola, con las guardas de P9**: carpeta de confianza, que este ordenador conoce y con el arnés entero. Si
+  no, pregunta a la persona («El asistente quiere añadir Facturación. ¿La añado?») y «Añadirla» pasa por el
+  botón de siempre. Si cierra la pregunta, se le contesta al asistente que ahora no, para que no se quede
+  esperando.
+- **Con el arnés de la carpeta por delante** la barra no puede (P7), y lo contesta sin preguntar a nadie. Sin
+  darle al asistente ninguna orden que correr: `npx` en esa carpeta leería su `.npmrc`, que es justo por lo que
+  la barra tampoco lo usa ahí.
+- **Si el nombre no está en el catálogo**, la respuesta trae las que más se parecen, por el identificador o por
+  sus palabras en español («facturas» → invoicing).
+- **Tres por vez, y cinco sin preguntar en cada sesión.** Uno que llega mientras se atiende otro no espera al
+  minuto siguiente, y lo que espera a que la persona conteste no ocupa sitio.
+- `02-DOCS/raw/pedidos/` no entra en git (`no-entra-en-git.js`).
+
+**Sin seguir enlaces.** La carpeta viene en el repositorio. Con el borrador, un `<id>.hecho` que fuera un
+enlace a un fichero de la persona se sobrescribía solo con abrir la carpeta, antes de ninguna guarda, y una
+carpeta `pedidos` enlazada a otra parte hacía borrar allí. Ahora cada trozo del camino tiene que ser una carpeta
+de verdad, el pedido un fichero de verdad, y la respuesta se escribe nueva (`pedidos.js`). La prueba lo hace con
+enlaces de verdad.
+
+**La revisión adversaria** (seguridad y corrección) no encontró nada alto. Lo que encontró, arreglado y con su
+prueba:
+
+- Seguridad: la respuesta con el arnés por delante mandaba correr `npx` (arriba); el nombre del fichero salía tal
+  cual en la respuesta, que el asistente lee con la voz de la barra, y ahora solo sale si es un identificador;
+  sin confianza se preguntaba, y «Añadirla» daba la carpeta por conocida: ahora sin confianza no se pregunta y se
+  dice por qué, y la pregunta no da nada por conocido; y el tope de tres no paraba una cadena de pedidos, que
+  ahora para el de cinco por sesión.
+- Corrección: la respuesta de la vez anterior se leía como la nueva (la barra la quita al ver el pedido, y la
+  regla 7 le dice al asistente que la borre antes); con la pregunta abierta, el reloj la añadía sola y luego se
+  contestaba dos veces; «Añadirla» con el arnés ocupado contestaba «no se ha podido» (ahora espera, y con el sí
+  dado no se vuelve a preguntar); un pedido podía pisar un botón que corre el arnés (los botones lo marcan
+  ocupado, y lo que la barra arregla sola al abrir espera a que quede libre); si el arnés reventaba, el pedido se
+  repetía cada minuto; con Codex la frase de cómo se pide salía rota; y el vigía no veía las rutas de Windows.

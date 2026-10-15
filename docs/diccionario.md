@@ -210,6 +210,7 @@ jerga por goteo.
 | una sugerencia de la barra | (no se nombra: se enseña la frase y su botón) |
 | apartar una sugerencia | Ahora no |
 | `rsc add <skill>` desde la barra | Añadir · Añadirla |
+| una habilidad que pide el asistente con `02-DOCS/raw/pedidos/<id>.habilidad` (decisión 150) | sola: «He añadido {Facturación}, que te ha pedido el asistente. Se pide con {/invoicing}.» (con Codex, si es del arnés: «Se pide nombrándola: «{invoicing}».») · si no puede sola: «El asistente quiere añadir {Facturación}. ¿La añado?» · Añadirla · lo que contesta en `<id>.hecho` lo lee el asistente, no el alumno |
 | crear un `.claude/commands/` nuevo por repetición | Que se quede como botón |
 | la web de la empresa del alumno | Tu web |
 | la cara que la barra saca sola de la web al montar (`marca.md` con `provisional: si`) | Ya lleva la cara de <empresa> · «sacada de su web de forma automática; el asistente la afina» |
