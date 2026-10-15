@@ -223,10 +223,16 @@ const sitiosDe = (quien) => SITIOS[quien] || null;
 //   · con las habilidades en un fichero suelto (Cursor), el `.mdc` nuestro;
 //   · con un fichero de siempre compartido, el trozo entre marcas, ahí.
 // Y null si no hay dónde.
-function dondeVaLoDeSiempre(quien) {
+function dondeVaLoDeSiempre(quien, raiz = null) {
   const suyo = sitiosDe(quien);
   if (!suyo) return null;
   if (quien === 'claude') return ['CLAUDE.md'];
+  if (quien === 'codex' && raiz) {
+    try {
+      const texto = require('node:fs').readFileSync(require('node:path').join(raiz, 'AGENTS.override.md'), 'utf8');
+      if (texto.trim()) return ['AGENTS.override.md'];
+    } catch { /* sin override, Codex lee AGENTS.md */ }
+  }
   if (suyo.habilidadEnUnFichero) return [...suyo.habilidades, `executive-lab${suyo.habilidadEnUnFichero}`];
   if (suyo.siempre && suyo.siempre.compartido) return suyo.siempre.fichero;
   return null;

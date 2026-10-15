@@ -410,9 +410,7 @@ ${cabecera}
       // Cuatro datos de hoy en una línea, en vez de la tarjeta que contaba
       // dónde estabas: eso ya lo hace `orient` en la conversación, y mejor.
       pulso: await pulso.deHoy(),
-      // Si el asistente de esta carpeta llega a tener botones. Codex no: RSC no
-      // le escribe comandos a ninguno de su familia. Sin esto, la barra
-      // enseñaba un hueco y nadie sabía si era que no había o que no iban.
+      // Codex también tiene botones: salen de sus habilidades nativas.
       puedeTenerBotones: donde.puedeTenerBotones(),
       // Cuántos hay de cada cosa, para que el rótulo de su fila lo diga.
       comandos: acciones.todos().length,
@@ -2879,7 +2877,9 @@ function loQueMira() {
     donde.carpetaDeAgentes(),
   ].map(suCarpeta).filter(Boolean).map((c) => `${c}/**`);
 
-  return `{${[...LO_FIJO, ...new Set(suyas)].join(',')}}`;
+  const reglasDelAsistente = donde.paraQuien() === 'codex'
+    ? ['AGENTS.md', 'AGENTS.override.md'] : ['CLAUDE.md'];
+  return `{${[...LO_FIJO, ...reglasDelAsistente, ...new Set(suyas)].join(',')}}`;
 }
 
 // Volver a vigilar lo del asistente de ahora. Cambiar de asistente ya no toca

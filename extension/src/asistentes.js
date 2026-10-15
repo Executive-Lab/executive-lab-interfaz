@@ -27,7 +27,7 @@
 //     cogerla, abre otra. Llamarlo justo después de mandar el texto era lo que
 //     le dejaba a Jose una conversación vacía encima de la buena.
 //
-//   CODEX (openai.chatgpt 26.5908.31748)
+//   CODEX (openai.chatgpt 26.1007.21434, contrastado el 15-10-2026)
 //     No expone NINGÚN comando que acepte texto. `chatgpt.addToThread` manda la
 //     selección del editor, no lo que le pases, y `chatgpt.implementTodo`
 //     llega enmarcado como "implementa este TODO". Así que con Codex los
@@ -65,8 +65,9 @@ const ASISTENTES = [
     parametro: null,
     abrir: ['chatgpt.openSidebar'],
     // `chatgpt.newChat`, el que documenta Codex para su extensión (decisión 144);
-    // sin él, se abre su barra y se dice dónde está el «+».
-    nueva: ['chatgpt.newChat'],
+    // El panel nuevo es el repuesto comprobado en su extensión. Sin ninguno,
+    // se abre su barra y se dice dónde está el «+».
+    nueva: ['chatgpt.newChat', 'chatgpt.newCodexPanel'],
     foco: ['chatgpt.openSidebar'],
   },
 ];
