@@ -697,7 +697,7 @@ ${cabecera}
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
-      dejarLaClaveAsi: () => this.dejarLaClaveAsi(mensaje.proveedor),
+      dejarLaClaveAsi: () => this.dejarLaClaveAsi(mensaje.proveedor, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
@@ -1031,6 +1031,12 @@ ${cabecera}
     const datos = conexiones.claves(proveedor);
     if (!datos) return this.verConexiones();
     this.donde = { tipo: 'conexion', proveedor };
+    // Conecta con una clave que puede escribir y no ha dicho qué hace: la pregunta
+    // sigue aquí, también si se fue mientras se probaba (revisión del punto 7).
+    if (!aviso) {
+      const ultima = this.laUltimaPrueba(proveedor);
+      if (ultima && ultima.puedeEscribir) aviso = this.loQueDijoLaPrueba(proveedor, { ok: true, puedeEscribir: true, mensaje: ultima.mensaje, huella: conexiones.huella(proveedor) });
+    }
     const desordenadas = sueltas.resumen();
     const guia = (this.guias || {})[proveedor] || {};
     return this.enviar({
@@ -1081,12 +1087,14 @@ ${cabecera}
     if (!hecho.puedeEscribir) return { texto: hecho.mensaje, malo: !hecho.ok };
     if (this.laDejoAsi(proveedor)) return { texto: 'Conectado. Funciona. Esta clave puede cambiar y borrar, como elegiste.', malo: false };
     const datos = conexiones.claves(proveedor);
-    const nombre = (datos && datos.proveedor && datos.proveedor.etiqueta) || proveedor;
+    // Recortado: sale de la primera línea de su README, que puede escribir cualquiera.
+    const nombre = String((datos && datos.proveedor && datos.proveedor.etiqueta) || proveedor).slice(0, 60);
     return {
       texto: `${hecho.mensaje} ¿La dejas así o la cambias por una de solo lectura?`,
       malo: false,
       botones: [
-        { etiqueta: 'Dejarla así', accion: { tipo: 'dejarLaClaveAsi', proveedor } },
+        // Con la huella de la clave que se probó: si cambia antes del clic, no vale.
+        { etiqueta: 'Dejarla así', accion: { tipo: 'dejarLaClaveAsi', proveedor, huella: hecho.huella || conexiones.huella(proveedor) } },
         { etiqueta: 'Cambiarla por una de solo lectura', accion: { tipo: 'pedir', prompt: `La conexión con ${nombre} (01-TOOLS/${proveedor}/) funciona, pero su clave puede cambiar y borrar, y quiero una de solo lectura. Guíame paso a paso para sacarla en ${nombre}: mira su CREDENTIALS.md y la documentación oficial, y dime qué permisos marcar y cuáles no. Cuando la tenga, la pego en la barra, en esta conexión, y la barra la prueba.` } }, // diccionario: interno
       ],
     };
@@ -1097,9 +1105,11 @@ ${cabecera}
     return Boolean(huella) && (this.almacen().get(CLAVE_PUEDEN_ESCRIBIR) || {})[proveedor] === huella;
   }
 
-  async dejarLaClaveAsi(proveedor) {
+  async dejarLaClaveAsi(proveedor, laProbada) {
     const huella = conexiones.huella(proveedor);
     if (!huella) return this.verConexiones();
+    // La clave cambió entre la pregunta y el clic: esa no se ha probado.
+    if (laProbada !== huella) return this.verConexion(proveedor, { texto: 'La clave ha cambiado desde la prueba. Pulsa «Probar la conexión» otra vez.', malo: false });
     await this.almacen().update(CLAVE_PUEDEN_ESCRIBIR, { ...(this.almacen().get(CLAVE_PUEDEN_ESCRIBIR) || {}), [proveedor]: huella });
     return this.verConexion(proveedor, { texto: 'Hecho. Mientras sea esta clave, no te lo vuelvo a preguntar.', malo: false });
   }
@@ -1115,7 +1125,7 @@ ${cabecera}
     const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
     pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
     await this.almacen().update(CLAVE_PRUEBAS, pruebas);
-    return hecho;
+    return { ...hecho, huella };
   }
 
   // La última prueba, si sus claves siguen como cuando se probó; si no, null.

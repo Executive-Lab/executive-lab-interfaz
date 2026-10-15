@@ -13161,16 +13161,24 @@ exec git "$@"
       await almacen.update('executiveLab.clavesQuePuedenEscribir', {});
       // Lo que dice la prueba de connect-tool, y las formas de decirlo; lo contrario no.
       fs.writeFileSync(path.join(suya, '.env'), 'CONTA_API_KEY=admin\n');
-      for (const fallo of ['FAIL — this user can write', 'FAIL: token has a write scope', 'FAIL — este usuario puede escribir']) {
+      for (const fallo of ['FAIL — this user can write', 'FAIL: token has a write scope', 'FAIL — este usuario puede escribir',
+        'FAIL — write succeeded: created record 42', 'FAIL — this token has write access', 'FAIL — POST returned 201, writes NOT refused']) {
         conPrueba(fallo);
         const hecho = await conexionesM.probar('Contabilidad');
         assert.deepEqual([hecho.ok, hecho.puedeEscribir], [true, true], `«${fallo}» no se lee como que conecta y puede escribir: ${hecho.mensaje}`);
         assert.equal(hecho.mensaje, 'Conecta, pero esta clave puede cambiar y borrar cosas en Contabilidad, no solo mirarlas.');
       }
-      for (const fallo of ['FAIL — unexpected error: permission denied for table x', 'OK — writes refused', 'HTTP 401 Unauthorized']) {
+      // Leerlo de más es peor que no leerlo: un fallo de verdad pasaría por «conecta».
+      for (const fallo of ['FAIL — unexpected error: permission denied for table x', 'OK — writes refused', 'OK — this user can write',
+        'FAIL: token invalid; needs write scope', 'FAIL — cannot connect: check that the user can write to the .env',
+        'FAIL — no tiene permisos de escritura', 'HTTP 401 Unauthorized']) {
         conPrueba(fallo);
-        assert.ok(!(await conexionesM.probar('Contabilidad')).puedeEscribir, `«${fallo}» se lee como que puede escribir`);
+        const hecho = await conexionesM.probar('Contabilidad');
+        assert.ok(!hecho.puedeEscribir && !hecho.ok, `«${fallo}» se lee como que conecta y puede escribir`);
       }
+      // Y si dice que la clave no vale, gana eso.
+      conPrueba('HTTP 401 Unauthorized\nFAIL — this user can write');
+      assert.match((await conexionesM.probar('Contabilidad')).mensaje, /^La clave no vale/);
 
       // Al guardarla se prueba sola, y se pregunta, con las dos salidas.
       conPrueba('FAIL — this user can write');
@@ -13188,10 +13196,23 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'verConexiones' });
       let enLaLista = ultimo('conexiones').proveedores.find((p) => p.id === 'Contabilidad');
       assert.equal(enLaLista.prueba.puedeEscribir, true);
-      assert.match(panel.mandar(ultimo('conexiones')), /Contabilidad — conecta, pero puede cambiar y borrar/);
+      const laLista = panel.mandar(ultimo('conexiones'));
+      assert.match(laLista, /Contabilidad — conecta, pero puede cambiar y borrar/);
+      assert.match(laLista, /◐/, 'en la lista sale como conectada del todo');
+      // Si se fue mientras se probaba, al volver a su pantalla la pregunta sigue ahí.
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Contabilidad' });
+      aviso = ultimo('conexion').aviso;
+      assert.equal(aviso && aviso.botones && aviso.botones.length, 2, 'al volver, la pregunta ya no está');
 
-      // «Dejarla así»: no se vuelve a preguntar con esa clave, y la lista dice «conectada».
-      await proveedor.manejar({ tipo: 'dejarLaClaveAsi', proveedor: 'Contabilidad' });
+      // Si la clave cambia entre la pregunta y el clic, esa no se ha probado: no se apunta.
+      fs.writeFileSync(path.join(suya, '.env'), 'CONTA_API_KEY=otra-sin-probar\n');
+      await proveedor.manejar(aviso.botones[0].accion);
+      assert.match(ultimo('conexion').aviso.texto, /^La clave ha cambiado desde la prueba/);
+      assert.equal(proveedor.laDejoAsi('Contabilidad'), false, 'se apunta una clave que nadie ha probado');
+      fs.writeFileSync(path.join(suya, '.env'), 'CONTA_API_KEY=admin\n');
+
+      // «Dejarla así», con su botón: no se vuelve a preguntar con esa clave, y la lista dice «conectada».
+      await proveedor.manejar(aviso.botones[0].accion);
       assert.equal(ultimo('conexion').aviso.texto, 'Hecho. Mientras sea esta clave, no te lo vuelvo a preguntar.');
       await proveedor.manejar({ tipo: 'probar', proveedor: 'Contabilidad' });
       aviso = ultimo('conexion').aviso;
@@ -13199,6 +13220,15 @@ exec git "$@"
       assert.ok(!aviso.botones, 'se pregunta otra vez con la misma clave');
       await proveedor.manejar({ tipo: 'verConexiones' });
       assert.match(panel.mandar(ultimo('conexiones')), /Contabilidad — conectada · probada hoy/);
+      // Con la clave en un fichero de acceso (keys/), cambiarlo también es otra clave.
+      fs.mkdirSync(path.join(suya, 'keys'));
+      fs.writeFileSync(path.join(suya, 'keys', 'cuenta.json'), '{"una":1}');
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Contabilidad' });
+      await proveedor.manejar(ultimo('conexion').aviso.botones[0].accion);
+      fs.writeFileSync(path.join(suya, 'keys', 'cuenta.json'), '{"otra":2}');
+      await proveedor.manejar({ tipo: 'probar', proveedor: 'Contabilidad' });
+      assert.equal(ultimo('conexion').aviso.botones && ultimo('conexion').aviso.botones.length, 2, 'con otro fichero de acceso no se pregunta');
+      fs.rmSync(path.join(suya, 'keys'), { recursive: true });
 
       // Con otra clave se pregunta otra vez; con una de solo lectura, conecta y ya.
       await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Contabilidad' });

@@ -234,6 +234,12 @@ hacerse solo, porque no se puede deshacer.
   puede cambiar y borrar, y se pregunta una vez con dos salidas: dejarla así, que se recuerda con la huella
   de la clave, o pedirle al asistente una de solo lectura. La lista lo dice mientras no se elija.
   `humo.js` 372, contrato 14, diccionario, y 11 de 11 mutaciones.
+- **La revisión adversaria del punto 7** encontró que leía de más y de menos. «FAIL: token invalid; needs
+  write scope» pasaba por «conecta», y con un «Dejarla así», por conectada. Y «FAIL — write succeeded» no
+  se reconocía. Ahora cuenta solo una línea que empieza por FAIL y afirma que puede escribir, sin negarlo,
+  y nunca si la salida dice que la clave no vale: 24 de 24 frases de la revisión bien. Además, «Dejarla así»
+  apunta la clave que se probó; la pregunta sigue en su pantalla si se fue mientras probaba; y la huella
+  mira también los ficheros de `keys/`, que mejora la última prueba de la 146. 18 de 18 mutaciones.
 
 ## Next
 

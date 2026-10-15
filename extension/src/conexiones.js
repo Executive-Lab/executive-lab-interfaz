@@ -531,9 +531,22 @@ const PORQUE_FALLA = [
 // `FAIL — this user can write`, y aquí se contestaba «No conecta, y no sé decirte
 // por qué», cuando sí conecta (punto 7 de la decisión 142, en la clase del 13-10).
 // No es un fallo: es más permiso del que se pidió, y quedárselo o no lo decide su
-// negocio. Así que conecta (`ok`), y `extension.js` pregunta una vez. Solo con
-// FAIL delante: un «OK — writes refused» es lo contrario.
-const PUEDE_ESCRIBIR = /\bFAIL\b[^\n]*?(\bcan write\b|\bwrite scopes?\b|\bwrites? (?:are |is )?(?:allowed|accepted)\b|\bpuede escribir\b|\bpermisos? de escritura\b)/i;
+// negocio. Así que conecta (`ok`), y `extension.js` pregunta una vez.
+//
+// Leerlo de más es peor que no leerlo: un fallo de verdad pasaría por «conecta» y,
+// con un «Dejarla así», por conectada (revisión de seguridad y de corrección). Así
+// que cuenta solo una línea que empieza por FAIL y **afirma** que puede escribir,
+// sin negarlo en la misma línea, y nunca si la salida dice que la clave no vale. Lo
+// que no case sigue siendo «no sé decirte por qué», que no engaña.
+const AFIRMA_QUE_ESCRIBE = /\b(?:this|the)\s+(?:user|key|token|account|role)\s+can\s+write\b|\b(?:has|holds)\s+(?:a\s+)?(?:write|admin)\s+(?:access|permissions?|scopes?|rights)\b|\bwrites?\s+(?:was|were|is|are)\s+(?:allowed|accepted|granted)\b|\bwrites?\s+succeeded\b|\bwrites?\s+(?:was\s+|were\s+|are\s+|is\s+)?not\s+refused\b|\bwrite\s+permissions?\s+(?:was\s+|were\s+|is\s+|are\s+)?granted\b|\bpuede\s+escribir\b|\btiene\s+permisos?\s+de\s+escritura\b/i;
+const LO_NIEGA = /\b(?:cannot|can't|can\s+not|lacks?|missing|without|invalid|could\s*n[o']t|unable|not\s+(?:verify|confirm|check|sure))\b|\bno\s+(?:puede|se\s+pudo|tiene)\b|\b(?:sin|falta|faltan)\b/i;
+function diceQuePuedeEscribir(salida) {
+  if (NO_VALE[0].test(salida)) return false;
+  return salida.split(/\r?\n/).some((linea) => {
+    const fallo = linea.match(/^\s*FAIL\b(.*)$/i);
+    return Boolean(fallo) && AFIRMA_QUE_ESCRIBE.test(fallo[1]) && !LO_NIEGA.test(fallo[1]);
+  });
+}
 
 // Una clave escrita sin comillas con algo que bash no lee tal cual: la prueba
 // hace `source .env`, y con un `;`, un espacio o un `$` fuera de comillas se
@@ -569,8 +582,8 @@ async function probar(proveedorId) {
   const error = `${resultado.error || ''}\n${resultado.salida || ''}`;
 
   if (resultado.codigo === 0) return { ok: true, mensaje: 'Conectado. Funciona.' };
-  if (PUEDE_ESCRIBIR.test(error)) {
-    const nombre = etiquetaDeProveedor(proveedorId, carpeta);
+  if (diceQuePuedeEscribir(error)) {
+    const nombre = String(etiquetaDeProveedor(proveedorId, carpeta)).slice(0, 60);
     return { ok: true, puedeEscribir: true, mensaje: `Conecta, pero esta clave puede cambiar y borrar cosas en ${nombre}, no solo mirarlas.` };
   }
 
@@ -800,15 +813,27 @@ async function ejecutar(proveedorId, fichero) {
 }
 
 // La huella de sus claves (decisión 146): si cambian, lo que dijo la última
-// prueba ya no vale. Se hace del fichero entero, sin guardar ni enseñar nada.
+// prueba ya no vale. Se hace del fichero entero, sin guardar ni enseñar nada. Y de
+// los ficheros de acceso de `keys/` (decisión 105): con la clave en un fichero, la
+// huella era la de un `.env` vacío y no cambiaba nunca, así que un «Dejarla así»
+// valía también para la clave siguiente (revisión del punto 7 de la 142).
 function huella(proveedorId) {
   const carpeta = carpetaDe(proveedorId);
   if (!carpeta) return null;
-  let texto = '';
+  const suma = require('node:crypto').createHash('sha256');
   try {
-    texto = fs.readFileSync(path.join(carpeta, '.env'), 'utf8');
+    suma.update(fs.readFileSync(path.join(carpeta, '.env'), 'utf8'));
   } catch { /* sin claves todavía */ }
-  return require('node:crypto').createHash('sha256').update(texto).digest('hex').slice(0, 16);
+  try {
+    const llaves = path.join(carpeta, 'keys');
+    for (const nombre of fs.readdirSync(llaves).filter((n) => !n.startsWith('.')).sort()) {
+      const ruta = path.join(llaves, nombre);
+      const datos = fs.lstatSync(ruta);
+      if (!datos.isFile() || datos.size > 1024 * 1024) continue;
+      suma.update(`\0${nombre}\0`).update(fs.readFileSync(ruta));
+    }
+  } catch { /* sin ficheros de acceso */ }
+  return suma.digest('hex').slice(0, 16);
 }
 
 const tienePrueba = (proveedorId) => {
