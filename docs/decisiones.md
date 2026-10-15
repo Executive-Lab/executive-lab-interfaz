@@ -5278,7 +5278,7 @@ ajustes son de su cuenta (P9). Lo que sí hace sola es decirlo a tiempo.
 - **En Ayuda, «Si trabajas con datos de clientes»**, entre Sugerencias y Más ayuda; y en Más ayuda, en Guías.
   Es una pantalla para leer, con tres cosas:
   - **una licencia de empresa**. Con ella, de fábrica, Anthropic y OpenAI no entrenan con lo que se les da: en
-    Claude, Team o Enterprise; en ChatGPT, Business, Enterprise o Edu. Tampoco si se paga por uso, con una
+    Claude, Team, Enterprise o Education; en ChatGPT, Business, Enterprise o Edu. Tampoco si se paga por uso, con una
     clave de acceso. Con un plan personal depende de un ajuste;
   - **dónde se apaga** en cada asistente de la barra, con el camino de menús y un botón a su página de ajustes;
   - **lo que no se pega nunca**: claves y contraseñas, el banco, la salud y los documentos de identidad. Y que
@@ -5290,8 +5290,9 @@ ajustes son de su cuenta (P9). Lo que sí hace sola es decirlo a tiempo.
   conexión con todas sus claves puestas, lo mismo que pide la 149 para preguntar cuándo caduca. O con el
   primer documento entregado, sin leer, leído u original. Son las dos puertas por las que entran los datos del
   negocio, y lo siguiente es hablar de ellos con el asistente, que es cuando salen del ordenador. Con «Leerlo» o
-  «Entendido» no vuelve en esa carpeta, y leerlo desde Ayuda también cuenta. Una carpeta que ya tenía algo
-  conectado la ve una vez, al abrir la versión que trae esto.
+  «Entendido» no vuelve en esa carpeta. Leerlo desde Ayuda cuenta solo si ya entran datos: leído antes, la
+  tarjeta sale igual cuando entren, porque lo que importa es el momento, y semanas antes no se tiene delante.
+  Una carpeta que ya tenía algo conectado la ve una vez, al abrir la versión que trae esto.
 - **El orden de la tarjeta que toca:** detrás de lo que impide trabajar (sin git, sin asistente, sin cuenta,
   sin ajustar), del recordatorio que tiene su hora y de «Recargar ahora». Delante de lo nuevo de la versión, la
   costumbre, el consejo, los avisos y la versión nueva. No impide trabajar, pero es lo que hay que saber antes
@@ -5335,9 +5336,34 @@ De OpenAI:
 
 **Lo que se queda fuera:**
 
-- Los menús como salen en el ordenador de cada uno, que dependen del idioma: se ponen como los da la ayuda de
-  cada uno en español.
-- «Include environments», el ajuste de Codex en la nube: la barra trabaja con Codex en el editor.
+- Los menús como salen en el ordenador de cada uno, que dependen del idioma. Los de Claude, como los da su ayuda
+  en español, que se leyó. Los de ChatGPT, en inglés como los da la fuente, con la traducción al lado y «Si lo
+  tienes en español, salen traducidos»: su ayuda en español no se deja leer, y su nombre en español no está
+  comprobado.
+- «Include environments», el ajuste de Codex en la nube: la barra trabaja con Codex en el editor. Por eso dice
+  «Vale también para las tareas de Codex», que es lo que dice la fuente, y no «para Codex».
 - Cuánto se guardan las conversaciones (30 días o cinco años en Claude): no cambia lo que hay que hacer.
 - La transcripción de la clase no está en este repositorio. Las palabras de Eric son las que apuntó el repaso de
   la 142.
+
+**La revisión adversaria** (corrección, datos y seguridad) encontró esto, y está arreglado con su prueba:
+
+- **Corrección.**
+  - Lo que deja la barra en `02-DOCS/raw/` (los avisos para Executive Lab, los pedidos, los informes de «Algo va
+    mal» y «Qué falta por montar» por escrito) contaba como un documento entregado. Hacía salir «Ya le has dado
+    documentos…» sin ninguno, y como sale una vez, la gastaba. También salía en «Documentos entregados». Ahora
+    las dos cosas se saltan lo mismo, de la misma lista (`papeles.js`), y solo arriba de `raw/`: una carpeta
+    suya que se llame «avisos» más abajo, cuenta.
+  - Leerlo desde Ayuda antes de que entrara nada la gastaba. Ahora no (ver arriba).
+  - Cuatro mutantes vivían: una conexión con solo su fichero de acceso; un `.env.example` vacío contado como
+    puesto; dos conexiones, una puesta y otra a medias; y «Entendido» sin repintar, que dejaba la tarjeta en
+    pantalla. Los cuatro caen ahora.
+- **Datos.** «Mejorar el modelo para todos» no estaba comprobado en una página oficial que se pudiera leer:
+  ahora va en inglés, como la fuente, con la traducción al lado. «Vale también para Codex» pasa a «para las
+  tareas de Codex». Y Education entra en las licencias de empresa de Claude.
+- **Seguridad, de antes de esta decisión.** La ruta `abrir` del panel abría cualquier cosa, con cualquier
+  esquema y de cualquier sitio. La página de una conexión sale de su CREDENTIALS.md, así que una plantilla podía
+  poner una página falsa en «Abrir su página para sacar la clave». Ahora solo se abre lo que va por https. Lo
+  que es la barra en GitHub (`sitio.js`) o una página de Anthropic u OpenAI de la tabla se abre directo. Lo
+  demás se pregunta antes, con el sitio a la vista: «Voy a abrir app.holded.com. ¿Lo abro?». Lo que no es https
+  no se abre: «No abro esa página: no es segura. Díselo a tu tutor.»

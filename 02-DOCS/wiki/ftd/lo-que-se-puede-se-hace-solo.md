@@ -260,6 +260,11 @@ hacerse solo, porque no se puede deshacer.
   empresa, dónde se apaga en Claude y en Codex, y lo que no se pega nunca. Sale de su tabla, comprobada ese día en
   las páginas de Anthropic y OpenAI. La tarjeta lo dice una vez por carpeta, con la primera conexión puesta o el
   primer documento, detrás de lo urgente. `humo.js` 375, contrato 14, diccionario, y 20 de 20 mutaciones.
+- **La revisión adversaria del punto 12** encontró que lo que deja la barra en `raw/` (los avisos, los informes)
+  contaba como documento entregado y gastaba la tarjeta. También que leerlo antes de tiempo la gastaba, cuatro
+  mutantes vivos y un nombre de menú de ChatGPT sin comprobar. Y uno de seguridad, de antes: la ruta `abrir` del
+  panel abría cualquier esquema y cualquier sitio, y la página de una conexión sale de su CREDENTIALS.md. Ahora
+  solo https, y lo que no es nuestro se pregunta con el sitio a la vista. `humo.js` 376 y 39 de 39 mutaciones.
 
 ## Next
 

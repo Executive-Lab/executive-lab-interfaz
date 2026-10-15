@@ -7,7 +7,7 @@
     {
       "titulo": "Con datos de clientes, una licencia de empresa",
       "lineas": [
-        { "texto": "Con una licencia de empresa, de fábrica Anthropic y OpenAI no usan lo que le das para entrenar sus modelos: en Claude, Team o Enterprise; en ChatGPT, Business, Enterprise o Edu." },
+        { "texto": "Con una licencia de empresa, de fábrica Anthropic y OpenAI no usan lo que le das para entrenar sus modelos: en Claude, Team, Enterprise o Education; en ChatGPT, Business, Enterprise o Edu." },
         { "texto": "Lo mismo si pagas por uso, con una clave de acceso." },
         { "texto": "Con un plan personal, como Claude Pro o ChatGPT Plus, depende de un ajuste: apágalo como te digo aquí abajo." }
       ]
@@ -23,7 +23,7 @@
         },
         {
           "asistente": "codex",
-          "texto": "Codex va con tu cuenta de ChatGPT. En ChatGPT: Configuración › Controles de datos, y apaga «Mejorar el modelo para todos». Vale también para Codex.",
+          "texto": "Codex va con tu cuenta de ChatGPT. En ChatGPT: Settings › Data controls (ajustes, controles de datos), y apaga «Improve the model for everyone» (mejorar el modelo para todos). Si lo tienes en español, salen traducidos. Vale también para las tareas de Codex.",
           "boton": "Abrir los ajustes de ChatGPT",
           "url": "https://chatgpt.com/#settings/DataControls"
         }

@@ -71,6 +71,7 @@ const rastro = require('./rastro');
 const entorno = require('./entorno');
 const relevo = require('./relevo');
 const clientes = require('./clientes');
+const sitio = require('./sitio');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -716,7 +717,7 @@ ${cabecera}
       noHaceFaltaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, true),
       conversacionNueva: () => this.conversacionNueva(),
       pedirAyudaEnElForo: () => this.pedirAyudaEnElForo(),
-      abrir: () => vscode.env.openExternal(vscode.Uri.parse(mensaje.url)),
+      abrir: () => this.abrirUnaPagina(mensaje.url),
       bajarLaNueva: () => vscode.env.openExternal(version.dondeBajarla()),
       verLaRelease: () => vscode.env.openExternal(version.dondeVerla(this.versionDeLaBarra())),
       yaLoHeVisto: () => this.yaLoHeVisto(),
@@ -1509,13 +1510,52 @@ ${cabecera}
     await this.almacen().update(clientes.CLAVE, Date.now());
   }
 
-  // Leerlo, venga de Ayuda o de la tarjeta, cuenta como dicho.
+  // Leerlo cuenta como dicho si ya entran datos, venga de Ayuda o de la tarjeta.
+  // Leído antes, desde Ayuda, la tarjeta sale igual cuando entren: lo que importa
+  // es el momento, y semanas antes no se tiene delante (revisión de la 153).
   async verDatosDeClientes() {
     const tabla = this.laTablaDeLosDatos();
     if (!tabla) return this.enviar({ tipo: 'aviso', texto: 'No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
     this.donde = { tipo: 'quieto' };
-    await this.yaSeDijoLoDeLosDatos();
+    if (this.laTarjetaDeLosDatos()) await this.yaSeDijoLoDeLosDatos();
     return this.enviar({ tipo: 'datosDeClientes', tabla: clientes.paraLeer(tabla) });
+  }
+
+  // ── Abrir una página (revisión de seguridad de la 153) ────────────────
+  //
+  // La dirección llega del panel, y alguna sale de la carpeta: la página de una
+  // conexión viene de su CREDENTIALS.md, que puede haber escrito cualquiera. Así
+  // que solo se abre lo que va por https; y lo que no es nuestro en GitHub ni una
+  // de las páginas de Anthropic y OpenAI de la tabla de los datos de clientes, se
+  // pregunta antes, con el sitio a la vista.
+  async abrirUnaPagina(url) {
+    let direccion = null;
+    try {
+      direccion = new URL(String(url));
+    } catch {
+      direccion = null;
+    }
+    if (!direccion || direccion.protocol !== 'https:' || !direccion.hostname) {
+      this.salida.appendLine(`[abrir] no se abre, no va por https: ${String(url).slice(0, 200)}`); // diccionario: interno
+      return this.enviar({ tipo: 'aviso', texto: 'No abro esa página: no es segura. Díselo a tu tutor.', malo: true });
+    }
+    if (!this.esUnaPaginaNuestra(direccion)) {
+      const si = await vscode.window.showWarningMessage(`Voy a abrir ${direccion.hostname}. ¿Lo abro?`, { modal: true }, 'Abrirlo');
+      if (si !== 'Abrirlo') return undefined;
+    }
+    return vscode.env.openExternal(vscode.Uri.parse(direccion.href));
+  }
+
+  // Nuestra en GitHub (el repositorio de la barra, `sitio.js`), o de Anthropic u
+  // OpenAI, de las que da la tabla de los datos de clientes.
+  esUnaPaginaNuestra(direccion) {
+    if (direccion.hostname === 'github.com') {
+      return sitio.esNuestro(direccion.pathname.split('/').filter(Boolean).slice(0, 2).join('/'));
+    }
+    const tabla = this.laTablaDeLosDatos();
+    const deLaTabla = (JSON.stringify(tabla || {}).match(/https:\/\/[^"\s]+/g) || [])
+      .map((u) => { try { return new URL(u).hostname; } catch { return null; } });
+    return deLaTabla.includes(direccion.hostname);
   }
 
   async entendidoLoDeLosDatos() {

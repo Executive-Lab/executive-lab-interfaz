@@ -39,11 +39,11 @@ Las páginas, con lo que dice cada una, están en la decisión 153. En corto:
 
 | Dato | Dónde se comprobó |
 |---|---|
-| Claude Team y Enterprise, y la API, no entrenan de fábrica | `privacy.claude.com/en/articles/7996868` (18-8-2026), `claude.com/pricing`, `anthropic.com/news/updates-to-our-consumer-terms` |
+| Claude Team, Enterprise y Education, y la API, no entrenan de fábrica | `privacy.claude.com/en/articles/7996868` (18-8-2026), `claude.com/pricing`, `anthropic.com/news/updates-to-our-consumer-terms` |
 | Claude Free, Pro y Max (también con Claude Code): entrena si lo permites | `privacy.claude.com/en/articles/10023580` (16-3-2026), `claude.com/pricing` («Opt-out») |
 | Configuración › Privacidad › «Ayudar a mejorar nuestros modelos de IA», en `claude.ai/settings/data-privacy-controls` | `privacy.claude.com/es/articles/12109829` (3-8-2026) |
 | ChatGPT Business, Enterprise y Edu, y la clave de acceso, no entrenan de fábrica; Plus y Pro, sí | `learn.chatgpt.com/docs/pricing`, `learn.chatgpt.com/docs/enterprise/chatgpt-work-cloud-security`, `developers.openai.com/api/docs/guides/your-data` |
-| Configuración › Controles de datos › «Mejorar el modelo para todos», que vale también para Codex | `help.openai.com/es-es/articles/7730893` y `/en/articles/7730893`, leídas con el buscador (dan 403 a una petición automática) |
+| Settings › Data controls › «Improve the model for everyone», que vale también para las tareas de Codex. En pantalla, en inglés y con la traducción al lado: el nombre en español no está comprobado | `learn.chatgpt.com/docs/browser`, leída; `help.openai.com/en/articles/7730893`, con el buscador (da 403 a una petición automática) |
 | El enlace `chatgpt.com/#settings/DataControls` | `learn.chatgpt.com/docs/use-chatgpt` y `/docs/changelog` |
 | El pulgar manda la conversación entera, aunque esté apagado | `privacy.claude.com` (los dos artículos) y la ayuda de OpenAI |
 
@@ -70,8 +70,9 @@ Las páginas, con lo que dice cada una, están en la decisión 153. En corto:
   la pantalla entera, con «Volver» a Ayuda.
 - [x] 3. La tarjeta, una vez por carpeta, sin tapar lo urgente — la prueba la saca en una carpeta nueva por cada
   puerta y mira que no vuelve; y la pinta contra cada tarjeta de antes y de después.
-- [x] 4. La prueba de humo y las mutaciones — 20 mutaciones, las 20 tumbadas.
+- [x] 4. La prueba de humo y las mutaciones — 20 mutaciones, las 20 tumbadas; tras la revisión, 39 de 39.
 - [x] 5. Decisión 153, diccionario y el punto 12.
+- [x] 6. La revisión adversaria, arreglada con su prueba.
 
 ## Evidence
 
@@ -91,10 +92,23 @@ Las páginas, con lo que dice cada una, están en la decisión 153. En corto:
 - `contrato.js` con 14, `empresas-distintas.js` con las tres empresas, y `comprobar-diccionario.js`, en verde.
 - Las páginas se miraron el 15-10-2026. Las de Anthropic y la documentación de OpenAI, leídas directamente. La
   ayuda de OpenAI (`help.openai.com`) da 403 a una petición automática, y se leyó con el buscador.
+- **La revisión adversaria** (corrección, datos y seguridad) encontró esto, y está arreglado (decisión 153):
+  - lo que deja la barra en `raw/` (avisos, pedidos, incidencias y «Qué falta por montar» por escrito)
+    contaba como documento entregado: hacía salir la tarjeta sin documentos, y salía en «Documentos
+    entregados». Ahora se salta en los dos sitios, de la misma lista, y solo arriba de `raw/`;
+  - leerlo desde Ayuda antes de que entrara nada la gastaba: ahora sale igual cuando entran;
+  - cuatro mutantes vivían (el fichero de acceso, un `.env.example` vacío, dos conexiones, «Entendido» sin
+    repintar), y ahora caen;
+  - en ChatGPT, el nombre en español no estaba comprobado: va en inglés, como la fuente, con la traducción al
+    lado. Dice «las tareas de Codex», y Education entra en las licencias de Claude;
+  - de seguridad, y de antes: la ruta `abrir` abría cualquier esquema y cualquier sitio. Ahora solo https; lo
+    nuestro, directo; lo demás, preguntando con el sitio a la vista. Hay una prueba nueva con `javascript:`,
+    `file:`, `http:` y sitios ajenos.
+- Tras la revisión: `humo.js` **376** comprobaciones, todas en verde, contrato 14, empresas y diccionario. **Las
+  20 mutaciones de antes y 19 nuevas, 39 de 39 tumbadas.**
 
 ## Next
 
-- Una revisión adversaria (corrección y pruebas), como en los puntos anteriores.
 - Las máquinas de GitHub, y fusionar: lo decide Jose.
 - Si el texto cambia de verdad (otra licencia, otro menú), decidir si la tarjeta vuelve a salir. Hoy sale una
   vez por carpeta y no vuelve.
