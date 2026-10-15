@@ -416,10 +416,10 @@ function pantallaSalidas(datos) {
 // El reloj de la barra y las tareas que ejecuta cada asistente se explican en
 // el mismo sitio. El primero se gestiona aquí; las otras se preparan para su
 // gestor oficial, sin contarlas como activas en esta lista.
-function pantallaRutinas({ horarios = [], automatica = {} }) {
+function pantallaRutinas({ horarios = [], automatica = {}, aviso: avisoLocal }) {
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Rutinas y horarios' }])}
-    ${bloqueAviso()}
+    ${bloqueAviso(avisoLocal)}
     ${volver()}
     <div class="brujula">
       <h2>Rutinas y horarios</h2>

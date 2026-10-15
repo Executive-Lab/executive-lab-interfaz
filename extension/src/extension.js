@@ -392,7 +392,7 @@ ${cabecera}
     // que tenían: guardar la foto o soltar un documento es lo que despierta al vigía.
     if (d.tipo === 'documentos') return this.verDocumentos(d.aviso);
     if (d.tipo === 'foto') return this.verLaFoto(d.desde, d.aviso);
-    if (d.tipo === 'rutinas') return this.verRutinas();
+    if (d.tipo === 'rutinas') return this.verRutinas(d.aviso);
     // En una pantalla de lectura o de resultado no se toca nada: está leyendo.
     if (d.tipo === 'quieto') return undefined;
     return this.refrescar(true);
@@ -1059,7 +1059,7 @@ ${cabecera}
   }
 
   async verRutinas(avisoLocal = null) {
-    this.donde = { tipo: 'rutinas' };
+    this.donde = { tipo: 'rutinas', aviso: avisoLocal };
     const pendientes = new Set((await this.losRecordatoriosQueTocan()).map((r) => r.nombre));
     const ahora = Date.now();
     const horarios = recordatorios.conHorario().map((r) => {
@@ -1117,7 +1117,7 @@ ${cabecera}
   }
 
   actualizarRecordatorios() {
-    return this.donde && this.donde.tipo === 'rutinas' ? this.verRutinas() : this.refrescar(true);
+    return this.donde && this.donde.tipo === 'rutinas' ? this.verRutinas(this.donde.aviso) : this.refrescar(true);
   }
 
   // Los que tocan, del más antiguo al más nuevo. La principal enseña uno; el
@@ -1189,7 +1189,7 @@ ${cabecera}
 
   async quitarRecordatorio(nombre) {
     const hecho = recordatorios.ponerCuando(nombre, null);
-    if (!hecho.ok) return this.enviar({ tipo: 'aviso', texto: 'No he podido quitar ese recordatorio. Pídele al asistente que revise esa habilidad.', malo: true });
+    if (!hecho.ok) return this.avisarAqui({ texto: 'No he podido quitar ese recordatorio. Pídele al asistente que revise esa habilidad.', malo: true });
     // Lo que se quita no vuelve por costumbre, venga de donde venga; y si se
     // vuelve a poner, empieza a contar desde entonces.
     const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
@@ -1198,7 +1198,7 @@ ${cabecera}
     const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
     delete vistos[nombre];
     await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
-    if (this.donde && this.donde.tipo === 'rutinas') await this.verRutinas();
+    if (this.donde && this.donde.tipo === 'rutinas') return this.verRutinas({ texto: `Ya no te recordaré «${hecho.boton.etiqueta}».` });
     else if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
     else await this.refrescar(true);
     return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
@@ -1224,7 +1224,7 @@ ${cabecera}
     for (const t of sinAvisar) avisados[t.nombre] = t.ultima;
     await this.almacen().update(CLAVE_AVISADOS, avisados);
     if (!this.donde || this.donde.tipo === 'principal') await this.refrescar(true);
-    else if (this.donde.tipo === 'rutinas') await this.verRutinas();
+    else if (this.donde.tipo === 'rutinas') await this.verRutinas(this.donde.aviso);
     // Sin esperar a uno para enseñar el siguiente: cada aviso, con su botón.
     await Promise.all(sinAvisar.map(async (t) => {
       const quiere = await vscode.window.showInformationMessage(`Toca: ${t.etiqueta}.`, 'Hacerlo ahora');
@@ -1670,6 +1670,7 @@ ${cabecera}
   // corrección, 1). En las demás, como siempre.
   avisarAqui(aviso) {
     const d = this.donde || {};
+    if (d.tipo === 'rutinas') return this.verRutinas(aviso);
     if (d.tipo === 'documentos') return this.verDocumentos(aviso);
     if (d.tipo === 'foto') return this.verLaFoto(d.desde, aviso);
     return this.enviar({ tipo: 'aviso', ...aviso });

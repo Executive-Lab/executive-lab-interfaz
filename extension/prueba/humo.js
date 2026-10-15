@@ -13958,6 +13958,9 @@ exec git "$@"
       assert.equal(ultima().horarios.find((r) => r.nombre === 'carpeta-del-resumen').pendiente, false);
       assert.ok(ultima().horarios.find((r) => r.nombre === 'carpeta-del-resumen').proxima);
       assert.match(ultima().aviso.texto, /cada lunes a las 8:45/);
+      assert.match(require('./panel-falso').montarPanel().mandar(ultima()), /Te recordaré «Resumen semanal» cada lunes a las 8:45\./, 'la confirmación no se pinta en la pantalla');
+      await proveedor.repintarLoQueHaya();
+      assert.match(ultima().aviso.texto, /Te recordaré/, 'el vigía borra la confirmación');
 
       const textoAntes = fs.readFileSync(habilidad, 'utf8');
       for (const respuestas of [[], ['Un día de la semana'], ['Un día de la semana', 'martes']]) {
@@ -14024,6 +14027,8 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'quitarRecordatorio', nombre: 'carpeta-del-resumen' });
       assert.doesNotMatch(fs.readFileSync(habilidad, 'utf8'), /cuando:/);
       assert.equal(proveedor.donde.tipo, 'rutinas');
+      assert.equal(mensajes.at(-1).tipo, 'rutinas', 'el aviso de quitarlo manda a la principal');
+      assert.match(require('./panel-falso').montarPanel().mandar(mensajes.at(-1)), /Ya no te recordaré «Resumen semanal»\./);
       assert.equal(ultima().horarios.length, 1, 'queda visible el horario por corregir');
       return 'diario · laborables · semanal · mensual · cancelación · pendientes · Codex y Claude';
     } finally {
