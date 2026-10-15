@@ -41,6 +41,8 @@ const NOMBRES_PROPIOS = [/\bnode\.js\b/gi];
 const TABLAS = [
   { fichero: 'extension/media/nombres.json', campos: ['nombre', 'queHace'], listas: ['lenguajes'] },
   { fichero: 'extension/media/capacidades.json', campos: ['nombre', 'frase'], listas: [] },
+  // Si trabajas con datos de clientes, y su tarjeta (decisión 153): todo es pantalla.
+  { fichero: 'extension/media/datos-de-clientes.json', campos: ['titulo', 'entradilla', 'texto', 'boton', 'pie', 'conexion', 'documentos', 'detalle'], listas: [] },
 ];
 
 // Lo que enseñan los instaladores (H2): los pasos que corre `instalar.js` y que

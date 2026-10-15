@@ -1,0 +1,53 @@
+{
+  "_": "Ayuda › Si trabajas con datos de clientes, y la tarjeta que lo dice una vez por carpeta (decisión 153). Cada dato está comprobado en las páginas oficiales de Anthropic y OpenAI el día de «comprobado»; las páginas están en la decisión y en 02-DOCS/wiki/ftd/los-datos-de-clientes.md. Esto cambia: antes de tocar una línea, se vuelven a mirar, y se cambian juntos «comprobado» y «pie».",
+  "comprobado": "2026-10-15",
+  "titulo": "Si trabajas con datos de clientes",
+  "entradilla": "Lo que le das a tu asistente sale de este ordenador. Si son datos de clientes, mira esto antes.",
+  "partes": [
+    {
+      "titulo": "Con datos de clientes, una licencia de empresa",
+      "lineas": [
+        { "texto": "Con una licencia de empresa, de fábrica Anthropic y OpenAI no usan lo que le das para entrenar sus modelos: en Claude, Team, Enterprise o Education; en ChatGPT, Business, Enterprise o Edu." },
+        { "texto": "Lo mismo si pagas por uso, con una clave de acceso." },
+        { "texto": "Con un plan personal, como Claude Pro o ChatGPT Plus, depende de un ajuste: apágalo como te digo aquí abajo." }
+      ]
+    },
+    {
+      "titulo": "Dónde se apaga que se usen tus datos",
+      "lineas": [
+        {
+          "asistente": "claude",
+          "texto": "En Claude: Configuración › Privacidad, y apaga «Ayudar a mejorar nuestros modelos de IA». Vale también para lo que hablas con Claude aquí.",
+          "boton": "Abrir los ajustes de Claude",
+          "url": "https://claude.ai/settings/data-privacy-controls"
+        },
+        {
+          "asistente": "codex",
+          "texto": "Codex va con tu cuenta de ChatGPT. En ChatGPT: Settings › Data controls (ajustes, controles de datos), y apaga «Improve the model for everyone» (mejorar el modelo para todos). Si lo tienes en español, salen traducidos. Vale también para las tareas de Codex.",
+          "boton": "Abrir los ajustes de ChatGPT",
+          "url": "https://chatgpt.com/#settings/DataControls"
+        }
+      ]
+    },
+    {
+      "titulo": "Lo que no se pega nunca",
+      "lineas": [
+        { "texto": "Claves de acceso y contraseñas. Las claves van en Conexiones (tools), no en la conversación." },
+        { "texto": "Números de tarjeta o de cuenta del banco." },
+        { "texto": "Datos de salud o documentos de identidad de tus clientes." },
+        { "texto": "Si te basta sin el nombre del cliente, quítalo antes de pegarlo." },
+        { "texto": "Y no valores con el pulgar ni mandes un fallo desde una conversación con datos de clientes: aunque lo tengas apagado, esa conversación entera se puede usar para entrenar." }
+      ]
+    }
+  ],
+  "pie": "Comprobado el 15 de octubre de 2026 en las páginas de Anthropic y OpenAI. Esto cambia: si algo no cuadra, mira lo que dicen ellos.",
+  "fuentes": [
+    { "boton": "Lo que dice Anthropic", "url": "https://privacy.claude.com/es/articles/12109829-como-cambio-mi-configuracion-de-privacidad-de-mejora-del-modelo" },
+    { "boton": "Lo que dice OpenAI", "url": "https://help.openai.com/es-es/articles/7730893-preguntas-frecuentes-sobre-los-controles-de-datos" }
+  ],
+  "tarjeta": {
+    "conexion": "Por tu conexión ya entran datos de tu negocio. Si son de clientes, mira antes qué licencia hace falta y dónde se apaga que se usen para entrenar.",
+    "documentos": "Ya le has dado documentos. Si llevan datos de clientes, mira antes qué licencia hace falta y dónde se apaga que se usen para entrenar.",
+    "detalle": "Lo tienes siempre en Ayuda."
+  }
+}
