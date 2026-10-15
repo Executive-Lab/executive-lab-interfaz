@@ -1,7 +1,7 @@
 ---
 type: worklog
 title: Lo que se puede hacer solo, la barra en la 3 y lo pesado fuera de las copias
-description: De la clase del 13-10 sin la barra salen P9 (142), el paso a la serie 3 de RSC (145) y que las fotos y los vídeos no entren en git (146).
+description: De la clase del 13-10 sin la barra salen P9 (142), el paso a la serie 3 de RSC (145) y que las fotos y los vídeos no entren en git (147).
 timestamp: 2026-10-14T16:00:00Z
 topic: interfaz
 status: unprocessed
@@ -22,7 +22,7 @@ sources: []
   mira sin escribir y sin npx. Al pasar de la 2, la barra decide en un solo sitio (`decidir.js`, desde
   `rsc.correr`): apaga lo que sale del ordenador, abre `main` en lo suyo y respeta lo que el equipo ya
   había apagado.
-- **Lo pesado no entra en las copias** (decisión 146, PR #30): vídeos al `.gitignore`, más de 20 MB
+- **Lo pesado no entra en las copias** (decisión 147, PR #30): vídeos al `.gitignore`, más de 20 MB
   fuera de la copia, y si lo nuevo pasa de 200 MB en total no se guarda. Con eso, poner copias se hace
   solo.
 
@@ -34,8 +34,8 @@ sources: []
 - **npx leía el `.npmrc` de la carpeta** que va por delante, solo con abrir la barra (revisión de
   seguridad, H1). Ya no se usa npx.
 - **La copia de después de «Volver a como estaba» metía las claves**, porque se guardaba sin la lista
-  de lo que no entra. Era un fallo de antes, y salió al escribir la 146.
-- **La revisión de la 146 encontró un fallo de seguridad**: un repositorio dentro de la carpeta (una
+  de lo que no entra. Era un fallo de antes, y salió al escribir la 147.
+- **La revisión de la 147 encontró un fallo de seguridad**: un repositorio dentro de la carpeta (una
   plantilla clonada) entraba en la copia, y luego cada vistazo de la barra a git corría su `fsmonitor`
   y sus filtros `clean`. Con las copias puestas solas, bastaba con abrir la carpeta. Y seis de
   corrección, entre ellos que un fichero que ya estaba en git podía crecer sin tope y que con miles de

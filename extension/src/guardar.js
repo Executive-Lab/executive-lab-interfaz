@@ -129,7 +129,7 @@ function dichoDeLoQueNoEntro(excluidos) {
   };
 }
 
-// ── Lo pesado no entra en las copias (decisión 146) ─────────────────────
+// ── Lo pesado no entra en las copias (decisión 147) ─────────────────────
 //
 // Un alumno de la clase del 13-10 quería meter «unos 100 gigas» de fotos y vídeos
 // en su carpeta, y con «guardar solo» encendido entraban todos en el historial,
@@ -144,7 +144,7 @@ function dichoDeLoQueNoEntro(excluidos) {
 //     botón que se lo pide al asistente.
 //
 // Lo que ya estaba en git sigue en git, por mucho que pese: sacarlo lo decide la
-// persona. Pero cuenta para el total, porque entra en la copia (revisión de la 146:
+// persona. Pero cuenta para el total, porque entra en la copia (revisión de la 147:
 // una base de datos de 5 GB que cambia entraba entera en cada copia, sin tope).
 const LIMITE_FICHERO = 20 * 1024 * 1024;
 const LIMITE_TOTAL = 200 * 1024 * 1024;
@@ -198,7 +198,7 @@ async function loQueSeQuedaFuera(donde) {
   try {
     claves = loQueNoEntra();
   } catch { /* sin inventario se guarda como siempre: el .gitignore de los raíles sigue ahí */ }
-  // Sin saber qué hay, no se guarda: guardaría sin tope (revisión de la 146).
+  // Sin saber qué hay, no se guarda: guardaría sin tope (revisión de la 147).
   const pendiente = await loPendiente(donde);
   if (!pendiente) return null;
   const anidados = pendiente.filter((p) => p.anidado).map((p) => p.rel);
@@ -297,7 +297,7 @@ async function volverA(id) {
 
   const etiqueta = movido.cuando ? haceCuanto(movido.cuando) : 'entonces';
   // Con lo que se queda fuera, como cualquier copia: se guardaba sin la lista, y
-  // metía las claves que la copia de antes había dejado fuera (decisión 146).
+  // metía las claves que la copia de antes había dejado fuera (decisión 147).
   const despues = await loQueSeQuedaFuera(donde);
   if (despues && !despues.demasiado) await h.guardar(donde, `Vuelta a como estaba ${etiqueta}`, { ...comoLlamar(), excluir: despues.excluir });
 

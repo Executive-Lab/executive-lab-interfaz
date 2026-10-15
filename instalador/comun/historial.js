@@ -34,7 +34,7 @@ const RAMA = 'main';
 //
 // Con un repositorio anidado en la copia, cada `status` y cada `add` lanzaban un git
 // dentro de él, con su configuración: su `core.fsmonitor` y sus filtros `clean`
-// corrían órdenes de quien hiciera esa carpeta. Y desde la decisión 146 las copias
+// corrían órdenes de quien hiciera esa carpeta. Y desde la decisión 147 las copias
 // se ponen solas al abrir (revisión de seguridad, reproducido con git 2.46).
 // `diff.ignoreSubmodules=all` hace que `status` no entre; `core.fsmonitor=false`,
 // que el de la propia carpeta tampoco corra. El `add` entra igual, así que lo anidado
@@ -96,7 +96,7 @@ function motorBinario(ejecutable) {
       const seguidos = new Set(enLaCopia.codigo === 0 ? enLaCopia.salida.split('\0').filter(Boolean) : []);
       const fuera = excluir.filter((rel) => fs.existsSync(path.join(dir, rel)) && !seguidos.has(rel));
       // Las rutas, literales y por la entrada: un `*`, un `?` o un `[` en un nombre
-      // no son comodines, y miles de rutas no caben en la orden (revisión de la 146).
+      // no son comodines, y miles de rutas no caben en la orden (revisión de la 147).
       // Para sacar del índice, `update-index`, que las lee tal cual en cualquier git
       // (`rm --pathspec-from-file` pide la 2.26); `add` la pide la 2.25.
       const juntas = (rutas) => rutas.map((r) => `${r}\0`).join('');

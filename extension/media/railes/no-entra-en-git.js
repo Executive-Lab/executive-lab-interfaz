@@ -57,7 +57,7 @@ const LO_QUE_NO_ENTRA = [
   // por dentro, y lo que sale de aquí sale limpio y solo con su sí (decisión 131).
   '02-DOCS/raw/avisos/',
   // Los vídeos y las imágenes de disco, que pesan mucho y hacen el historial enorme
-  // sin vuelta atrás (decisión 146). Aquí, y no solo al guardar desde la barra,
+  // sin vuelta atrás (decisión 147). Aquí, y no solo al guardar desde la barra,
   // porque así tampoco entran cuando guarda el asistente. Con las dos formas de
   // cada letra: el iPhone escribe `.MOV`, y git no siempre mira sin mayúsculas.
   '*.[mM][pP]4',

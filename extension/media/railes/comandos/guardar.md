@@ -19,7 +19,7 @@ dilo en una línea («No he metido «.env» en la copia: es un fichero de claves
 este ordenador.») y ofrece ponerlo en su sitio, que es la carpeta de su herramienta en `01-TOOLS/`. Si ya
 estaba en git, no lo saques tú: dilo, y que lo decida la persona.
 
-**Nada pesado en una copia** (decisión 146). Un fichero de más de 20 MB que git todavía no seguía se
+**Nada pesado en una copia** (decisión 147). Un fichero de más de 20 MB que git todavía no seguía se
 queda fuera: dilo en una línea («No he metido «catalogo.pdf» en la copia: pesa mucho y la haría enorme.
 Sigue en tu carpeta.»). Los vídeos ya los deja fuera el `.gitignore`. Y si lo que entraría pasa de
 200 MB en total —muchas fotos, o algo que ya estaba en git y ha crecido—, no guardes: dilo, y

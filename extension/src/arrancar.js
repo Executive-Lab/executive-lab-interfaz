@@ -911,7 +911,7 @@ const COMO_SE_HACE = {
       return {
         ok: false,
         detalle: hecho.mensaje,
-        // Con demasiado peso nuevo, el motivo de verdad y no «Algo va mal» (decisión 146).
+        // Con demasiado peso nuevo, el motivo de verdad y no «Algo va mal» (decisión 147).
         pega: hecho.demasiado ? hecho.mensaje : 'No he podido guardar el punto de partida. Lo demás está listo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
         ...(hecho.boton ? { boton: hecho.boton } : {}),
       };
@@ -1179,7 +1179,7 @@ async function ponerLasCopias(contexto) {
   const partida = await COMO_SE_HACE.puntoDePartida();
   if (!partida.ok) {
     // El historial que se acaba de crear, sin ninguna copia, se quita: con él, la
-    // pieza decía «Listas» sin haber copias, y no quedaba botón (revisión de la 146).
+    // pieza decía «Listas» sin haber copias, y no quedaba botón (revisión de la 147).
     if (!habia && !(await procesos.git('rev-parse', '--verify', '-q', 'HEAD')).salida.trim()) {
       try { fs.rmSync(path.join(proyecto.raiz(), '.git'), { recursive: true, force: true }); } catch { /* se queda: lo dice la pieza */ }
     }

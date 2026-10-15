@@ -160,7 +160,7 @@ hacerse solo, porque no se puede deshacer.
   dos se quedan con su botón, cada uno por su motivo.
 - [x] 6. Pasar a RSC 3: `ftd/la-barra-pasa-a-la-3.md`, decisión 145.
 - [ ] 7. La prueba que dice que la clave puede escribir.
-- [x] 8. Lo pesado, fuera de git: decisión 146. Y poner copias, solo.
+- [x] 8. Lo pesado, fuera de git: decisión 147. Y poner copias, solo.
 - [ ] 9. Cuándo caduca una clave.
 - [ ] 10. Añadir una habilidad sin mandar a nadie a la barra.
 - [ ] 11. La foto del cerebro.
@@ -217,7 +217,7 @@ hacerse solo, porque no se puede deshacer.
   ordenador ya conoce: **la primera vez que un alumno abra con esta barra una carpeta montada antes,
   tendrá que pulsar un botón del arnés una vez**.
 
-- **Punto 8** (decisión 146): `humo.js` 370, contrato 14 y diccionario en verde. Al escribirlo salió un
+- **Punto 8** (decisión 147): `humo.js` 370, contrato 14 y diccionario en verde. Al escribirlo salió un
   fallo que ya estaba: la copia de «Volver a como estaba» metía las claves que la de antes había dejado
   fuera.
 - **La revisión adversaria del punto 8** encontró siete fallos, reproducidos y arreglados con su prueba.

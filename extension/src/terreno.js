@@ -872,7 +872,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         detalle: sigueSinCopias ? 'Sin copias, porque lo elegiste' : 'Todavía sin copias',
         // Si eligió seguir sin copias, es suyo. Si no, se ponen solas: lo pesado ya
         // se queda fuera de la copia, y con demasiado peso nuevo no se guarda
-        // (decisión 146, `guardar.js`).
+        // (decisión 147, `guardar.js`).
         arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' }, ...(sigueSinCopias ? { retiene: 'loDecide' } : { alAbrir: true }) },
       }
       : conArreglo({
