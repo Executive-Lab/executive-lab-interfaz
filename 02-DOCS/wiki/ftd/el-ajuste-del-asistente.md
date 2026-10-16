@@ -68,17 +68,18 @@ Lo elegido en «Tu asistente» para una carpeta manda en ella.
   - los cuatro mutantes que sobrevivían caen: el arnés libre a la segunda vuelta, la barra ocupada
     mientras corre el arnés, una carpeta sin nada declarado y la oferta en otra carpeta;
   - el contrato mira las habilidades con botón de los raíles en `.claude/skills` y en `.agents/skills`.
-- [x] 13. Mutaciones otra vez, después de traer la 156 y la 157 — 57, las 57 tumbadas, y la copia sin mutar, en verde.
+- [x] 13. Mutaciones otra vez, después de traer la 156, la 157 y la #48 — 57, las 57 tumbadas, y la copia sin
+  mutar, en verde.
 
 ## Evidence
 
 Primera vuelta, 15-10-2026, después de traer la 152: `humo.js` 404, `mapeos-codex.js` 15 de 15,
 `contrato.js` 15, y 45 mutaciones tumbadas.
 
-Después de la revisión, 16-10-2026, en la rama `el-ajuste-del-asistente`, con la 156 y la 157 traídas de
-`origin/main`:
+Después de la revisión, 16-10-2026, en la rama `el-ajuste-del-asistente`, con la 156, la 157 y los
+recordatorios ordenados (#48) traídos de `origin/main`:
 
-- `humo.js`: 415 comprobaciones pasadas. Las siete nuevas:
+- `humo.js`: 416 comprobaciones pasadas. Las siete nuevas:
   «el ajuste del asistente: cuatro valores, automático de fábrica y para todo el editor» ·
   «al montar, el ajuste dice para cuál, sin preguntar» ·
   «al montar, sin el que pide el ajuste se ofrece ponerlo, o seguir con el que hay» ·
@@ -87,7 +88,7 @@ Después de la revisión, 16-10-2026, en la rama `el-ajuste-del-asistente`, con 
   «cambiar el ajuste con la barra abierta se nota sin recargar» ·
   «con «Los dos», una carpeta montada para uno se prepara sola para el otro, con las guardas, y lo dice».
   Y la del diccionario siembra un `enumItemLabels` con una palabra prohibida.
-- `mapeos-codex.js`: 15 de 15 pasadas, con «con el ajuste en Codex, una carpeta montada para los dos mira e
+- `mapeos-codex.js`: 29 de 29 pasadas, con «con el ajuste en Codex, una carpeta montada para los dos mira e
   invoca lo de Codex».
 - `contrato.js`: 15 comprobaciones pasadas. «con el ajuste de los dos asistentes, el arranque no pregunta
   y RSC monta para los dos — montado para claude y codex, con 3 habilidades con botón para cada uno», con
