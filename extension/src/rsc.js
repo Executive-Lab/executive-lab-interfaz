@@ -70,7 +70,7 @@ function paquete() {
 // `.rsc.json` y los de cada fichero de estado. Con uno que sale de la carpeta,
 // no se corre, y el motivo queda en el informe de «Algo va mal».
 const QUE_ESCRIBEN = new Set(['sync', 'repair', 'onboard', 'add', 'uninstall', 'purge', 'install', 'upgrade', 'restore',
-  'main', 'isolation', 'knowledge-sync', 'git-permissions', 'agents', 'agent-model']);
+  'main', 'isolation', 'knowledge-sync', 'memory', 'git-permissions', 'agents', 'agent-model']);
 // Lo que el arnés usa como nombre de carpeta o de fichero al borrar
 // (`install-apply.js`, `repair.js`, `targets/agents.js`, `targets/commands.js`).
 const NOMBRES_DEL_ESTADO = ['skills', 'agents', 'explicitAgents', 'commands'];
@@ -123,6 +123,8 @@ const saberDondeEstamos = (ruta) => { carpetaDeLaExtension = ruta; };
 async function correr(args, opciones) {
   // Pedir el plan de `onboard` no escribe nada: lo que escribe es aceptarlo.
   const escribe = QUE_ESCRIBEN.has(args[0]) && !args.includes('--dry-run') && args[1] !== 'status'
+    // `memory` solo escribe con `on` y con `off`: `resume`, `metrics` y `status` miran.
+    && (args[0] !== 'memory' || args[1] === 'on' || args[1] === 'off')
     && (args[0] !== 'onboard' || args.includes('--accept-plan'));
   if (escribe) {
     const malos = nombresQueSalenDeLaCarpeta();
