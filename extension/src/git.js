@@ -7,6 +7,7 @@
 // módulo compartido no aparece.
 
 const entorno = require('./entorno');
+const respuestas = require('./respuestas');
 
 // Se busca una vez y se recuerda, como historial.js: si no está, no va a estar
 // más tarde.
@@ -38,14 +39,58 @@ async function hay() {
   return m ? m.hay(comoLlamar()) : false;
 }
 
-async function instalar(avisar = () => {}) {
+// Una sola vez a la vez (decisión 165): preparar la carpeta lo pone mientras
+// pregunta, y en ese rato «Ponerla ahora» o volver a pulsar no pueden lanzar un
+// segundo instalador. Quien llega después espera al que ya está.
+let enCurso = null;
+const NO_HE_PODIDO = 'No he podido poner git. Pulsa «Algo va mal» y pásale el código a tu tutor.';
+
+function instalar(avisar = () => {}) {
   const m = compartido();
   if (!m) {
     const aMano = 'Pídesela a tu tutor: se llama git.';
-    return { ok: false, mensaje: aMano };
+    return Promise.resolve({ ok: false, mensaje: aMano });
   }
+  if (!enCurso) {
+    const anterior = respuestas.cuandoEmpezoGit();
+    enCurso = (anterior && Date.now() - anterior < QUINCE_MINUTOS
+      ? esperarALaAnterior(anterior, avisar)
+      : empezar(m, avisar))
+      // Lo que falle por dentro se cuenta como un fallo, con su motivo (P3).
+      .catch((error) => ({ ok: false, mensaje: NO_HE_PODIDO, detalle: error.message }))
+      .finally(() => { enCurso = null; return respuestas.olvidarQueEmpezoGit(); });
+  }
+  return enCurso;
+}
+
+// Una instalación que empezó antes de recargar la ventana y puede seguir en
+// marcha (Windows copia git en varios pasos): no se lanza otra encima. Se espera
+// a que git esté entero, como si siguiera en marcha, hasta cumplirse el plazo.
+const QUINCE_MINUTOS = 15 * 60 * 1000;
+const espera = { cada: 5000 };
+
+function esperarALaAnterior(desde, avisar) {
+  avisar('Git se está poniendo todavía. Espero a que acabe.');
+  return new Promise((resolver) => {
+    const mirar = async () => {
+      try {
+        if (await hay()) return resolver({ ok: true });
+        if (Date.now() - desde >= QUINCE_MINUTOS) {
+          return resolver({ ok: false, tarda: true, mensaje: 'Se está haciendo muy largo. Déjalo terminar y vuelve a abrir esto dentro de un rato.' });
+        }
+      } catch { /* se vuelve a mirar */ }
+      setTimeout(mirar, espera.cada);
+    };
+    mirar();
+  });
+}
+
+async function empezar(m, avisar) {
+  await respuestas.apuntarQueEmpezoGit();
   return m.instalar(comoLlamar(), avisar);
 }
+
+const seEstaPoniendo = () => Boolean(enCurso);
 
 function comoSeInstala() {
   const m = compartido();
@@ -57,4 +102,9 @@ function sePuedeInstalarSolo() {
   return Boolean(m && m.sePuedeInstalarSolo());
 }
 
-module.exports = { hay, instalar, comoSeInstala, sePuedeInstalarSolo };
+// La línea de debajo de «Preparar esta carpeta» cuando falta git y se puede
+// poner solo (decisión 165): pulsar es el sí de instalarlo (P9), y se dice.
+// Sin poder ponerlo solo no hay línea: sale lo de siempre, con su botón.
+const AL_PREPARAR = 'Al pulsar pongo también git, para tus copias. Mientras se pone, te hago las preguntas.';
+
+module.exports = { hay, instalar, seEstaPoniendo, espera, QUINCE_MINUTOS, comoSeInstala, sePuedeInstalarSolo, AL_PREPARAR };

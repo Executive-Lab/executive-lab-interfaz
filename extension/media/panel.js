@@ -1720,10 +1720,13 @@ function pararElReloj() {
 // Con salida. Esperar sin poder volver es un callejón: si lo de detrás tarda
 // más de la cuenta —o se cuelga, que ya ha pasado— quedarse mirando no es una
 // opción que nadie elija. Volver no cancela lo de detrás; solo te deja salir.
-function pantallaEsperando(que = 'Un momento…') {
+// Y con otra salida, si la espera la trae: mientras se pone git con las respuestas
+// ya dadas, seguir sin copias (decisión 165).
+function pantallaEsperando(que = 'Un momento…', otra = null) {
   return `
     ${nada(que)}
     <p class="cargando cuanto" data-cuanto></p>
+    ${otra && otra.etiqueta && otra.accion ? boton({ etiqueta: otra.etiqueta, icono: '↷', discreto: true, accion: otra.accion }) : ''}
     ${boton({ etiqueta: 'Volver', icono: '←', discreto: true, accion: { tipo: 'volver' } })}
   `;
 }
@@ -1800,29 +1803,63 @@ function pantallaNoSePrepara() {
   `;
 }
 
-// Carpeta sin arnés: no está rota, es que aún no se ha montado. Si falta git no
-// se ofrece prepararla: sin él la preparación aborta a mitad, y enseñar un
-// botón que no puede funcionar es peor que no enseñarlo.
+// Falta git y la barra lo puede poner sola (decisión 165). Se ofrece preparar la
+// carpeta igual, y debajo, en una línea, que pulsar también lo pone: ese clic es
+// el sí de instalarlo (P9), y mientras se pone se hacen las preguntas. Antes
+// salía «Ponerla ahora» en su lugar, y luego había que pulsar Preparar.
+// Mientras se está poniendo no hay botón que pulsar: lo dice y ya.
+const PONIENDO_GIT = {
+  conLasRespuestas: 'Estoy poniendo git. En cuanto esté, preparo la carpeta con tus respuestas.',
+  solo: 'Estoy poniendo git. En cuanto esté, puedes preparar la carpeta.',
+};
+
+function lineaDeGit() {
+  // Con las respuestas guardadas no queda nada que preguntar: lo dice el aviso.
+  if (!estado.faltaGit || !estado.gitAlPreparar || estado.esperandoAGit) return '';
+  return `<p class="detalle">${texto(estado.gitAlPreparar)}</p>`;
+}
+
+// Lo que ya se contestó y esperaba a git (decisión 165): no se vuelve a
+// preguntar, y se dice. Sin git, además, se puede seguir sin copias: es la
+// salida de quien no puede ponerlo (P1).
+function loYaContestado() {
+  if (!estado.esperandoAGit) return '';
+  return `<p class="detalle">Tus respuestas están guardadas: no te las vuelvo a preguntar.</p>
+    ${estado.faltaGit ? boton({ etiqueta: 'Seguir sin copias', icono: '↷', discreto: true, accion: { tipo: 'seguirSinCopias' } }) : ''}`;
+}
+
+// Carpeta sin arnés: no está rota, es que aún no se ha montado. Si falta git y
+// la barra no puede ponerlo sola, no se ofrece prepararla: sin él la
+// preparación aborta a mitad, y enseñar un botón que no puede funcionar es peor
+// que no enseñarlo.
 function pantallaSinArnes() {
   if (estado.noSePrepara) return pantallaNoSePrepara();
   // Una carpeta a medio montar no se «prepara», se termina: decirle otra cosa
-  // le haría pensar que va a empezar de cero y a perder lo que ya hay.
-  const ofrecer = estado.yaEmpezada
+  // le haría pensar que va a empezar de cero y a perder lo que ya hay. Tampoco
+  // una con las respuestas guardadas (decisión 165).
+  const terminar = estado.aMedioPreparar || estado.esperandoAGit;
+  const ofrecer = estado.yaEmpezada && !estado.esperandoAGit
     ? bloqueYaEmpezada()
     : boton({
-      etiqueta: estado.aMedioPreparar ? 'Terminar de prepararla' : 'Preparar esta carpeta',
+      etiqueta: terminar ? 'Terminar de prepararla' : 'Preparar esta carpeta',
       icono: '✳',
       principal: true,
       accion: { tipo: 'arrancar' },
     });
+  let loQueToca = `${ofrecer}${lineaDeGit()}${loYaContestado()}`;
+  if (estado.faltaGit && estado.poniendoGit) {
+    // Esperando con lo contestado, también aquí se puede dejar de esperar.
+    loQueToca = `<p class="detalle">${texto(PONIENDO_GIT[estado.poniendoGit] || PONIENDO_GIT.solo)}</p>
+      ${estado.poniendoGit === 'conLasRespuestas' && estado.esperandoAGit ? boton({ etiqueta: 'Seguir sin copias', icono: '↷', discreto: true, accion: { tipo: 'seguirSinCopias' } }) : ''}`;
+  } else if (estado.faltaGit && !estado.sigueSinCopias && !estado.gitAlPreparar) {
+    // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias
+    // (decisión 164): entonces se prepara sin ellas.
+    loQueToca = bloqueFaltaGit();
+  }
 
   // «Lo último» encabezaba también una carpeta vacía, donde no hay nada que
   // contar (decisión 164): solo sale si ya había algo.
   const hayAlgo = Boolean(estado.yaEmpezada || estado.aMedioPreparar);
-  // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias, que
-  // entonces se prepara sin ellas y ponerlas queda en Sugerencias (decisión 164).
-  const primeroGit = estado.faltaGit && !estado.sigueSinCopias;
-
   return `
     ${bloqueAviso()}
     ${lineaDeVarias()}
@@ -1831,7 +1868,7 @@ function pantallaSinArnes() {
       <p class="donde">${texto(estado.donde)}</p>
       <p class="hiciste">${texto(estado.aviso)}</p>
     </div>
-    ${primeroGit ? bloqueFaltaGit() : ofrecer}
+    ${loQueToca}
     ${/* La lista de piezas solo se alcanzaba desde pantallas que exigen tener
           el arnés montado — o sea, nunca cuando hace falta. Aquí es donde
           alguien se pregunta qué pasa. */''}
@@ -1884,6 +1921,8 @@ function pantallaPrincipalSencilla() {
     t.sinAsistente, t.primerPaso, t.sinAjustar,
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
+    // Las claves, después de lo urgente y antes que todo lo demás (decisión 167).
+    t.lasClavesEnLasCopias, t.lasClavesFueraDeSitio,
     t.losDatos,
     t.loNuevo, t.laCostumbre, t.loQueParece,
     // Lo de la última vez, al empezar el día (decisión 160): detrás de lo que impide
@@ -1959,12 +1998,7 @@ function grupoAccionesSencillo() {
     cuantos: estado.conectados ? plural(estado.conectados, '1 programa', '{n} programas') : '',
     dentro: `
       ${boton({ etiqueta: 'Conexiones (tools)', icono: '🔌', pequeno: true, accion: { tipo: 'verConexiones' } })}
-      ${boton({
-        etiqueta: 'Conectar algo nuevo',
-        icono: '➕',
-        pequeno: true,
-        accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
-      })}
+      ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', pequeno: true, accion: CONECTAR_ALGO_NUEVO })}
       ${/* Los comandos son habilidades (decisión 141): salen dentro de
             Habilidades. La fila de Comandos queda apagada en la tabla, no borrada. */''}
       ${encendida('comandos') && estado.comandos ? boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } }) : ''}
@@ -2289,6 +2323,30 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
+  // Las claves, en la tarjeta (decisión 167): las filas 3 y 4 de «La tarjeta que
+  // toca». Van antes que lo nuevo y las ideas porque es lo único que puede costar
+  // dinero si se deja: una clave dentro de las copias sube a GitHub con ellas.
+  // Las dos con su «Ahora no»: puede que estén bien donde están, y la tarjeta no
+  // puede quedarse para siempre tapando las demás.
+  const cuantasClaves = (c) => [
+    c.claves ? plural(c.claves, '1 clave', '{n} claves') : '',
+    c.deAcceso ? plural(c.deAcceso, '1 fichero de acceso', '{n} ficheros de acceso') : '',
+  ].filter(Boolean).join(' y ');
+  const enLasCopias = estado.clavesEnLasCopias;
+  const lasClavesEnLasCopias = enLasCopias && cuantasClaves(enLasCopias) ? `
+    <div class="consejo">
+      <p class="que">${texto(`Hay ${cuantasClaves(enLasCopias)} de ${enLasCopias.aplicaciones > 1 ? 'tus aplicaciones' : 'tu aplicación'} dentro de tus copias.`)}</p>
+      ${boton({ etiqueta: 'Que deje de guardarlas', icono: '🔒', principal: true, accion: { tipo: 'pedir', prompt: enLasCopias.prompt } })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: 'claves:en-las-copias' } })}
+    </div>` : '';
+  const fueraDeSitio = estado.clavesFueraDeSitio;
+  const lasClavesFueraDeSitio = fueraDeSitio && cuantasClaves(fueraDeSitio) ? `
+    <div class="consejo">
+      <p class="que">${texto(`Hay ${cuantasClaves(fueraDeSitio)} fuera de sitio.`)}</p>
+      ${boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: fueraDeSitio.prompt } })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: 'claves:fuera-de-sitio' } })}
+    </div>` : '';
+
   // La primera vez de cada día, dónde lo dejó (decisión 160). Las acciones, tal
   // cual vienen (P6); las dos la quitan hasta mañana.
   const u = estado.laUltimaVez;
@@ -2299,7 +2357,7 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: u.ahoraNo })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez };
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez, lasClavesEnLasCopias, lasClavesFueraDeSitio };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2407,12 +2465,7 @@ function grupoAccionesCompleto() {
               al menos uno: un rótulo con nada detrás es peor que no tenerlo. */''}
         ${estado.hayAgentes ? boton({ etiqueta: 'Agentes', icono: '🤖', pequeno: true, accion: { tipo: 'verAgentes' } }) : ''}
         ${boton({ etiqueta: 'Conexiones (tools)', icono: '🔌', pequeno: true, accion: { tipo: 'verConexiones' } })}
-        ${boton({
-          etiqueta: 'Conectar algo nuevo',
-          icono: '➕',
-          pequeno: true,
-          accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
-        })}
+        ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', pequeno: true, accion: CONECTAR_ALGO_NUEVO })}
 `,
     })}`;
 }
@@ -2462,9 +2515,11 @@ function tarjetaDeLasAppsEnLasCopias(enLasCopias, { principal }) {
     deAcceso ? plural(deAcceso, '1 fichero de acceso', '{n} ficheros de acceso') : '',
   ].filter(Boolean).join(' y ');
   const una = carpetas.length < 2;
+  // La de la raíz, cuando la carpeta entera es la aplicación, es la principal (decisión 167).
+  const nombres = carpetas.map((c) => c || 'principal');
   const donde = una
-    ? `la aplicación de la carpeta ${carpetas[0]}`
-    : `cada aplicación de las carpetas ${carpetas.slice(0, -1).join(', ')} y ${carpetas[carpetas.length - 1]}`;
+    ? `la aplicación de la carpeta ${nombres[0]}`
+    : `cada aplicación de las carpetas ${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
   return `
     <div class="conexion">
       <p class="nombre">${texto(`Hay ${cuanto} de ${una ? 'tu aplicación' : 'tus aplicaciones'} dentro de tus copias`)}</p>
@@ -2573,7 +2628,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       ${deApps}
       ${porMontar}
       ${nada('Todavía no hay ninguna puesta en su sitio. Cuando le pidas al asistente que conecte tu correo, tu facturación o lo que uses, aparecerán aquí.')}
-      ${boton({ etiqueta: 'Conectar algo', icono: '▸', principal: !sueltas && !enLasCopias, accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO } })}
+      ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', principal: !sueltas && !enLasCopias, accion: CONECTAR_ALGO_NUEVO })}
       ${volver()}`;
   }
 
@@ -2615,18 +2670,11 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
   `;
 }
 
-// Lo que se le pide al asistente para conectar algo (decisión 146). Con RSC 3
-// trae una habilidad para esto, `connect-tool`: investiga la herramienta de
-// verdad, elige la forma más segura, monta la carpeta con su prueba y guía.
-// Y lo que la barra necesita leer después: los pasos en su README y de dónde
-// sale cada clave, para la guía de uno en uno.
-// Y, desde la decisión 156, la clase de acceso y lo que pedirle a su informático.
-// Desde la 159, los pasos de la documentación oficial, con su página y su fecha:
-// salen también en la guía en PDF.
-const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es. Si tienes la habilidad connect-tool, úsala. '
-  + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, sacados de su documentación oficial y con la página y el día en que lo comprobaste, y de dónde sale cada clave en su CREDENTIALS.md. '
-  + 'Escribe también en su CREDENTIALS.md la clase de acceso que pide, y en su README lo que tendría que pedirle a mi informático, como dice tu habilidad executive-lab. '
-  + 'Comprueba que funciona antes de darla por buena.';
+// «Conectar algo nuevo» (decisiones 146, 156, 159 y 167). Un solo botón con un
+// solo nombre, en Acciones y en Conexiones: antes, en Conexiones vacía, el mismo
+// se llamaba «Conectar algo» (decisión 101). Qué programa se pregunta en el
+// editor, y el encargo lo arma la extensión con el nombre (`conectar.js`).
+const CONECTAR_ALGO_NUEVO = { tipo: 'conectarAlgoNuevo' };
 
 // Lo que le falta a una conexión según su clase de acceso (decisión 156): entrar
 // con su cuenta, o su fichero de acceso. Null si no es eso: se dice lo de siempre.
@@ -2660,7 +2708,7 @@ function bloqueCaduca(caduca, proveedor) {
     + boton({ etiqueta: 'Cambiar', icono: '✎', pequeno: true, discreto: true, accion: { tipo: 'cuandoCaduca', proveedor: proveedor.id, en: 'otraVez' } });
 }
 
-function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null, prepararLaGuia = null }) {
+function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null, prepararLaGuia = null, noVale = false }) {
   // La clase de acceso que dejó escrita el asistente (decisión 156). Sin ella,
   // todo como antes (P1).
   const clases = proveedor.acceso || [];
@@ -2670,9 +2718,13 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
   const soloEntrar = clases.length > 0 && clases.every((c) => c === 'cuenta') && !claves.some((c) => !c.puesta);
   const faltaAlguna = claves.some((c) => !c.puesta) || (proveedor.pideFichero && !proveedor.conFichero);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
+  // Puesta, pero la última prueba dijo que no vale (decisión 167): hay que sacarla
+  // otra vez, así que la guía sigue como si faltara.
+  const porSacar = faltaAlguna || noVale;
 
   // Los pasos los escribe el asistente al investigar la herramienta. Se
-  // enseñan mientras falte alguna clave: cuando ya está todo puesto, estorban.
+  // enseñan mientras falte alguna clave, o mientras la que hay no valga: cuando
+  // ya está todo puesto y funciona, estorban.
   //
   // Y de uno en uno (decisión 146): una lista de diez pasos con tres campos
   // debajo es una pared. «No lo encuentro» le pasa al asistente la herramienta
@@ -2686,7 +2738,10 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     // Con el fichero ya puesto, no se dice que se suelte.
     const sinFichero = pide('fichero') && !proveedor.conFichero;
     const deFichero = sinFichero && /fichero|archivo|descarg/i.test(pasos[n]);
-    const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]) || deFichero;
+    // Solo en el paso donde se saca la clave, que lo sabe la extensión (decisión
+    // 167). Buscar «contrase» en cada paso hacía que «Entra con el usuario y la
+    // contraseña», el primero, ya dijera «pégala abajo». Sin saberlo, en el último.
+    const enElDeLaClave = Number.isInteger(proveedor.pasoDeLaClave) ? n === proveedor.pasoDeLaClave : ultimo;
     const yAbajo = soloEntrar ? 'Cuando lo tengas, pulsa «Entrar» abajo: el asistente te abre el navegador.'
       : (deFichero || (sinFichero && !claves.some((c) => !c.puesta)) ? 'Cuando lo tengas, suéltalo abajo: lo pongo en su sitio y lo pruebo yo.'
         : (pide('usuario') ? 'Cuando los tengas, pégalos abajo y pulsa «Guardar»: los pruebo yo.'
@@ -2695,7 +2750,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
       <div class="conexion guia-paso">
         <p class="pista">${texto(`Paso ${n + 1} de ${pasos.length}`)}</p>
         <p class="nombre">${texto(pasos[n])}</p>
-        ${hablaDeLaClave || ultimo ? `<p class="pista">${texto(yAbajo)}</p>` : ''}
+        ${enElDeLaClave ? `<p class="pista">${texto(yAbajo)}</p>` : ''}
         <div class="fila">
           ${proveedor.ayuda ? boton({ etiqueta: 'Abrir su página', icono: '↗', pequeno: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
           ${!ultimo ? boton({ etiqueta: 'Hecho, siguiente', icono: '▸', principal: true, pequeno: true, accion: ir(n + 1) }) : ''}
@@ -2705,7 +2760,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
         ${boton({ etiqueta: 'Ver todos los pasos', pequeno: true, discreto: true, accion: ir(n, true) })}
       </div>`;
   };
-  const guia = !pasos.length || !faltaAlguna ? ''
+  const guia = !pasos.length || !porSacar ? ''
     : (todosLosPasos
       ? `<ol class="guia">${pasos.map((p) => `<li>${texto(p)}</li>`).join('')}</ol>${boton({ etiqueta: 'De uno en uno', pequeno: true, discreto: true, accion: ir(paso) })}`
       : unPaso());
@@ -2797,15 +2852,15 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${volver({ tipo: 'verConexiones' })}
     <p class="titulo">${texto(proveedor.etiqueta)}</p>
     ${guia ? `<h2>Cómo conectarla</h2>${guia}` : ''}
-    ${proveedor.ayuda && faltaAlguna && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
-    ${faltaAlguna ? '<hr class="separador">' : ''}
+    ${proveedor.ayuda && porSacar && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+    ${porSacar ? '<hr class="separador">' : ''}
     ${algunaFuera && ordenar ? boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: ordenar } }) : ''}
     ${entrar}
     ${elFichero}
     ${visibles.length ? `<p class="detalle">${texto(queSePega)}</p>` : ''}
     ${formularios}
     ${bloqueCaduca(caduca, proveedor)}
-    ${proveedor.ayuda && !faltaAlguna ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+    ${proveedor.ayuda && !porSacar ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${!proveedor.pasos.length ? boton({ etiqueta: 'Explícame cómo conectarla', icono: '💬', accion: { tipo: 'pedir', prompt: `Explícame paso a paso cómo conectar ${proveedor.etiqueta}: dónde entro, dónde saco cada clave y qué pego dónde. Y deja los pasos escritos para la próxima vez.` } }) : ''}
     ${/* La guía para sacar la clave, en PDF (decisión 159). Sin pasos, no hay
           PDF que hacer: se le pide al asistente que la prepare (P1). */''}
@@ -3512,7 +3567,7 @@ function atender(data) {
   switch (data.tipo) {
     case 'cargando': return pintar(pantallaEsperando());
     case 'esperando':
-      pintar(pantallaEsperando(data.que));
+      pintar(pantallaEsperando(data.que, data.boton));
       return arrancarElReloj();
     case 'estado':
       // Lo que la extensión manda al lado del estado y esta pantalla lee
@@ -3524,7 +3579,7 @@ function atender(data) {
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
-          'seAdapta', 'sigueSinCopias', 'laUltimaVez']) {
+          'seAdapta', 'sigueSinCopias', 'laUltimaVez', 'clavesEnLasCopias', 'clavesFueraDeSitio']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }
@@ -3588,7 +3643,9 @@ function atender(data) {
     case 'contar': return pintar(pantallaContar(data));
     case 'elAviso': return pintar(pantallaElAviso(data));
     case 'aviso':
-      aviso = { texto: data.texto, malo: data.malo, boton: data.boton };
+      // Con varios botones si es una pregunta o tiene más de una salida: git que no
+      // se ha puesto se puede volver a intentar o seguir sin copias (decisión 165).
+      aviso = { texto: data.texto, malo: data.malo, boton: data.boton, ...(Array.isArray(data.botones) && data.botones.length ? { botones: data.botones } : {}) };
       return pintar(pantallaPrincipal());
     default:
       // Un mensaje que no conocemos no puede dejar la pantalla congelada: eso
