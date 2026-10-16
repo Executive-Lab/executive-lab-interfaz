@@ -210,10 +210,16 @@ for (const [nombre, montar] of TODAS) {
     modo: 'sencillo',
     pulso: [],
   };
-  // Y después de «Entendido», sin nada más delante: la idea, sola.
+  // Y después de «Entendido», sin nada más delante: la idea, sola. Y con las
+  // claves dentro de las copias y fuera de sitio (decisión 167), que van delante.
+  const lasClaves = {
+    clavesEnLasCopias: { claves: 2, deAcceso: 0, aplicaciones: 1, prompt: 'Que deje de guardarlas.' },
+    clavesFueraDeSitio: { claves: 3, deAcceso: 1, prompt: 'Que las ordene.' },
+  };
   const variantes = [
     ['con todo', conLasDos],
     ['después de «Entendido»', { ...conLasDos, consejo: null, hayVersionNueva: null, seAdapta: { parece: null, idea: seAdapta.idea } }],
+    ['con las claves', { ...conLasDos, ...lasClaves }],
     ['después de «Ahora no» a la última vez', { ...conLasDos, consejo: null, hayVersionNueva: null, laUltimaVez: null, seAdapta: { parece: null, idea: seAdapta.idea } }],
   ];
   const rotas = [];
@@ -224,13 +230,14 @@ for (const [nombre, montar] of TODAS) {
       const tarjetas = (pintada.match(/<div class="(consejo|aviso)/g) || []).length;
       const aLaVista = cosasALaVista(pintada);
       const enLaTarjeta = (pintada.match(/<div class="consejo">\s*<p class="que[^"]*">([^<]*)</) || [])[1] || '';
-      if (datos.seAdapta.idea || datos.consejo || datos.laUltimaVez) {
+      if (datos.seAdapta.idea || datos.consejo || datos.laUltimaVez || datos.clavesEnLasCopias) {
         if (tarjetas !== 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
       } else if (tarjetas > 1) rotas.push(`la principal sencilla, ${cual}: ${tarjetas} tarjetas a la vez`);
       if (aLaVista > 5) rotas.push(`la principal sencilla, ${cual}: ${aLaVista} cosas a la vista`);
-      // La que toca: «Esto parece» antes que la última vez, la última vez antes que el
-      // consejo, y el consejo antes que la idea.
-      const primera = (datos.seAdapta.parece && datos.seAdapta.parece.texto)
+      // La que toca: las claves antes que todo, «Esto parece» antes que la última vez, la
+      // última vez antes que el consejo, y el consejo antes que la idea.
+      const primera = (datos.clavesEnLasCopias && 'Hay 2 claves de tu aplicación dentro de tus copias.')
+        || (datos.seAdapta.parece && datos.seAdapta.parece.texto)
         || (datos.laUltimaVez && datos.laUltimaVez.texto)
         || (datos.consejo && datos.consejo.texto)
         || (datos.seAdapta.idea && datos.seAdapta.idea.texto);

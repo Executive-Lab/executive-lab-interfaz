@@ -1921,6 +1921,8 @@ function pantallaPrincipalSencilla() {
     t.sinAsistente, t.primerPaso, t.sinAjustar,
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
+    // Las claves, después de lo urgente y antes que todo lo demás (decisión 167).
+    t.lasClavesEnLasCopias, t.lasClavesFueraDeSitio,
     t.losDatos,
     t.loNuevo, t.laCostumbre, t.loQueParece,
     // Lo de la última vez, al empezar el día (decisión 160): detrás de lo que impide
@@ -1996,12 +1998,7 @@ function grupoAccionesSencillo() {
     cuantos: estado.conectados ? plural(estado.conectados, '1 programa', '{n} programas') : '',
     dentro: `
       ${boton({ etiqueta: 'Conexiones (tools)', icono: '🔌', pequeno: true, accion: { tipo: 'verConexiones' } })}
-      ${boton({
-        etiqueta: 'Conectar algo nuevo',
-        icono: '➕',
-        pequeno: true,
-        accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
-      })}
+      ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', pequeno: true, accion: CONECTAR_ALGO_NUEVO })}
       ${/* Los comandos son habilidades (decisión 141): salen dentro de
             Habilidades. La fila de Comandos queda apagada en la tabla, no borrada. */''}
       ${encendida('comandos') && estado.comandos ? boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } }) : ''}
@@ -2326,6 +2323,30 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
+  // Las claves, en la tarjeta (decisión 167): las filas 3 y 4 de «La tarjeta que
+  // toca». Van antes que lo nuevo y las ideas porque es lo único que puede costar
+  // dinero si se deja: una clave dentro de las copias sube a GitHub con ellas.
+  // Las dos con su «Ahora no»: puede que estén bien donde están, y la tarjeta no
+  // puede quedarse para siempre tapando las demás.
+  const cuantasClaves = (c) => [
+    c.claves ? plural(c.claves, '1 clave', '{n} claves') : '',
+    c.deAcceso ? plural(c.deAcceso, '1 fichero de acceso', '{n} ficheros de acceso') : '',
+  ].filter(Boolean).join(' y ');
+  const enLasCopias = estado.clavesEnLasCopias;
+  const lasClavesEnLasCopias = enLasCopias && cuantasClaves(enLasCopias) ? `
+    <div class="consejo">
+      <p class="que">${texto(`Hay ${cuantasClaves(enLasCopias)} de ${enLasCopias.aplicaciones > 1 ? 'tus aplicaciones' : 'tu aplicación'} dentro de tus copias.`)}</p>
+      ${boton({ etiqueta: 'Que deje de guardarlas', icono: '🔒', principal: true, accion: { tipo: 'pedir', prompt: enLasCopias.prompt } })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: 'claves:en-las-copias' } })}
+    </div>` : '';
+  const fueraDeSitio = estado.clavesFueraDeSitio;
+  const lasClavesFueraDeSitio = fueraDeSitio && cuantasClaves(fueraDeSitio) ? `
+    <div class="consejo">
+      <p class="que">${texto(`Hay ${cuantasClaves(fueraDeSitio)} fuera de sitio.`)}</p>
+      ${boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: fueraDeSitio.prompt } })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: 'claves:fuera-de-sitio' } })}
+    </div>` : '';
+
   // La primera vez de cada día, dónde lo dejó (decisión 160). Las acciones, tal
   // cual vienen (P6); las dos la quitan hasta mañana.
   const u = estado.laUltimaVez;
@@ -2336,7 +2357,7 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: u.ahoraNo })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez };
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez, lasClavesEnLasCopias, lasClavesFueraDeSitio };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2444,12 +2465,7 @@ function grupoAccionesCompleto() {
               al menos uno: un rótulo con nada detrás es peor que no tenerlo. */''}
         ${estado.hayAgentes ? boton({ etiqueta: 'Agentes', icono: '🤖', pequeno: true, accion: { tipo: 'verAgentes' } }) : ''}
         ${boton({ etiqueta: 'Conexiones (tools)', icono: '🔌', pequeno: true, accion: { tipo: 'verConexiones' } })}
-        ${boton({
-          etiqueta: 'Conectar algo nuevo',
-          icono: '➕',
-          pequeno: true,
-          accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO },
-        })}
+        ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', pequeno: true, accion: CONECTAR_ALGO_NUEVO })}
 `,
     })}`;
 }
@@ -2499,9 +2515,11 @@ function tarjetaDeLasAppsEnLasCopias(enLasCopias, { principal }) {
     deAcceso ? plural(deAcceso, '1 fichero de acceso', '{n} ficheros de acceso') : '',
   ].filter(Boolean).join(' y ');
   const una = carpetas.length < 2;
+  // La de la raíz, cuando la carpeta entera es la aplicación, es la principal (decisión 167).
+  const nombres = carpetas.map((c) => c || 'principal');
   const donde = una
-    ? `la aplicación de la carpeta ${carpetas[0]}`
-    : `cada aplicación de las carpetas ${carpetas.slice(0, -1).join(', ')} y ${carpetas[carpetas.length - 1]}`;
+    ? `la aplicación de la carpeta ${nombres[0]}`
+    : `cada aplicación de las carpetas ${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
   return `
     <div class="conexion">
       <p class="nombre">${texto(`Hay ${cuanto} de ${una ? 'tu aplicación' : 'tus aplicaciones'} dentro de tus copias`)}</p>
@@ -2610,7 +2628,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       ${deApps}
       ${porMontar}
       ${nada('Todavía no hay ninguna puesta en su sitio. Cuando le pidas al asistente que conecte tu correo, tu facturación o lo que uses, aparecerán aquí.')}
-      ${boton({ etiqueta: 'Conectar algo', icono: '▸', principal: !sueltas && !enLasCopias, accion: { tipo: 'pedir', prompt: CONECTAR_ALGO_NUEVO } })}
+      ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', principal: !sueltas && !enLasCopias, accion: CONECTAR_ALGO_NUEVO })}
       ${volver()}`;
   }
 
@@ -2652,18 +2670,11 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
   `;
 }
 
-// Lo que se le pide al asistente para conectar algo (decisión 146). Con RSC 3
-// trae una habilidad para esto, `connect-tool`: investiga la herramienta de
-// verdad, elige la forma más segura, monta la carpeta con su prueba y guía.
-// Y lo que la barra necesita leer después: los pasos en su README y de dónde
-// sale cada clave, para la guía de uno en uno.
-// Y, desde la decisión 156, la clase de acceso y lo que pedirle a su informático.
-// Desde la 159, los pasos de la documentación oficial, con su página y su fecha:
-// salen también en la guía en PDF.
-const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es. Si tienes la habilidad connect-tool, úsala. '
-  + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, sacados de su documentación oficial y con la página y el día en que lo comprobaste, y de dónde sale cada clave en su CREDENTIALS.md. '
-  + 'Escribe también en su CREDENTIALS.md la clase de acceso que pide, y en su README lo que tendría que pedirle a mi informático, como dice tu habilidad executive-lab. '
-  + 'Comprueba que funciona antes de darla por buena.';
+// «Conectar algo nuevo» (decisiones 146, 156, 159 y 167). Un solo botón con un
+// solo nombre, en Acciones y en Conexiones: antes, en Conexiones vacía, el mismo
+// se llamaba «Conectar algo» (decisión 101). Qué programa se pregunta en el
+// editor, y el encargo lo arma la extensión con el nombre (`conectar.js`).
+const CONECTAR_ALGO_NUEVO = { tipo: 'conectarAlgoNuevo' };
 
 // Lo que le falta a una conexión según su clase de acceso (decisión 156): entrar
 // con su cuenta, o su fichero de acceso. Null si no es eso: se dice lo de siempre.
@@ -2697,7 +2708,7 @@ function bloqueCaduca(caduca, proveedor) {
     + boton({ etiqueta: 'Cambiar', icono: '✎', pequeno: true, discreto: true, accion: { tipo: 'cuandoCaduca', proveedor: proveedor.id, en: 'otraVez' } });
 }
 
-function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null, prepararLaGuia = null }) {
+function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null, prepararLaGuia = null, noVale = false }) {
   // La clase de acceso que dejó escrita el asistente (decisión 156). Sin ella,
   // todo como antes (P1).
   const clases = proveedor.acceso || [];
@@ -2707,9 +2718,13 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
   const soloEntrar = clases.length > 0 && clases.every((c) => c === 'cuenta') && !claves.some((c) => !c.puesta);
   const faltaAlguna = claves.some((c) => !c.puesta) || (proveedor.pideFichero && !proveedor.conFichero);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
+  // Puesta, pero la última prueba dijo que no vale (decisión 167): hay que sacarla
+  // otra vez, así que la guía sigue como si faltara.
+  const porSacar = faltaAlguna || noVale;
 
   // Los pasos los escribe el asistente al investigar la herramienta. Se
-  // enseñan mientras falte alguna clave: cuando ya está todo puesto, estorban.
+  // enseñan mientras falte alguna clave, o mientras la que hay no valga: cuando
+  // ya está todo puesto y funciona, estorban.
   //
   // Y de uno en uno (decisión 146): una lista de diez pasos con tres campos
   // debajo es una pared. «No lo encuentro» le pasa al asistente la herramienta
@@ -2723,7 +2738,10 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     // Con el fichero ya puesto, no se dice que se suelte.
     const sinFichero = pide('fichero') && !proveedor.conFichero;
     const deFichero = sinFichero && /fichero|archivo|descarg/i.test(pasos[n]);
-    const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]) || deFichero;
+    // Solo en el paso donde se saca la clave, que lo sabe la extensión (decisión
+    // 167). Buscar «contrase» en cada paso hacía que «Entra con el usuario y la
+    // contraseña», el primero, ya dijera «pégala abajo». Sin saberlo, en el último.
+    const enElDeLaClave = Number.isInteger(proveedor.pasoDeLaClave) ? n === proveedor.pasoDeLaClave : ultimo;
     const yAbajo = soloEntrar ? 'Cuando lo tengas, pulsa «Entrar» abajo: el asistente te abre el navegador.'
       : (deFichero || (sinFichero && !claves.some((c) => !c.puesta)) ? 'Cuando lo tengas, suéltalo abajo: lo pongo en su sitio y lo pruebo yo.'
         : (pide('usuario') ? 'Cuando los tengas, pégalos abajo y pulsa «Guardar»: los pruebo yo.'
@@ -2732,7 +2750,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
       <div class="conexion guia-paso">
         <p class="pista">${texto(`Paso ${n + 1} de ${pasos.length}`)}</p>
         <p class="nombre">${texto(pasos[n])}</p>
-        ${hablaDeLaClave || ultimo ? `<p class="pista">${texto(yAbajo)}</p>` : ''}
+        ${enElDeLaClave ? `<p class="pista">${texto(yAbajo)}</p>` : ''}
         <div class="fila">
           ${proveedor.ayuda ? boton({ etiqueta: 'Abrir su página', icono: '↗', pequeno: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
           ${!ultimo ? boton({ etiqueta: 'Hecho, siguiente', icono: '▸', principal: true, pequeno: true, accion: ir(n + 1) }) : ''}
@@ -2742,7 +2760,7 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
         ${boton({ etiqueta: 'Ver todos los pasos', pequeno: true, discreto: true, accion: ir(n, true) })}
       </div>`;
   };
-  const guia = !pasos.length || !faltaAlguna ? ''
+  const guia = !pasos.length || !porSacar ? ''
     : (todosLosPasos
       ? `<ol class="guia">${pasos.map((p) => `<li>${texto(p)}</li>`).join('')}</ol>${boton({ etiqueta: 'De uno en uno', pequeno: true, discreto: true, accion: ir(paso) })}`
       : unPaso());
@@ -2834,15 +2852,15 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${volver({ tipo: 'verConexiones' })}
     <p class="titulo">${texto(proveedor.etiqueta)}</p>
     ${guia ? `<h2>Cómo conectarla</h2>${guia}` : ''}
-    ${proveedor.ayuda && faltaAlguna && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
-    ${faltaAlguna ? '<hr class="separador">' : ''}
+    ${proveedor.ayuda && porSacar && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+    ${porSacar ? '<hr class="separador">' : ''}
     ${algunaFuera && ordenar ? boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: ordenar } }) : ''}
     ${entrar}
     ${elFichero}
     ${visibles.length ? `<p class="detalle">${texto(queSePega)}</p>` : ''}
     ${formularios}
     ${bloqueCaduca(caduca, proveedor)}
-    ${proveedor.ayuda && !faltaAlguna ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
+    ${proveedor.ayuda && !porSacar ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${!proveedor.pasos.length ? boton({ etiqueta: 'Explícame cómo conectarla', icono: '💬', accion: { tipo: 'pedir', prompt: `Explícame paso a paso cómo conectar ${proveedor.etiqueta}: dónde entro, dónde saco cada clave y qué pego dónde. Y deja los pasos escritos para la próxima vez.` } }) : ''}
     ${/* La guía para sacar la clave, en PDF (decisión 159). Sin pasos, no hay
           PDF que hacer: se le pide al asistente que la prepare (P1). */''}
@@ -3561,7 +3579,7 @@ function atender(data) {
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
-          'seAdapta', 'sigueSinCopias', 'laUltimaVez']) {
+          'seAdapta', 'sigueSinCopias', 'laUltimaVez', 'clavesEnLasCopias', 'clavesFueraDeSitio']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }

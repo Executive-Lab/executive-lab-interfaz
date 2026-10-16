@@ -37,6 +37,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const proyecto = require('./proyecto');
+const limpio = require('./limpio');
 
 const HERRAMIENTAS = '01-TOOLS';
 
@@ -78,6 +79,15 @@ const TOPE = 128 * 1024;
 const DE_UNA_APP = ['package.json', 'pyproject.toml', 'pubspec.yaml', 'Cargo.toml', 'go.mod'];
 
 const esUnaApp = (carpetaRelativa) => DE_UNA_APP.some((f) => proyecto.existe(carpetaRelativa, f));
+
+// Y si la carpeta entera es una aplicación (decisión 167), los ficheros de claves
+// de su raíz también son suyos. La 135 solo miraba las de dentro: una web hecha
+// con React, con su `package.json` y su `.env` arriba, daba «Hay 3 claves fuera de
+// sitio · Que las ordene», y el encargo le pedía al asistente llevarlas a
+// `01-TOOLS`, con lo que la web dejaba de encontrarlas. Solo los de la raíz: una
+// carpeta de dentro sigue siendo suya o no por lo que tenga ella. Los ficheros de
+// acceso de la raíz siguen contando como hasta ahora (decisión 105).
+const laRaizEsUnaApp = () => esUnaApp('');
 
 function lineasDe(fichero) {
   try {
@@ -156,7 +166,7 @@ function buscar({ conLasDeLasApps = false } = {}) {
   if (!raiz) return [];
 
   const encontradas = [];
-  for (const fichero of ficherosDeClavesEn('')) mirar(fichero, encontradas);
+  if (conLasDeLasApps || !laRaizEsUnaApp()) for (const fichero of ficherosDeClavesEn('')) mirar(fichero, encontradas);
 
   // Carpetas de primer nivel: `auto/.env`, `publicar/.env.local`… Sin bajar
   // más: lo que está más hondo es de un subproyecto y no se toca.
@@ -451,19 +461,60 @@ const enElOrdenador = (nombres) => nombres.filter((n) => typeof process.env[n] =
 // **ya estaba en su historial de git**, porque lo guardó el día que empezó.
 // Moverlas no las saca de ahí. Sacarlas es otra cosa y la decide esa persona,
 // así que aquí solo se mira y se dice.
+//
+// Revisión de la 167: esto corre en cada repintado, así que (1) no corre `git`
+// en una carpeta sin confianza —un `.git/config` con `core.fsmonitor` ejecuta
+// ese programa con solo abrirla—, (2) lleva `-c core.fsmonitor=false` como el
+// resto de la barra, y (3) guarda lo que contestó mientras el índice de git no
+// cambie (son dos `git` síncronos de hasta 5 s).
+let laCarpetaEsDeConfianza = () => true;
+function ponerConfianza(funcion) { laCarpetaEsDeConfianza = funcion; }
+
+const ultimaRespuesta = { clave: null, subidas: [] };
+function paraElIndice(raiz) {
+  try {
+    let git = path.join(raiz, '.git');
+    if (fs.statSync(git).isFile()) {
+      const dentro = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(git, 'utf8'));
+      if (!dentro) return null;
+      git = path.resolve(raiz, dentro[1].trim());
+    }
+    const e = fs.statSync(path.join(git, 'index'));
+    return `${e.mtimeMs}:${e.size}:${e.ino}`;
+  } catch {
+    return null;
+  }
+}
+
 function estanSubidas(sitios) {
   const raiz = proyecto.raiz();
-  if (!raiz || !sitios.length) return [];
+  if (!raiz || !sitios.length || !laCarpetaEsDeConfianza()) return [];
+  const lista = sitios.map((s) => s.donde);
+  const indice = paraElIndice(raiz);
+  const clave = indice ? `${raiz}\n${indice}\n${lista.join('\n')}` : null;
+  if (clave && ultimaRespuesta.clave === clave) return ultimaRespuesta.subidas;
   try {
     const { execFileSync } = require('node:child_process');
-    const salida = execFileSync('git', ['ls-files', '--', ...sitios.map((s) => s.donde)], {
+    const salida = execFileSync('git', ['-c', 'core.fsmonitor=false', 'ls-files', '--', ...lista], {
       cwd: raiz, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
     });
-    return salida.split('\n').map((l) => l.trim()).filter(Boolean);
+    const subidas = salida.split('\n').map((l) => l.trim()).filter(Boolean);
+    ultimaRespuesta.clave = clave;
+    ultimaRespuesta.subidas = subidas;
+    return subidas;
   } catch {
     return [];
   }
 }
+
+// Un nombre de fichero lo ha escrito quien hizo la carpeta: antes de que entre
+// en un encargo, o es una ruta de verdad o no entra (revisión de la 167).
+const RUTA_SEGURA = /^[\w./@+-]{1,200}$/;
+const ruta = (donde) => {
+  const limpia = limpio.etiqueta(donde, 200);
+  return RUTA_SEGURA.test(limpia) && limpia === donde ? limpia : '(un fichero con un nombre raro)';
+};
+const rutas = (lista) => lista.map(ruta).join(', ');
 
 // El encargo al asistente, con el plan hecho. Las rutas y los nombres de las
 // claves van aquí porque esto se lo lee él; los valores, nunca.
@@ -484,15 +535,15 @@ function encargo(sitios, { grupos, sinDueno }, subidas, ficheros = []) {
   // con «hay 0 claves guardadas fuera de su sitio, en: .» era exactamente eso,
   // y se lo estaba mandando al asistente (lo pilló `review`).
   const lineas = sitios.length ? [
-    `En esta carpeta hay ${sitios.reduce((t, s) => t + s.cuantas, 0)} claves guardadas fuera de su sitio, en: ${sitios.map((s) => s.donde).join(', ')}. `
+    `En esta carpeta hay ${sitios.reduce((t, s) => t + s.cuantas, 0)} claves guardadas fuera de su sitio, en: ${rutas(sitios.map((s) => s.donde))}. `
       + `El sitio de una clave es 01-TOOLS/<HERRAMIENTA>/.env, por el protocolo de harness: una carpeta por proveedor, con su .env, su .env.example, su CREDENTIALS.md y su prueba de conexión.`,
     '',
     'Reparto que sale por el nombre de cada clave:',
     ...yLasDemas(grupos, (g) => (g.existe
-      ? `- ${g.claves.join(', ')} (${g.donde.join(', ')}) → 01-TOOLS/${g.herramienta}/.env, que ya existe${g.claves.length === 1 ? ' y la espera' : ''}.`
-      : `- ${g.claves.join(', ')} (${g.donde.join(', ')}) → 01-TOOLS/${g.herramienta}/, que no existe: créala desde 01-TOOLS/_TEMPLATE, con su .env.example, su CREDENTIALS.md (dónde se saca cada una) y su prueba de conexión.`), 'herramientas'),
+      ? `- ${g.claves.join(', ')} (${rutas(g.donde)}) → 01-TOOLS/${g.herramienta}/.env, que ya existe${g.claves.length === 1 ? ' y la espera' : ''}.`
+      : `- ${g.claves.join(', ')} (${rutas(g.donde)}) → 01-TOOLS/${g.herramienta}/, que no existe: créala desde 01-TOOLS/_TEMPLATE, con su .env.example, su CREDENTIALS.md (dónde se saca cada una) y su prueba de conexión.`), 'herramientas'),
     ...(sinDueno.length
-      ? [`- Sin dueño claro: ${sinDueno.map((x) => `${x.nombre} (${x.donde})`).join(', ')}. Pregúntame de qué herramienta son antes de moverlas.`]
+      ? [`- Sin dueño claro: ${sinDueno.map((x) => `${x.nombre} (${ruta(x.donde)})`).join(', ')}. Pregúntame de qué herramienta son antes de moverlas.`]
       : []),
   ] : [
     'En esta carpeta hay credenciales guardadas fuera de su sitio. El sitio lo define el protocolo de harness: una carpeta por proveedor en 01-TOOLS, con su .env, su .env.example, su CREDENTIALS.md y su prueba de conexión.',
@@ -505,8 +556,8 @@ function encargo(sitios, { grupos, sinDueno }, subidas, ficheros = []) {
       '',
       'Y hay credenciales que no son una línea sino un fichero entero. Su sitio es 01-TOOLS/<HERRAMIENTA>/keys/, que el .gitignore de la plantilla ya excluye:',
       ...yLasDemas(ficheros, (f) => (f.herramienta
-        ? `- ${f.donde} — ${f.queEs.toLowerCase()} → 01-TOOLS/${f.herramienta}/keys/ (${f.por}).${f.existe ? '' : ' Esa herramienta no existe: créala desde 01-TOOLS/_TEMPLATE.'}`
-        : `- ${f.donde} — ${f.queEs.toLowerCase()}. No sé de qué herramienta es: pregúntamelo antes de moverlo.`), 'credenciales'),
+        ? `- ${ruta(f.donde)} — ${f.queEs.toLowerCase()} → 01-TOOLS/${f.herramienta}/keys/ (${f.por}).${f.existe ? '' : ' Esa herramienta no existe: créala desde 01-TOOLS/_TEMPLATE.'}`
+        : `- ${ruta(f.donde)} — ${f.queEs.toLowerCase()}. No sé de qué herramienta es: pregúntamelo antes de moverlo.`), 'credenciales'),
       'No abras ni me pegues el contenido de ninguno: con saber cuál es y a dónde va, basta.',
     ] : []),
     '',
@@ -519,7 +570,7 @@ function encargo(sitios, { grupos, sinDueno }, subidas, ficheros = []) {
       + 'así que si te digo que alguna es de otra herramienta, manda lo que yo diga.',
   ]);
   if (subidas.length) {
-    lineas.push('', `AVISO IMPORTANTE: estos ficheros ya están guardados en el historial de git (${subidas.join(', ')}), `
+    lineas.push('', `AVISO IMPORTANTE: estos ficheros ya están guardados en el historial de git (${rutas(subidas)}), `
       + 'así que moverlos NO saca esas claves de ahí: siguen en el historial y viajarían con cualquier copia que se suba. '
       + 'Explícaselo en cristiano antes de tocar nada y dile que lo prudente es cambiar esas claves en el proveedor, '
       + 'que es lo único que las deja inservibles. No reescribas el historial sin que te lo pida.');
@@ -580,7 +631,9 @@ function deLasAppsEnLasCopias() {
   const enGit = (s) => subidas.includes(s.donde);
   const nombres = [...new Set(claves.filter(enGit).flatMap((s) => s.nombres))];
   const deAcceso = ficheros.filter(enGit).length;
-  const carpetas = [...new Set(subidas.map((d) => d.split('/')[0]))].sort();
+  // La de un fichero de la raíz es la principal (''): con la carpeta entera como
+  // aplicación, salía «la aplicación de la carpeta .env» (decisión 167).
+  const carpetas = [...new Set(subidas.map((d) => (d.includes('/') ? d.split('/')[0] : '')))].sort();
   return {
     ficheros: subidas,
     carpetas,
@@ -588,7 +641,7 @@ function deLasAppsEnLasCopias() {
     deAcceso,
     // Los nombres van al asistente para que diga cuáles cambiar; los valores, nunca.
     prompt: [
-      `En esta carpeta hay una aplicación con credenciales que ya están guardadas en el historial de git: ${subidas.join(', ')}.`,
+      `En esta carpeta hay una aplicación con credenciales que ya están guardadas en el historial de git: ${rutas(subidas)}.`,
       'Están en su sitio: es donde las lee la aplicación, y para el protocolo de harness lo de dentro de un subproyecto no se mueve. No las muevas.',
       '',
       'Lo que hay que hacer:',
@@ -604,7 +657,7 @@ function deLasAppsEnLasCopias() {
 }
 
 module.exports = {
-  deLasAppsEnLasCopias,
+  deLasAppsEnLasCopias, ponerConfianza, rutas,
   buscar, resumen, reparto, aQuien, prefijoDe, herramientas, enCristiano, enElOrdenador, nombresDeClaves, nombresEsperados,
   ficherosDeAcceso, tieneSuFichero, queEs, paraProteger, DE_UNA_APP,
   // Para no ofrecer «Conectar» a lo que no es un programa (decisión 152).
