@@ -22,17 +22,38 @@ const { etiqueta: unRotulo } = require('./limpio');
 // Lo que RSC equipa siempre (`default-skill-floor.js`): `sync` lo volvería a poner.
 const SUELO = new Set(['orient', 'suggest', 'unslop', 'ftd', 'connect-tool']);
 
+// Un id que RSC leería como un nombre y nunca como una opción: no empieza por `-`.
+// El analizador de RSC no entiende `--` como fin de opciones (`rsc.js`: lo salta como
+// a cualquier `--algo`), así que no se usa: un agente llamado `--all` corría `uninstall
+// --all`, que en RSC es `purge`. Aquí no llega ni a ofrecerse.
+const ID_DE_HABILIDAD = /^[a-z0-9][a-z0-9-]{1,39}$/;
+const ID_DE_AGENTE = /^[a-z0-9][a-z0-9-]{1,59}$/;
+
+// Los agentes del catálogo de RSC, y solo ellos. Una prueba lo compara con el paquete.
+let delCatalogo = null;
+function agentesDelCatalogo() {
+  if (!delCatalogo) {
+    try {
+      delCatalogo = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'media', 'agentes-del-catalogo.json'), 'utf8')).agentes;
+    } catch {
+      delCatalogo = [];
+    }
+  }
+  return delCatalogo;
+}
+
 // ¿Se ofrece «Quitarla» para esta habilidad? Solo la del catálogo que se añadió.
 function sePuedeQuitarLaHabilidad(id, { propias = [], deLaBarra = false, esFontaneria = false } = {}) {
-  if (typeof id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(id)) return false;
+  if (typeof id !== 'string' || !ID_DE_HABILIDAD.test(id)) return false;
   return !SUELO.has(id) && !propias.includes(id) && !deLaBarra && !esFontaneria;
 }
 
-// ¿Y para este agente? Solo el que la declaración apunta como pedido a RSC
-// (`agents` de `.rsc.json`). Los que salen de una habilidad no son de nadie: los
-// quita la habilidad. Y uno propio no lo conoce RSC.
-function sePuedeQuitarElAgente(id, { declarados = [], propios = [] } = {}) {
-  if (typeof id !== 'string' || !/^[a-z0-9-]{2,60}$/.test(id)) return false;
+// ¿Y para este agente? Tres cosas a la vez: un nombre que no puede ser una opción, que
+// sea de la lista cerrada del catálogo de RSC (lo que dice `.rsc.json` lo escribe quien
+// hizo la carpeta, y no basta), y que la declaración lo apunte como pedido.
+function sePuedeQuitarElAgente(id, { declarados = [], propios = [], catalogo = agentesDelCatalogo() } = {}) {
+  if (typeof id !== 'string' || !ID_DE_AGENTE.test(id)) return false;
+  if (!catalogo.includes(id)) return false;
   return declarados.includes(id) && !propios.includes(id);
 }
 
@@ -57,7 +78,8 @@ async function quitar(id) {
 // Lo mismo con un agente. RSC no lo quita si una habilidad que sigue puesta lo
 // necesita: entonces sale bien, el fichero sigue, y `siguePuesto` lo dice.
 async function quitarAgente(id, ficheros) {
-  if (typeof id !== 'string' || !/^[a-z0-9-]{2,60}$/.test(id)) return { ok: false, dijo: '' };
+  // Aunque llegue un mensaje a mano: lo de la lista cerrada y con un nombre que no es una opción.
+  if (typeof id !== 'string' || !ID_DE_AGENTE.test(id) || !agentesDelCatalogo().includes(id)) return { ok: false, dijo: '' };
   const para = rsc.losAsistentes();
   const hecho = await rsc.correr(['uninstall', id, '--target', para.join(',')], { tiempoMaximo: 120000 });
   const siguePuesto = (ficheros || []).some((f) => fs.existsSync(f));
@@ -66,35 +88,45 @@ async function quitarAgente(id, ficheros) {
 
 // ── Volver a la copia del montaje ────────────────────────────────────────
 
-// Lo que `restore --dry-run` dice que tocaría: RSC escribe una ruta por línea, con
-// dos espacios delante, y dentro de la carpeta. Lo demás no cuenta.
-function lasRutasDeLaSalida(salida, raiz) {
-  // RSC escribe la ruta con los enlaces resueltos (en un Mac, `/private/var/…` y no `/var/…`).
-  const dentro = [path.resolve(raiz)];
-  try { dentro.push(fs.realpathSync(raiz)); } catch { /* la carpeta que no está, no cuenta */ }
-  return String(salida || '').split(/\r?\n/)
-    .filter((l) => /^ {2}\S/.test(l))
-    .map((l) => l.trim())
-    .filter((p) => path.isAbsolute(p) && dentro.some((d) => (path.resolve(p) + path.sep).startsWith(d + path.sep)));
-}
-
-// La ruta de algo de la carpeta, relativa a ella, o null si no es de dentro.
-function deLaCarpeta(raiz, ruta) {
-  const bases = [path.resolve(raiz)];
-  try { bases.push(fs.realpathSync(raiz)); } catch { /* sin carpeta, nada */ }
+// La ruta de algo de la carpeta, relativa a ella, o null si no es de dentro. Con
+// `path.relative` y los enlaces resueltos (`realpathSync.native`: en un Mac `/private/var/…`
+// y no `/var/…`, y en Windows la letra de unidad como la tiene el disco); en Windows sin
+// distinguir mayúsculas, que `C:\` y `c:\` son la misma unidad. `plataforma` es solo para probarlo.
+function deLaCarpeta(raiz, ruta, plataforma = process.platform) {
+  const P = plataforma === 'win32' ? path.win32 : path;
+  const bases = [P.resolve(raiz)];
+  try { bases.push(fs.realpathSync.native(raiz)); } catch { /* sin carpeta, nada */ }
+  const igual = (x) => (plataforma === 'win32' ? x.toLowerCase() : x);
+  if (!P.isAbsolute(ruta)) return null;
   for (const base of bases) {
-    const relativa = path.relative(base, path.resolve(ruta));
-    if (relativa && !relativa.startsWith('..') && !path.isAbsolute(relativa)) return relativa;
+    const relativa = P.relative(igual(base), igual(P.resolve(ruta)));
+    if (!relativa || relativa === '..' || relativa.startsWith(`..${P.sep}`) || P.isAbsolute(relativa)) continue;
+    // Con la caja original de la ruta: lo que `relative` devolvió es lo de la minúscula.
+    return plataforma === 'win32' ? P.resolve(ruta).slice(P.resolve(ruta).length - relativa.length) : relativa;
   }
   return null;
 }
 
-// Qué tocaría, sin tocar nada (`restore <copia> --dry-run`). Null si RSC no responde.
-async function loQueTocaria(id) {
+// Lo que `restore --dry-run` dice que tocaría: RSC escribe una ruta por línea, con dos
+// espacios delante. Se cuentan todas antes de filtrar: las que no son de dentro de la
+// carpeta no se tiran en silencio, se dicen (`descartadas`), y quien llama no restaura.
+function lasRutasDeLaSalida(salida, raiz, plataforma = process.platform) {
+  const lineas = String(salida || '').split(/\r?\n/).filter((l) => /^ {2}\S/.test(l)).map((l) => l.trim());
+  const P = plataforma === 'win32' ? path.win32 : path;
+  const rutas = lineas.filter((p) => deLaCarpeta(raiz, p, plataforma) !== null).map((p) => P.resolve(p));
+  return { rutas, total: lineas.length, descartadas: lineas.length - rutas.length };
+}
+
+// Qué tocaría, sin tocar nada (`restore <copia> --dry-run`). Con 0 rutas, o con alguna que no
+// es de esta carpeta, no vale: la copia de lo de ahora tiene que cubrir exactamente lo que se toca.
+async function loQueTocaria(id, plataforma = process.platform) {
   const raiz = proyecto.raiz();
   const hecho = await rsc.correr(['restore', id, '--dry-run'], { tiempoMaximo: 60000 });
   if (hecho.codigo !== 0) return { ok: false, dijo: loQueDijo(hecho), rutas: [] };
-  return { ok: true, rutas: lasRutasDeLaSalida(hecho.salida, raiz) };
+  const { rutas, total, descartadas } = lasRutasDeLaSalida(hecho.salida, raiz, plataforma);
+  if (total === 0) return { ok: false, motivo: 'vacia', rutas: [] };
+  if (descartadas > 0) return { ok: false, motivo: 'ajenas', rutas: [] };
+  return { ok: true, rutas };
 }
 
 // RSC no guarda lo de ahora antes de restaurar. La barra sí: una copia de cada
@@ -111,7 +143,7 @@ function guardarLoDeAhora(rutas, ahora = new Date()) {
       let info;
       try { info = fs.lstatSync(ruta); } catch { continue; }
       const relativa = deLaCarpeta(raiz, ruta);
-      if (!relativa) continue;
+      if (!relativa) return null;
       const aqui = path.join(destino, 'files', relativa);
       fs.mkdirSync(path.dirname(aqui), { recursive: true });
       if (info.isSymbolicLink()) fs.symlinkSync(fs.readlinkSync(ruta), aqui);
@@ -133,5 +165,5 @@ async function recuperar(id, rutas) {
 
 module.exports = {
   SUELO, sePuedeQuitarLaHabilidad, sePuedeQuitarElAgente, quitar, quitarAgente,
-  lasRutasDeLaSalida, loQueTocaria, guardarLoDeAhora, recuperar, loQueDijo,
+  lasRutasDeLaSalida, deLaCarpeta, agentesDelCatalogo, loQueTocaria, guardarLoDeAhora, recuperar, loQueDijo,
 };

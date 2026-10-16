@@ -43,12 +43,19 @@ que diga qué se quita o se recupera. Decisión 173.
 - [x] Pruebas con un RSC de mentira y con el de verdad
 - [x] 12 mutaciones
 - [x] Batería entera
+- [x] Revisión de la PR #69: `--all` (tres guardas y lista cerrada), `recuperar` que falla abierto (rutas contadas antes de filtrar, segunda mirada), y el texto de un agente que sigue puesto
 
 ## Evidence
 
 Las 12 mutaciones tumban su prueba; el original se restauró desde una copia en el scratchpad. Con el arnés de
 verdad, `uninstall` saca la habilidad de disco y de `.rsc.json` sin tocar el suelo, y `restore` de la copia del
 montaje devuelve lo suyo (92 sitios) y deja lo de ahora guardado.
+
+## La revisión
+
+Un agente llamado `--all` llegaba a `rsc uninstall --all` (= `purge`). Arreglado con tres guardas independientes, cada
+una con su mutación. `recuperar` ya no restaura si el `--dry-run` sale vacío, con rutas de fuera o con otra lista tras el
+sí. No se usa `--` en la línea de comandos: el analizador de RSC no lo entiende como fin de opciones.
 
 ## Next
 

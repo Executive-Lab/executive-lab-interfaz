@@ -1217,9 +1217,18 @@ ${cabecera}
     await this.refrescar(true);
     await this.verAgentes();
     let texto = `${nombre} ya no está puesto.`;
-    if (hecho.siguePuesto) texto = `${nombre} sigue puesto: lo necesita una habilidad que sigue puesta, y el arnés no lo quita mientras tanto.`;
+    // Si el fichero sigue, se dice eso y no se inventa por qué.
+    if (hecho.siguePuesto) texto = `No se ha podido quitar ${nombre}: sigue puesto.`;
     else if (!hecho.ok) texto = `No he podido quitar ${nombre}.${hecho.dijo ? ` El arnés ha dicho: «${hecho.dijo}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`;
-    return this.enviar({ tipo: 'aviso', texto, malo: !hecho.ok && !hecho.siguePuesto });
+    return this.enviar({ tipo: 'aviso', texto, malo: !hecho.ok });
+  }
+
+  // Por qué no se ha podido mirar qué cambiaría; en ningún caso se ha tocado nada.
+  noSePuedeMirar(toca) {
+    this.salida.appendLine(`[recuperar] ${toca.motivo || toca.dijo || ''}`); // diccionario: interno
+    if (toca.motivo === 'vacia') return 'No he tocado nada: no he podido saber qué cambiaría.';
+    if (toca.motivo === 'ajenas') return 'No he tocado nada: el arnés ha nombrado sitios que no reconozco en esta carpeta.';
+    return `No he podido mirar qué cambiaría.${toca.dijo ? ` El arnés ha dicho: «${toca.dijo}».` : ''} No he tocado nada.`;
   }
 
   async recuperarLoQueHabia() {
@@ -1227,10 +1236,7 @@ ${cabecera}
     if (!copia) return this.enviar({ tipo: 'aviso', texto: 'Esa copia ya no está.', malo: true });
     // Lo que RSC tocaría, sin tocar nada: para decirle a la persona cuántos sitios son.
     const toca = await deshacer.loQueTocaria(copia.id);
-    if (!toca.ok) {
-      this.salida.appendLine(`[recuperar] ${toca.dijo}`); // diccionario: interno
-      return this.enviar({ tipo: 'aviso', texto: `No he podido mirar qué cambiaría.${toca.dijo ? ` El arnés ha dicho: «${toca.dijo}».` : ''} No he tocado nada.`, malo: true });
-    }
+    if (!toca.ok) return this.enviar({ tipo: 'aviso', texto: this.noSePuedeMirar(toca), malo: true });
     const sitios = toca.rutas.length === 1 ? '1 sitio' : `${toca.rutas.length} sitios`;
     const seguro = await vscode.window.showWarningMessage(
       `Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes, lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos ${sitios} se pierde. Antes guardo una copia de lo de ahora.`,
@@ -1238,8 +1244,14 @@ ${cabecera}
       'Sí, recupéralo',
     );
     if (seguro !== 'Sí, recupéralo') return undefined;
+    // Otra vez, justo antes: la copia de lo de ahora tiene que cubrir exactamente lo que se va a tocar.
+    const otra = await deshacer.loQueTocaria(copia.id);
+    if (!otra.ok) return this.enviar({ tipo: 'aviso', texto: this.noSePuedeMirar(otra), malo: true });
+    if ([...otra.rutas].sort().join('\n') !== [...toca.rutas].sort().join('\n')) {
+      return this.enviar({ tipo: 'aviso', texto: 'No he tocado nada: lo que iba a cambiar ya no es lo mismo. Vuelve a pulsar «Recuperar lo que había».', malo: true });
+    }
     this.enviar({ tipo: 'esperando', que: 'Recuperando lo que había…' });
-    const hecho = await deshacer.recuperar(copia.id, toca.rutas);
+    const hecho = await deshacer.recuperar(copia.id, otra.rutas);
     this.salida.appendLine(`[recuperar] ${copia.id}: ${hecho.ok}${hecho.dijo ? ` · ${hecho.dijo}` : ''}`); // diccionario: interno
     await this.refrescar(true);
     await this.verCopias();

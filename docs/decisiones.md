@@ -7916,9 +7916,9 @@ carpeta montada.
    restaura nada. La copia usada es la de `laCopiaDelMontaje` (el primer montaje), buscada otra vez en disco.
 3. **Después, repintar y decir lo que ha pasado**: «Facturación ya no está puesta.» / «Hecho: la carpeta está como
    antes de montar el arnés. Lo de antes de recuperar está en …»; si RSC falla o no ha quitado lo que dijo, «No he
-   podido… El arnés ha dicho: «…»» con su última línea (como la 166), y todo en el registro. Un agente que RSC
-   mantiene lo dice: «Cobros sigue puesto: lo necesita una habilidad que sigue puesta». Lo que cuenta es el disco, no
-   el código de salida.
+   podido… El arnés ha dicho: «…»» con su última línea (como la 166), y todo en el registro. Un agente cuyo
+   fichero sigue tras el `uninstall` dice solo eso: «No se ha podido quitar {nombre}: sigue puesto.», sin inventar la
+   causa. Lo que cuenta es el disco, no el código de salida.
 
 ### Lo que no se ofrece
 Nunca «Quitarla» en: lo suyo (`ownSkills` y lo de fuera del catálogo), lo que ponen los raíles de la barra
@@ -7944,3 +7944,30 @@ las tres acciones, suelo vacío, ofrecer lo suyo / lo de la barra / la fontaner�
 lo de ahora, todo quitable, el manejador sin volver a comprobar, dar por quitada sin mirar el disco): las 12 tumbadas.
 Una cosa que salió de probar con el de verdad: RSC escribe las rutas con los enlaces resueltos (`/private/var/…` en
 un Mac), y comparar con la ruta de la carpeta sin resolver las descartaba todas.
+
+### La revisión
+
+La revisión de la PR #69 encontró un fallo grave y otro que fallaba abierto. Arreglados, cada uno con su prueba y su
+mutación.
+
+- **Un agente llamado `--all` corría `rsc uninstall --all`**, que en RSC es un alias de `purge` (comprobado con
+  `--dry-run`): un repositorio ajeno con `.claude/agents/--all.md` y `"agents":["--all"]` en `.rsc.json` habría
+  borrado el arnés entero con un clic. Tres guardas, cada una sola basta: (a) un id no puede empezar por `-`
+  (`/^[a-z0-9][a-z0-9-]{1,59}$/`, y `{1,39}` en las habilidades); (b) un agente solo se ofrece si está en la lista
+  cerrada del catálogo de RSC (`media/agentes-del-catalogo.json`, que una prueba compara con `stackAgentNames()` del
+  paquete) y además lo apunta `.rsc.json`: lo que diga `.rsc.json` lo escribe quien hizo la carpeta; (c) `quitarAgente`
+  vuelve a comprobar las dos cosas antes de correr nada, para un mensaje a mano. **No se usa `--` como fin de
+  opciones**: el analizador de RSC (`rsc.js`) lo salta como a cualquier `--algo` y no lo entiende como separador,
+  así que no protege y no se pasa.
+- **`recuperar` seguía aunque no hubiera guardado nada.** `lasRutasDeLaSalida` descartaba en silencio las rutas que no
+  cuadraban con la carpeta (en Windows, `C:\` frente a `c:\`), y con ellas la copia de lo de ahora. Ahora cuenta las
+  rutas de `--dry-run` antes de filtrar: con 0, o con alguna que no es de la carpeta, no se restaura y se dice
+  («No he tocado nada: …»). Se compara con `path.relative` (`path.win32` sin distinguir mayúsculas en Windows) y con
+  `fs.realpathSync.native`. Y tras el sí se vuelve a correr `--dry-run`: si la lista cambió, no se restaura (la copia de
+  lo de ahora cubre exactamente lo que se toca).
+- **Texto:** el agente cuyo fichero sigue ya no dice por qué (antes: «lo necesita una habilidad», que era una suposición).
+
+Pruebas: una comprobación nueva para el `--all` (cada guarda sola, el manejador con el mensaje a mano, y nada corrido) y
+casos nuevos en la de recuperar (ruta de fuera, 0 rutas, lista que cambia, y letra de unidad en otra caja con un RSC de
+mentira que escribe `c:\…`). 10 mutaciones, 8 tumbadas; las dos vivas son equivalentes: `path.win32.relative` ya
+ignora la caja por sí mismo, y una ruta relativa se resuelve contra la carpeta de trabajo y cae fuera de todos modos.
