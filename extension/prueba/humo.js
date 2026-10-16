@@ -96,7 +96,7 @@ async function main() {
 
   // ---------------------------------------------------- los módulos cargan
   const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar', 'cuando', 'recordatorios', 'rutinas',
-    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'ajustes-locales', 'retirados', 'conectar', 'extension'];
+    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'ajustes-locales', 'retirados', 'conectar', 'mcp', 'extension'];
   await comprobar('todos los módulos cargan', () => {
     modulos.forEach(cargar);
     return `${modulos.length} módulos`;
@@ -784,6 +784,206 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     assert.match(crudo, /^HOLDED_API_KEY=nueva-clave-9999$/m);
     assert.match(crudo, /^HOLDED_ENV=test$/m, 'no pisa las demás claves');
     return 'sin comillas ni saltos';
+  });
+
+  // ------------------------------------------- las conexiones MCP se ven (decisión 175)
+  // Una casa y una carpeta de mentira, con servidores falsos cuyos «secretos» se
+  // construyen aquí, en tiempo de ejecución: ningún valor puede salir de la lectura.
+  const casaDeMcp = (() => {
+    const crypto = require('node:crypto');
+    const hex = () => crypto.randomBytes(8).toString('hex');
+    const SECRETOS = { token: `sk-live-${hex()}`, cabecera: `Bearer ${hex()}`, argumento: `--clave=${hex()}`, url: `https://${hex()}.ejemplo.test/mcp?k=${hex()}`, orden: `/opt/${hex()}/servidor`, otro: `tok-${hex()}` };
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-casa-'));
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-carpeta-'));
+    fs.mkdirSync(path.join(casa, '.codex'));
+    fs.mkdirSync(path.join(carpeta, '.codex'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude', 'codex'] }));
+    // Claude, de la carpeta
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: {
+      holded: { type: 'stdio', command: SECRETOS.orden, args: [SECRETOS.argumento], env: { HOLDED_API_KEY: SECRETOS.token } },
+      'tienda-web': { type: 'http', url: SECRETOS.url, headers: { Authorization: SECRETOS.cabecera } },
+      'sin-tipo': { url: SECRETOS.url },
+      roto: 'no es un objeto',
+    } }));
+    // Claude, de la persona: para todas las carpetas, y solo para esta
+    fs.writeFileSync(path.join(casa, '.claude.json'), JSON.stringify({
+      historial: 'x'.repeat(5000),
+      mcpServers: { 'de-todas': { command: SECRETOS.orden, env: { T: SECRETOS.otro } } },
+      projects: {
+        [carpeta]: { mcpServers: { 'solo-aqui': { type: 'sse', url: SECRETOS.url, headers: { A: SECRETOS.cabecera } } } },
+        '/otra/carpeta': { mcpServers: { 'de-otra': { command: 'x' } } },
+      },
+    }));
+    // Codex, de la carpeta y de la persona
+    fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), [
+      'model = "gpt-5.5"', '',
+      '[mcp_servers.context7]', 'command = "npx"', 'args = ["-y", "@upstash/context7-mcp",', `  "${SECRETOS.argumento}"]`, `env = { MY_KEY = "${SECRETOS.token}" }`, '',
+      '[mcp_servers.context7.env]', `OTRA = "${SECRETOS.otro}"`, '',
+      '[mcp_servers.figma]', `url = "${SECRETOS.url}"`, `bearer_token_env_var = "FIGMA_TOKEN"`, `http_headers = { "X-Clave" = "${SECRETOS.cabecera}" }`, '',
+      '[mcp_servers.apagado]', 'command = "x"', 'enabled = false', '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(casa, '.codex', 'config.toml'), `[mcp_servers."mi.servidor"]\ncommand = "uvx"\nenv = { Z = "${SECRETOS.token}" }\n`);
+    return { casa, carpeta, SECRETOS, entorno: { CODEX_HOME: path.join(casa, '.codex') } };
+  })();
+
+  await comprobar('las conexiones MCP: de dónde salen y qué son, sin ningún valor', () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    const visto = mcp.leer({ raiz: carpeta, asistentes: ['claude', 'codex'], casa, entorno });
+    const resumen = visto.servidores.map((s) => `${s.asistente}/${s.origen}/${s.nombre}/${s.tipo}`).sort();
+    assert.deepEqual(resumen, [
+      'claude/carpeta/holded/programa',
+      'claude/carpeta/tienda-web/web',
+      'claude/tuyoAqui/solo-aqui/web',
+      'claude/usuario/de-todas/programa',
+      'codex/carpeta/context7/programa',
+      'codex/carpeta/figma/web',
+      'codex/usuario/mi.servidor/programa',
+    ], 'sin-tipo (Claude lo salta), roto, apagado y lo de otra carpeta no salen');
+    assert.deepEqual(visto.noSeEntendio, []);
+    // Ningún valor: ni en lo que devuelve ni, entero, tal y como lo guarda la barra.
+    const crudo = JSON.stringify(visto);
+    for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!crudo.includes(valor), `el valor «${cual}» sale de la lectura`);
+    assert.ok(!/ejemplo\.test|npx|uvx|HOLDED_API_KEY|FIGMA_TOKEN|MY_KEY|X-Clave/.test(crudo), 'ni órdenes, ni direcciones, ni nombres de variables');
+    for (const s of visto.servidores) assert.deepEqual(Object.keys(s).sort(), ['asistente', 'nombre', 'origen', 'tipo']);
+    // Solo los asistentes que se usan en la carpeta.
+    assert.ok(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa, entorno }).servidores.every((s) => s.asistente === 'claude'));
+    assert.ok(mcp.leer({ raiz: carpeta, asistentes: ['codex'], casa, entorno }).servidores.every((s) => s.asistente === 'codex'));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: [], casa, entorno }).servidores, []);
+    // Con CLAUDE_CONFIG_DIR, el de Claude es el que está ahí.
+    const otraCasa = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-otra-'));
+    fs.writeFileSync(path.join(otraCasa, '.claude.json'), JSON.stringify({ mcpServers: { enOtraCasa: { command: 'x' } } }));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa, entorno: { ...entorno, CLAUDE_CONFIG_DIR: otraCasa } }).servidores.filter((s) => s.origen !== 'carpeta').map((s) => s.nombre), ['enOtraCasa']);
+    return '7 servidores, 2 asistentes, 3 orígenes';
+  });
+
+  await comprobar('las conexiones MCP: lo que no se entiende no se enseña, y no se siguen enlaces', () => {
+    const mcp = cargar('mcp');
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-raro-'));
+    const casa = path.join(base, 'casa');
+    const carpeta = path.join(base, 'carpeta');
+    fs.mkdirSync(path.join(casa, '.codex'), { recursive: true });
+    fs.mkdirSync(path.join(carpeta, '.codex'), { recursive: true });
+    const entorno = { CODEX_HOME: path.join(casa, '.codex') };
+    const ver = (asistentes = ['claude', 'codex']) => mcp.leer({ raiz: carpeta, asistentes, casa, entorno });
+    const bueno = JSON.stringify({ mcpServers: { a: { command: 'x' } } });
+    const tomlBueno = '[mcp_servers.a]\ncommand = "x"\n';
+
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), '{ "mcpServers": { "a": { "command": "x" }, ');
+    assert.deepEqual(ver(['claude']).servidores, [], 'un JSON a medias no enseña nada');
+    assert.deepEqual(ver(['claude']).noSeEntendio, [{ asistente: 'claude', origen: 'carpeta' }]);
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: ['a'] }));
+    assert.deepEqual(ver(['claude']).servidores, [], 'mcpServers que no es un mapa');
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ otra: 1 }));
+    assert.deepEqual(ver(['claude']).noSeEntendio, [], 'un JSON válido sin servidores no es un fallo');
+    // Los caracteres que no se ven (bidi, ancho cero) no llegan al nombre: `a‮gnp.exe​` se pintaba al revés.
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: { 'a\u202egnp.exe\u200b': { command: 'x' }, '\u202e\u200b': { command: 'x' } } }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['agnp.exe'], 'sin bidi ni ancho cero, y uno que se queda vacío no sale');
+    assert.ok(!/[\u202e\u200b]/.test(JSON.stringify(ver(['claude']))));
+    // Más del tope de `.claude.json` (32 MB): no se lee, y se dice (revisión de la 175).
+    const grande = path.join(casa, '.claude.json');
+    const fd = fs.openSync(grande, 'w');
+    fs.writeSync(fd, '{"mcpServers":{"a":{"command":"x"}},"historial":"');
+    fs.ftruncateSync(fd, 33 * 1024 * 1024);
+    fs.closeSync(fd);
+    fs.rmSync(path.join(carpeta, '.mcp.json'));
+    assert.deepEqual(ver(['claude']).servidores, [], 'uno de más del tope no se lee');
+    assert.deepEqual(ver(['claude']).noSeEntendio, [{ asistente: 'claude', origen: 'usuario' }], 'y se dice que no se pudo leer');
+    // Con 20 MB de historial sí: el tope de antes (8 MB) era corto.
+    fs.writeFileSync(grande, JSON.stringify({ mcpServers: { a: { command: 'x' } }, historial: 'h'.repeat(20 * 1024 * 1024) }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['a'], 'con 20 MB de historial se lee');
+    fs.rmSync(grande);
+
+    for (const [titulo, texto] of [
+      ['una cadena de varias líneas', `[mcp_servers.a]\ncommand = "x"\nnota = """\nhola\n"""\n`],
+      ['una comilla sin cerrar', '[mcp_servers.a]\ncommand = "x\n'],
+      ['una cabecera sin cerrar', '[mcp_servers.a\ncommand = "x"\n'],
+      ['una lista sin cerrar', '[mcp_servers.a]\ncommand = "x"\nargs = ["a",\n'],
+      ['las claves con puntos arriba', 'mcp_servers.a.command = "x"\n'],
+      ['una tabla de tablas', '[[mcp_servers.a]]\ncommand = "x"\n'],
+      ['el mismo servidor dos veces', `${tomlBueno}\n${tomlBueno}`],
+      ['una línea enorme', `${tomlBueno}\nx = "${'a'.repeat(3000)}"\n`],
+    ]) {
+      fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), texto);
+      assert.deepEqual(ver(['codex']).servidores, [], `${titulo}: no se enseña nada`);
+      assert.deepEqual(ver(['codex']).noSeEntendio, [{ asistente: 'codex', origen: 'carpeta' }], titulo);
+    }
+    // Con un tope: pasado, ese fichero no se lee.
+    fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), `${tomlBueno}\n${'# nada\n'.repeat(60000)}`);
+    assert.deepEqual(ver(['codex']).servidores, [], 'un config.toml enorme no se lee');
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: { a: { command: 'x' } }, relleno: 'x'.repeat(300 * 1024) }));
+    assert.deepEqual(ver(['claude']).servidores, [], 'un .mcp.json enorme no se lee');
+
+    // Sin enlaces: ni el fichero ni la carpeta `.codex`.
+    const fuera = path.join(base, 'fuera');
+    fs.mkdirSync(path.join(fuera, 'dentro'), { recursive: true });
+    fs.writeFileSync(path.join(fuera, 'mcp.json'), bueno);
+    fs.writeFileSync(path.join(fuera, 'dentro', 'config.toml'), tomlBueno);
+    fs.rmSync(path.join(carpeta, '.mcp.json'));
+    fs.symlinkSync(path.join(fuera, 'mcp.json'), path.join(carpeta, '.mcp.json'));
+    assert.deepEqual(ver(['claude']).servidores, [], 'un .mcp.json que es un enlace no se sigue');
+    fs.rmSync(path.join(carpeta, '.codex'), { recursive: true });
+    fs.symlinkSync(path.join(fuera, 'dentro'), path.join(carpeta, '.codex'));
+    assert.deepEqual(ver(['codex']).servidores, [], 'una carpeta .codex que es un enlace no se sigue');
+    fs.rmSync(path.join(carpeta, '.codex'));
+    // Y los dos de la persona.
+    fs.rmSync(path.join(casa, '.codex'), { recursive: true });
+    fs.symlinkSync(path.join(fuera, 'dentro', 'config.toml'), path.join(casa, '.codex'));
+    fs.mkdirSync(path.join(base, 'casa2'));
+    fs.symlinkSync(path.join(fuera, 'mcp.json'), path.join(base, 'casa2', '.claude.json'));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa: path.join(base, 'casa2'), entorno: {} }).servidores, [], 'un .claude.json que es un enlace no se sigue');
+    // Sin nada: no falla.
+    assert.deepEqual(mcp.leer({ raiz: path.join(base, 'no-existe'), asistentes: ['claude', 'codex'], casa: path.join(base, 'tampoco'), entorno: {} }).servidores, []);
+    assert.deepEqual(mcp.leer({ raiz: null, asistentes: ['claude'] }).servidores, []);
+    return '8 formas de TOML raro, JSON roto, topes y enlaces';
+  });
+
+  await comprobar('las conexiones MCP: la pantalla las enseña sin ningún valor, y sin nada no sale nada', async () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    const lista = mcp.conLasConocidas(mcp.leer({ raiz: carpeta, asistentes: ['claude', 'codex'], casa, entorno }).servidores,
+      [{ id: 'HOLDED', etiqueta: 'Holded' }, { id: 'Facturas', etiqueta: 'Facturas' }]);
+    assert.equal(lista.find((s) => s.nombre === 'holded').herramienta, 'Holded', 'la que la barra ya conoce lo dice');
+    assert.equal(lista.filter((s) => s.herramienta).length, 1, 'y solo si coincide entera');
+    const p = require('./panel-falso').montarPanel();
+    const pintado = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: lista });
+    assert.match(pintado, /Conectadas por MCP/);
+    assert.match(pintado, /context7 — Codex · de esta carpeta · programa de tu ordenador/);
+    assert.match(pintado, /tienda-web — Claude · de esta carpeta · dirección web/);
+    assert.match(pintado, /solo-aqui — Claude · solo tuya, en esta carpeta · dirección web/);
+    assert.match(pintado, /mi\.servidor — Codex · de tu usuario/);
+    // Un fichero de la carpeta (que puede venir en un repo clonado) no afirma que sea tuya: solo que se llama igual.
+    assert.match(pintado, /holded — Claude · de esta carpeta · programa de tu ordenador · se llama como tu conexión Holded/);
+    assert.ok(!/es tu conexión Holded/.test(pintado), 'una de la carpeta no dice que es tu conexión');
+    const tuya = mcp.conLasConocidas([{ nombre: 'Holded', asistente: 'claude', origen: 'usuario', tipo: 'web' }, { nombre: 'holded', asistente: 'claude', origen: 'tuyoAqui', tipo: 'web' }], [{ id: 'HOLDED', etiqueta: 'Holded' }]);
+    assert.equal((p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: tuya }).match(/es tu conexión Holded, la de arriba/g) || []).length, 2, 'las de tu usuario, sí');
+    // Lo que no se pudo leer, se dice.
+    const sinLeer = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: [], mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }, { asistente: 'claude', origen: 'tuyoAqui' }, { asistente: 'codex', origen: 'carpeta' }] });
+    assert.match(sinLeer, /No he podido leer lo de Claude de tu usuario\./);
+    assert.match(sinLeer, /No he podido leer lo de Codex de esta carpeta\./);
+    assert.equal((sinLeer.match(/lo de Claude de tu usuario/g) || []).length, 1, 'una sola vez');
+    assert.match(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: lista, mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }] }), /No he podido leer lo de Claude de tu usuario[\s\S]*context7/, 'también con otros servidores');
+    // Sin confianza en la carpeta, los de sus ficheros llevan «sin aprobar todavía».
+    const sinConfianza = mcp.conLaConfianza(lista, false);
+    const deLaCarpeta = lista.filter((s) => s.origen === 'carpeta').length;
+    assert.equal(sinConfianza.filter((s) => s.sinAprobar).length, deLaCarpeta);
+    assert.ok(sinConfianza.filter((s) => s.sinAprobar).every((s) => s.origen === 'carpeta'), 'los de tu usuario no');
+    const htmlSin = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: sinConfianza });
+    assert.equal((htmlSin.match(/sin aprobar todavía/g) || []).length, deLaCarpeta);
+    assert.match(htmlSin, /tienda-web — Claude · de esta carpeta · dirección web · sin aprobar todavía/);
+    assert.ok(!/sin aprobar/.test(pintado), 'con confianza, no sale');
+    assert.equal(mcp.conLaConfianza(lista, true).filter((s) => s.sinAprobar).length, 0);
+    for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!pintado.includes(valor), `el valor «${cual}» sale en pantalla`);
+    assert.ok(!/ejemplo\.test|npx|uvx|Bearer|HOLDED_API_KEY/.test(pintado), 'ni órdenes ni direcciones');
+    const con = p.mandar({ tipo: 'conexiones', proveedores: [{ id: 'HOLDED', etiqueta: 'Holded', faltan: 0, fueraDeSitio: 0, cositas: 0 }], sueltas: null, mcp: lista });
+    assert.match(con, /Conectadas por MCP/, 'también con conexiones propias');
+    for (const sin of [[], undefined]) {
+      assert.ok(!/MCP/.test(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: sin })), 'sin ninguna, no sale nada');
+    }
+    const muchas = Array.from({ length: 12 }, (_, i) => ({ nombre: `s${i}`, asistente: 'claude', origen: 'usuario', tipo: 'web' }));
+    assert.match(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: muchas }), /Y 4 más/, 'con muchas, se cuentan');
+
+    return 'en pantalla';
   });
 
   // --------------------------------------------------------------- cerebro
@@ -19536,6 +19736,42 @@ exec git "$@"
       vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
       fs.rmSync(carpeta, { recursive: true, force: true });
     }
+  });
+
+  await comprobar('las conexiones MCP: lo que viaja de la extensión a la pantalla no lleva ningún valor', async () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    // De punta a punta: lo que viaja de la extensión a la pantalla no lleva ningún valor.
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, claude: process.env.CLAUDE_CONFIG_DIR, codex: process.env.CODEX_HOME, casa: process.env.HOME };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = carpeta;
+    process.env.CLAUDE_CONFIG_DIR = casa;
+    process.env.CODEX_HOME = entorno.CODEX_HOME;
+    const confianzaAntes = vscode.guion.confianza;
+    try {
+      vscode.guion.confianza = true;
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const mensaje = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
+      assert.equal(mensaje.mcp.length, 7, 'la extensión manda lo que lee');
+      assert.equal(mensaje.mcp.filter((s) => s.sinAprobar).length, 0, 'con confianza, ninguno sin aprobar');
+      assert.deepEqual(mensaje.mcpNoLeido, []);
+      vscode.guion.confianza = false;
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const sin = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
+      assert.deepEqual(sin.mcp.filter((s) => s.sinAprobar).map((s) => s.nombre).sort(), ['context7', 'figma', 'holded', 'tienda-web'], 'sin confianza, los de ficheros de la carpeta, sin aprobar');
+      assert.ok(sin.mcp.filter((s) => s.origen !== 'carpeta').every((s) => !s.sinAprobar));
+      const entero = JSON.stringify(mensaje);
+      for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!entero.includes(valor), `el valor «${cual}» viaja en el estado`);
+      assert.ok(!(entero.includes('ejemplo.test')), 'ni la dirección');
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = confianzaAntes;
+      for (const [k, v] of [['CLAUDE_CONFIG_DIR', antes.claude], ['CODEX_HOME', antes.codex]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+    return 'en el estado, 7 servidores';
   });
 
   await comprobar('conexiones paso a paso: se prueba sola al guardar, la lista dice cómo fue, y la guía va de uno en uno', async () => {
