@@ -5929,6 +5929,8 @@ Cada comprobación nueva de esta revisión, y las de la 154, se rompió a mano e
   documentos de `02-DOCS`. El encargo lo dice: «esta carpeta subida a GitHub en privado y sin datos de
   clientes». No dice «repositorio»: el diccionario no lo deja.
 
+Con esto, en el código final, 75 mutaciones —las de antes que siguen aplicando y 19 nuevas—, las 75 tumbadas.
+
 
 ## 156. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
 

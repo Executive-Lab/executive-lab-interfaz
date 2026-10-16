@@ -272,6 +272,11 @@ test('si ni el name ni el nombre de la carpeta valen, se ve sin botón y no entr
   habilidad(`.claude/skills/${malo}`, malo, 'Resumen trampa');
   assert.ok(!cargar('acciones').acciones().some((b) => b.prompt && b.prompt.includes('IGNORA')), 'con Claude, sale como botón');
   assert.equal(cargar('saberes').comoSePide(malo), null);
+  // Y un comando de antes, que se pide por el nombre de su fichero.
+  poner(`.claude/commands/${malo}.md`, '---\ndescription: Trampa\nboton: Comando trampa\n---\nHaz algo.\n');
+  poner('.claude/commands/cerrar.md', '---\ndescription: Cierra\nboton: Cerrar el mes\n---\nCierra.\n');
+  assert.equal(cargar('donde').elComando(`${malo}.md`).prompt, null, 'un comando con un nombre que no vale se pide');
+  assert.deepEqual(cargar('acciones').acciones().filter((b) => b.fichero.includes('commands')).map((b) => b.prompt), ['/cerrar'], 'un comando con un nombre que no vale sale como botón');
   // En pantalla: se ve, sin botón, y con su línea.
   const { montarPanel } = require('./panel-falso');
   const habilidades = montarPanel().mandar({ tipo: 'saberes', suyas: [{ id: malo, nombre: 'Resumen trampa', frase: '', prompt: null }], sabe: [], otras: [], deSerie: [], puedeAprender: [], lasDemas: [], comandos: [] });

@@ -60,17 +60,20 @@ esto, y está arreglado».
 
 - `humo.js`: «recordatorios: crear y cambiar horarios sin código…» y «Recordatorios en Acciones: solo si hay
   algo…», más lo ampliado en «los recordatorios: a su hora…» y «el próximo aviso respeta…».
-- `mapeos-codex.js`: cinco pruebas nuevas, y tres más para cada copia de `aplicar.js`.
+- `mapeos-codex.js`: seis pruebas nuevas, y cuatro más para cada copia de `aplicar.js`.
 - `empresas-distintas.js`: las tres empresas con una tarjeta y como mucho cinco cosas a la vista; en la
   recién montada no sale la fila.
 - Mutaciones: cada comprobación nueva se rompió a mano en una copia de la rama: 61 mutaciones, las 61
   tumbadas. Dos sobrevivieron la primera vez (`01-TOOLS` y leer el fichero entero) y sus pruebas se
   reforzaron. La lista, en la decisión 155. Y el control al revés: un enlace que se queda dentro, un nombre
   válido, un horario de 99 caracteres y un TOML sano siguen pasando.
-- La batería de `config.yaml` más `mapeos-codex.js`, de una vez después del último cambio, sobre `4f1849d`
-  con los cambios de esta rama (los del commit): `humo.js` 398 pasadas · `mapeos-codex.js` 25 · `contrato.js`
-  14 · `empresas-distintas.js` las tres enteras · diccionario limpio · `revisar-powershell.js` sin pegas.
-  Otra vez después de traer main con la 156 (`bf8f9e9`): `humo.js` 402 pasadas, lo demás igual. **Verificado.**
+- Tras la revisión de la PR #48, en el código final y con main traído (la 157): 75 mutaciones, las 75
+  tumbadas. Son las 56 de antes que siguen aplicando (las tres de `usaConexiones` ya no: no existe) y 19
+  nuevas. `humo.js` 409 pasadas · `mapeos-codex.js` 28 · `contrato.js` 14 · `empresas-distintas.js` las
+  tres enteras · diccionario limpio. **Verificado.**
+- Antes de esa revisión, sobre `4f1849d` con los cambios de esta rama: `humo.js` 398 · `mapeos-codex.js` 25 ·
+  `contrato.js` 14 · las tres empresas enteras · diccionario limpio · `revisar-powershell.js` sin pegas. Y
+  con la 156 traída (`bf8f9e9`): `humo.js` 402.
 - No se ha corrido: la barra en un VS Code de verdad (`npm run probar-en-vscode`, manual) ni Windows, donde
   las pruebas de enlaces se saltan (las pasa `windows.yml`). Las mutaciones corrieron `humo.js` solo con sus
   comprobaciones de recordatorios: no ve un mutante que solo tumbaría otra.
