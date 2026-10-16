@@ -89,6 +89,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const porDondeIbas = require('./por-donde-ibas');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -659,6 +660,8 @@ ${cabecera}
       costumbrePuesta: await this.ponerLasCostumbres(),
       // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
       datosDeClientes: this.laTarjetaDeLosDatos(),
+      // La primera vez de cada día, dónde lo dejó la última vez (decisión 160).
+      laUltimaVez: await this.laUltimaVezQueToca(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -1110,6 +1113,8 @@ ${cabecera}
       cuandoCaduca: () => this.apuntarCuandoCaduca(mensaje.proveedor, mensaje.en, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
+      seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt, mensaje.dia),
+      ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(mensaje.dia),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
       verRecordatorios: () => this.verRecordatorios(),
       crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
@@ -1496,8 +1501,21 @@ ${cabecera}
     const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
     await this.marcarHecho(nombre);
     if (!uno) return this.actualizarRecordatorios();
-    await this.pedir(uno.prompt);
+    await this.pedir(await this.elEncargoDe(uno));
     return this.actualizarRecordatorios();
+  }
+
+  // El de «Seguir donde lo dejé», con por dónde ibas si se sabe: es lo que dice
+  // su tarjeta (revisión de la PR #55, decisión 160).
+  async elEncargoDe(uno) {
+    if (uno.nombre !== 'seguir') return uno.prompt;
+    try {
+      const { ibasPor } = await brujula.estado();
+      return (ibasPor && ibasPor.accion && ibasPor.accion.prompt) || uno.prompt;
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return uno.prompt;
+    }
   }
 
   async dejarElRecordatorio(nombre) {
@@ -2283,6 +2301,33 @@ ${cabecera}
       this.salida.appendLine(`[clientes] ${error.message}`); // diccionario: interno
       return null;
     }
+  }
+
+  // ── La última vez (decisión 160) ──────────────────────────────────────
+  //
+  // La primera vez de cada día, en una carpeta con algo hecho, por dónde iba. Lo
+  // que sabe la brújula, que se acaba de calcular y está recordado: no cuesta otro
+  // proceso. Si falla, la barra sigue igual, y queda apuntado.
+  async laUltimaVezQueToca() {
+    try {
+      return await porDondeIbas.laDeHoy(this.almacen(), await brujula.estado());
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // Sus dos botones la quitan hasta el día siguiente al de la tarjeta, que viaja
+  // con ellos. «Seguir donde lo dejé» lleva el encargo que armó la extensión (P6).
+  async seguirDondeLoDeje(prompt, dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    await this.pedir(prompt);
+    return this.refrescar(true);
+  }
+
+  async ahoraNoLaUltimaVez(dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    return this.refrescar(true);
   }
 
   // La tarjeta: hasta que se lee o se pulsa «Entendido», y solo si ya entran datos

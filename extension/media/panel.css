@@ -782,6 +782,9 @@ button.solo-icono .icono { font-size: 15px; }
   font-size: 0.9em;
 }
 .acordeon > .pista { margin: 0 0 0.6rem 0.2rem; font-size: 0.9em; color: var(--apagado); }
+/* Por dónde ibas (decisión 160): lo escribió el asistente, y una dirección o un
+   nombre largo no tienen que salirse de la barra. */
+.ibas-por { overflow-wrap: anywhere; }
 .acordeon > button { margin-top: 0.5rem; }
 
 /* Los cinco grupos de la pantalla principal. Son el mismo acordeón, pero sin
