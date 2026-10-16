@@ -41,7 +41,11 @@ por la empresa, los de plugins y los conectores de la cuenta.
 
 ## Evidence
 
-Los números, en la PR. Sin confirmar: que `CLAUDE_CONFIG_DIR` mueva `.claude.json` (ver decisión 175).
+`humo.js` 491, `--con-arnes` 500, `mapeos-codex.js` 30, `contrato.js` 15, el resto en verde (`--con-arnes` falló una
+vez sin ninguna comprobación en rojo y no se repitió). Revisión de la PR (decisión 175, «La revisión»): sin
+caracteres invisibles en el nombre; «es tu conexión X» solo si sale de tu usuario; lo que no se pudo leer se dice,
+con `.claude.json` hasta 32 MB; sin confianza, «sin aprobar todavía». Una mutación por retoque, las diez tumbadas.
+ Sin confirmar: que `CLAUDE_CONFIG_DIR` mueva `.claude.json` (ver decisión 175).
 
 ## Next step
 

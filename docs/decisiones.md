@@ -8321,3 +8321,28 @@ servidores falsos cuyos «secretos» se construyen en tiempo de ejecución: la l
 asistentes, tres orígenes, y los que no salen), lo que no se entiende (ocho formas de TOML, JSON roto, topes y
 enlaces), la pantalla, y lo que viaja de la extensión a la pantalla (ningún valor, ni en el HTML ni en el
 estado). Mutaciones a mano en lo importante, restauradas desde una copia.
+
+### La revisión
+
+Cuatro retoques tras revisar la PR #72:
+
+1. **Caracteres que no se ven.** `limpiarElNombre` quita también `\p{Cf}` (bidi y ancho cero): `a‮gnp.exe​` se
+   pintaba al revés. Un nombre que se queda vacío no sale.
+2. **«Es tu conexión X» solo si lo es.** Un `.mcp.json` o un `.codex/config.toml` puede venir en un repo
+   clonado y llamarse «Holded». Solo lo que sale de tu usuario o de «solo tuya, en esta carpeta» (`.claude.json`)
+   dice «es tu conexión Holded, la de arriba»; lo de un fichero de la carpeta dice «se llama como tu conexión Holded».
+3. **Lo que no se pudo leer se dice.** Un fichero que hay y no se lee (demasiado grande, JSON o TOML roto, un
+   enlace) sale como «No he podido leer lo de Claude de tu usuario.» en vez de callar. El tope de `.claude.json`
+   sube a 32 MB: con mucho historial pasa de 8 MB, y solo se lee al abrir Conexiones.
+4. **Sin confianza, sin aprobar.** En una carpeta sin confianza (`vscode.workspace.isTrusted` false), los
+   servidores de ficheros de la carpeta llevan «· sin aprobar todavía»: el asistente no los activaría así.
+
+Pruebas: cuatro afirmaciones nuevas dentro de las comprobaciones de MCP (491 en `humo.js`, ninguna nueva en
+número) y una mutación por retoque, las diez tumbadas (también la de `esSuya`, el panel, el tope, el
+«no se pudo leer», la confianza en la extensión y en el módulo, y el texto «sin aprobar»).
+
+Batería entera, una vez, tras traer `origin/main` (173 y 174 ya estaban; la 175 va la última): `humo.js` 491,
+`humo.js --con-arnes` 500, `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js`,
+`comprobar-diccionario.js` y `revisar-powershell.js` en verde. `--con-arnes` falló una vez con un error de
+resolución de módulos sin ninguna comprobación en rojo, al correr justo después de `humo.js`, y no se repitió
+(pasó la segunda); ajena.
