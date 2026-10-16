@@ -5932,6 +5932,12 @@ Cada comprobación nueva de esta revisión, y las de la 154, se rompió a mano e
 Con esto, en el código final, 75 mutaciones —las de antes que siguen aplicando y 19 nuevas—, las 75 tumbadas.
 
 
+
+Y tres encargos más que metían texto de la carpeta tal cual, que vio la revisión de la PR #48: el título de
+un concepto en «Quiero cambiar lo que sabes sobre…», el rótulo de un programa de una conexión en «Quiero …»
+(que además salía del mensaje del panel y no del disco: ahora el programa tiene que estar en esa conexión y
+el rótulo es el de su README) y el nombre de un concepto demasiado largo para leerlo en la barra. Van por
+`limpio.etiqueta`. 5 de 5 mutaciones.
 ## 156. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F5 del plan de simplificar la barra)

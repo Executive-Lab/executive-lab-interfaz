@@ -233,7 +233,7 @@ function leerArticulo(rutaRelativa) {
         ok: false,
         malo: false,
         mensaje: 'Este concepto es demasiado largo para leerlo aquí.',
-        boton: { etiqueta: 'Pedírselo al asistente', accion: { tipo: 'pedir', prompt: `Cuéntame en pocas líneas qué dice el concepto «${path.basename(completa, '.md')}» de la wiki.` } },
+        boton: { etiqueta: 'Pedírselo al asistente', accion: { tipo: 'pedir', prompt: `Cuéntame en pocas líneas qué dice el concepto «${require('./limpio').etiqueta(path.basename(completa, '.md'))}» de la wiki.` } },
       };
     }
     texto = fs.readFileSync(completa, 'utf8');
