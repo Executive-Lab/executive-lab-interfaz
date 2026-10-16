@@ -28,7 +28,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { escribirAjustes } = require('./ajustes');
+// `leerJsonc` es uno solo, el de `ajustes.js`: dos copias acaban leyendo distinto.
+const { escribirAjustes, leerJsonc } = require('./ajustes');
 
 const CONSTANCIA = '.executive-lab-ajustes.json';
 
@@ -101,58 +102,7 @@ function queToca(asistentes, { delEditor = false } = {}) {
 // Las que la barra puede poner: las del asistente, nunca las del editor.
 const DE_LA_BARRA = Object.keys({ ...DE_CLAUDE, ...DE_CODEX_SOLO });
 const DEL_INSTALADOR = Object.keys({ ...DEL_EDITOR, ...DEL_EDITOR_CON_CLAUDE });
-
-// ── Leer los ajustes del editor, comentarios incluidos ─────────────────────
-//
-// El settings.json del editor admite comentarios y comas al final, y mucha gente
-// los tiene. Para saber qué claves tiene se quitan las dos cosas, fuera de las
-// cadenas, y se lee. Si ni así se entiende, devuelve null: no se toca.
-function leerJsonc(crudo) {
-  // El Bloc de notas de Windows guarda con una marca delante (BOM) que el
-  // editor no tiene en cuenta y `JSON.parse` no traga.
-  const texto = String(crudo).replace(/^\uFEFF/, '');
-  if (!texto.trim()) return {};
-  let sin = '';
-  let dentro = false;
-  for (let i = 0; i < texto.length; i += 1) {
-    const c = texto[i];
-    if (dentro) {
-      sin += c;
-      if (c === '\\') { sin += texto[i + 1] || ''; i += 1; } else if (c === '"') dentro = false;
-    } else if (c === '"') {
-      dentro = true;
-      sin += c;
-    } else if (c === '/' && texto[i + 1] === '/') {
-      while (i < texto.length && texto[i] !== '\n') i += 1;
-      sin += '\n';
-    } else if (c === '/' && texto[i + 1] === '*') {
-      const fin = texto.indexOf('*/', i + 2);
-      if (fin === -1) return null;
-      i = fin + 1;
-    } else sin += c;
-  }
-  // Las comas que se quedan delante de un cierre, fuera de las cadenas.
-  let limpio = '';
-  dentro = false;
-  for (let i = 0; i < sin.length; i += 1) {
-    const c = sin[i];
-    if (dentro) {
-      limpio += c;
-      if (c === '\\') { limpio += sin[i + 1] || ''; i += 1; } else if (c === '"') dentro = false;
-    } else if (c === '"') {
-      dentro = true;
-      limpio += c;
-    } else if (c === ',' && /^\s*[}\]]/.test(sin.slice(i + 1))) {
-      // se salta
-    } else limpio += c;
-  }
-  try {
-    const datos = JSON.parse(limpio);
-    return datos && typeof datos === 'object' && !Array.isArray(datos) ? datos : null;
-  } catch {
-    return null;
-  }
-}
+const SUYAS = [...DEL_INSTALADOR, ...DE_LA_BARRA];
 
 const tiene = (objeto, clave) => Object.prototype.hasOwnProperty.call(objeto, clave);
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -194,13 +144,25 @@ function apuntar(carpeta, { puestas, respetadas }) {
   }, null, 2)}\n`);
 }
 
+// Lo que ponía el instalador de antes de la 163, que no dejaba constancia
+// (decisión 71): las cinco claves, con estos valores. Al reinstalar encima, si
+// siguen así y no hay constancia, son nuestras y desinstalar las quita.
+const DE_ANTES = {
+  'security.workspace.trust.enabled': false,
+  'update.mode': 'none',
+  'update.showReleaseNotes': false,
+  'telemetry.telemetryLevel': 'off',
+  'extensions.ignoreRecommendations': true,
+};
+
 // ── Poner lo que falta ─────────────────────────────────────────────────────
 //
 // Lo mismo para el instalador, que escribe el fichero, y para la barra, que
 // escribe por el editor. Cada uno dice cómo se sabe si una clave ya la tiene
 // decidida (`laTiene`) y cómo se escribe (`escribir`, que devuelve las que ha
 // podido poner, o null si no ha podido con nada).
-async function ponerLoQueFalta({ carpeta, toca, laTiene, escribir }) {
+async function ponerLoQueFalta({ carpeta, toca, laTiene, escribir, valorDe }) {
+  const habiaConstancia = fs.existsSync(path.join(carpeta, CONSTANCIA));
   const constancia = leerConstancia(carpeta);
   if (!constancia) return { hecho: 'ilegible', puestas: [], respetadas: [] };
 
@@ -208,18 +170,23 @@ async function ponerLoQueFalta({ carpeta, toca, laTiene, escribir }) {
   const nuevas = Object.keys(toca).filter((c) => !miradas.has(c));
   if (!nuevas.length) return { hecho: 'nada', puestas: [], respetadas: [] };
 
-  const respetadas = nuevas.filter((c) => laTiene(c));
-  const faltan = nuevas.filter((c) => !respetadas.includes(c));
+  // Sin constancia, lo que ya vale lo que ponía el instalador de antes lo
+  // puso él, no la persona: se cuenta como nuestro (si no, desinstalar lo
+  // dejaría como si lo hubiera decidido ella).
+  const deAntes = (c) => !habiaConstancia && Boolean(valorDe) && tiene(DE_ANTES, c) && igual(valorDe(c), DE_ANTES[c]);
+  const heredadas = nuevas.filter((c) => laTiene(c) && deAntes(c));
+  const respetadas = nuevas.filter((c) => laTiene(c) && !heredadas.includes(c));
+  const faltan = nuevas.filter((c) => !respetadas.includes(c) && !heredadas.includes(c));
   const puestas = faltan.length ? await escribir(Object.fromEntries(faltan.map((c) => [c, toca[c]]))) : [];
   if (!puestas) return { hecho: 'ilegible', puestas: [], respetadas: [] };
   // Lo que no se ha podido escribir no se apunta: se mira otra vez la próxima.
-  if (!puestas.length && !respetadas.length) return { hecho: 'nada', puestas, respetadas };
+  if (!puestas.length && !respetadas.length && !heredadas.length) return { hecho: 'nada', puestas, respetadas };
 
   apuntar(carpeta, {
-    puestas: { ...constancia.puestas, ...Object.fromEntries(puestas.map((c) => [c, toca[c]])) },
+    puestas: { ...constancia.puestas, ...Object.fromEntries([...heredadas, ...puestas].map((c) => [c, toca[c]])) },
     respetadas: [...constancia.respetadas, ...respetadas],
   });
-  return { hecho: puestas.length ? 'puesto' : 'nada', puestas, respetadas };
+  return { hecho: puestas.length ? 'puesto' : 'nada', puestas, respetadas, heredadas };
 }
 
 // Dónde guarda el editor los ajustes de la persona.
@@ -243,6 +210,7 @@ async function ponerEnElFichero({ fichero = ficheroDeUsuario(), asistentes, delE
     carpeta: path.dirname(fichero),
     toca: queToca(asistentes, { delEditor }),
     laTiene: (clave) => tiene(actuales, clave),
+    valorDe: (clave) => actuales[clave],
     escribir: (nuevos) => {
       const r = escribirAjustes(fichero, nuevos, 'los ajustes del editor', anotar);
       return r.hecho === 'ilegible' ? null : r.claves;
@@ -274,7 +242,9 @@ function quitar({ fichero = ficheroDeUsuario() } = {}) {
   const crudo = fs.readFileSync(fichero, 'utf8');
   const actuales = leerJsonc(crudo);
   if (!actuales) return { hecho: 'ilegible', quitadas: [], fichero };
-  const nuestras = Object.keys(constancia.puestas).filter((c) => tiene(actuales, c) && igual(actuales[c], constancia.puestas[c]));
+  // Solo lo que de verdad ponemos: una constancia escrita a mano no puede
+  // hacer quitar otra cosa.
+  const nuestras = Object.keys(constancia.puestas).filter((c) => SUYAS.includes(c)).filter((c) => tiene(actuales, c) && igual(actuales[c], constancia.puestas[c]));
 
   let quitadas = [];
   if (nuestras.length) {
@@ -294,6 +264,10 @@ function quitar({ fichero = ficheroDeUsuario() } = {}) {
       }).join('\n');
       quitadas = [...fuera];
     }
+    // Quitar líneas a ojo puede dejar el fichero sin entender (una clave en
+    // dos líneas, una coma de más): si no se lee, no se escribe y la
+    // constancia se queda.
+    if (quitadas.length && !leerJsonc(nuevo)) return { hecho: 'ilegible', quitadas: [], fichero };
     if (quitadas.length) {
       fs.copyFileSync(fichero, `${fichero}.antes-de-desinstalar`);
       // Hay quien tiene sus ajustes en otro sitio y aquí un enlace: se escribe

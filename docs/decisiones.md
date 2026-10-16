@@ -6629,8 +6629,6 @@ que se quedaba pendiente de antes se olvida.
 - `chat.disableAIFeatures` y el idioma de Codex, propuestos arriba.
 - El editor en español: el paquete de idioma y `locale` en `argv.json` van fuera de los ajustes de usuario.
   Propuesto.
-- Volver a instalar sobre una instalación de antes de esta versión: lo que puso aquella cuenta ahora como
-  suyo, y al desinstalar se queda.
 - La barra en un perfil del editor que no es el de siempre: la constancia va al lado de los ajustes de ese
   perfil, y los desinstaladores miran los de siempre.
 - No se ha visto en un VS Code de verdad el aviso del enlace la primera vez, ni que sin él no salga.
@@ -6683,3 +6681,38 @@ solo para todo el editor», que confirma los ámbitos leídos en el código; y `
 
 La que sigue viva es a propósito: que el módulo dé por defecto lo del editor también a la barra. No cambia
 nada porque la guarda de `lo-del-editor.js` lo quita; sin la guarda, cae.
+
+### La revisión
+
+La revisión adversaria (16-10-2026) encontró dos fallos medios y tres bajos. Arreglados, cada uno con su
+prueba en `humo.js` («los ajustes del editor: se insertan dentro del objeto…»):
+
+- **Claves dentro de un comentario del final (medio).** Se buscaba el `}` de cierre con el último del texto:
+  con `// fin }` o un comentario de bloque detrás, las claves caían dentro del comentario, el `settings.json`
+  quedaba sin poder leerse (el editor entonces ignora todos los ajustes de esa persona) y la constancia decía
+  `puestas: 10`. Ahora el cierre lo busca el mismo lector que salta cadenas y comentarios, y **todo lo que se
+  escribe se lee antes con `leerJsonc`**: lo suyo como estaba y lo nuestro con su valor. Si no se lee, no se
+  escribe, se devuelve `ilegible` y no se apunta nada. De paso, `ajustes-del-editor.js` ya no lleva su propia
+  copia de `leerJsonc`: usa la de `ajustes.js`, para que dos copias no lean distinto.
+- **Reinstalar sobre una instalación de antes (medio).** Las cinco claves que ponía el instalador viejo
+  (`security.workspace.trust.enabled`, `update.mode`, `update.showReleaseNotes`, `telemetry.telemetryLevel`,
+  `extensions.ignoreRecommendations`, decisión 71) se tomaban por decisiones de la persona y desinstalar no
+  las quitaba. Ahora, sin constancia y con exactamente el valor que ponía el instalador viejo, se cuentan
+  como nuestras. Con otro valor siguen siendo suyas; con constancia ya hecha, no se toca nada. Riesgo
+  aceptado: quien ya tuviera esos mismos valores puestos a mano antes de instalar por primera vez con la 163
+  los verá quitar al desinstalar; son los mismos valores que habría puesto el instalador.
+- **`extensions.confirmedUriHandlerExtensionIds` se queda (bajo, decidido).** El enlace de Claude solo deja
+  el texto escrito en la caja: lo envía la persona; y el navegador sigue preguntando antes de abrir el
+  editor. Riesgo que queda: una página web puede dejar un texto escrito en la caja de Claude sin que el
+  editor pregunte, y confiar en que la persona no lo envíe sin leerlo. No ejecuta nada por sí solo. En un
+  ordenador con la confianza ya apagada por esta misma instalación, compensa.
+- **Una constancia a mano (bajo).** `quitar` filtra lo que la constancia dice que se puso contra las claves
+  que de verdad ponemos (`DEL_INSTALADOR` y `DE_LA_BARRA`): una constancia escrita a mano no puede hacer
+  quitar otra cosa.
+- **Escribir entero o nada (bajo).** `escribirAjustes` escribía con `writeFileSync` directo. Ahora escribe un
+  temporal en la misma carpeta y lo cambia de golpe con `rename`, conservando los permisos del fichero y sin
+  escribir a través de un enlace (devuelve `enlace`). Al quitar, la coma que dejó nuestra línea en la
+  anterior se queda (el editor la admite) y los comentarios no se mueven; y si lo que quedaría no se lee, no
+  se escribe y la constancia se queda (esa guarda no tiene prueba: con las líneas exactas que quitamos no se
+  ha encontrado un caso que la active).
+

@@ -15924,6 +15924,104 @@ exec git "$@"
     return 'puesto · lo decidido, respetado · una vez · Claude, Codex y los dos · y se quita solo lo nuestro';
   });
 
+  await comprobar('los ajustes del editor: se insertan dentro del objeto, se validan antes de escribir, se escriben enteros y desinstalar quita solo lo que ponemos (revisión de la 163)', async () => {
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const aj = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes.js'));
+    const nueva = () => fs.mkdtempSync(path.join(os.tmpdir(), 'editor-ajustes-'));
+    const fichero = (c) => path.join(c, 'settings.json');
+    const texto = (c) => fs.readFileSync(fichero(c), 'utf8');
+    const leer = (c) => ade.leerJsonc(texto(c));
+    const poner = (c, asistentes = ['claude']) => ade.ponerEnElFichero({ fichero: fichero(c), asistentes });
+    const DE_ANTES = { 'security.workspace.trust.enabled': false, 'update.mode': 'none', 'update.showReleaseNotes': false, 'telemetry.telemetryLevel': 'off', 'extensions.ignoreRecommendations': true };
+
+    // 1. La llave que cierra no es la última `}` del texto: un comentario del final, o una cadena, no cuentan.
+    const FINALES = {
+      'un comentario de línea con llave': ['{\n  "a": 1\n}\n// fin }\n', '// fin }'],
+      'una coma al final y un comentario de bloque de varias líneas': ['{\n  "a": 1,\n}\n/* notas\n   } de la persona\n*/\n', '} de la persona'],
+      'una llave dentro de una cadena': ['{\n  "a": "}",\n  "b": 2 // }\n}\n', '2, // }'],
+      'la marca del Bloc de notas y un comentario al final': ['﻿{\n  "a": 1 /* } */\n}\n// }', '/* } */'],
+    };
+    for (const [que, [crudo, suyo]] of Object.entries(FINALES)) {
+      const c = nueva();
+      fs.writeFileSync(fichero(c), crudo);
+      const hecho = await poner(c);
+      assert.equal(hecho.hecho, 'puesto', `con ${que}, no se pone`);
+      const dentro = leer(c);
+      assert.ok(dentro, `con ${que}, los ajustes quedan sin poder leerse`);
+      assert.equal(dentro['claudeCode.focusView'], true, `con ${que}, las claves caen fuera del objeto`);
+      assert.ok(dentro.a === 1 || dentro.a === '}', `con ${que}, se pierde lo suyo`);
+      assert.ok(texto(c).includes(suyo), `con ${que}, se pierde su comentario`);
+      const apuntadas = Object.keys(ade.leerConstancia(c).puestas);
+      assert.ok(apuntadas.length > 0 && apuntadas.every((k) => k in dentro), `con ${que}, la constancia dice lo que no está`);
+      assert.equal(apuntadas.length, hecho.puestas.length);
+    }
+    assert.equal(aj.elCierre('{ "a": 1 }\n// }').cierre, 9, 'el cierre se busca a ojo');
+
+    // 1b. Si lo escrito no se lee, o no dice lo que tenía que decir, no se escribe.
+    assert.equal(aj.sigueBien('{ "a": 1, "b": 2 }', { a: 1 }, { b: 2 }), true);
+    assert.equal(aj.sigueBien('{ "a": 1 } // }', { a: 1 }, { b: 2 }), false, 'falta lo nuestro y se da por bueno');
+    assert.equal(aj.sigueBien('{ "a": 1,, "b": 2 }', { a: 1 }, { b: 2 }), false, 'se da por bueno un fichero que no se lee');
+    assert.equal(aj.sigueBien('{ "a": 2, "b": 2 }', { a: 1 }, { b: 2 }), false, 'se da por bueno uno con lo suyo cambiado');
+
+    // 2. Reinstalar sobre una instalación de antes, sin constancia: sus claves son nuestras.
+    const deAntes = nueva();
+    fs.writeFileSync(fichero(deAntes), JSON.stringify({ ...DE_ANTES, 'editor.fontSize': 15, 'update.mode': 'manual' }, null, 2));
+    const heredo = await poner(deAntes);
+    const apuntadasAntes = ade.leerConstancia(deAntes);
+    for (const k of ['security.workspace.trust.enabled', 'update.showReleaseNotes', 'telemetry.telemetryLevel', 'extensions.ignoreRecommendations']) {
+      assert.deepEqual(apuntadasAntes.puestas[k], DE_ANTES[k], `${k}, de la instalación de antes, no se cuenta como nuestra`);
+    }
+    assert.ok(!('update.mode' in apuntadasAntes.puestas) && apuntadasAntes.respetadas.includes('update.mode'), 'lo que valía otra cosa se cuenta como nuestro');
+    assert.ok(!('editor.fontSize' in apuntadasAntes.puestas));
+    assert.equal(heredo.hecho, 'puesto');
+    assert.equal(ade.quitar({ fichero: fichero(deAntes) }).hecho, 'quitado');
+    assert.deepEqual(leer(deAntes), { 'editor.fontSize': 15, 'update.mode': 'manual' }, 'desinstalar deja lo de la instalación de antes, o quita lo que decidió');
+    // Con constancia ya hecha, lo que vale lo de antes es suyo: no se cuenta como nuestro.
+    const yaMirada = nueva();
+    fs.writeFileSync(path.join(yaMirada, ade.CONSTANCIA), JSON.stringify({ puestas: {}, respetadas: [] }));
+    fs.writeFileSync(fichero(yaMirada), JSON.stringify({ 'update.mode': 'none' }));
+    await poner(yaMirada);
+    assert.ok(!('update.mode' in ade.leerConstancia(yaMirada).puestas), 'con constancia, lo que valía lo de antes se cuenta como nuestro');
+
+    // 4. Una constancia escrita a mano no hace quitar otra cosa.
+    const aMano = nueva();
+    const MANO = { 'editor.fontSize': 15, 'claudeCode.focusView': true, 'files.autoSave': 'afterDelay' };
+    fs.writeFileSync(fichero(aMano), JSON.stringify(MANO));
+    fs.writeFileSync(path.join(aMano, ade.CONSTANCIA), JSON.stringify({ puestas: MANO, respetadas: [] }));
+    ade.quitar({ fichero: fichero(aMano) });
+    assert.deepEqual(leer(aMano), { 'editor.fontSize': 15, 'files.autoSave': 'afterDelay' }, 'una constancia a mano hace quitar algo que no es nuestro, o no quita lo nuestro');
+
+    // 5. Entero o nada: se escribe al lado y se cambia de golpe, con los permisos que tenía, y sin seguir enlaces.
+    if (process.platform !== 'win32') {
+      for (const crudo of ['{\n  "a": 1\n}\n', '{\n  "a": 1, // uno\n}\n']) {
+        const c = nueva();
+        fs.writeFileSync(fichero(c), crudo);
+        fs.chmodSync(fichero(c), 0o600);
+        const antes = fs.statSync(fichero(c)).ino;
+        await poner(c);
+        assert.equal(fs.statSync(fichero(c)).mode & 0o777, 0o600, 'al escribir se pierden los permisos del fichero');
+        assert.notEqual(fs.statSync(fichero(c)).ino, antes, 'se escribe encima del fichero, no al lado y de golpe');
+        assert.deepEqual(fs.readdirSync(c).filter((n) => n.includes('.executive-lab-') && n !== ade.CONSTANCIA), [], 'queda un temporal');
+        assert.ok(leer(c)['claudeCode.focusView']);
+      }
+      const dotfiles = nueva();
+      const conEnlace = nueva();
+      fs.writeFileSync(path.join(dotfiles, 'ajustes.json'), '{ "a": 1, // x\n}');
+      fs.symlinkSync(path.join(dotfiles, 'ajustes.json'), fichero(conEnlace));
+      assert.equal(aj.escribirAjustes(fichero(conEnlace), { b: 2 }, 'x').hecho, 'enlace');
+      assert.equal(fs.readFileSync(path.join(dotfiles, 'ajustes.json'), 'utf8'), '{ "a": 1, // x\n}', 'se escribe a través del enlace');
+      assert.ok(fs.lstatSync(fichero(conEnlace)).isSymbolicLink());
+    }
+    // Al quitar con comentarios, lo suyo no se mueve y el fichero se sigue leyendo (la coma de antes se queda: es válida).
+    const conComentario = nueva();
+    fs.writeFileSync(fichero(conComentario), '{\n  "a": 1, // uno\n  /* dos */ "b": 2\n}\n');
+    await poner(conComentario);
+    ade.quitar({ fichero: fichero(conComentario) });
+    assert.deepEqual(leer(conComentario), { a: 1, b: 2 });
+    assert.ok(texto(conComentario).includes('// uno') && texto(conComentario).includes('/* dos */'), 'al quitar se mueve o se pierde un comentario');
+    return 'la llave que cierra · lo escrito se lee o no se escribe · lo de antes es nuestro · solo se quita lo propio · entero o nada';
+  });
+
   await comprobar('la barra pone lo del asistente al arrancar si falta: una vez, sin pisar, nunca lo del editor, y lo dice (decisión 163)', async () => {
     const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
     const proveedor = vscode.registrado.proveedor;
