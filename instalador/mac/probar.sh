@@ -130,10 +130,10 @@ comprobar 'la extensión viaja, y lleva el arnés dentro' bash -c '
   echo "arnés e historial dentro"'
 
 comprobar 'preparar.js tiene al lado lo que necesita' bash -c '
-  for m in preparar.js git.js ajustes.js; do
+  for m in preparar.js git.js ajustes.js ajustes-del-editor.js; do
     [ -f "'"$AQUI"'/carga/$m" ] || { echo "falta $m"; exit 1; }
   done
-  echo "los tres módulos"'
+  echo "los cuatro módulos"'
 
 # Sin certificado Developer ID no se puede firmar, y en la máquina macOS de GitHub
 # no lo hay: ahí se anota que no se ha mirado, en vez de darla por mala. Todo lo
@@ -179,14 +179,17 @@ comprobar 'el arranque del shell lleva nuestro Node' bash -c '
   grep -q ">>> Executive Lab >>>" "'"$CASA"'/.zprofile" 2>/dev/null || { echo "falta el bloque en .zprofile"; exit 1; }
   echo "en .zprofile"'
 
-comprobar 'los cinco ajustes de programa están puestos' bash -c '
+# Lo del editor y lo de Claude (decisión 163), y la constancia de lo puesto: sin
+# ella, desinstalar no sabría qué es nuestro y qué es suyo.
+comprobar 'lo del editor está puesto, y apuntado para desinstalar' bash -c '
   [ -d "'"$APP"'" ] && [ -f "'"$AJUSTES"'" ] || { echo "SALTADA"; exit 0; }
-  n=0
-  for clave in security.workspace.trust.enabled update.mode telemetry.telemetryLevel; do
-    grep -q "\"$clave\"" "'"$AJUSTES"'" && n=$((n + 1))
+  for clave in security.workspace.trust.enabled update.mode workbench.startupEditor claudeCode.focusView; do
+    grep -q "\"$clave\"" "'"$AJUSTES"'" || { echo "falta $clave"; exit 1; }
   done
-  [ "$n" -ge 3 ] || { echo "solo $n de 3 de muestra"; exit 1; }
-  echo "los de muestra, puestos"'
+  constancia="$(dirname "'"$AJUSTES"'")/.executive-lab-ajustes.json"
+  [ -f "$constancia" ] || { echo "no queda constancia de lo puesto: desinstalar no sabría qué quitar"; exit 1; }
+  grep -q "claudeCode.focusView" "$constancia" || { echo "la constancia no dice lo que se puso"; exit 1; }
+  echo "la confianza, la bienvenida y la vista enfocada, con su constancia"'
 
 comprobar 'las dos piezas del editor están instaladas' bash -c '
   ext="'"$CASA"'/.vscode/extensions"

@@ -105,11 +105,27 @@ function LimpiarAjustes($fichero, $donde) {
   Nota "$fuera ajustes fuera de $donde (copia al lado)"
 }
 
-LimpiarAjustes (Join-Path $env:APPDATA 'Code\User\settings.json') 'los ajustes del editor'
+# Lo que puso la instalacion en los ajustes del editor (decision 163): solo lo
+# que dice su constancia, y solo si sigue con el valor que dejo. Lo que esa
+# persona ya tenia decidido no se toca. Antes de borrar la app: hace falta su
+# node y su modulo.
+$nodeDeLaApp = Join-Path $app 'runtime\node.exe'
+$moduloAjustes = Join-Path $app 'ajustes-del-editor.js'
+$constancia = Join-Path $env:APPDATA 'Code\User\.executive-lab-ajustes.json'
+if (Test-Path $constancia) {
+  if ((Test-Path $nodeDeLaApp) -and (Test-Path $moduloAjustes)) {
+    $dicho = & $nodeDeLaApp $moduloAjustes --quitar 2>&1
+    Nota "$dicho"
+  } else {
+    Queda "No encuentro con que quitar lo que puse en los ajustes del editor (esta en $constancia)"
+  }
+} else {
+  # Una instalacion de antes no dejaba constancia: se limpia como entonces.
+  LimpiarAjustes (Join-Path $env:APPDATA 'Code\User\settings.json') 'los ajustes del editor'
+}
 
 # El control remoto de Claude, si lo puso la instalacion y sigue puesto
 # (decision 143). Antes de borrar la app: hace falta su node y su modulo.
-$nodeDeLaApp = Join-Path $app 'runtime\node.exe'
 $moduloControl = Join-Path $app 'control-remoto.js'
 if ((Test-Path $nodeDeLaApp) -and (Test-Path $moduloControl)) {
   $dicho = & $nodeDeLaApp $moduloControl --quitar 2>&1

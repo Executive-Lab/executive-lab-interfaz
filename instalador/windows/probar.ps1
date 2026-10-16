@@ -109,6 +109,22 @@ Comprobar 'VS Code y las dos extensiones' {
   }
   'las dos'
 }
+# Lo del editor y lo de Claude (decision 163), y la constancia de lo puesto: sin
+# ella, desinstalar no sabria que es nuestro y que es suyo. Se mira el texto, que
+# con comentarios ConvertFrom-Json no lo lee.
+Comprobar 'lo del editor esta puesto, y apuntado para desinstalar' {
+  $usuario = Join-Path $env:APPDATA 'Code\User'
+  $ajustes = Join-Path $usuario 'settings.json'
+  if (-not (Test-Path $ajustes)) { throw 'no hay ajustes del editor' }
+  $texto = Get-Content $ajustes -Raw
+  foreach ($clave in @('security.workspace.trust.enabled', 'update.mode', 'workbench.startupEditor', 'claudeCode.focusView')) {
+    if ($texto -notmatch ('"' + [regex]::Escape($clave) + '"\s*:')) { throw "falta $clave" }
+  }
+  $constancia = Join-Path $usuario '.executive-lab-ajustes.json'
+  if (-not (Test-Path $constancia)) { throw 'no queda constancia de lo puesto: desinstalar no sabria que quitar' }
+  if ((Get-Content $constancia -Raw) -notmatch 'claudeCode\.focusView') { throw 'la constancia no dice lo que se puso' }
+  'la confianza, la bienvenida y la vista enfocada, con su constancia'
+}
 # El arnes tampoco viaja en la app: va dentro de la barra (el .vsix), que es
 # quien lo usa. Se busca donde lo deja el editor al instalarla.
 $rsc = Get-ChildItem -Path (Join-Path $env:USERPROFILE '.vscode\extensions') -Directory -Filter 'executivelab.arnes-ui-*' -ErrorAction SilentlyContinue |

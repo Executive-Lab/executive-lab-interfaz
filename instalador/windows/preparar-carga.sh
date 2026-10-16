@@ -37,7 +37,7 @@ for sobra in git harness skills; do
 done
 
 echo "▸ Lo nuestro"
-for modulo in preparar.js git.js ajustes.js control-remoto.js; do
+for modulo in preparar.js git.js ajustes.js ajustes-del-editor.js control-remoto.js; do
   cp "$RAIZ/instalador/comun/$modulo" "$CARGA/$modulo"
   echo "  carga/$modulo"
 done

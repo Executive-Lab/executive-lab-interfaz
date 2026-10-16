@@ -2416,6 +2416,73 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     return `${disfraz.clavesDeLaCarpeta(contexto).length} claves fuera de la carpeta`;
   });
 
+  await comprobar('la vista sencilla solo lleva lo que cabe en una carpeta, y lo de todo el editor va aparte (decisión 163)', async () => {
+    // Lo que el editor declara de programa o de máquina no se puede poner en una
+    // carpeta: lo rechaza, y el disfraz se lo quedaba pendiente en cada arranque.
+    // Así estaba la vista enfocada de Claude, que no se ponía nunca. Leído el
+    // 16-10-2026 en el código de VS Code (`ConfigurationScope`) y en el
+    // `package.json` de Claude Code 2.1.301.
+    const DE_PROGRAMA_O_DE_MAQUINA = [
+      'security.workspace.trust.enabled', 'update.mode', 'update.showReleaseNotes', 'telemetry.telemetryLevel',
+      'window.menuBarVisibility', 'workbench.welcomePage.walkthroughs.openOnInstall', 'extensions.confirmedUriHandlerExtensionIds',
+      'claudeCode.focusView', 'claudeCode.initialPermissionMode', 'claudeCode.environmentVariables', 'chatgpt.localeOverride',
+    ];
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const enLaCarpeta = JSON.parse(fs.readFileSync(path.join(RAIZ, 'media', 'disfraz.json'), 'utf8'));
+    for (const clave of DE_PROGRAMA_O_DE_MAQUINA) assert.ok(!(clave in enLaCarpeta), `${clave} no cabe en una carpeta y está en la vista sencilla`);
+    // Y lo que va en los de usuario no está también en la carpeta: dos sitios para
+    // lo mismo. Salvo la bienvenida, que hace falta en los dos: sin carpeta solo
+    // vale la de usuario, y con la barra sola, solo la de la carpeta.
+    const deUsuario = Object.keys(ade.queToca(['claude', 'codex'], { delEditor: true })).concat(Object.keys(ade.DE_CODEX_SOLO));
+    for (const clave of deUsuario) {
+      if (clave !== 'workbench.startupEditor') assert.ok(!(clave in enLaCarpeta), `${clave} está en los de usuario y en la carpeta`);
+    }
+
+    // Con un editor que rechaza en la carpeta lo que no cabe, como el de verdad,
+    // el disfraz no se deja nada pendiente.
+    const salida = vscode.window.createOutputChannel();
+    const antes = {
+      rechaza: vscode.guion.rechazaAjuste, mensajes: vscode.registrado.mensajes.length,
+      global: { ...vscode.registrado.ajustes.global }, workspace: { ...vscode.registrado.ajustes.workspace },
+      estado: contexto.globalState.get('disfraz'),
+    };
+    vscode.guion.rechazaAjuste = (clave, objetivo) => objetivo === vscode.ConfigurationTarget.Workspace && DE_PROGRAMA_O_DE_MAQUINA.includes(clave);
+    try {
+      vscode.registrado.ajustes.global = {};
+      vscode.registrado.ajustes.workspace = {};
+      await disfraz.volverAModoSencillo(contexto, salida);
+      assert.deepEqual(disfraz.estado(contexto).pendientes, [], 'el disfraz se queda claves pendientes que no caben en la carpeta');
+      assert.ok(!vscode.registrado.mensajes.slice(antes.mensajes).some((m) => /no admite ámbito de carpeta/.test(m)), 'el disfraz intenta poner en la carpeta algo que no cabe');
+
+      // Y lo que quedó pendiente de antes, que ya no es del disfraz, se olvida: la
+      // vista enfocada, puesta en los de usuario, se intentaba quitar de la carpeta
+      // en cada arranque.
+      vscode.registrado.ajustes.global['claudeCode.focusView'] = true;
+      await contexto.globalState.update('disfraz', { version: 2, pendientes: ['claudeCode.focusView'], quitado: false });
+      await disfraz.aplicar(contexto, salida);
+      assert.deepEqual(disfraz.estado(contexto).pendientes, [], 'lo pendiente de antes se intenta en cada arranque');
+      delete vscode.registrado.ajustes.global['claudeCode.focusView'];
+
+      // Una carpeta de antes, con la lista de primeros pasos de Claude escrita por
+      // la vista sencilla: ver el editor completo la quita de ella, y la salida
+      // de emergencia también, sin tocar la de usuario.
+      vscode.registrado.ajustes.workspace['claudeCode.hideOnboarding'] = true;
+      await disfraz.verEditorCompleto(contexto, salida);
+      assert.ok(!('claudeCode.hideOnboarding' in vscode.registrado.ajustes.workspace), 'la de antes se queda escrita en la carpeta');
+      vscode.registrado.ajustes.workspace['claudeCode.hideOnboarding'] = true;
+      vscode.registrado.ajustes.global['claudeCode.hideOnboarding'] = true;
+      await disfraz.quitar(contexto, salida);
+      assert.ok(!('claudeCode.hideOnboarding' in vscode.registrado.ajustes.workspace), 'quitarlo de todo no la quita de la carpeta');
+      assert.equal(vscode.registrado.ajustes.global['claudeCode.hideOnboarding'], true, 'quitar el aspecto se lleva lo que el instalador puso en los de usuario');
+      return `${Object.keys(enLaCarpeta).length} en la carpeta · ${deUsuario.length} en los de usuario`;
+    } finally {
+      vscode.guion.rechazaAjuste = antes.rechaza;
+      vscode.registrado.ajustes.global = antes.global;
+      vscode.registrado.ajustes.workspace = antes.workspace;
+      await contexto.globalState.update('disfraz', antes.estado);
+    }
+  });
+
   // ---------------------------------------------- que no se separen las copias
 
   await comprobar('nada de lo que está en git está a la vez ignorado', () => {
@@ -15600,6 +15667,263 @@ exec git "$@"
     assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerElControlRemoto\(\)/, 'el instalador del Mac no lo pone');
     assert.match(fs.readFileSync(path.join(RAIZ, 'preparar-paquete.js'), 'utf8'), /'control-remoto\.js'/, 'la barra no lo lleva dentro');
     return 'puesto · lo suyo intacto · lo que decidió, respetado · y se quita solo lo nuestro';
+  });
+
+  await comprobar('el instalador lo deja todo puesto: lo que falta se pone, lo decidido no se pisa y desinstalar quita solo lo suyo (decisión 163)', async () => {
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const nueva = () => fs.mkdtempSync(path.join(os.tmpdir(), 'editor-ajustes-'));
+    const fichero = (c) => path.join(c, 'settings.json');
+    const texto = (c) => fs.readFileSync(fichero(c), 'utf8');
+    const leer = (c) => ade.leerJsonc(texto(c));
+    const apuntado = (c) => ade.leerConstancia(c);
+    const poner = (c, asistentes) => ade.ponerEnElFichero({ fichero: fichero(c), asistentes });
+
+    // Dónde guarda el editor los ajustes de la persona, en cada sistema.
+    assert.equal(ade.ficheroDeUsuario({ APPDATA: path.join('C', 'Roaming') }, 'win32', 'casa'), path.join('C', 'Roaming', 'Code', 'User', 'settings.json'));
+    assert.equal(ade.ficheroDeUsuario({}, 'darwin', 'casa'), path.join('casa', 'Library', 'Application Support', 'Code', 'User', 'settings.json'));
+    assert.equal(ade.ficheroDeUsuario({}, 'linux', 'casa'), path.join('casa', '.config', 'Code', 'User', 'settings.json'));
+
+    // Con qué asistentes, según lo elegido (decisión 158).
+    assert.deepEqual(ade.asistentesDe('losDos'), ['claude', 'codex']);
+    assert.deepEqual(ade.asistentesDe('codex', ['anthropic']), ['codex'], 'lo elegido no manda');
+    assert.deepEqual(ade.asistentesDe('automatico', ['codex']), ['codex'], 'en automático no cuentan los que están puestos');
+    assert.deepEqual(ade.asistentesDe('automatico', []), []);
+
+    // Sin nada, con Claude: lo del editor y lo de Claude, y nada de Codex.
+    const vacia = nueva();
+    let hecho = await poner(vacia, ['claude']);
+    assert.equal(hecho.hecho, 'puesto');
+    const conClaude = leer(vacia);
+    assert.equal(conClaude['security.workspace.trust.enabled'], false, 'sin la confianza apagada, Claude no arranca en una carpeta nueva');
+    assert.equal(conClaude['claudeCode.focusView'], true, 'la vista enfocada no se pone');
+    assert.equal(conClaude['claudeCode.hideOnboarding'], true);
+    assert.equal(conClaude['workbench.startupEditor'], 'none', 'sin carpeta sale la bienvenida del editor');
+    assert.equal(conClaude['workbench.welcomePage.walkthroughs.openOnInstall'], false);
+    assert.deepEqual(conClaude['extensions.confirmedUriHandlerExtensionIds'], ['anthropic.claude-code'], 'el editor pide permiso en el primer botón');
+    for (const clave of ['update.mode', 'update.showReleaseNotes', 'telemetry.telemetryLevel', 'extensions.ignoreRecommendations']) assert.ok(clave in conClaude, `${clave}, de antes, ya no se pone`);
+    assert.ok(!('chatgpt.openOnStartup' in conClaude), 'con Claude se pone lo de Codex');
+    assert.deepEqual(apuntado(vacia).puestas, conClaude, 'la constancia no dice lo que se puso');
+
+    // Una vez por ordenador: otra vez no cambia nada; y lo que quitó, no vuelve.
+    const unaVez = texto(vacia);
+    assert.equal((await poner(vacia, ['claude'])).hecho, 'nada');
+    assert.equal(texto(vacia), unaVez, 'la segunda vez se vuelve a escribir');
+    const sinLaVista = { ...conClaude };
+    delete sinLaVista['claudeCode.focusView'];
+    fs.writeFileSync(fichero(vacia), JSON.stringify(sinLaVista));
+    assert.equal((await poner(vacia, ['claude'])).hecho, 'nada');
+    assert.ok(!('claudeCode.focusView' in leer(vacia)), 'lo que quitó vuelve');
+
+    // Lo que ya tenía decidido no se pisa, comentarios incluidos.
+    const suya = nueva();
+    // Con una clave nuestra comentada: al insertar como texto se salta, y no se
+    // puede apuntar como puesta lo que no se ha escrito.
+    const SUYO = '{\n  // lo mío\n  // "update.showReleaseNotes": true,\n  "security.workspace.trust.enabled": true,\n  "claudeCode.focusView": false,\n  "editor.fontSize": 15, // grande\n}\n';
+    fs.writeFileSync(fichero(suya), SUYO);
+    hecho = await poner(suya, ['claude']);
+    assert.deepEqual(hecho.respetadas.sort(), ['claudeCode.focusView', 'security.workspace.trust.enabled']);
+    assert.ok(!hecho.puestas.includes('security.workspace.trust.enabled') && !hecho.puestas.includes('claudeCode.focusView'));
+    const conLoSuyo = leer(suya);
+    assert.equal(conLoSuyo['security.workspace.trust.enabled'], true, 'se pisa la confianza que decidió');
+    assert.equal(conLoSuyo['claudeCode.focusView'], false, 'se pisa la vista que decidió');
+    assert.equal(conLoSuyo['editor.fontSize'], 15);
+    assert.equal(conLoSuyo['update.mode'], 'none', 'lo que falta no se pone porque tenga comentarios');
+    assert.ok(texto(suya).includes('// lo mío') && texto(suya).includes('// grande'), 'se pierden sus comentarios');
+    assert.deepEqual(apuntado(suya).respetadas.sort(), ['claudeCode.focusView', 'security.workspace.trust.enabled'], 'lo suyo no queda apuntado como suyo');
+    assert.ok(!('update.showReleaseNotes' in conLoSuyo) && !('update.showReleaseNotes' in apuntado(suya).puestas), 'se apunta como puesto lo que no se ha escrito');
+    // Y si después lo borra, no se pone el nuestro: ya se miró.
+    fs.writeFileSync(fichero(suya), texto(suya).replace('  "claudeCode.focusView": false,\n', ''));
+    await poner(suya, ['claude']);
+    assert.ok(!('claudeCode.focusView' in leer(suya)), 'lo que era suyo y borró, se pone');
+
+    // Con Codex, lo suyo y nada de Claude; con los dos, lo de Claude y sin abrir Codex al arrancar.
+    const deCodex = nueva();
+    await poner(deCodex, ['codex']);
+    assert.equal(leer(deCodex)['chatgpt.openOnStartup'], true, 'con Codex no se abre solo');
+    assert.equal(leer(deCodex)['security.workspace.trust.enabled'], false);
+    assert.ok(!Object.keys(leer(deCodex)).some((c) => c.startsWith('claudeCode.')), 'con Codex se pone lo de Claude');
+    assert.ok(!('extensions.confirmedUriHandlerExtensionIds' in leer(deCodex)), 'con Codex se deja pasar el enlace de Claude');
+    const deLosDos = nueva();
+    await poner(deLosDos, ['claude', 'codex']);
+    assert.equal(leer(deLosDos)['claudeCode.focusView'], true);
+    assert.ok(!('chatgpt.openOnStartup' in leer(deLosDos)), 'con los dos, Codex se abre encima del de la carpeta');
+
+    // Lo que no se entiende no se toca: sus ajustes, o la constancia.
+    const rota = nueva();
+    fs.writeFileSync(fichero(rota), '{ "a": 1, ');
+    assert.equal((await poner(rota, ['claude'])).hecho, 'ilegible');
+    assert.equal(texto(rota), '{ "a": 1, ', 'se toca un fichero que no se entiende');
+    assert.ok(!fs.existsSync(path.join(rota, ade.CONSTANCIA)), 'se apunta algo que no se ha puesto');
+    const mala = nueva();
+    fs.writeFileSync(path.join(mala, ade.CONSTANCIA), 'no es nada');
+    assert.equal((await poner(mala, ['claude'])).hecho, 'ilegible');
+    assert.ok(!fs.existsSync(fichero(mala)), 'con la constancia rota, se ponen cosas sin poder apuntarlas');
+    // Un fichero vacío es como no tenerlo.
+    const enBlanco = nueva();
+    fs.writeFileSync(fichero(enBlanco), '\n');
+    assert.equal((await poner(enBlanco, ['codex'])).hecho, 'puesto');
+    assert.equal(leer(enBlanco)['chatgpt.openOnStartup'], true);
+
+    // Desinstalar: lo nuestro que sigue igual, y nada más.
+    const alQuitar = { ...leer(vacia), 'editor.fontSize': 18, 'workbench.startupEditor': 'welcomePage' };
+    fs.writeFileSync(fichero(vacia), JSON.stringify(alQuitar, null, 2));
+    hecho = ade.quitar({ fichero: fichero(vacia) });
+    assert.equal(hecho.hecho, 'quitado');
+    assert.deepEqual(leer(vacia), { 'editor.fontSize': 18, 'workbench.startupEditor': 'welcomePage' }, 'desinstalar se lleva algo suyo, o deja algo nuestro');
+    assert.ok(!fs.existsSync(path.join(vacia, ade.CONSTANCIA)), 'la constancia se queda');
+    assert.equal(ade.quitar({ fichero: fichero(vacia) }).hecho, 'noEraNuestro');
+    // Con comentarios: solo nuestras líneas, y lo suyo se queda.
+    hecho = ade.quitar({ fichero: fichero(suya) });
+    assert.equal(hecho.hecho, 'quitado');
+    const tras = leer(suya);
+    assert.ok(tras, 'desinstalar deja sus ajustes sin poder leerse');
+    assert.deepEqual(tras, { 'security.workspace.trust.enabled': true, 'editor.fontSize': 15 }, 'con comentarios, desinstalar no quita lo nuestro o quita lo suyo');
+    assert.ok(texto(suya).includes('// lo mío') && texto(suya).includes('// grande'), 'desinstalar se lleva sus comentarios');
+    // Con sus ajustes en otro sitio y un enlace aquí, el enlace se queda.
+    if (process.platform !== 'win32') {
+      const dotfiles = nueva();
+      const conEnlace = nueva();
+      fs.writeFileSync(path.join(dotfiles, 'ajustes.json'), '{}');
+      fs.symlinkSync(path.join(dotfiles, 'ajustes.json'), fichero(conEnlace));
+      await poner(conEnlace, ['claude']);
+      ade.quitar({ fichero: fichero(conEnlace) });
+      assert.ok(fs.lstatSync(fichero(conEnlace)).isSymbolicLink(), 'desinstalar cambia su enlace por un fichero');
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dotfiles, 'ajustes.json'), 'utf8')), {}, 'desinstalar no quita lo nuestro de su fichero de verdad');
+    }
+
+    // Suelto, que es como lo llaman los desinstaladores.
+    const cp = require('node:child_process');
+    const suelta = nueva();
+    await poner(suelta, ['codex']);
+    const dicho = cp.spawnSync(process.execPath, [path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'), '--quitar', '--ajustes', fichero(suelta)], { encoding: 'utf8' }).stdout.trim();
+    assert.match(dicho, /^ajustes del editor: quitado \(\d+\)$/);
+    assert.deepEqual(leer(suelta), {}, 'suelto, no se quita');
+
+    // `preparar.js`, el de Windows, con lo que elige quien instala.
+    const preparar = require(path.join(RAIZ, '..', 'instalador', 'comun', 'preparar.js'));
+    const deWindows = nueva();
+    await preparar.ajustesDelEditor('codex', { fichero: fichero(deWindows) });
+    assert.equal(leer(deWindows)['chatgpt.openOnStartup'], true, 'preparar.js no pone lo de Codex');
+    assert.ok(!('claudeCode.focusView' in leer(deWindows)), 'preparar.js pone lo de Claude con Codex');
+    const deWindowsConLosDos = nueva();
+    await preparar.ajustesDelEditor('losDos', { fichero: fichero(deWindowsConLosDos) });
+    assert.equal(leer(deWindowsConLosDos)['claudeCode.focusView'], true, 'preparar.js, con los dos, no pone lo de Claude');
+    assert.deepEqual(preparar.asistentesDe('losDos'), ['claude', 'codex']);
+    assert.deepEqual(preparar.asistentesDe('otra cosa'), ['claude'], 'sin entender lo elegido, no se pone Claude como antes');
+    const lineas = preparar.registro.length;
+    preparar.controlRemoto('losDos');
+    assert.match(preparar.registro.slice(lineas).join('\n'), /Control remoto/, 'con los dos no se pone el control remoto');
+    const lineas2 = preparar.registro.length;
+    preparar.controlRemoto('codex');
+    assert.equal(preparar.registro.length, lineas2, 'con Codex se pone el control remoto de Claude');
+
+    // Y viaja: en las dos cargas, en el .exe, en la barra, y lo quitan los tres desinstaladores.
+    const leerTexto = (...p) => fs.readFileSync(path.join(RAIZ, '..', ...p), 'utf8');
+    assert.match(leerTexto('instalador', 'mac', 'construir.sh'), /for modulo in [^;]*ajustes-del-editor\.js/, 'el .dmg no lo lleva');
+    assert.match(leerTexto('instalador', 'windows', 'preparar-carga.sh'), /for modulo in [^;]*ajustes-del-editor\.js/, 'el .exe no lo lleva');
+    assert.match(leerTexto('instalador', 'windows', 'ExecutiveLab.iss'), /Source: "carga\\ajustes-del-editor\.js"/, 'el .exe no lo instala');
+    assert.match(leerTexto('instalador', 'windows', 'ExecutiveLab.iss'), /\[UninstallRun\][\s\S]*ajustes-del-editor\.js"" --quitar/, 'desinstalar en Windows no lo quita');
+    assert.match(leerTexto('instalador', 'windows', 'desinstalar.ps1'), /'ajustes-del-editor\.js'[\s\S]*if \(Test-Path \$constancia\) \{[\s\S]*\$moduloAjustes --quitar[\s\S]*\} else \{\s*# Una instalacion de antes[^\n]*\n\s*LimpiarAjustes \(Join-Path \$env:APPDATA/, 'el desinstalador a mano de Windows no lo quita, o limpia por el nombre aunque haya constancia');
+    assert.match(leerTexto('instalador', 'mac', 'desinstalar.command'), /"\$MODULO" --quitar --ajustes "\$AJUSTES"[\s\S]*if \[ "\$HABIA_CONSTANCIA" = "1" \]; then/, 'el desinstalador del Mac no lo quita, o limpia por el valor aunque haya constancia');
+    assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerEnElFichero\(\{[\s\S]{0,200}asistentes: \['claude'\]/, 'el instalador del Mac no lo pone');
+    assert.match(fs.readFileSync(path.join(RAIZ, 'preparar-paquete.js'), 'utf8'), /'ajustes\.js', 'ajustes-del-editor\.js'/, 'la barra no lo lleva dentro');
+    return 'puesto · lo decidido, respetado · una vez · Claude, Codex y los dos · y se quita solo lo nuestro';
+  });
+
+  await comprobar('la barra pone lo del asistente al arrancar si falta: una vez, sin pisar, nunca lo del editor, y lo dice (decisión 163)', async () => {
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const proveedor = vscode.registrado.proveedor;
+    const { ajustes } = vscode.registrado;
+    const antes = {
+      almacen: proveedor.contexto.globalStorageUri, global: ajustes.global, extensiones: vscode.guion.extensionesInstaladas,
+      rechaza: vscode.guion.rechazaAjuste, aviso: proveedor.avisoPendiente,
+    };
+    // Un ordenador: la carpeta de los ajustes de usuario, con el almacén de la barra dentro.
+    const unOrdenador = () => {
+      const usuario = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-usuario-'));
+      const almacen = path.join(usuario, 'globalStorage', 'executivelab.arnes-ui');
+      fs.mkdirSync(almacen, { recursive: true });
+      proveedor.contexto.globalStorageUri = { fsPath: almacen };
+      vscode.registrado.ajustes.global = {};
+      proveedor.avisoPendiente = null;
+      return usuario;
+    };
+    // El editor no conoce las claves de un asistente que no está puesto.
+    vscode.guion.rechazaAjuste = (clave) => (clave.startsWith('claudeCode.') && !vscode.guion.extensionesInstaladas.includes('anthropic.claude-code'))
+      || (clave.startsWith('chatgpt.') && !vscode.guion.extensionesInstaladas.includes('openai.chatgpt'));
+    const frase = () => (proveedor.avisoPendiente ? proveedor.avisoPendiente.texto : null);
+    try {
+      // Solo Claude, en automático: lo de Claude, y nada de todo el editor.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      let usuario = unOrdenador();
+      let hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding']);
+      assert.deepEqual(vscode.registrado.ajustes.global, { 'claudeCode.focusView': true, 'claudeCode.hideOnboarding': true }, 'la barra pone algo de todo el editor');
+      assert.equal(frase(), 'He dejado a Claude enseñándote solo lo que le pides y lo que te contesta, sin su lista de primeros pasos.');
+      assert.deepEqual(Object.keys(ade.leerConstancia(usuario).puestas).sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding'], 'no queda constancia para desinstalar');
+      // Otra vez: nada, y nada que decir. Y lo que quitó no vuelve.
+      proveedor.avisoPendiente = null;
+      assert.equal((await proveedor.ponerLoDelEditor()).hecho, 'nada');
+      assert.equal(frase(), null, 'sin cambiar nada, se dice algo');
+      delete vscode.registrado.ajustes.global['claudeCode.focusView'];
+      await proveedor.ponerLoDelEditor();
+      assert.ok(!('claudeCode.focusView' in vscode.registrado.ajustes.global), 'lo que quitó vuelve');
+
+      // Lo que ya tenía decidido no se pisa, y la frase dice solo lo que cambió.
+      usuario = unOrdenador();
+      vscode.registrado.ajustes.global['claudeCode.focusView'] = false;
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.respetadas, ['claudeCode.focusView']);
+      assert.equal(vscode.registrado.ajustes.global['claudeCode.focusView'], false, 'se pisa lo que decidió');
+      assert.equal(frase(), 'He dejado a Claude sin su lista de primeros pasos.');
+
+      // Codex en el ajuste y sin poner: no se apunta nada, y cuando está, se pone.
+      usuario = unOrdenador();
+      vscode.registrado.ajustes.global['executiveLab.asistente'] = 'codex';
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.puestas, []);
+      assert.ok(!fs.existsSync(path.join(usuario, ade.CONSTANCIA)), 'se apunta lo que no se ha podido poner');
+      assert.equal(frase(), null);
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.puestas, ['chatgpt.openOnStartup'], 'con Codex en el ajuste, se pone lo de Claude o no lo de Codex');
+      assert.equal(frase(), 'He dejado Codex abriéndose solo al arrancar.');
+
+      // Con los dos: lo de Claude, y Codex no se abre encima.
+      unOrdenador();
+      vscode.registrado.ajustes.global['executiveLab.asistente'] = 'losDos';
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding']);
+      // En automático con los dos puestos, igual.
+      unOrdenador();
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding'], 'en automático no cuentan los dos que están puestos');
+
+      // Lo que puso el instalador ya está mirado: la barra no lo vuelve a poner.
+      usuario = unOrdenador();
+      await ade.ponerEnElFichero({ fichero: path.join(usuario, 'settings.json'), asistentes: ['claude'] });
+      hecho = await proveedor.ponerLoDelEditor();
+      assert.equal(hecho.hecho, 'nada', 'la barra no lee la constancia del instalador');
+      assert.deepEqual(vscode.registrado.ajustes.global, {});
+
+      // Sin una carpeta de usuario que se reconozca, nada.
+      unOrdenador();
+      proveedor.contexto.globalStorageUri = { fsPath: fs.mkdtempSync(path.join(os.tmpdir(), 'almacen-suelto-')) };
+      assert.equal(await proveedor.ponerLoDelEditor(), null);
+      assert.deepEqual(vscode.registrado.ajustes.global, {}, 'sin saber dónde apuntarlo, se pone igual');
+
+      // Y la activación lo llama, antes de soltar el aviso.
+      const activar = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8').split('function activate(contexto)')[1];
+      assert.ok(activar.indexOf('panel.ponerLoDelEditor()') !== -1 && activar.indexOf('panel.ponerLoDelEditor()') < activar.indexOf('panel.soltarElAviso()'),
+        'al arrancar, la barra no lo pone, o lo pone después de soltar el aviso');
+      return 'lo de Claude, lo de Codex y los dos · una vez · lo suyo, respetado · nunca lo del editor';
+    } finally {
+      proveedor.contexto.globalStorageUri = antes.almacen;
+      vscode.registrado.ajustes.global = antes.global;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      vscode.guion.rechazaAjuste = antes.rechaza;
+      proveedor.avisoPendiente = antes.aviso;
+    }
   });
 
   await comprobar('los recordatorios: a su hora con su botón, y la costumbre se convierte en recordatorio sola', async () => {

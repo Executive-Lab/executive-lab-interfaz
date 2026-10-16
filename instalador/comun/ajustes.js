@@ -44,16 +44,23 @@ function ponerComaAlFinal(texto) {
 // se reparsea y se reescribe, se los cargamos. Asi que cuando no es JSON puro
 // se insertan las claves como texto, justo antes de la llave de cierre: entra
 // lo nuestro y lo suyo queda intacto, comentarios incluidos.
+//
+// Con JSON puro, una clave que ya estuviera se cambia: quien no quiera pisar
+// nada pasa solo las que faltan, como hace `ajustes-del-editor.js`.
+//
+// Devuelve que ha hecho y que claves ha escrito, para que quien llama pueda
+// dejar constancia de lo que puso y no de lo que quiso poner (decision 163).
 function escribirAjustes(fichero, nuevos, donde, anotar = () => {}) {
   fs.mkdirSync(path.dirname(fichero), { recursive: true });
 
   const claves = Object.keys(nuevos);
-  if (!claves.length) return;
+  if (!claves.length) return { hecho: 'nada', claves: [] };
 
-  if (!fs.existsSync(fichero)) {
+  // Un fichero vacio es como no tenerlo: el editor lo da por bueno.
+  if (!fs.existsSync(fichero) || !fs.readFileSync(fichero, 'utf8').trim()) {
     fs.writeFileSync(fichero, `${JSON.stringify(nuevos, null, 2)}\n`);
     anotar(`${claves.length} ajustes en ${donde} (nuevo)`);
-    return;
+    return { hecho: 'nuevo', claves };
   }
 
   const crudo = fs.readFileSync(fichero, 'utf8');
@@ -63,7 +70,7 @@ function escribirAjustes(fichero, nuevos, donde, anotar = () => {}) {
     const actuales = JSON.parse(crudo);
     fs.writeFileSync(fichero, `${JSON.stringify({ ...actuales, ...nuevos }, null, 2)}\n`);
     anotar(`${claves.length} ajustes en ${donde}`);
-    return;
+    return { hecho: 'escrito', claves };
   } catch {
     /* tiene comentarios: se inserta a mano */
   }
@@ -71,7 +78,7 @@ function escribirAjustes(fichero, nuevos, donde, anotar = () => {}) {
   const cierre = crudo.lastIndexOf('}');
   if (cierre === -1) {
     anotar(`AVISO: no entiendo ${donde}; no lo toco.`);
-    return;
+    return { hecho: 'ilegible', claves: [] };
   }
 
   // Las que ya estan escritas no se tocan: no vamos a duplicar una clave ni a
@@ -79,7 +86,7 @@ function escribirAjustes(fichero, nuevos, donde, anotar = () => {}) {
   const faltan = claves.filter((c) => !new RegExp(`"${c.replace(/\./g, '\\.')}"\\s*:`).test(crudo));
   if (!faltan.length) {
     anotar(`${donde}: ya estaban puestas`);
-    return;
+    return { hecho: 'yaEstaban', claves: [] };
   }
 
   fs.copyFileSync(fichero, `${fichero}.antes-de-executive-lab`);
@@ -89,6 +96,7 @@ function escribirAjustes(fichero, nuevos, donde, anotar = () => {}) {
 
   fs.writeFileSync(fichero, `${antes}\n${lineas}\n${crudo.slice(cierre)}`);
   anotar(`${faltan.length} ajustes insertados en ${donde} (tiene comentarios: copia al lado)`);
+  return { hecho: 'insertado', claves: faltan };
 }
 
 module.exports = { escribirAjustes };

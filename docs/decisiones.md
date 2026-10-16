@@ -6493,3 +6493,165 @@ que ya había en este Mac y sin red:
   un documento, y el diccionario lo dice.
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
+
+## 163. El instalador lo deja todo puesto
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · FTD `el-instalador-lo-deja-todo`
+
+Jose: *«que el instalador instale y configure todo para que el usuario no tenga que hacer mierdas. Quiero
+que el instalador active cosas como el remote control siempre de claude code, el focus view, etc. y que
+configure todo lo que se necesite a nivel de visual studio code como lo de trust folder y que claude code se
+meta en todos los workspaces. La fricción del usuario debe ser MÍNIMA»*.
+
+Se leyó lo que trae hoy cada pieza, el 16-10-2026:
+- la página de Claude Code para VS Code (code.claude.com/docs/en/vs-code) y el `package.json` publicado de
+  `anthropic.claude-code` 2.1.301, del 15-10 (Open VSX y el Marketplace);
+- la de Codex (learn.chatgpt.com/docs/developer-settings?surface=ide) y el `package.json` de `openai.chatgpt`
+  26.51007.21434, del Marketplace;
+- las de VS Code sobre la confianza (code.visualstudio.com/docs/editing/workspaces/workspace-trust) y sobre
+  la IA (code.visualstudio.com/docs/agents/reference/ai-settings);
+- y el código de VS Code (`microsoft/vscode`, rama `main`): dónde declara el ámbito de cada ajuste y cuándo
+  pregunta antes de abrir un enlace.
+
+**De paso salió un fallo: la vista enfocada de Claude no se ponía nunca.** `claudeCode.focusView` es de
+programa (`application`), y el editor no deja ponerlo en una carpeta. La vista sencilla lo escribía en la
+carpeta, el editor lo rechazaba y se quedaba pendiente en cada arranque, sin que nada lo dijera. Les pasaba
+lo mismo a `window.menuBarVisibility` (de programa) y a `workbench.welcomePage.walkthroughs.openOnInstall`
+(de máquina).
+
+### Qué se pone, y quién
+
+Un módulo común, `instalador/comun/ajustes-del-editor.js`, para los dos instaladores y la barra, con dos
+grupos:
+
+- **Lo del editor** lo pone solo el instalador, en el ordenador del alumno. Cambia el editor entero. En el
+  de quien lo usa para otras cosas, le cambiaría todas las ventanas (decisiones 15 y 71), así que la barra
+  no lo toca nunca.
+- **Lo del asistente** lo pone el instalador y, si falta, la barra al arrancar, para quien solo instaló la
+  barra. Solo cambia la ventana de Claude o la de Codex.
+
+Con el cuidado del control remoto (decisión 143):
+- **Lo que ya tenía decidido, sí o no, no se pisa** (P4). Antes sí se pisaba: con un `settings.json` sin
+  comentarios, `escribirAjustes` mezclaba lo nuestro por encima. Ahora solo recibe lo que falta.
+- **Cada clave se mira una vez por ordenador.** Si después la quita, no vuelve.
+- **Se lee con comentarios y con comas al final**, como los escribe el editor. Si no se entiende, no se toca.
+- **Queda constancia al lado de sus ajustes**, en `.executive-lab-ajustes.json`: lo que pusimos, con su
+  valor, y lo que era suyo. Desinstalar quita solo lo que dice la constancia y solo si sigue con el valor
+  que dejamos. Lo hacen el `[UninstallRun]` de Inno, `desinstalar.ps1` y `desinstalar.command`, con
+  `node ajustes-del-editor.js --quitar`. Sin constancia, que es una instalación de antes, se limpia como
+  entonces. Con sus ajustes en otro sitio y un enlace aquí, el enlace se queda.
+
+**La barra, al arrancar:**
+- Con qué asistentes, lo dice `executiveLab.asistente` (decisión 158): el del ajuste, los dos o, en
+  automático, los que estén puestos.
+- Escribe por el editor, en los ajustes de usuario. La constancia va al lado, en la carpeta de la que cuelga
+  su almacén (`<User>/globalStorage/…`). Si el almacén no tiene esa forma, no pone nada.
+- La clave de un asistente que no está puesto no se puede escribir. No se apunta, y se pone cuando esté.
+- No espera a la confianza de la carpeta: es de la persona y no de la carpeta, como el control remoto.
+- Lo dice en una frase, solo si ha cambiado algo, junto con lo demás que se dice al abrir: «He dejado a
+  Claude enseñándote solo lo que le pides y lo que te contesta, sin su lista de primeros pasos.» o «He dejado
+  Codex abriéndose solo al arrancar.».
+
+**La vista sencilla se queda con lo que cabe en una carpeta.** Salen de `disfraz.json` la vista enfocada y
+la lista de primeros pasos de Claude, la guía al poner una extensión y el menú, además de las cinco que ya
+solo ponía el instalador y que ahora viven en el módulo. La lista de primeros pasos sí se escribía en las
+carpetas: «Ver el editor completo» y la salida de emergencia la siguen quitando de una carpeta de antes. Lo
+que se quedaba pendiente de antes se olvida.
+
+### La tabla de lo investigado
+
+| Ajuste | Qué hace | Ámbito | Para un alumno | Qué se hace | Fuente |
+|---|---|---|---|---|---|
+| `security.workspace.trust.enabled: false` | Sin modo restringido. Claude: «The extension doesn't work in Restricted Mode»; Codex no declara que funcione en él | programa | Sin esto, ni Claude ni Codex arrancan en una carpeta que el editor no conoce, y sale el aviso de confianza | **Instalador** (ya estaba) | VS Code, workspace-trust; Claude Code, vs-code; los dos `package.json` |
+| `security.workspace.trust.startupPrompt`, `.untrustedFiles`, `.banner`, `.emptyWindow` | Cuándo pregunta y qué hace con un fichero suelto | programa | Con la confianza apagada no hacen nada | No: si alguien la enciende a propósito, quitarle los avisos sería decidir por él | VS Code, workspace-trust |
+| `update.mode: none`, `update.showReleaseNotes: false`, `telemetry.telemetryLevel: off` | Sin actualizaciones del editor, sin notas de versión, sin telemetría | programa | Nada que salga de repente | **Instalador** (ya estaban) | VS Code |
+| `extensions.ignoreRecommendations: true` | Sin avisos de extensiones recomendadas | ventana | Un aviso menos, también sin carpeta | **Instalador** (ya estaba) | VS Code |
+| `workbench.startupEditor: none` | Sin la página de bienvenida al arrancar | recurso | El acceso directo abre el editor sin carpeta, y lo primero que salía era la bienvenida | **Instalador**, y sigue en la vista sencilla: sin carpeta solo vale la de usuario; con la barra sola, solo la de la carpeta | VS Code |
+| `workbench.welcomePage.walkthroughs.openOnInstall: false` | No abre la guía de una extensión al ponerla | máquina | Al poner Claude (trae `claude-code-walkthrough`) con el editor abierto, se abría su guía | **Instalador**; sale de la vista sencilla, donde no hacía nada | VS Code; `package.json` de Claude |
+| `extensions.confirmedUriHandlerExtensionIds: ["anthropic.claude-code"]` | El editor no pregunta «Allow 'Claude Code' extension to open this URI?» | programa | Cada botón de la barra le habla a Claude por su enlace, y el editor lo pregunta la primera vez | **Instalador, con Claude.** Solo la de Claude, y su enlace solo deja el texto en la caja: lo manda la persona. La barra no, porque es de todo el editor | VS Code, `extensionUrlHandler.ts` |
+| `chat.disableAIFeatures` | Apaga y esconde la IA del editor (Copilot) | — | Quitaría un chat que compite con el suyo | No, propuesto: la documentación no dice si toca a las extensiones de otros asistentes, y no se ha medido | VS Code, ai-settings |
+| `extensions.autoUpdate` | Las extensiones se ponen al día solas | programa | Claude y Codex al día | No se toca: ya viene encendido | VS Code |
+| `window.menuBarVisibility: hidden` | Esconde el menú | programa | En la carpeta no hacía nada | Sale de la vista sencilla. No pasa a todo el editor: esconder el menú en todas las ventanas no quita fricción, quita salidas, y «Ver el editor completo» no lo devolvería | VS Code |
+| `claudeCode.focusView: true` | La vista enfocada: lo que le pides y lo que contesta; las herramientas, plegadas | **programa** | La pidió Jose, y en la carpeta no se ponía | **Instalador y barra**; sale de la vista sencilla | Claude Code, vs-code y `package.json` |
+| `claudeCode.hideOnboarding: true` | Sin la lista de primeros pasos de Claude | ventana | Sale al entrar, antes de que haya ninguna carpeta con la vista sencilla | **Instalador y barra**; sale de la vista sencilla | Claude Code, vs-code |
+| `claudeCode.preferredLocation` | Dónde se abre: `panel` (pestaña) o `sidebar` | ventana | La barra ya abre la conversación en el centro, que es `panel`, lo de fábrica. Y Claude lo cambia solo cuando la persona la mueve | No | Claude Code, vs-code y `package.json` |
+| `claudeCode.initialPermissionMode` | El modo de permisos con el que empieza | máquina | Es suyo: «Qué puede hacer sin preguntarte» (decisión 157) | No | Claude Code, vs-code |
+| `claudeCode.disableLoginPrompt` | No pide entrar | ventana | Es para proveedores de fuera: con él, un alumno no podría entrar | No | Claude Code, vs-code |
+| `claudeCode.useTerminal`, `autosave`, `continueAfterReload` | Terminal en vez de ventana, guardar antes de leer, seguir tras recargar | ventana y programa | De fábrica ya están como hace falta | No | Claude Code, vs-code |
+| `claudeCode.allowDangerouslySkipPermissions` | Deja saltarse los permisos | máquina | Nunca | No | Claude Code, vs-code |
+| Abrir Claude al arrancar, en cada ventana | — | — | Claude no tiene ajuste para eso. La barra lo abre al arrancar (`claude-vscode.editor.openLast`), en cada ventana, desde antes | Ya lo hace la barra | `package.json` de Claude (sus comandos) |
+| `remoteControlAtStartup` | El control remoto, en todas las conversaciones | ajustes de Claude | Lo pidió Jose | Ya estaba (decisión 143) | Claude Code, settings |
+| `chatgpt.openOnStartup: true` | «Focus the Codex sidebar when the extension finishes starting» | ventana | Codex a la vista al arrancar | **Instalador y barra, solo si Codex es el único**: con los dos, la barra ya abre el de la carpeta, y los dos a la vez es no saber con cuál hablar | Codex, developer-settings |
+| `chatgpt.localeOverride` | El idioma de la ventana de Codex | programa | En un editor en inglés, Codex sale en inglés | No, propuesto: la página no dice qué valores admite | Codex, developer-settings |
+| `chatgpt.commentCodeLensEnabled`, `chatgpt.runCodexInWindowsSubsystemForLinux` | Un botón encima de los TODO; Codex dentro de WSL | ventana | No le hacen falta | No | Codex, developer-settings |
+| Que la extensión no quede apagada en una carpeta | — | — | El editor lo guarda en su estado, no en un ajuste. El instalador la deja encendida para todo el editor | Nada que poner | VS Code |
+
+### Lo que se decidió por el camino
+
+- **La barra solo toca lo del asistente** (`claudeCode.*`, `chatgpt.*`). Es el criterio que separa los dos
+  grupos, y una guarda en `lo-del-editor.js` lo hace cumplir aunque el módulo se equivoque.
+- **El enlace de Claude sin preguntar, solo con el instalador.** Lo pide el primer botón de la barra en
+  cualquier ordenador, pero es un aviso del editor entero, y un enlace de una página web también llegaría
+  sin preguntar. En el del alumno, con la confianza ya apagada, compensa; en otro, se pulsa una vez y se
+  marca «Do not ask me again».
+- **Codex abierto al arrancar, solo si es el único.**
+- **La bienvenida, en los dos sitios.** Es el único ajuste que está a la vez en los de usuario y en la vista
+  sencilla, y cada uno cubre una ventana que el otro no alcanza.
+- **La frase no lleva botón.** La vista enfocada se quita en el menú de Claude («Focus view», o
+  `Ctrl+Alt+F`), y lo que se quita no vuelve. El instalador lo quita al desinstalar.
+- **`preparar.js` admite `--asistente losDos`**, aunque el de Windows siga preguntando entre dos.
+
+### Lo que no hace, todavía
+
+- `chat.disableAIFeatures` y el idioma de Codex, propuestos arriba.
+- El editor en español: el paquete de idioma y `locale` en `argv.json` van fuera de los ajustes de usuario.
+  Propuesto.
+- Volver a instalar sobre una instalación de antes de esta versión: lo que puso aquella cuenta ahora como
+  suyo, y al desinstalar se queda.
+- La barra en un perfil del editor que no es el de siempre: la constancia va al lado de los ajustes de ese
+  perfil, y los desinstaladores miran los de siempre.
+- No se ha visto en un VS Code de verdad el aviso del enlace la primera vez, ni que sin él no salga.
+  `probar-en-vscode` mira ahora, en uno de verdad, que lo de la vista sencilla cabe en una carpeta y que lo
+  de todo el editor no.
+
+### Las pruebas
+
+Tres comprobaciones nuevas en `humo.js`, que pasa de 419 a 422 (antes de traer main):
+
+- *El instalador lo deja todo puesto*, con carpetas de mentira:
+  - con Claude, con Codex y con los dos, lo que toca y nada más;
+  - lo decidido no se pisa, con comentarios y sin ellos, y queda apuntado como suyo;
+  - una clave nuestra comentada no se puede insertar, y no se apunta como puesta;
+  - una vez por ordenador: lo que quitó no vuelve, ni lo suyo que borró después;
+  - lo que no se entiende no se toca, ni sus ajustes ni la constancia, y un fichero vacío cuenta como nuevo;
+  - desinstalar quita lo nuestro que sigue igual y nada más, con comentarios también, y deja su enlace como
+    enlace; la orden suelta, como la llaman los desinstaladores;
+  - `preparar.js` cargado, con Codex y con los dos, y el control remoto con los dos;
+  - y que viaja: las dos cargas, el `.iss`, los dos desinstaladores a mano (que con constancia no limpian como
+    antes), el instalador del Mac y la barra.
+- *La barra lo pone al arrancar si falta*: en automático, con Claude, con Codex en el ajuste y sin ponerlo,
+  con los dos; una vez y sin volver; sin pisar; nunca lo del editor; la frase exacta, y nada que decir si no
+  cambió nada; lo que dejó el instalador ya está mirado; sin una carpeta de usuario que se reconozca, nada; y
+  la activación lo llama antes de soltar el aviso.
+- *La vista sencilla solo lleva lo que cabe en una carpeta*: nada de programa o de máquina en `disfraz.json`
+  (los ámbitos leídos de VS Code y de los `package.json`); nada a la vez en los de usuario y en la carpeta,
+  salvo la bienvenida; con un editor que rechaza en la carpeta lo que no cabe, no queda nada pendiente; lo
+  pendiente de antes se olvida; y la lista de primeros pasos de una carpeta de antes se quita, sin tocar la de
+  usuario.
+
+En las máquinas de GitHub, `probar.ps1` (el `.exe`) y `probar.sh` (el `.dmg`) miran lo puesto y la
+constancia, y `probar-en-vscode` mira en un VS Code de verdad que cada ajuste de la vista sencilla cabe en
+una carpeta y que los de todo el editor no. `probar.sh` se pasó en este Mac contra una casa de mentira, y los
+dos pasos de los ajustes de `desinstalar.command`, tal cual, también.
+
+**Mutaciones a mano: 48, y 47 tumbadas.** Cada una, en una copia del árbol, con `humo.js` entero:
+
+- 22 en el módulo común y `escribirAjustes`;
+- 3 en `preparar.js`, 1 en el instalador del Mac y 6 en las cargas, el `.iss`, los desinstaladores y lo que
+  lleva la barra;
+- 9 en la barra;
+- 5 en la vista sencilla;
+- y 2 en `probar.sh`, a mano contra la casa de mentira (sin la constancia, y sin la vista enfocada).
+
+La que sigue viva es a propósito: que el módulo dé por defecto lo del editor también a la barra. No cambia
+nada porque la guarda de `lo-del-editor.js` lo quita; sin la guarda, cae.
