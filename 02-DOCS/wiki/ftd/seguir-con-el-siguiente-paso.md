@@ -62,10 +62,11 @@ el asistente y sin red. Y, de la revisión de producto, que quien vuelve al día
 
 ## Evidence
 
-- `humo.js`: de 419 a 423 antes de traer main.
+- `humo.js`: de 419 a 423 antes de traer main, y 425 con main traído (la 0.53.0 y los arreglos sueltos).
 - `empresas-distintas.js`: las tres, con una tarjeta y 5 cosas a la vista como mucho; la gestoría y el
   despacho (Codex) dicen por dónde iban.
-- `mapeos-codex.js` 29, `contrato.js` 15, `comprobar-diccionario.js` en verde.
+- `mapeos-codex.js` 29, `contrato.js` 15, `comprobar-diccionario.js` y `revisar-powershell.js` en verde.
+- Las 86 mutaciones, otra vez con main traído: lo mismo, 83 tumbadas.
 
 ## Next
 

@@ -6584,7 +6584,7 @@ Lo que se lee lo escribió quien hizo la carpeta, y acaba en pantalla y en un en
   «Conocimiento (Ftd)». Ahora es «Conocimiento», con `cerebro.esAndamio`, la misma lista que en Documentos.
 - Solo en la barra sencilla: la completa no la lleva.
 
-**Las pruebas**: cuatro comprobaciones nuevas en `humo.js`, de 419 a 423 antes de traer main.
+**Las pruebas**: cuatro comprobaciones nuevas en `humo.js`, de 419 a 423, y 425 con main traído.
 
 - *Por dónde ibas*, con carpetas temporales y los ficheros de verdad:
   - lo de `next:` antes que lo más reciente, los tres primeros y no un cuarto, y los del SDD;
