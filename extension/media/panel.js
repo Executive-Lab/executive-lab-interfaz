@@ -501,7 +501,9 @@ const filaDeHabilidad = (c) => (c.siempre
   accion: { tipo: 'pedir', prompt: c.prompt },
   nombreReal: c.prompt && c.prompt.startsWith('/') ? c.prompt : c.id,
   seEscribe: Boolean(c.prompt && c.prompt.startsWith('/')),
-  dentro: ORIGEN[c.origen] ? `<p>${ORIGEN[c.origen]}</p>` : '',
+  dentro: `${ORIGEN[c.origen] ? `<p>${ORIGEN[c.origen]}</p>` : ''}${c.quitable
+    ? boton({ etiqueta: 'Quitarla', icono: '🗑️', pequeno: true, discreto: true, accion: { tipo: 'quitarHabilidad', habilidad: c.id, nombre: c.nombre } })
+    : ''}`,
 }));
 
 // Una del catálogo que todavía no está: se pulsa y se añade (`rsc add`).
@@ -925,7 +927,8 @@ function pantallaAgentes({ agentes = [] }) {
         nombreReal: a.id || a.fichero.replace(/\.[^.]+$/, ''),
         // El encargo entero va detrás de la (i): interesa una vez, y antes
         // competía con el botón que de verdad se pulsa.
-        dentro: boton({ etiqueta: 'Ver sus instrucciones', icono: '📄', pequeno: true, discreto: true, accion: { tipo: 'verAgente', fichero: a.fichero } }),
+        dentro: boton({ etiqueta: 'Ver sus instrucciones', icono: '📄', pequeno: true, discreto: true, accion: { tipo: 'verAgente', fichero: a.fichero } })
+          + (a.quitable ? boton({ etiqueta: 'Quitarlo', icono: '🗑️', pequeno: true, discreto: true, accion: { tipo: 'quitarAgente', fichero: a.fichero, nombre: a.nombre } }) : ''),
       }))).join('')
       : nada('Todavía no hay ninguno.')}
 
@@ -3350,7 +3353,8 @@ function pantallaCopias({ copias, delMontaje = null }) {
     <hr class="separador">
     <h2>Copias que guarda el arnés</h2>
     <p class="detalle">${texto(delMontaje.texto)}</p>
-    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}` : '';
+    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}
+    ${boton({ etiqueta: 'Recuperar lo que había', icono: '↩️', pequeno: true, discreto: true, accion: { tipo: 'recuperarLoQueHabia' } })}` : '';
 
   if (!copias.length) {
     return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${delArnes}${volver()}`;

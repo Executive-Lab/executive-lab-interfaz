@@ -121,6 +121,11 @@ function queHay() {
       nombre: dicho.nombre,
       queHace: dicho.queHace,
       delArnes: dicho.deFuera,
+      // Si se ofrece «Quitarlo» (decisión 173): solo uno que la declaración apunta como pedido a RSC.
+      quitable: require('./deshacer').sePuedeQuitarElAgente(id, {
+        declarados: (((require('./proyecto').declaracion() || {}).agents) || []).filter((x) => typeof x === 'string'),
+        propios: (((require('./proyecto').declaracion() || {}).ownAgents) || []).filter((x) => typeof x === 'string'),
+      }),
       // Cómo se le pide al asistente que lo lance: por su identificador, que
       // es lo que él tiene en su carpeta. «Quiero que cobros atrasados haga lo
       // suyo» no nombraba nada que el asistente pudiera buscar.
