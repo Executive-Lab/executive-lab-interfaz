@@ -5522,6 +5522,139 @@ ficheros que solo cambian en mayúsculas, y la foto que no dice que no está ent
 por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
 mutar. La batería entera se pasó al final, sin mutar.
 
+## 152. Se adapta y da ideas
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho en el código (F6 del plan de simplificar la barra, y el punto 8 de «Hay que construirlo» de la 142)
+
+Jose, 05-10-2026: *«que sea inteligente e interactiva y que solo ponga lo necesario según el caso, y en
+brownfield se adapte y dé ideas»*. Y de la clase del 13-10: en una carpeta que ya tenía cosas, Eric aconseja
+hacer antes una copia. RSC ya la hace, en `.rsc/backups/`, pero no se veía en ningún sitio.
+
+Todo sale del disco y de reglas, no de una ocurrencia del modelo (P5). Vive en un módulo puro,
+`extension/src/ideas.js`, que se prueba con situaciones inventadas.
+
+- **«Esto parece …», la primera vez.** En una carpeta que ya tenía cosas, la tarjeta dice lo que la barra ya
+  sabe leer: «Esto parece una aplicación hecha con React, con claves de Stripe y 12 documentos sin colocar.»
+  Sale de cuatro sitios:
+  - de qué parece, por los ficheros de la raíz (`terreno`, lo mismo que se enseña antes de montar);
+  - con qué está hecho, por lo que RSC apuntó al montarla (`evidence.stacks` en `.rsc.json`), con el nombre
+    del catálogo. Lo que el catálogo no nombra, como `node`, no se dice;
+  - de qué programas hay claves, por el nombre de cada una (`sueltas`);
+  - cuántos documentos hay sin colocar, con la regla de `papeles` y sin el tope de 40 de su lista.
+
+  Si no se sabe de qué parece: «Aquí ya había trabajo tuyo: …». Con «Entendido» no vuelve.
+- **La primera vez es la primera vez que la barra mira la carpeta ya montada.** Si entonces no hay nada que
+  decir, porque es una carpeta nueva, se apunta y ya no se dirá: lo que crezca después lo ha hecho ella. Una
+  carpeta que ya se usaba con una barra de antes lo verá una vez, al ponerse esta.
+- **La copia del montaje.** Si el arnés guardó una copia de lo suyo antes de montarse, la misma tarjeta lo
+  dice, cada cosa con el nombre que tiene al pedir el sí para montar: «Antes de cambiar lo tuyo, el arnés
+  guardó una copia: los ajustes de Claude de esta carpeta y la habilidad «review».» Al lado va **Ver la
+  copia**, que abre su carpeta en una ventana del sistema.
+  - Vale la copia del primer montaje (`onboarding-transaction`): antes de él, todo era suyo. En las
+    siguientes, lo guardado ya es del arnés.
+  - Lo de RSC no cuenta. Medido con la 3.0.22 sobre una carpeta de verdad: en la copia va también lo que la
+    barra apaga antes de montar (`.rsc/.no-trunk-guard`), y no es suyo.
+  - Después de «Entendido» sigue a mano en Ver las copias guardadas, bajo «Copias que guarda el arnés».
+- **Las ideas, de una en una.** Después, en la tarjeta de siempre y al final de la fila (la 12 de la
+  propuesta), dos o tres ideas. Cada una lleva su botón y su «Ahora no» de dos semanas, como los consejos:
+  1. un programa del que hay claves y que no tiene conexión: «Ya usas Stripe: sus claves están en la
+     carpeta, pero todavía no tiene su conexión.», con **Conectar Stripe**. Se lo pide al asistente con
+     `connect-tool` y el protocolo de harness, con los nombres de las claves y dónde están, nunca sus valores;
+  2. los documentos sin colocar, con **Que los coloque y los lea**, el mismo botón de Documentos entregados;
+  3. las habilidades del catálogo que encajan, con lo que ya calcula `consejos.js`. Primero con lo que dijo
+     al prepararla («Para «llevar las facturas de mis clientes», te vendría bien la habilidad (skill)
+     Facturación.»), después con lo que hay. En una carpeta nueva solo hay estas.
+
+  Se cortan a tres antes de quitar las apartadas: «Ahora no» deja ver la siguiente, no saca una cuarta. Una
+  habilidad lleva el mismo `id` que su consejo, así que su «Ahora no» vale para los dos.
+- **La lista entera, en Ayuda › Sugerencias**, detrás de los consejos y sin repetir ninguna.
+- **No es un menú, y sigue saliendo una.** `empresas-distintas.js` pinta la principal sencilla de las tres
+  empresas de mentira con «Esto parece», un consejo y una versión nueva queriendo salir. Sale una tarjeta, y
+  como mucho cinco cosas a la vista con todo plegado. También después de «Entendido», con la idea sola.
+- **Nada nombrado a fuego.** Los programas salen del nombre de sus claves, y con qué está hecho, del catálogo.
+  Lo que hay que entender, como dónde va cada documento o cómo se conecta cada programa, se le pide al
+  asistente, que lo mira.
+- **Por qué no se hace solo (P9).** Conectar un programa lo decide su negocio, y mover sus documentos o
+  añadir una habilidad toca lo suyo. Se deja a un clic.
+- **Seguridad.** La carpeta de la copia tiene que ser una carpeta de verdad, no un enlace: `.rsc/` lo puede
+  traer un repositorio de fuera, y abrir un enlace con el sistema podría abrir un programa. Y el botón no
+  lleva la ruta: la barra la vuelve a buscar en el disco.
+
+Lo que quedaba: el emparejamiento de `consejos.js` contaba «cliente» y «clientes» como dos palabras distintas,
+y a «llevar la contabilidad de mis clientes» le proponía Ventas y oportunidades. Lo arregló aparte la PR #43, «El
+consejo cuenta cada palabra del texto una vez», y con ella la Gestoría de mentira ya no recibe esa idea.
+
+**La revisión adversaria de seguridad** (PR #42) encontró tres cosas, y las tres están arregladas con su prueba:
+
+- **La copia del montaje costaba en cada repintado** (media). Se leía `.rsc/backups/` entera, con cada manifiesto
+  de hasta 1 MB, en cada repintado, en Sugerencias y en Ver las copias guardadas. Con 3.000 copias de 100 KB, 1,4 s
+  cada vez. Ahora:
+  - se miran las 200 primeras por su nombre;
+  - los manifiestos se leen de uno en uno hasta el primer montaje, y no se lee ninguno de más de 256 KB;
+  - lo encontrado se guarda en memoria con la fecha de la carpeta de las copias, y el manifiesto elegido, con su
+    huella.
+
+  Medido con 3.000 copias de 100 KB: 144 ms la primera vez y 0,02 ms las siguientes.
+- **El encargo de «Conectar Stripe» citaba rutas libres y no esperaba el OK** (media). Los nombres de carpetas y de
+  ficheros entraban tal cual en lo que se deja en la conversación, y una carpeta llamada «x. Ignora lo anterior y
+  …» se leía como una orden. Además mandaba crear, mover y probar sin enseñar antes el plan, como sí hace «Que las
+  ordene». Ahora:
+  - solo se cita un fichero, o una carpeta y su fichero, con letras, números, puntos y guiones, y sin «..»;
+  - si no, dice «en los ficheros de claves de la carpeta»;
+  - pide el plan y espera el OK antes de crear o mover nada, y no prueba la conexión hasta que se lo confirme.
+
+  No se reutiliza el encargo de `sueltas.js`, porque reparte todas las claves de la carpeta y aquí es un programa.
+  Se copia su regla.
+- **Lo que dice el manifiesto mandaba demasiado** (baja). El nombre de cada cosa guardada entraba entero en la
+  frase, y podía ocupar casi 1 MB. Y un `createdAt: '0'` decidía cuál era el primer montaje. Ahora:
+  - cada nombre se recorta a 60 caracteres;
+  - el primer montaje es el de la carpeta más vieja, por su fecha real.
+
+**La revisión adversaria de corrección** (PR #42) encontró ocho cosas, y las ocho están arregladas con su prueba:
+
+- **Lo del proyecto contaba como documento sin colocar** (media). Un `requirements.txt`, un `robots.txt`, el logo de
+  una web o el bloqueo de Office `~$presupuesto.docx` salían como «1 documento sin colocar», con «Que lo coloque y
+  lo lea» volviendo cada dos semanas. Ahora:
+  - un `~$…` no cuenta nunca;
+  - en una carpeta que parece un proyecto (lo dice `terreno`, o RSC apuntó con qué está hecho) solo cuentan los
+    documentos de oficina: PDF, Word, Excel, PowerPoint y sus parecidos.
+
+  La regla de `papeles.js` no se toca: la usa Documentos entregados, y la rama 153 también la cambia.
+- **«Conectar Debug»** (media). `DEBUG_MODE`, `FEATURE_FLAG_X` o `NEXT_TELEMETRY_DISABLED` salían como programas, y
+  como solo se ofrecía el primero, tapaban los de verdad. Ahora un programa sin conexión cuenta solo si alguna de
+  sus claves suena a secreto (`SUENA_A_SECRETO`, de `sueltas.js`) o si el catálogo lo conoce. Nunca cuenta si su
+  prefijo no es de nadie (DEBUG, FEATURE, TELEMETRY, LOG, NODE…).
+- **Los ficheros de acceso, código muerto** (media). `sueltas.ficherosDeAcceso` solo dice de quién es un fichero
+  cuando ya hay conexión, así que la rama de «conectar con un fichero» no se daba nunca, y su prueba usaba un caso
+  imposible. Un fichero suelto sin dueño no salía en ningún sitio, y con dueño decía «claves de Google».
+  - Se quita esa rama: «Conectar» es solo para claves.
+  - Los ficheros de acceso se cuentan aparte en «Esto parece» («1 fichero de acceso»), probado con la salida de
+    verdad de `sueltas`. Se ordenan desde Conexiones, como hasta ahora.
+- **La copia** (baja). Los enlaces que pone RSC (`kind: 'symlink'`) no son lo suyo. Una habilidad de Cursor se
+  nombra sin `.mdc`, y lo de `.agents/skills/` es una habilidad (decisión 141).
+- **Con qué está hecho** (baja). Se comparaba por trozos de texto, y «algo en Python» se comía «Go». Ahora va por
+  palabra entera.
+- **Cómo se dice** (baja):
+  - «Holded e Instagram», con «e» delante de «i» y «hi», salvo «hie»;
+  - un programa en minúsculas sale con mayúscula;
+  - la coma de «claves de Stripe y Pexels, y …» se pone por cómo se hizo la lista, no buscando « y », que un
+    nombre puede llevar.
+- **Todas las ideas** (baja). En la tarjeta, las tres primeras, una de cada clase. En Ayuda › Sugerencias, la
+  lista entera, con todos los programas sin conexión.
+- **La primera vez** (baja). Se daba por nueva una carpeta con algo suyo que la barra no sabía decir, y lo que
+  apareciera después ya no se decía. Ahora solo se da por nueva si no hay nada suyo: nada fuera de lo del arnés
+  y de lo escondido.
+
+Además, las pruebas cubren lo que la revisión vio sin probar:
+- el HTML en lo que dijo al prepararla y en el nombre de lo guardado, en las cuatro frases que pinta el panel;
+- que sin arnés no se dice nada;
+- el corpus con los nombres de programas y documentos;
+- los límites de cuatro cosas, 70 caracteres y una clave;
+- un `existed` que no es `true`;
+- `.rsc`, las copias o una copia que son un enlace.
+
+Y en `empresas-distintas.js`, «la que toca» se mira también cuando hay consejo.
+
 ## 153. Los datos de clientes, en Ayuda y a tiempo
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho
@@ -5686,6 +5819,146 @@ Pruebas: creación, cambio, cancelación, cadencias, pendientes, nombre declarad
 del contenido, enlaces compartidos y fechas reales —incluido el cambio de hora y el año 2100—.
 La pantalla vacía también se prueba en las tres empresas de muestra. No se ha creado ninguna tarea
 en las cuentas personales de Claude o ChatGPT.
+
+## 156. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F5 del plan de simplificar la barra)
+
+Jose, al pedir el plan: *«lo que más fricción da es conectar las conexiones y tools […] y que se pueda
+saber qué preguntar a informáticos y técnicos»*. La 146 dejó la guía de un paso cada vez. Faltaban dos
+cosas de la propuesta: que no todas las herramientas piden una clave, y que muchas veces la clave la
+tiene otra persona.
+
+- **La clase de acceso, en una línea de `CREDENTIALS.md`**, junto a la URL de su panel:
+  `- Tipo de acceso: Una clave`. La propuesta decía una columna, pero la tabla de verdad no tiene una
+  forma fija: la plantilla de RSC trae cuatro columnas, sus propios ejemplos traen tres, y alguno ni
+  empieza por «Variable». Una columna nueva cambiaría la posición de lo que ya se lee («Dónde se
+  saca» es la tercera). Y es una tabla de variables: una herramienta en la que se entra con tu cuenta,
+  o que solo pide un fichero, no tiene fila donde escribirlo. La línea va donde la barra ya lee la URL,
+  y no toca nada de lo que se leía. Si el asistente la escribe como columna, también vale.
+- **Cinco clases, y cada una su pantalla:**
+  - *Una clave*: un campo, como hasta ahora.
+  - *Usuario y contraseña*: los dos juntos, con un solo «Guardar». Con uno por campo se escribían los
+    dos, se pulsaba el de abajo, y el de arriba se perdía al repintar.
+  - *Un fichero de acceso* (cuenta de servicio, certificado): «Suéltalo aquí», encima de la barra, o
+    «Elegir el fichero». Va a `keys/` de esa conexión, y solo si `sueltas.js` lo reconoce: una factura
+    soltada por error no acaba entre las llaves. Si la conexión dice qué fichero busca
+    (`keys/cuenta-de-servicio.json`), se guarda con ese nombre. El de antes se queda al lado, como
+    `.anterior-<fecha>`, porque sobrescribir no se deshace (P4). La pantalla dice «no sale de este
+    ordenador», así que se comprueba con git (más abajo). Al ponerlo, si ya está todo, se prueba
+    sola, como una clave (P9).
+  - *Entrar con tu cuenta* (OAuth): no hay nada que pegar. «Entrar» se lo pide al asistente, que abre
+    el navegador. Es un botón porque sale de su ordenador en su nombre.
+  - *Una dirección que te dan* (un webhook): un campo para la dirección, con dónde sale.
+  - Puede nombrar dos («Un fichero de acceso y entrar con tu cuenta»), y salen las dos.
+  - **Sin la línea, como antes (P1).** La lista dice «le falta su fichero de acceso» o «falta entrar con
+    tu cuenta» en vez de «falta una clave».
+  - Ninguna herramienta va nombrada en el código: las clases salen de lo que escribió el asistente.
+- **«Pídeselo a tu informático»**, en cada conexión. Arma un mensaje listo para mandar, con «Copiarlo»
+  y «Mandarlo por correo». La barra no manda nada: copia el mensaje, o abre el correo de esa persona con
+  él puesto y sin destinatario, y lo manda ella.
+  - **Lo de cada herramienta lo escribe el asistente** en el README, bajo `## Para tu informático`:
+    para qué es, qué acceso y con qué permisos mínimos, si basta con leer, la página y qué preguntarle.
+    La barra lo copia tal cual, en texto llano (P5). Si no está, arma lo que sabe del disco: la
+    clase de acceso, el nombre de cada clave y dónde se saca, y la página. Además ofrece «Que lo
+    escriba el asistente».
+  - **La parte de seguridad la pone la barra**, escrita una vez en `informatico.js`. Es el riesgo que
+    nombraba la propuesta: el consejo no cambia de una conversación a otra. Con una clave dice:
+    > Cómo hacérmela llegar, por seguridad:
+    > - Nunca me la mandes por correo ni por mensajería, ni la pegues en la conversación con el
+    >   asistente: ahí se queda guardada y se puede reenviar.
+    > - Lo mejor es que la pegues tú mismo en mi ordenador, en la barra de Executive Lab: Conexiones
+    >   (tools) → Holded. Para eso tienes que estar delante de él, o conectado a él. Así no pasa por
+    >   ningún otro sitio.
+    > - Si no puede ser, compártela conmigo con un gestor de contraseñas.
+    > - Mejor una nueva, solo para esto y con los permisos mínimos, que una que ya se use para otra
+    >   cosa: así se puede quitar sin romper nada.
+    > - Si se le puede poner fecha de caducidad, pónsela y dime cuál es.
+    > - Si ya me la has mandado por correo o por mensajería, anúlala y saca otra: esa ya no es segura.
+
+    Es lo de siempre con un secreto (la *Secrets Management Cheat Sheet* de OWASP): que no viaje por
+    donde se queda guardado, solo lo mínimo, uno para cada uso y con caducidad. La fecha la pregunta la
+    barra desde la 149. Con usuario y contraseña, y con un fichero, dice lo mismo en su forma. Entrando
+    con tu cuenta, que no hace falta mandar ninguna clave, y que si hay que autorizarlo como
+    administrador, diga qué hay que aceptar.
+  - **Nunca un valor de una clave**, ni aunque el asistente la haya pegado donde no debe: sale
+    «[clave quitada]» (cómo, en la revisión de seguridad, abajo). El mensaje se arma en la extensión
+    cada vez, y los botones solo dicen de qué conexión es: el texto no vuelve desde la pantalla. La
+    pantalla no promete que no lleva claves: dice «Lo he revisado para quitar las claves: léelo antes
+    de mandarlo».
+  - **Primero lo de la barra, y después, marcado, lo del asistente.** El README lo puede escribir
+    quien prepara la carpeta, va en primera persona y acaba en manos de un tercero. Así que va detrás
+    de la parte de seguridad, bajo «Lo que preparó el asistente para esta herramienta:», con cada
+    línea citada con «>». Sin direcciones de correo («[correo quitado]»), y con las páginas que no son
+    de la herramienta a la vista en la pantalla, antes de mandarlo.
+  - **El `mailto:` se abre como texto, no con `Uri.parse`.** El editor decodifica lo que va detrás del
+    `?` al leer la dirección, y al abrirla la vuelve a codificar a su manera
+    (`encodeURI(uri.toString(true))`, en su `openerService`). Un «?» del mensaje llegaba como «%3F» y un
+    «&» partía el cuerpo en dos. Con el texto, su código lo abre «AS IS». Asunto y cuerpo van con
+    `encodeURIComponent` y los saltos como `%0D%0A`, como pide la norma (RFC 6068). En Windows, una
+    dirección de más de 2.000 caracteres se corta (decisión 130): el mensaje va al portapapeles y el
+    correo se abre con una línea que dice que lo pegue.
+- **El raíl** (`SKILL.md`, §2, en las dos copias) pasa de tres a cinco cosas que el panel enseña tal
+  cual: d) la clase de acceso, con las cinco palabras que la barra lee, y e) la sección para el
+  informático, con su ejemplo. «Conectar algo nuevo» también las pide. Una prueba lee las cinco
+  palabras de los raíles y su ejemplo con el código de la barra, para que no se separen.
+
+**Lo que encontró la revisión de seguridad** (PR #40), arreglado y con su prueba:
+
+- **La clave salía a trozos en el mensaje.** Se pasaba a texto llano antes de tapar, y eso quita `__`,
+  `**` y comillas invertidas: la clave ya no casaba. Y el corte a 4.000 caracteres podía partirla.
+  Ahora se tapa sobre el texto crudo y otra vez sobre el mensaje entero, y se corta por líneas
+  enteras. Además se tapa cada valor también codificado como en una dirección, en base64 (también
+  dentro de otro base64) y partido por espacios, saltos, guiones o puntos. Los de 4 o 5 caracteres de
+  una clave secreta por su nombre se tapan como palabra entera. También se tapa la clave de
+  `https://usuario:clave@sitio`, y lo que parece una clave por lo revuelto que es.
+- **Un `keys/.gitignore` que ya venía se daba por bueno.** Con `!*` dentro, la cuenta de servicio
+  entraba en git (reproducido con `git add -A`). Ahora, después de ponerlo, se pregunta a git
+  (`check-ignore`). Si no queda fuera, se añade su nombre a ese `.gitignore`, y si aun así entraría
+  (porque git ya lo seguía), no se deja: el de antes vuelve a su sitio y se dice, con su botón. Y el
+  `.gitignore` nuevo se escribe sin seguir un enlace que esté colgando.
+- **Expresiones lentas con un fichero preparado.** La de la línea del tipo de acceso tardaba segundos
+  con cien espacios delante, y corre en cada repintado. La de los marcadores y la de los enlaces eran
+  cuadráticas. Ahora tienen tope por línea y por tramo, y la primera se lee a mano.
+- **El asunto del correo:** el nombre sale de la primera línea del README, y un `\r` dentro abría otra
+  cabecera. Ahora va en una línea. Un emoji partido hacía fallar el correo: se corta por letras
+  enteras y lo que queda suelto se cambia.
+- **El de antes, con fecha**: con `.anterior` a secas, la tercera vez se perdía el primero.
+- **Un `.json` dice lo que es por dentro**: un `credentials.json` con una factura entraba por el
+  nombre.
+- **La parte de seguridad** dice qué hacer si ya se mandó (anularla y sacar otra), y que pegarla en
+  la barra supone estar en ese ordenador.
+
+**Lo que encontró la revisión de corrección** (PR #40), arreglado y con su prueba:
+
+- **La clase de acceso se leía de la frase entera.** «Una clave de API (va en el .env, no hace falta
+  ningún archivo)» salía clave y fichero, y la barra decía que le faltaba un fichero que no pedía.
+  Ahora se lee solo la primera frase (hasta el primer punto, paréntesis o coma). No cuenta lo que va
+  detrás de «no», «ni» o «sin», y con «o» entre dos vale cualquiera, sin exigir las dos. «Entra con
+  tu cuenta», «Entrar con la cuenta de Google» e «Inicia sesión con tu cuenta» son entrar con tu
+  cuenta, y «Basic auth», usuario y contraseña.
+- **Sin el fichero no se probaba sola**: decía «Falta su fichero de acceso» y se paraba (rompía la
+  146). Ahora, si trae prueba, se prueba igual y ella dice lo que falta. Sin prueba, se dice. Y la
+  pregunta de cuándo caduca espera a que esté el fichero.
+- **El nombre que busca la prueba** se lee también de la prueba misma (`test_connection.*`), que manda
+  sobre los documentos. Si los documentos nombran más de uno, se dice que no se sabe.
+- **Con una sola clase «dirección», cualquier clave se pintaba como dirección**, y un secreto de firma
+  salía a la vista. Ahora se mira el nombre de cada clave, y un secreto nunca se pinta como texto.
+- **El mensaje tapaba también los ajustes**: la dirección de su panel o `production`, y el informático
+  se quedaba sin saber adónde ir. Ahora se tapan solo las claves secretas por su nombre, los ficheros
+  de acceso y las formas de clave.
+- **«Entrar con tu cuenta» con un ID y un secreto por pegar** no tenía dónde pegarlos, y al
+  informático le decía que no hacía falta ninguna clave. Ahora «solo entrar» es cuando no queda
+  ninguna clave por poner. Si quedan, salen con su campo y el mensaje lleva la parte de seguridad de
+  una clave. El raíl lo dice: son dos clases.
+- **«Dónde se saca» se lee por su cabecera**: si el asistente pone el tipo de acceso como tercera
+  columna, ya no sale como dónde se saca.
+- **Menores:** la guía habla en plural con usuario y contraseña, y no dice «suéltalo» con el fichero
+  ya puesto.
+
+Queda fuera: lo que parece una clave se mira con una regla (mayúsculas, minúsculas y cifras revueltas,
+o una ristra hexadecimal larga). Una clave de solo minúsculas que no esté en esta carpeta pasaría, y
+un identificador revuelto que no lo es se taparía.
 
 ## 157. Lo que traen los asistentes, y lo que se pone solo
 

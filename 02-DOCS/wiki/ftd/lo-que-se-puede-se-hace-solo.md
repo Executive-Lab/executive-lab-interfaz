@@ -229,6 +229,11 @@ hacerse solo, porque no se puede deshacer.
     tope si `git status` fallaba; y los renombrados.
   - La prueba nueva usa git de verdad y comprueba que la trampa salta con git a pelo. Las mutaciones
     caen 12 de 12, también la del renombrado que antes vivía.
+- **«Una carpeta que ya tenía cosas»** (el punto 8 de «Hay que construirlo», no el de la checklist; decisión
+  152, 15-10): la copia que RSC guarda en `.rsc/backups/` antes de montar ya se ve y se dice. La primera vez, la
+  tarjeta «Esto parece …» nombra lo suyo que guardó («la habilidad «review»») con «Ver la copia», y después
+  sigue en Ver las copias guardadas. Probado también con el RSC de verdad (`--con-arnes`): su `review`, pisada
+  por la del arnés, está entera en la copia, y lo que la barra apaga antes de montar no cuenta como suyo.
 - **Punto 7** (15-10): la prueba de `connect-tool` que termina con `FAIL — this user can write` (o «write
   scope», o «puede escribir») ya no es «No conecta, y no sé decirte por qué». Conecta, se dice que la clave
   puede cambiar y borrar, y se pregunta una vez con dos salidas: dejarla así, que se recuerda con la huella

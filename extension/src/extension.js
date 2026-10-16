@@ -20,12 +20,15 @@ const identidad = require('./identidad');
 const puente = require('./puente');
 const acciones = require('./acciones');
 const conexiones = require('./conexiones');
+const informatico = require('./informatico');
 const sueltas = require('./sueltas');
 // Los encargos con su diagnóstico: «Resolver una incidencia» los usaba sin traerlos, y reventaba siempre (G1).
 const encargos = require('./encargos');
 const cerebro = require('./cerebro');
 const buscador = require('./buscar');
 const consejos = require('./consejos');
+// Se adapta y da ideas (F6, decisión 152): «Esto parece …» y las ideas de lo que hay.
+const ideas = require('./ideas');
 const recordatorios = require('./recordatorios');
 const rutinas = require('./rutinas');
 const cuando = require('./cuando');
@@ -127,6 +130,9 @@ const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
 const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
 const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
+// Si ya se dijo «Esto parece …» en esta carpeta, o si la primera vez no había
+// nada que decir (decisión 152).
+const CLAVE_LO_QUE_PARECE = 'executiveLab.loQueParece';
 // La última versión de la barra que se abrió aquí, para saber si hay que decir
 // qué trae la de ahora; y cuándo se miró en GitHub lo que pasó con los avisos
 // mandados de esta carpeta (decisión 134).
@@ -491,6 +497,8 @@ ${cabecera}
       comoSeLlama: identidad.deQuien(),
       // Como mucho uno, y siempre con un botón que lo resuelve ahí mismo.
       consejo: await this.elConsejoQueToca(),
+      // «Esto parece …» la primera vez, y la idea que toca (decisión 152).
+      seAdapta: await this.loQueSeAdapta(),
       // Lo que toca a esta hora, con su botón; y la costumbre que la barra
       // acaba de convertir en recordatorio, dicha una vez (decisión 144).
       recordatorio: await this.elRecordatorioQueToca(),
@@ -767,6 +775,44 @@ ${cabecera}
     return this.refrescar(true);
   }
 
+  // ── Se adapta y da ideas (decisión 152) ──────────────────────────────
+
+  // «Esto parece …», la primera vez, y la idea que toca. Si la primera vez no
+  // hay nada —una carpeta nueva—, ya no se dirá: lo que crezca aquí después lo
+  // ha hecho ella, y «esto parece» le contaría lo que ya sabe. Pero si hay algo
+  // suyo que la barra todavía no sabe decir, se espera (revisión de corrección, 8).
+  async loQueSeAdapta() {
+    try {
+      if (!proyecto.arnesCompleto()) return null;
+      const visto = ideas.queSeVe({
+        carpetaDeLaExtension: this.contexto.extensionPath,
+        corpus: this.corpus(),
+        silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
+      });
+      const yaSeDijo = this.almacen().get(CLAVE_LO_QUE_PARECE);
+      if (!yaSeDijo && !visto.parece && !visto.hayAlgoSuyo) await this.almacen().update(CLAVE_LO_QUE_PARECE, 'nada');
+      return { parece: yaSeDijo ? null : visto.parece, idea: visto.idea };
+    } catch (error) {
+      // Como el consejo: es un extra, y si falla la barra sigue igual.
+      this.salida.appendLine(`[ideas] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  async entendidoLoQueParece() {
+    await this.almacen().update(CLAVE_LO_QUE_PARECE, Date.now());
+    return this.refrescar(true);
+  }
+
+  // La copia que guardó el arnés al montarse, en una ventana del sistema. La
+  // ruta no viene del panel: se vuelve a buscar en el disco.
+  async verLaCopiaDelMontaje() {
+    const copia = ideas.laCopiaDelMontaje(proyecto.raiz());
+    if (!copia) return this.enviar({ tipo: 'aviso', texto: 'Esa copia ya no está.', malo: true });
+    await vscode.env.openExternal(vscode.Uri.file(copia.carpeta));
+    return undefined;
+  }
+
   // ── Lo que pide el asistente (decisión 150) ──────────────────────────
   //
   // La regla 7 decía «dile que la busque en la barra y la pulse»: el alumno, que
@@ -933,6 +979,13 @@ ${cabecera}
       verConexion: () => this.verConexion(mensaje.proveedor),
       guardarClave: () => this.guardarClave(mensaje.proveedor, mensaje.clave, mensaje.valor),
       pasoDeLaGuia: () => this.pasoDeLaGuia(mensaje.proveedor, mensaje.paso, mensaje.todos),
+      // Decisión 156: cada clase de acceso, su forma, y lo que pedirle al informático.
+      guardarClaves: () => this.guardarClaves(mensaje.proveedor, mensaje.valores),
+      soltarFicheroDeAcceso: () => this.ponerFicheroDeAcceso(mensaje.proveedor, mensaje.ficheros),
+      elegirFicheroDeAcceso: () => this.elegirFicheroDeAcceso(mensaje.proveedor),
+      verParaElInformatico: () => this.verParaElInformatico(mensaje.proveedor),
+      copiarParaElInformatico: () => this.copiarParaElInformatico(mensaje.proveedor),
+      mandarAlInformatico: () => this.mandarAlInformatico(mensaje.proveedor),
       probar: () => this.probar(mensaje.proveedor),
       hacerCosita: () => this.hacerCosita(mensaje.proveedor, mensaje.fichero, mensaje.etiqueta, mensaje.pideDatos),
 
@@ -1021,6 +1074,8 @@ ${cabecera}
       crearCarpeta: () => arrancar.crearUnaCarpetaDentro(os.homedir(), this.salida),
       abrirAsistente: () => puente.abrirConversacion(),
       ahoraNo: () => this.ahoraNo(mensaje.id),
+      entendidoLoQueParece: () => this.entendidoLoQueParece(),
+      verLaCopiaDelMontaje: () => this.verLaCopiaDelMontaje(),
       aprenderCapacidad: () => this.aprenderCapacidad(mensaje.capacidad, mensaje.nombre),
       verEditorCompleto: () => this.verEditorCompleto(),
       modoSencillo: () => this.modoSencillo(),
@@ -1356,19 +1411,118 @@ ${cabecera}
   async guardarClave(proveedor, clave, valor) {
     const { ok, mensaje } = conexiones.escribir(proveedor, clave, valor);
     if (!ok) return this.verConexion(proveedor, { texto: mensaje, malo: true });
+    return this.yaEstaPuesto(proveedor, 'Guardada.', mensaje);
+  }
+
+  // Lo de después de poner algo, una clave o un fichero de acceso: si ya está
+  // todo, se prueba sola; si no, se dice qué falta (decisiones 146 y 156).
+  async yaEstaPuesto(proveedor, dicho, sinPrueba) {
     const datos = conexiones.claves(proveedor);
     const faltan = datos ? datos.claves.filter((c) => !c.puesta).length : 0;
+    // Pide su fichero de acceso y todavía no está. No para la prueba: si trae una,
+    // ella dirá si falta (revisión de corrección de la 156); si no, se dice aquí.
+    const faltaElFichero = Boolean(datos) && datos.proveedor.pideFichero && !datos.proveedor.conFichero;
     if (faltan || !conexiones.tienePrueba(proveedor)) {
-      return this.verConexion(proveedor, { texto: faltan ? `Guardada. ${faltan === 1 ? 'Falta 1 por poner.' : `Faltan ${faltan} por poner.`}` : mensaje, malo: false });
+      const queFalta = faltan ? (faltan === 1 ? 'Falta 1 por poner.' : `Faltan ${faltan} por poner.`) : (faltaElFichero ? 'Falta su fichero de acceso.' : '');
+      return this.verConexion(proveedor, { texto: queFalta ? `${dicho} ${queFalta}` : sinPrueba, malo: false });
     }
-    this.enviar({ tipo: 'esperando', que: 'Guardada. Probando la conexión…' });
+    this.enviar({ tipo: 'esperando', que: `${dicho} Probando la conexión…` });
     const prueba = await this.probarYApuntar(proveedor);
     // Si mientras tanto se fue a otra pantalla, no se le devuelve: lo que salió
     // ya está apuntado y la lista lo dice.
     const sigueAqui = this.donde && this.donde.tipo === 'conexion' && this.donde.proveedor === proveedor;
     if (!sigueAqui) return this.donde && this.donde.tipo === 'conexiones' ? this.verConexiones() : undefined;
     const aviso = this.loQueDijoLaPrueba(proveedor, prueba);
-    return this.verConexion(proveedor, { ...aviso, texto: `Guardada. ${aviso.texto}` });
+    return this.verConexion(proveedor, { ...aviso, texto: `${dicho} ${aviso.texto}` });
+  }
+
+  // El usuario y la contraseña, con un solo «Guardar» (decisión 156): si cada uno
+  // llevara el suyo, se escribirían los dos y se pulsaría solo el de abajo, y el
+  // de arriba se perdería al repintar. Se guardan todos y el último hace lo de
+  // siempre: probarla si ya está todo.
+  async guardarClaves(proveedor, valores) {
+    const pares = Object.entries(valores && typeof valores === 'object' ? valores : {})
+      .filter(([clave, valor]) => typeof clave === 'string' && typeof valor === 'string' && valor.trim())
+      .slice(0, 10);
+    if (!pares.length) return this.verConexion(proveedor);
+    for (const [clave, valor] of pares.slice(0, -1)) {
+      const { ok, mensaje } = conexiones.escribir(proveedor, clave, valor);
+      if (!ok) return this.verConexion(proveedor, { texto: mensaje, malo: true });
+    }
+    const [clave, valor] = pares[pares.length - 1];
+    return this.guardarClave(proveedor, clave, valor);
+  }
+
+  // Un fichero de acceso, soltado encima de la barra o elegido (decisión 156): a
+  // su sitio, y si con eso ya está todo, se prueba sola, como una clave (P9).
+  async ponerFicheroDeAcceso(proveedor, ficheros) {
+    const hecho = await conexiones.ponerFicheroDeAcceso(proveedor, ficheros);
+    if (!hecho.ok) return this.verConexion(proveedor, { texto: hecho.mensaje, malo: true, ...(hecho.boton ? { boton: hecho.boton } : {}) });
+    return this.yaEstaPuesto(proveedor, hecho.mensaje, hecho.mensaje);
+  }
+
+  // Con el diálogo de siempre, para quien no arrastra: lo mismo que soltarlo.
+  async elegirFicheroDeAcceso(proveedor) {
+    const elegidos = await vscode.window.showOpenDialog({ canSelectMany: false, openLabel: 'Ponerlo en su sitio', title: 'Elige el fichero de acceso' });
+    if (!elegidos || !elegidos.length) return this.verConexion(proveedor);
+    const ficheros = [];
+    for (const uri of elegidos) {
+      try {
+        // Antes de leerlo: uno de varios gigas no se sube entero a la memoria.
+        if (fs.statSync(uri.fsPath).size > conexiones.CABE_UN_FICHERO_DE_ACCESO) {
+          return this.verConexion(proveedor, { texto: 'Eso pesa demasiado para ser un fichero de acceso.', malo: true });
+        }
+        ficheros.push({ nombre: path.basename(uri.fsPath), datos: fs.readFileSync(uri.fsPath).toString('base64') });
+      } catch { /* uno que no se lee no tumba los demás */ }
+    }
+    return this.ponerFicheroDeAcceso(proveedor, ficheros);
+  }
+
+  // ── «Pídeselo a tu informático» (decisión 156) ────────────────────────
+  //
+  // El mensaje se arma en `informatico.js` cada vez, del disco: los botones solo
+  // dicen de qué conexión es, y el texto no viaja desde la pantalla. La barra no
+  // manda nada: lo copia, o abre su correo con el mensaje puesto (P9).
+  verParaElInformatico(proveedor, aviso = null) {
+    const hecho = informatico.mensaje(proveedor);
+    if (!hecho) return this.verConexiones();
+    // Es para leer: el vigía no lo repinta debajo.
+    this.donde = { tipo: 'quieto' };
+    return this.enviar({ tipo: 'informatico', ...hecho, aviso });
+  }
+
+  async copiarParaElInformatico(proveedor) {
+    const hecho = informatico.mensaje(proveedor);
+    if (!hecho) return this.verConexiones();
+    await vscode.env.clipboard.writeText(hecho.cuerpo);
+    return this.verParaElInformatico(proveedor, { texto: 'Copiado. Pégalo donde se lo vayas a mandar.', malo: false });
+  }
+
+  async mandarAlInformatico(proveedor) {
+    const hecho = informatico.mensaje(proveedor);
+    if (!hecho) return this.verConexiones();
+    let abierto = false;
+    let alPortapapeles = false;
+    try {
+      // Dentro: codificar puede lanzar con un texto raro, y entonces se copia.
+      const { enlace, alPortapapeles: copiado } = informatico.correo(hecho);
+      alPortapapeles = copiado;
+      if (alPortapapeles) await vscode.env.clipboard.writeText(hecho.cuerpo);
+      // Como texto, no con `Uri.parse`: ver `informatico.correo`.
+      abierto = await vscode.env.openExternal(enlace);
+    } catch (error) {
+      this.salida.appendLine(`[informatico] no se ha abierto el correo: ${error.message}`); // diccionario: interno
+    }
+    if (!abierto) {
+      await vscode.env.clipboard.writeText(hecho.cuerpo);
+      return this.verParaElInformatico(proveedor, { texto: 'No he podido abrir tu correo. Te lo he copiado: pégalo en un correo nuevo.', malo: true });
+    }
+    return this.verParaElInformatico(proveedor, {
+      texto: alPortapapeles
+        ? 'Es un texto largo: te lo he copiado para que llegue entero. Pégalo en el correo con Ctrl+V.'
+        : 'Te he abierto el correo con el mensaje. Pon a quién va y mándalo tú.',
+      malo: false,
+    });
   }
 
   async probar(proveedor) {
@@ -1415,7 +1569,9 @@ ${cabecera}
   }
 
   queDecirDeCuandoCaduca(proveedor, datos, aviso) {
-    const puestas = datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero);
+    // Y con su fichero de acceso, si lo pide: antes se preguntaba sin él (revisión de corrección de la 156).
+    const puestas = (datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero))
+      && (!datos.proveedor.pideFichero || Boolean(datos.proveedor.conFichero));
     if (!puestas || datos.proveedor.aMedioHacer) return null;
     const una = this.cuandoCaduca(proveedor);
     if (!una) return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };
@@ -1742,7 +1898,8 @@ ${cabecera}
   // ----------------------------------------------------------- copias
 
   async verCopias() {
-    this.enviar({ tipo: 'copias', copias: await copias.copias(8) });
+    // Y la copia que guardó el arnés al montarse, si guardó algo suyo (decisión 152).
+    this.enviar({ tipo: 'copias', copias: await copias.copias(8), delMontaje: ideas.laCopiaEnPantalla(ideas.laCopiaDelMontaje(proyecto.raiz())) });
   }
 
   // La pantalla de la copia de fuera. Enseña en qué punto está esto —si ha
@@ -2086,6 +2243,13 @@ ${cabecera}
     let ahora = [];
     try {
       ahora = consejos.consejos(await this.queVeoYo());
+      // Y las ideas de lo que hay aquí, todas (decisión 152), sin repetir ninguna.
+      const visto = ideas.queSeVe({
+        carpetaDeLaExtension: this.contexto.extensionPath,
+        corpus: this.corpus(),
+        silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
+      });
+      ahora = [...ahora, ...visto.ideas.filter((idea) => !ahora.some((c) => c.id === idea.id))];
     } catch (error) {
       this.salida.appendLine(`[sugerencias] ${error.stack || error.message}`);
     }

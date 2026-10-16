@@ -34,6 +34,9 @@ const pedir = (tipo, extra = {}) => vscode.postMessage({ tipo, ...extra });
 // Dónde cae lo que se arrastra encima: la bandeja de documentos, salvo cuando
 // se está mirando la cara de la empresa, que va a su carpeta.
 let dondeCaeLoQueSueltas = 'documentos';
+// Y en la pantalla de una conexión que pide un fichero de acceso, a esa
+// conexión (decisión 156): «Suéltalo aquí».
+let conexionQueRecibe = null;
 
 // -------------------------------------------------- soltar documentos encima
 //
@@ -86,6 +89,10 @@ document.addEventListener('drop', async (e) => {
   if (!sueltos.length) return;
 
   const leidos = (await Promise.all(sueltos.map(leer))).filter(Boolean);
+  if (dondeCaeLoQueSueltas === 'acceso' && conexionQueRecibe) {
+    pedir('soltarFicheroDeAcceso', { ficheros: leidos, proveedor: conexionQueRecibe });
+    return;
+  }
   if (!leidos.length) {
     pedir('soltarDocumentos', { ficheros: [], para: dondeCaeLoQueSueltas });
     return;
@@ -1813,8 +1820,9 @@ function pantallaPrincipalSencilla() {
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
     t.losDatos,
-    t.loNuevo, t.laCostumbre, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
+    t.loNuevo, t.laCostumbre, t.loQueParece, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
     recargar ? '' : t.versionNueva,
+    t.laIdea,
   ].filter(Boolean);
   const tarjeta = encendida('tarjetaUnica') ? (enOrden[0] || '') : enOrden.join('');
   // Tras «Actualizar ahora» llegan el aviso y la tarjeta, los dos con «Recargar
@@ -2158,6 +2166,28 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'No hace falta', discreto: true, accion: { tipo: 'noHaceFaltaLaCostumbre', nombre: c.nombre } })}
     </div>`;
 
+  // Se adapta y da ideas (decisión 152). La primera vez, en una carpeta que ya
+  // tenía cosas, lo que la barra sabe leer de ella y, si el arnés guardó una
+  // copia de lo suyo al montarse, eso y el botón para verla. Las acciones,
+  // tal cual vienen (P6).
+  const p = estado.seAdapta && estado.seAdapta.parece;
+  const loQueParece = !p ? '' : `
+    <div class="consejo">
+      ${p.texto ? `<p class="que">${texto(p.texto)}</p>` : ''}
+      ${p.copia ? `<p class="detalle">${texto(p.copia.texto)}</p>` : ''}
+      ${p.copia ? boton({ etiqueta: 'Ver la copia', icono: '🗂️', principal: true, accion: p.copia.accion }) : ''}
+      ${boton({ etiqueta: 'Entendido', icono: p.copia ? '' : '✓', principal: !p.copia, discreto: Boolean(p.copia), accion: p.entendido })}
+    </div>`;
+  // Y después, de una en una, las ideas de lo que hay: la última de la fila,
+  // con su botón y su «Ahora no».
+  const idea = estado.seAdapta && estado.seAdapta.idea;
+  const laIdea = !idea ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(idea.texto)}</p>
+      ${boton({ etiqueta: idea.boton, icono: '💡', principal: true, accion: idea.accion })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: idea.id } })}
+    </div>`;
+
   // Los datos de clientes, dichos a tiempo y una vez (decisión 153): al entrar los
   // primeros datos de verdad. Lleva al texto de Ayuda, y leerlo o «Entendido» no
   // la deja volver en esta carpeta. La frase sale de su tabla.
@@ -2170,7 +2200,7 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, losDatos };
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos };
 }
 
 function accionesRapidas(descubiertos) {
@@ -2459,7 +2489,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       // disfraza de conexión con claves que no se pueden rellenar. Y una cuyas
       // claves están, pero en otro sitio, tampoco se disfraza de «le faltan»:
       // no le falta nada, le falta orden.
-      etiqueta: p.aMedioHacer
+      etiqueta: loQuePideSuAcceso(p) || (p.aMedioHacer
         ? `${p.etiqueta} — sin preparar`
         : (p.faltan
           ? `${p.etiqueta} — ${plural(p.faltan, 'falta una clave', 'faltan {n} claves')}`
@@ -2478,8 +2508,8 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
                 : `${p.etiqueta} — falla: ${laPrimeraFrase(p.prueba.mensaje)}`)
               // Se autentica con un fichero y no con claves: decir su nombre a
               // secas dejaría pensando que no tiene nada puesto (decisión 105).
-              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta)))))),
-      icono: p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.caduca && p.caduca.caducada ? '✕' : (p.fueraDeSitio || p.caduca || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●')))),
+              : (p.conFichero ? `${p.etiqueta} — con su fichero de acceso` : p.etiqueta))))))),
+      icono: loQuePideSuAcceso(p) ? '○' : p.aMedioHacer ? '◌' : (p.faltan ? '○' : (p.caduca && p.caduca.caducada ? '✕' : (p.fueraDeSitio || p.caduca || (p.prueba && p.prueba.puedeEscribir) ? '◐' : (p.prueba && !p.prueba.ok ? '✕' : '●')))),
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}
     ${porMontar}
@@ -2491,9 +2521,23 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
 // verdad, elige la forma más segura, monta la carpeta con su prueba y guía.
 // Y lo que la barra necesita leer después: los pasos en su README y de dónde
 // sale cada clave, para la guía de uno en uno.
+// Y, desde la decisión 156, la clase de acceso y lo que pedirle a su informático.
 const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es. Si tienes la habilidad connect-tool, úsala. '
   + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, y de dónde sale cada clave en su CREDENTIALS.md. '
+  + 'Escribe también en su CREDENTIALS.md la clase de acceso que pide, y en su README lo que tendría que pedirle a mi informático, como dice tu habilidad executive-lab. '
   + 'Comprueba que funciona antes de darla por buena.';
+
+// Lo que le falta a una conexión según su clase de acceso (decisión 156): entrar
+// con su cuenta, o su fichero de acceso. Null si no es eso: se dice lo de siempre.
+function loQuePideSuAcceso(p) {
+  const clases = p.acceso || [];
+  if (p.aMedioHacer || p.fueraDeSitio || (p.prueba && p.prueba.ok)) return null;
+  // Con claves por poner, «falta una clave» dice más; y si ya se probó, lo que dijo la prueba.
+  if (!p.faltan && !p.prueba && clases.length && clases.every((c) => c === 'cuenta')) return `${p.etiqueta} — falta entrar con tu cuenta`;
+  // Antes que «falta una clave», si de verdad lo pide: sin el fichero no hay nada que probar.
+  if (p.pideFichero && !p.conFichero) return `${p.etiqueta} — le falta su fichero de acceso`;
+  return null;
+}
 
 // «Esa clave no vale. Cópiala otra vez entera.» → «esa clave no vale».
 const laPrimeraFrase = (t) => {
@@ -2516,7 +2560,14 @@ function bloqueCaduca(caduca, proveedor) {
 }
 
 function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null }) {
-  const faltaAlguna = claves.some((c) => !c.puesta);
+  // La clase de acceso que dejó escrita el asistente (decisión 156). Sin ella,
+  // todo como antes (P1).
+  const clases = proveedor.acceso || [];
+  const pide = (clase) => clases.includes(clase);
+  // «Solo entrar» es cuando no queda ninguna clave por poner: con un ID y un
+  // secreto que pegar, se enseñan con su campo (revisión de corrección de la 156).
+  const soloEntrar = clases.length > 0 && clases.every((c) => c === 'cuenta') && !claves.some((c) => !c.puesta);
+  const faltaAlguna = claves.some((c) => !c.puesta) || (proveedor.pideFichero && !proveedor.conFichero);
   const algunaFuera = claves.some((c) => !c.puesta && c.fuera);
 
   // Los pasos los escribe el asistente al investigar la herramienta. Se
@@ -2530,12 +2581,20 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
   const unPaso = () => {
     const n = Math.min(paso, pasos.length - 1);
     const ultimo = n === pasos.length - 1;
-    const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]);
+    // Qué se hace abajo, según lo que pide y de qué habla el paso (decisión 156).
+    // Con el fichero ya puesto, no se dice que se suelte.
+    const sinFichero = pide('fichero') && !proveedor.conFichero;
+    const deFichero = sinFichero && /fichero|archivo|descarg/i.test(pasos[n]);
+    const hablaDeLaClave = /clave|key|token|secret|contrase|password|c[oó]digo/i.test(pasos[n]) || deFichero;
+    const yAbajo = soloEntrar ? 'Cuando lo tengas, pulsa «Entrar» abajo: el asistente te abre el navegador.'
+      : (deFichero || (sinFichero && !claves.some((c) => !c.puesta)) ? 'Cuando lo tengas, suéltalo abajo: lo pongo en su sitio y lo pruebo yo.'
+        : (pide('usuario') ? 'Cuando los tengas, pégalos abajo y pulsa «Guardar»: los pruebo yo.'
+          : 'Cuando la tengas, pégala abajo y pulsa «Guardar»: la pruebo yo.'));
     return `
       <div class="conexion guia-paso">
         <p class="pista">${texto(`Paso ${n + 1} de ${pasos.length}`)}</p>
         <p class="nombre">${texto(pasos[n])}</p>
-        ${hablaDeLaClave || ultimo ? `<p class="pista">${texto('Cuando la tengas, pégala abajo y pulsa «Guardar»: la pruebo yo.')}</p>` : ''}
+        ${hablaDeLaClave || ultimo ? `<p class="pista">${texto(yAbajo)}</p>` : ''}
         <div class="fila">
           ${proveedor.ayuda ? boton({ etiqueta: 'Abrir su página', icono: '↗', pequeno: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
           ${!ultimo ? boton({ etiqueta: 'Hecho, siguiente', icono: '▸', principal: true, pequeno: true, accion: ir(n + 1) }) : ''}
@@ -2550,19 +2609,70 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
       ? `<ol class="guia">${pasos.map((p) => `<li>${texto(p)}</li>`).join('')}</ol>${boton({ etiqueta: 'De uno en uno', pequeno: true, discreto: true, accion: ir(paso) })}`
       : unPaso());
 
-  const formularios = claves.length
-    ? claves.map((c) => `
+  // Cada clase de acceso, su forma (decisión 156). Entrar con tu cuenta: no hay
+  // nada que pegar. Usuario y contraseña: juntos, con un solo «Guardar». Una
+  // dirección que te dan: como dirección, con dónde sale. Lo demás, como siempre.
+  const visibles = soloEntrar ? [] : claves;
+  const juntas = visibles.filter((c) => c.forma === 'usuario' || c.forma === 'contrasena');
+  const agrupar = juntas.length >= 2;
+  const sueltasDeUna = agrupar ? visibles.filter((c) => !juntas.includes(c)) : visibles;
+  const queSePega = agrupar && !sueltasDeUna.length ? 'Escribe el usuario y la contraseña tal cual te los dieron.'
+    : (visibles.length && visibles.every((c) => c.forma === 'direccion') ? 'Pega la dirección entera. Los espacios y las comillas los quito yo.'
+      : 'Pega la clave entera. Los espacios y las comillas los quito yo.');
+  // Un secreto nunca se pinta como texto, sea de la forma que sea.
+  const comoSeEscribe = (c) => {
+    const tipo = c.secreta || c.forma === 'contrasena' ? 'password' : 'text';
+    if (c.forma === 'usuario') return [tipo, 'Escribe aquí el usuario'];
+    if (c.forma === 'contrasena') return [tipo, 'Escribe aquí la contraseña'];
+    if (c.forma === 'direccion') return [tipo, 'Pega aquí la dirección entera'];
+    return [tipo, c.secreta ? 'Pega aquí la clave entera' : 'Escribe aquí el valor'];
+  };
+  const usuarioYContrasena = agrupar ? `
+        <div class="conexion" data-proveedor="${atributo(proveedor.id)}">
+          <p class="nombre">Usuario y contraseña</p>
+          ${juntas.map((c) => `
+          <p class="pista">${texto(`${c.etiqueta}: ${c.puesta ? c.pista : (c.fuera || 'todavía sin poner')}`)}</p>
+          ${c.donde ? `<p class="donde">${texto(c.donde)}</p>` : ''}
+          <input type="${comoSeEscribe(c)[0]}" placeholder="${atributo(comoSeEscribe(c)[1])}" data-clave="${atributo(c.clave)}">`).join('')}
+          <div class="fila">
+            ${boton({ etiqueta: 'Guardar', principal: true, accion: { tipo: 'guardarClaves', proveedor: proveedor.id } })}
+          </div>
+        </div>` : '';
+  const elFichero = pide('fichero') ? `
+        <div class="conexion soltar-aqui">
+          <p class="nombre">Fichero de acceso</p>
+          ${proveedor.conFichero
+    ? `<p class="pista">Puesto en su sitio.</p>
+             ${boton({ etiqueta: 'Cambiarlo', icono: '✎', pequeno: true, discreto: true, accion: { tipo: 'elegirFicheroDeAcceso', proveedor: proveedor.id } })}`
+    : `<p class="soltar">Suéltalo aquí</p>
+             <p class="pista">Arrástralo encima de la barra, o elígelo: lo pongo en su sitio y no sale de este ordenador.</p>
+             ${boton({ etiqueta: 'Elegir el fichero', icono: '📄', principal: true, accion: { tipo: 'elegirFicheroDeAcceso', proveedor: proveedor.id } })}`}
+        </div>` : '';
+  const entrar = pide('cuenta') ? `
+        <div class="conexion">
+          <p class="nombre">Entrar con tu cuenta</p>
+          <p class="pista">${texto(soloEntrar
+    ? `No hay nada que pegar: entras con tu cuenta de ${proveedor.etiqueta} en el navegador, y el asistente hace el resto.`
+    : `Además, entras con tu cuenta de ${proveedor.etiqueta} en el navegador, y el asistente hace el resto.`)}</p>
+          ${boton({ etiqueta: 'Entrar', icono: '↗', principal: soloEntrar, accion: { tipo: 'pedir', prompt: `Quiero conectar ${proveedor.etiqueta} entrando con mi cuenta (01-TOOLS/${proveedor.id}/). Sigue lo que dicen su README y su CREDENTIALS.md: ábreme el navegador para que entre y dé permiso, guarda lo que devuelva donde lo busca su prueba sin enseñármelo, y prueba la conexión. Si antes hace falta algo de mi informático, dímelo.` } })}
+        </div>` : '';
+
+  const formularios = visibles.length
+    ? usuarioYContrasena + sueltasDeUna.map((c) => `
         <div class="conexion" data-proveedor="${atributo(proveedor.id)}">
           <p class="nombre">${texto(c.etiqueta)}</p>
           ${c.donde ? `<p class="donde">${texto(c.donde)}</p>` : ''}
+          ${c.forma === 'direccion' && !c.donde ? `<p class="donde">${texto(`Te la da ${proveedor.etiqueta}: cópiala entera de su página.`)}</p>` : ''}
           <p class="pista">${c.puesta
     ? `Puesta: ${texto(c.pista)}`
     : (c.fuera ? `Ya la tienes, ${texto(c.fuera)}. Pulsa «Que las ordene» y aparecerá aquí.` : 'Todavía sin poner')}</p>
-          <input type="${c.secreta ? 'password' : 'text'}" placeholder="${c.secreta ? 'Pega aquí la clave entera' : 'Escribe aquí el valor'}" data-clave="${atributo(c.clave)}">
+          <input type="${comoSeEscribe(c)[0]}" placeholder="${atributo(comoSeEscribe(c)[1])}" data-clave="${atributo(c.clave)}">
           <div class="fila">
             ${boton({ etiqueta: 'Guardar', principal: true, accion: { tipo: 'guardarClave', proveedor: proveedor.id, clave: c.clave } })}
           </div>
         </div>`).join('')
+    // Con un fichero o entrando con tu cuenta, que no haya claves no hay que decirlo.
+    : (pide('fichero') || pide('cuenta')) && !proveedor.aMedioHacer ? ''
     // Sin claves puede significar dos cosas muy distintas, y decir la que no es
     // manda al alumno a esperar algo que no va a pasar. Si el asistente copió
     // la plantilla y no la ha terminado, no hay nada que rellenar todavía: se
@@ -2589,13 +2699,46 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${proveedor.ayuda && faltaAlguna && !guia ? boton({ etiqueta: 'Abrir su página para sacar la clave', icono: '↗', principal: true, accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${faltaAlguna ? '<hr class="separador">' : ''}
     ${algunaFuera && ordenar ? boton({ etiqueta: 'Que las ordene', icono: '🧹', principal: true, accion: { tipo: 'pedir', prompt: ordenar } }) : ''}
-    ${claves.length ? '<p class="detalle">Pega la clave entera. Los espacios y las comillas los quito yo.</p>' : ''}
+    ${entrar}
+    ${elFichero}
+    ${visibles.length ? `<p class="detalle">${texto(queSePega)}</p>` : ''}
     ${formularios}
     ${bloqueCaduca(caduca, proveedor)}
     ${proveedor.ayuda && !faltaAlguna ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${!proveedor.pasos.length ? boton({ etiqueta: 'Explícame cómo conectarla', icono: '💬', accion: { tipo: 'pedir', prompt: `Explícame paso a paso cómo conectar ${proveedor.etiqueta}: dónde entro, dónde saco cada clave y qué pego dónde. Y deja los pasos escritos para la próxima vez.` } }) : ''}
+    ${/* Muchas veces la clave la tiene otra persona (decisión 156). */''}
+    ${boton({ etiqueta: 'Pídeselo a tu informático', icono: '✉️', accion: { tipo: 'verParaElInformatico', proveedor: proveedor.id } })}
     ${boton({ etiqueta: 'Probar la conexión', icono: '🔎', accion: { tipo: 'probar', proveedor: proveedor.id } })}
     ${lasCositas}
+  `;
+}
+
+// «Pídeselo a tu informático» (decisión 156). El mensaje lo arma la extensión
+// con lo que dejó escrito el asistente y la parte de seguridad de la barra. Los
+// botones solo dicen de qué conexión es: el texto no vuelve desde aquí.
+function pantallaInformatico({ proveedor, asunto, cuerpo, deLaCarpeta, paginasAjenas = [], tieneSuPagina = false, aviso: avisoLocal }) {
+  // Lo que preparó el asistente puede llevar páginas que no son de la
+  // herramienta: se enseñan antes de mandarlo (revisión de seguridad de la 156).
+  const paginas = paginasAjenas.length ? `
+    <p class="pista malo">${texto(tieneSuPagina
+    ? `Lleva páginas que no son de ${proveedor.etiqueta}. Mira que sean de fiar antes de mandarlo:`
+    : 'Lleva estas páginas. Mira que sean de fiar antes de mandarlo:')}</p>
+    ${paginasAjenas.map((u) => `<p class="pista">· ${texto(u)}</p>`).join('')}` : '';
+  return `
+    ${bloqueAviso(avisoLocal)}
+    ${volver({ tipo: 'verConexion', proveedor: proveedor.id })}
+    <p class="titulo">Para tu informático</p>
+    <p class="detalle">${texto('Mándaselo a quien te lleve los ordenadores y las cuentas. Lo he revisado para quitar las claves: léelo antes de mandarlo.')}</p>
+    ${paginas}
+    <p class="pista">${texto(asunto)}</p>
+    <pre class="salida">${texto(cuerpo)}</pre>
+    <div class="fila">
+      ${boton({ etiqueta: 'Copiarlo', icono: '📋', principal: true, accion: { tipo: 'copiarParaElInformatico', proveedor: proveedor.id } })}
+      ${boton({ etiqueta: 'Mandarlo por correo', icono: '✉️', accion: { tipo: 'mandarAlInformatico', proveedor: proveedor.id } })}
+    </div>
+    ${deLaCarpeta ? '' : `
+      <p class="detalle">${texto(`Lo he armado con lo que sé de ${proveedor.etiqueta}. El asistente puede dejarlo escrito con los permisos exactos.`)}</p>
+      ${boton({ etiqueta: 'Que lo escriba el asistente', icono: '💬', accion: { tipo: 'pedir', prompt: `Escribe en el README de 01-TOOLS/${proveedor.id}/ una sección «## Para tu informático», como dice tu habilidad executive-lab: para qué es, qué acceso exactamente y con qué permisos mínimos, si basta con solo leer, la página donde se hace y qué preguntarle si no está claro. Investiga ${proveedor.etiqueta} de verdad antes de escribirla, y no pongas ninguna clave.` } })}`}
   `;
 }
 
@@ -2999,9 +3142,17 @@ function pantallaArticulo({ titulo, cuerpo, tema, enlaces, hermanos, desde }) {
 
 // ----------------------------------------------------------------- resto
 
-function pantallaCopias({ copias }) {
+function pantallaCopias({ copias, delMontaje = null }) {
+  // Y la que guardó el arnés de lo suyo al montarse, que no es de git y no se
+  // veía por ningún lado (decisión 152).
+  const delArnes = delMontaje ? `
+    <hr class="separador">
+    <h2>Copias que guarda el arnés</h2>
+    <p class="detalle">${texto(delMontaje.texto)}</p>
+    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}` : '';
+
   if (!copias.length) {
-    return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${volver()}`;
+    return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${delArnes}${volver()}`;
   }
 
   return `
@@ -3009,6 +3160,7 @@ function pantallaCopias({ copias }) {
     <p class="titulo">Volver atrás</p>
     <p class="detalle">Antes de mover nada guardo una copia de lo de ahora, así que esto también se puede deshacer.</p>
     ${copias.map((c) => boton({ etiqueta: c.etiqueta, icono: '↩️', accion: { tipo: 'volverA', id: c.id } })).join('')}
+    ${delArnes}
   `;
 }
 
@@ -3093,6 +3245,8 @@ function pantallaIncidencia({ codigo, fichero, sano, desconocido, hayQueTocarAlg
 function pintar(html) {
   // Salvo la de la marca, que lo pone justo antes de pintar.
   if (!/El tema de mi empresa/.test(html)) dondeCaeLoQueSueltas = 'documentos';
+  // La de un fichero de acceso la pone su pantalla, después de pintarse.
+  conexionQueRecibe = null;
   // Cualquier pantalla que no sea la de esperar para el reloj.
   if (!html.includes('data-cuanto')) pararElReloj();
   // Repintar tira el scroll al principio. Si se está en la misma pantalla —el
@@ -3110,6 +3264,15 @@ function pintar(html) {
         const campo = b.closest('.conexion').querySelector('input[data-clave]');
         if (!campo.value.trim()) return;
         accion.valor = campo.value;
+      }
+      // El usuario y la contraseña van juntos, con un solo «Guardar» (decisión 156).
+      if (accion.tipo === 'guardarClaves') {
+        const valores = {};
+        b.closest('.conexion').querySelectorAll('input[data-clave]').forEach((campo) => {
+          if (campo.value.trim()) valores[campo.dataset.clave] = campo.value;
+        });
+        if (!Object.keys(valores).length) return;
+        accion.valores = valores;
       }
       // Lo que diga la caja en el momento de pulsar, que es lo que ha leído.
       // Si lo cuenta el alumno y está vacía, no se manda: se le pone ahí.
@@ -3242,7 +3405,8 @@ function atender(data) {
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
-          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes']) {
+          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
+          'seAdapta']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }
@@ -3254,7 +3418,15 @@ function atender(data) {
       comoSeLlama = data.comoSeLlama || 'tu trabajo';
       return pintar(pantallaPrincipal());
     case 'conexiones': return pintar(pantallaConexiones(data));
-    case 'conexion': return pintar(pantallaConexion(data));
+    case 'conexion':
+      pintar(pantallaConexion(data));
+      // Si pide un fichero de acceso, lo que se suelta encima va a ella (decisión 156).
+      if (data.proveedor && (data.proveedor.acceso || []).includes('fichero')) {
+        dondeCaeLoQueSueltas = 'acceso';
+        conexionQueRecibe = data.proveedor.id;
+      }
+      return undefined;
+    case 'informatico': return pintar(pantallaInformatico(data));
     case 'resultado': return pintar(pantallaResultado(data));
     case 'cerebro':
       ultimaBusqueda = '';
