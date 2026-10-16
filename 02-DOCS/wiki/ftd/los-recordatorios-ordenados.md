@@ -67,7 +67,7 @@ esto, y está arreglado».
 - La batería de `config.yaml` más `mapeos-codex.js`, de una vez después del último cambio, sobre `4f1849d`
   con los cambios de esta rama (los del commit): `humo.js` 398 pasadas · `mapeos-codex.js` 25 · `contrato.js`
   14 · `empresas-distintas.js` las tres enteras · diccionario limpio · `revisar-powershell.js` sin pegas.
-  **Verificado.**
+  Otra vez después de traer main con la 156 (`bf8f9e9`): `humo.js` 402 pasadas, lo demás igual. **Verificado.**
 - No se ha corrido: la barra en un VS Code de verdad (`npm run probar-en-vscode`, manual) ni Windows, donde
   las pruebas de enlaces se saltan (las pasa `windows.yml`). Las mutaciones corrieron `humo.js` solo con sus
   comprobaciones de recordatorios: no ve un mutante que solo tumbaría otra.
