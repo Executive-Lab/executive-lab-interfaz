@@ -63,9 +63,19 @@ const cargar = (m) => require(path.join(RAIZ, 'src', m));
 
 let pasadas = 0;
 
+// Para probar una mutación sin esperar dos minutos: `HUMO_SOLO='trozo|otro'` corre
+// solo las comprobaciones cuyo título casa. Así no vale como pasada: lo dice al
+// final y sale con 1 (decisión 166).
+const SOLO = process.env.HUMO_SOLO ? new RegExp(process.env.HUMO_SOLO) : null;
+let saltadas = 0;
+
 // Espera siempre: media prueba es asíncrona, y si no se espera se solapan unas
 // con otras y los fallos aparecen en la comprobación equivocada.
 const comprobar = async (titulo, fn) => {
+  if (SOLO && !SOLO.test(titulo)) {
+    saltadas += 1;
+    return;
+  }
   try {
     const detalle = await fn();
     pasadas += 1;
@@ -15316,7 +15326,8 @@ exec git "$@"
         'Seguir donde lo dejé': 'pedir', 'Conversación nueva': 'conversacionNueva', 'Dime qué hago ahora': 'pedir', 'Pedir ayuda en el foro': 'pedirAyudaEnElForo',
         Sugerencias: 'verSugerencias', 'Más ayuda': 'verAyuda',
         'Guardar en git': 'guardarCopia', 'Ver las copias guardadas': 'verCopias', 'Subir a GitHub': 'verCopiaFuera',
-        'Barra 0.46.0': 'verAyuda', 'Cambiar de proyecto': 'elegirCarpeta',
+        // La versión lleva a lo de la versión, no a Más ayuda (decisión 166).
+        'Barra 0.46.0': 'verEstaBarra', 'Cambiar de proyecto': 'elegirCarpeta',
       };
       for (const [etiqueta, tipo] of Object.entries(quiero)) assert.equal(botones[etiqueta], tipo, `«${etiqueta}» lleva a otro sitio`);
       for (const deAntes of ['Darle documentos (inbox)', 'Documentos entregados', 'Resultados (out)']) {
@@ -15991,12 +16002,13 @@ exec git "$@"
       const trasSoltar = enviados.filter((x) => x.tipo === 'documentos' || x.tipo === 'estado').pop();
       assert.equal(trasSoltar.tipo, 'documentos', 'soltar en Documentos te saca a la principal');
       assert.ok(trasSoltar.esperando.some((d) => d.nombre === 'albaran.txt'), 'lo soltado no sale');
-      assert.equal(trasSoltar.aviso.texto, 'Documento añadido. Se lo paso.');
+      // Lo que ha pasado de verdad: el encargo, escrito en su caja (decisión 166).
+      assert.equal(trasSoltar.aviso.texto, 'Documento añadido. Te lo he dejado escrito en la conversación. Dale a enviar.');
       // Y el aviso se queda al repintar, que es lo que pasa justo después de soltar algo.
       enviados.length = 0;
       await proveedor.repintarLoQueHaya();
       assert.equal(ultimo().tipo, 'documentos', 'el vigía saca de Documentos');
-      assert.equal(ultimo().aviso && ultimo().aviso.texto, 'Documento añadido. Se lo paso.', 'el vigía se come el aviso');
+      assert.equal(ultimo().aviso && ultimo().aviso.texto, 'Documento añadido. Te lo he dejado escrito en la conversación. Dale a enviar.', 'el vigía se come el aviso');
 
       // Elegirlos, desde Documentos, vuelve a Documentos; desde Conocimiento, como antes.
       const elegido = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'elegir-')), 'factura.txt');
@@ -16004,7 +16016,7 @@ exec git "$@"
       vscode.guion.ficheros = [elegido];
       await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
       assert.equal(ultimo().tipo, 'documentos', 'después de elegirlos, a otra pantalla');
-      assert.equal(ultimo().aviso.texto, 'Documento añadido. Se lo paso.');
+      assert.equal(ultimo().aviso.texto, 'Documento añadido. Te lo he dejado escrito en la conversación. Dale a enviar.');
       vscode.guion.ficheros = [];
       await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
       assert.equal(ultimo().tipo, 'documentos', 'sin elegir nada, a otra pantalla');
@@ -16377,7 +16389,9 @@ exec git "$@"
           vscode.registrado.portapapeles = '';
           await proveedor.manejar({ tipo });
           assert.deepEqual([vscode.registrado.ejecutados.length, vscode.registrado.abiertos.length, vscode.registrado.portapapeles], [0, 0, ''], `${tipo}: sin asistente, hace algo igual`);
-          assert.deepEqual([ultimoAviso().texto, ultimoAviso().malo], ['Claude no está en este ordenador. Díselo a tu tutor.', true], `${tipo}: sin asistente, no lo dice`);
+          // Y se pone con un clic: decía «Díselo a tu tutor» (decisión 166).
+          assert.deepEqual([ultimoAviso().texto, ultimoAviso().malo], ['Falta Claude en este ordenador, y sin él no puedo hablar con nadie.', true], `${tipo}: sin asistente, no lo dice`);
+          assert.deepEqual(ultimoAviso().boton, { etiqueta: 'Poner Claude', accion: { tipo: 'ponerElAsistente', cual: 'claude' } }, `${tipo}: sin asistente, no se puede poner`);
         }
       } finally {
         vscode.guion.extensionesInstaladas = instaladas;
@@ -19660,6 +19674,522 @@ exec git "$@"
     }
   });
 
+  // ── La barra dice lo que de verdad ha pasado (decisión 166) ──────────────
+
+  await comprobar('darle documentos dice qué ha pasado con el encargo, como «pedir» (decisión 166)', async () => {
+    // Decía «Documento añadido. Se lo paso.» y el encargo se quedaba escrito en la
+    // caja de Claude sin enviar, o en el portapapeles con Codex, sin mirar si había
+    // llegado. Y con uno pedía «Léelos».
+    const proveedor = vscode.registrado.proveedor;
+    const asistentesM = cargar('asistentes');
+    const otra = montar();
+    const enviados = [];
+    const antes = {
+      enviar: proveedor.enviar, raiz: vscode.guion.raiz, extensiones: vscode.guion.extensionesInstaladas, comandos: vscode.guion.comandosDeClaude,
+      elDeAhora: asistentesM.elDeAhora, ficheros: vscode.guion.ficheros, donde: proveedor.donde, aviso: vscode.window.showWarningMessage,
+    };
+    proveedor.enviar = (m) => enviados.push(m);
+    const avisosDelEditor = [];
+    vscode.window.showWarningMessage = async (m) => { avisosDelEditor.push(m); };
+    vscode.guion.raiz = otra;
+    const ultimoAviso = () => [...enviados].reverse().find((m) => m.tipo === 'aviso');
+    const loPedido = () => decodeURIComponent((vscode.registrado.abiertos.at(-1) || '').split('prompt=')[1] || '');
+    const uno = (nombre) => ({ nombre, datos: Buffer.from(`papel ${nombre}`).toString('base64') });
+    const ESCRITO = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
+    try {
+      // Con Claude, en su caja: se dice lo mismo que «pedir», y con uno, en singular.
+      proveedor.donde = { tipo: 'principal' };
+      vscode.registrado.abiertos.length = 0;
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('albaran.txt')] });
+      assert.equal(ultimoAviso().texto, `Documento añadido. ${ESCRITO}`, 'no dice que el encargo está en su caja sin enviar');
+      assert.match(loPedido(), /^Te he dejado un documento nuevo en la bandeja de entrada\. Léelo, guárdalo donde toque/, `con uno, en plural: ${loPedido()}`);
+      assert.doesNotMatch(loPedido(), /Léelos/);
+      // Con dos, en plural.
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('a.txt'), uno('b.txt')] });
+      assert.equal(ultimoAviso().texto, `2 documentos añadidos. ${ESCRITO}`);
+      assert.match(loPedido(), /^Te he dejado 2 documentos nuevos en la bandeja de entrada\. Léelos, guárdalos donde toque/);
+      // Elegirlos, desde Documentos: lo mismo, y se queda en Documentos.
+      const elegido = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'elegir-')), 'factura.txt');
+      fs.writeFileSync(elegido, 'factura');
+      vscode.guion.ficheros = [elegido];
+      await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
+      const enDocumentos = enviados.at(-1);
+      assert.equal(enDocumentos.tipo, 'documentos');
+      assert.equal(enDocumentos.aviso.texto, `Documento añadido. ${ESCRITO}`, 'al elegirlos no se dice cómo ha llegado');
+      assert.match(loPedido(), /un documento nuevo[\s\S]*Léelo,/, 'elegido uno, se le piden varios');
+
+      // Si no llega a su caja (el enlace no lo recoge nadie y no hay comandos), va
+      // al portapapeles: el aviso del editor dice que lo pegue, y la barra no dice
+      // que está escrito.
+      vscode.guion.enlaceFalla = true;
+      vscode.guion.comandosDeClaude = [];
+      vscode.registrado.portapapeles = '';
+      proveedor.donde = { tipo: 'principal' };
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('c.txt')] });
+      assert.equal(ultimoAviso().texto, 'Documento añadido.', 'copiado, y dice que está escrito en su caja');
+      assert.match(vscode.registrado.portapapeles, /un documento nuevo/, 'no se ha copiado');
+      vscode.guion.enlaceFalla = false;
+      vscode.guion.comandosDeClaude = antes.comandos;
+      // Con Codex, igual: copiado.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      asistentesM.elDeAhora = () => asistentesM.porId('codex');
+      vscode.registrado.portapapeles = '';
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('d.txt')] });
+      assert.equal(ultimoAviso().texto, 'Documento añadido.', 'con Codex dice que está escrito en su caja');
+      assert.match(vscode.registrado.portapapeles, /un documento nuevo/);
+      asistentesM.elDeAhora = antes.elDeAhora;
+
+      // Sin el asistente: el documento se guarda, no se manda nada a nadie y se dice
+      // que falta, con el botón que lo pone.
+      vscode.guion.extensionesInstaladas = [];
+      vscode.registrado.abiertos.length = 0;
+      vscode.registrado.portapapeles = '';
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('e.txt')] });
+      assert.ok(fs.existsSync(path.join(otra, '02-DOCS', 'inbox', 'e.txt')), 'sin asistente no se guarda el documento');
+      assert.deepEqual([vscode.registrado.abiertos.length, vscode.registrado.portapapeles], [0, ''], 'sin asistente se manda igual');
+      const sinEl = ultimoAviso();
+      assert.deepEqual([sinEl.texto, sinEl.malo], ['Documento añadido. Falta Claude en este ordenador, y sin él no puedo hablar con nadie.', true]);
+      assert.deepEqual(sinEl.boton, { etiqueta: 'Poner Claude', accion: { tipo: 'ponerElAsistente', cual: 'claude' } }, 'sin el botón que lo pone');
+      // Y un botón cualquiera, lo mismo: iba al portapapeles con «pégalo en su caja».
+      avisosDelEditor.length = 0;
+      await proveedor.manejar({ tipo: 'pedir', prompt: 'Haz esto' });
+      assert.deepEqual([vscode.registrado.abiertos.length, vscode.registrado.portapapeles], [0, ''], 'un botón sin asistente copia igual');
+      assert.deepEqual(avisosDelEditor, [], 'y manda pegarlo en una caja que no hay');
+      assert.equal(ultimoAviso().boton.etiqueta, 'Poner Claude');
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+
+      // La marca, lo mismo: decía «Se lo he pasado al asistente».
+      vscode.registrado.abiertos.length = 0;
+      await proveedor.manejar({ tipo: 'soltarDocumentos', para: 'marca', ficheros: [{ nombre: 'logo.svg', datos: Buffer.from('<svg/>').toString('base64') }] });
+      const laCara = enviados.at(-1);
+      assert.equal(laCara.tipo, 'laCara');
+      assert.equal(laCara.aviso.texto, `Guardado 1. ${ESCRITO}`, `la marca no dice cómo ha llegado: ${laCara.aviso.texto}`);
+      assert.equal(vscode.registrado.abiertos.length, 1, 'el material de la marca no se le pasa');
+      return 'escrito, copiado o sin asistente, y en singular con uno';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      vscode.guion.comandosDeClaude = antes.comandos;
+      vscode.guion.enlaceFalla = false;
+      vscode.guion.ficheros = antes.ficheros;
+      vscode.window.showWarningMessage = antes.aviso;
+      asistentesM.elDeAhora = antes.elDeAhora;
+    }
+  });
+
+  await comprobar('si falta el asistente, las cinco salidas lo ponen con un clic, y lo puesto se mira (decisión 166)', async () => {
+    // Decía «Díselo a tu tutor» en cinco sitios, y la barra ya sabía ponerlo.
+    const proveedor = vscode.registrado.proveedor;
+    const asistentesM = cargar('asistentes');
+    const { montarPanel } = require('./panel-falso');
+    const enviados = [];
+    const antes = {
+      enviar: proveedor.enviar, extensiones: vscode.guion.extensionesInstaladas, ejecutar: vscode.commands.executeCommand,
+      donde: proveedor.donde, vueltas: proveedor.vueltasAlPoner,
+    };
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => !tipo || m.tipo === tipo);
+    const PONER_CLAUDE = { tipo: 'ponerElAsistente', cual: 'claude' };
+    try {
+      // 1 y 2. La principal: la tarjeta de siempre y la del primer día, con su botón dentro.
+      vscode.guion.extensionesInstaladas = [];
+      await proveedor.refrescar(true);
+      const m = ultimo('estado');
+      assert.equal(m.estado.faltaElAsistente, 'Claude');
+      assert.deepEqual(m.estado.ponerElAsistente, { etiqueta: 'Poner Claude', accion: PONER_CLAUDE }, 'el estado no trae el botón');
+      for (const [que, estado] of [
+        ['la tarjeta', { ...m.estado, primerPaso: null }],
+        ['el primer día', { ...m.estado, primerPaso: { asistente: 'Claude', instalado: false } }],
+      ]) {
+        for (const barraCompleta of [true, false]) {
+          const html = montarPanel().mandar({ ...m, barraCompleta, estado: { ...estado, barraCompleta } });
+          assert.doesNotMatch(html, /Díselo a tu tutor/, `${que}: sigue mandando al tutor`);
+          assert.match(html, /Falta Claude en este ordenador/, `${que}: no dice que falta`);
+          assert.ok(accionesDe(html).some((a) => a.tipo === 'ponerElAsistente' && a.cual === 'claude'), `${que}: sin «Poner Claude»`);
+        }
+      }
+      // 3. Tu asistente: el que no está, con su botón, que vuelve aquí.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      await proveedor.verAsistente();
+      const suPantalla = montarPanel().mandar(ultimo('asistente'));
+      assert.doesNotMatch(suPantalla, /Díselo a tu tutor/);
+      assert.deepEqual(accionesDe(suPantalla).filter((a) => a.tipo === 'ponerElAsistente'), [{ tipo: 'ponerElAsistente', cual: 'codex', desde: 'asistente' }], 'Tu asistente no ofrece poner el que falta');
+      // 4. El aviso de cuando no hay con quién hablar (lo prueba también «Ayuda: una conversación nueva»).
+      assert.deepEqual(asistentesM.falta(asistentesM.porId('codex')), {
+        texto: 'Falta Codex en este ordenador, y sin él no puedo hablar con nadie.', malo: true, boton: { etiqueta: 'Poner Codex', accion: { tipo: 'ponerElAsistente', cual: 'codex' } },
+      });
+      // 5. Elegir uno que no está: lo dice, con el botón, en Tu asistente. Sin pasar
+      // por `manejar`, que daría la carpeta por conocida para las pruebas de después.
+      await proveedor.elegirAsistente('codex');
+      const alElegir = ultimo('asistente');
+      assert.equal(alElegir.aviso.texto, 'Falta Codex en este ordenador, y sin él no puedo hablar con nadie.');
+      assert.deepEqual(alElegir.aviso.boton, { etiqueta: 'Poner Codex', accion: { tipo: 'ponerElAsistente', cual: 'codex', desde: 'asistente' } }, 'elegir uno que falta no lo ofrece poner');
+      assert.ok(accionesDe(montarPanel().mandar(alElegir)).some((a) => a.tipo === 'ponerElAsistente' && a.cual === 'codex'), 'el aviso no pinta el botón');
+
+      // Ponerlo: el comando del editor, y se mira si lo ve.
+      const instalados = [];
+      vscode.commands.executeCommand = async (id, ...args) => {
+        vscode.registrado.ejecutados.push({ id, args });
+        if (id === 'workbench.extensions.installExtension') {
+          instalados.push(args[0]);
+          vscode.guion.extensionesInstaladas = [...vscode.guion.extensionesInstaladas, args[0]];
+        }
+      };
+      vscode.guion.extensionesInstaladas = [];
+      proveedor.vueltasAlPoner = 2;
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' });
+      assert.deepEqual(instalados, ['anthropic.claude-code'], 'no pone la extensión de Claude');
+      assert.equal(ultimo('aviso').texto, 'Ya está puesto Claude. Ábrelo y entra con tu cuenta.');
+      assert.deepEqual(ultimo('aviso').boton, { etiqueta: 'Abrir Claude', accion: { tipo: 'abrirAsistente' } });
+      assert.ok(enviados.some((x) => x.tipo === 'estado' && !x.estado.faltaElAsistente), 'puesto, y la principal sigue diciendo que falta');
+      // Desde Tu asistente, se vuelve allí.
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'codex', desde: 'asistente' });
+      assert.equal(ultimo().tipo, 'asistente', 'desde Tu asistente, a otra pantalla');
+      assert.equal(ultimo().aviso.texto, 'Ya está puesto Codex.');
+      // Si el editor no lo ve, no se dice que se puede usar: a recargar.
+      vscode.commands.executeCommand = async (id, ...args) => { vscode.registrado.ejecutados.push({ id, args }); };
+      vscode.guion.extensionesInstaladas = [];
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' });
+      assert.equal(ultimo('aviso').texto, 'Ya está puesto Claude. Recarga la ventana para empezar a usarlo: no se pierde nada.', 'dice que se puede usar sin que el editor lo vea');
+      assert.deepEqual(ultimo('aviso').boton, { etiqueta: 'Recargar ahora', accion: { tipo: 'recargar' } });
+      // Si no se puede poner, se dice, con «Algo va mal».
+      vscode.commands.executeCommand = async (id) => { if (id === 'workbench.extensions.installExtension') throw new Error('sin red'); };
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' });
+      assert.deepEqual([ultimo('aviso').texto, ultimo('aviso').malo], ['No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.', true], 'no poder ponerlo pasa en silencio');
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'codex', desde: 'asistente' });
+      assert.deepEqual([ultimo().tipo, ultimo().aviso.texto], ['asistente', 'No he podido poner Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.']);
+      // Y un botón con otro nombre no pone nada.
+      vscode.registrado.ejecutados.length = 0;
+      vscode.commands.executeCommand = antes.ejecutar;
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'otra.cosa' });
+      assert.ok(!vscode.registrado.ejecutados.some((e) => e.id === 'workbench.extensions.installExtension'), 'pone algo que no es un asistente');
+      assert.match(ultimo().aviso ? ultimo().aviso.texto : ultimo().texto, /Ese botón está mal montado/);
+      return 'la tarjeta, el primer día, Tu asistente, el aviso y elegir · puesto, sin verlo, y sin poder';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      proveedor.vueltasAlPoner = antes.vueltas;
+      vscode.commands.executeCommand = antes.ejecutar;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+    }
+  });
+
+  await comprobar('«Algo va mal» en una carpeta sana: todo bien, sin «Arreglarlo ahora», y se lo cuenta al asistente (decisión 166)', async () => {
+    // `soporte.js` buscaba la palabra «repair», y el arnés sano contesta «Nothing to
+    // repair — this harness is healthy.»: salía «He mirado y está todo bien.» junto
+    // a «Arreglarlo ahora».
+    const rscM = cargar('rsc');
+    const soporteM = cargar('soporte');
+    const proveedor = vscode.registrado.proveedor;
+    const { montarPanel } = require('./panel-falso');
+    const otra = montar();
+    const clave = 'sk_live_9f8e7d6c5b4a3210';
+    fs.mkdirSync(path.join(otra, '01-TOOLS', 'HOLDED'), { recursive: true });
+    fs.writeFileSync(path.join(otra, '01-TOOLS', 'HOLDED', '.env'), `HOLDED_API_KEY=${clave}\n`);
+    const antes = {
+      salud: rscM.salud, arreglarEnSeco: rscM.arreglarEnSeco, revisar: rscM.revisar, raiz: vscode.guion.raiz,
+      enviar: proveedor.enviar, pedir: proveedor.pedir, incidencia: proveedor.ultimaIncidencia, informe: proveedor.ultimoInforme,
+    };
+    vscode.guion.raiz = otra;
+    rscM.salud = async () => ({ codigo: 0, salida: JSON.stringify({ healthy: true, missing: [], hookWired: true }) });
+    rscM.revisar = async () => ({ codigo: 0, salida: `doctor: todo bien ${clave}` });
+    const SANO = { codigo: 0, salida: 'Nothing to repair — this harness is healthy.\n' };
+    try {
+      rscM.arreglarEnSeco = async () => SANO;
+      const sana = await soporteM.revisar({ lineas: [] });
+      assert.equal(sana.sano, true, `la carpeta sana no sale sana: ${sana.informe.split('\n').slice(0, 30).join(' | ')}`);
+      assert.equal(sana.hayQueTocarAlgo, false, '«Nothing to repair» cuenta como algo que arreglar');
+      // Lo que sí trae algo: una línea [fix] o [ask] por cada cosa.
+      for (const [que, salida, toca] of [
+        ['uno que arregla solo', '\nFound 1 thing(s):\n\n  [fix] skill orient is missing on disk\n      → reinstall\n', true],
+        ['uno que pregunta', '\nFound 1 thing(s):\n\n  [ask] the harness targets codex\n      → move it\n', true],
+        ['un texto que dice «repair» sin hallazgos', 'Run repair again later. Nothing to fix here.\n', false],
+      ]) {
+        rscM.arreglarEnSeco = async () => ({ codigo: 0, salida });
+        assert.equal((await soporteM.revisar({ lineas: [] })).hayQueTocarAlgo, toca, que);
+      }
+      // Si el arreglo en seco no se pudo correr, no se sabe: no se ofrece arreglar por lo que diga.
+      rscM.arreglarEnSeco = async () => ({ codigo: 1, salida: '  [fix] algo\nrepair' });
+      assert.equal((await soporteM.revisar({ lineas: [] })).hayQueTocarAlgo, false, 'un arreglo en seco que falla dice que hay algo');
+
+      // La pantalla: con todo sano, «Contárselo al asistente» es la salida principal, y
+      // «Contárselo a Executive Lab» se queda para lo de la barra, discreto.
+      const pintar = (datos) => montarPanel().mandar({ tipo: 'incidencia', codigo: 'ABC234', fichero: '/x/ABC234.txt', ...datos });
+      const bien = pintar({ sano: true, hayQueTocarAlgo: false });
+      assert.match(bien, /He mirado y está todo bien\./);
+      assert.doesNotMatch(bien, /Arreglarlo ahora/, 'sano, y ofrece arreglarlo');
+      const deBien = accionesDe(bien);
+      assert.deepEqual(deBien.find((a) => a.tipo === 'resolverIncidencia'), { tipo: 'resolverIncidencia', cual: 'algoVaMal' }, 'sano, sin «Contárselo al asistente»');
+      assert.match(bien, /<button class="principal"[^>]*resolverIncidencia[\s\S]*?Contárselo al asistente/, '«Contárselo al asistente» no es la principal');
+      assert.ok(bien.indexOf('Contárselo al asistente') < bien.indexOf('Contárselo a Executive Lab'), 'Executive Lab va antes que el asistente');
+      assert.match(bien, /Si lo que falla es esta barra[\s\S]*<button class="discreto"[^>]*contarLaIncidencia/, '«Contárselo a Executive Lab» no se queda para la barra');
+      // Sano según el arnés, pero con algo que arreglar: se dice que ha encontrado algo.
+      const conAlgo = pintar({ sano: true, hayQueTocarAlgo: true });
+      assert.match(conAlgo, /He encontrado algo y puedo intentar arreglarlo\./, '«todo bien» y «Arreglarlo ahora» juntos');
+      assert.match(conAlgo, /Arreglarlo ahora/);
+      assert.doesNotMatch(conAlgo, /Contárselo al asistente/);
+      // Roto, como antes; y sin git, solo ponerlo.
+      const roto = pintar({ sano: false, hayQueTocarAlgo: false });
+      assert.match(roto, /He encontrado algo[\s\S]*Arreglarlo ahora/);
+      assert.match(roto, /<button class=""[^>]*contarLaIncidencia/, 'con algo roto, Executive Lab se queda discreto');
+      const sinGit = pintar({ sano: false, faltaGit: true, hayQueTocarAlgo: true });
+      assert.doesNotMatch(sinGit, /Arreglarlo ahora|Contárselo al asistente/);
+
+      // De punta a punta: «Algo va mal» y luego «Contárselo al asistente», que lleva
+      // el informe, sin claves y fuera de git, para que lo lea.
+      rscM.arreglarEnSeco = async () => SANO;
+      const enviados = [];
+      const pedidos = [];
+      proveedor.enviar = (m) => enviados.push(m);
+      proveedor.pedir = async (texto) => { pedidos.push(texto); };
+      await proveedor.manejar({ tipo: 'algoVaMal' });
+      const pantalla = enviados.find((x) => x.tipo === 'incidencia');
+      assert.deepEqual([pantalla.sano, pantalla.hayQueTocarAlgo], [true, false]);
+      await proveedor.manejar({ tipo: 'resolverIncidencia', cual: 'algoVaMal' });
+      const [encargo] = pedidos;
+      assert.ok(encargo, 'no se le pide nada al asistente');
+      assert.match(encargo, /He pulsado «Algo va mal» y la barra dice que está todo bien/);
+      const ruta = `02-DOCS/raw/incidencias/${pantalla.codigo}.txt`;
+      assert.ok(encargo.includes(`El informe de la revisión de «Algo va mal» (código ${pantalla.codigo}) está en ${ruta}: léelo antes de nada.`), `no lleva el informe: ${encargo}`);
+      const informe = fs.readFileSync(path.join(otra, ...ruta.split('/')), 'utf8');
+      assert.ok(!informe.includes(clave) && informe.includes(clave.slice(-4)), 'el informe lleva la clave');
+      assert.ok(!encargo.includes(clave), 'el encargo lleva la clave');
+      // Un informe que quedó fuera de la carpeta no se nombra.
+      proveedor.ultimoInforme = path.join(os.tmpdir(), 'fuera.txt');
+      fs.writeFileSync(proveedor.ultimoInforme, 'x');
+      pedidos.length = 0;
+      await proveedor.manejar({ tipo: 'resolverIncidencia', cual: 'algoVaMal' });
+      assert.doesNotMatch(pedidos[0], /El informe de la revisión/, 'nombra un informe de fuera de la carpeta');
+      // Y el síntoma de siempre no lo lleva.
+      pedidos.length = 0;
+      proveedor.ultimoInforme = path.join(otra, ...ruta.split('/'));
+      await proveedor.manejar({ tipo: 'resolverIncidencia', cual: 'noHace' });
+      assert.doesNotMatch(pedidos[0], /El informe de la revisión/);
+      return 'sano sin arreglo · [fix] y [ask] sí · y al asistente, con su informe';
+    } finally {
+      Object.assign(rscM, { salud: antes.salud, arreglarEnSeco: antes.arreglarEnSeco, revisar: antes.revisar });
+      vscode.guion.raiz = antes.raiz;
+      proveedor.enviar = antes.enviar;
+      proveedor.pedir = antes.pedir;
+      proveedor.ultimaIncidencia = antes.incidencia;
+      proveedor.ultimoInforme = antes.informe;
+    }
+  });
+
+  await comprobar('«Barra 0.53.0» abre lo de la versión: Actualizar ahora y Probar las versiones nuevas antes (decisión 166)', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const versionM = cargar('version');
+    const { montarPanel } = require('./panel-falso');
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, laNueva: versionM.laNuevaSiHay, donde: proveedor.donde, global: { ...vscode.registrado.ajustes.global }, laDeAhora: proveedor.versionDeLaBarra };
+    proveedor.enviar = (m) => enviados.push(m);
+    // La empresa de mentira no trae el paquete de la barra: se dice cuál es.
+    proveedor.versionDeLaBarra = () => '0.53.0';
+    const ultimo = () => enviados.at(-1);
+    try {
+      // El de abajo de la principal, en las dos.
+      await proveedor.refrescar(true);
+      const m = [...enviados].reverse().find((x) => x.tipo === 'estado');
+      for (const barraCompleta of [true, false]) {
+        const html = montarPanel().mandar({ ...m, barraCompleta, estado: { ...m.estado, barraCompleta }, versionDeLaBarra: '0.53.0' });
+        const suyo = [...html.matchAll(/data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].find((b) => b[2].includes('Barra 0.53.0'));
+        if (!barraCompleta) {
+          assert.ok(suyo, 'la sencilla no enseña la versión');
+          assert.match(suyo[1], /^\{&quot;tipo&quot;:&quot;verEstaBarra&quot;\}$/, `«Barra 0.53.0» abre otra cosa: ${suyo[1]}`);
+        }
+      }
+      // Su pantalla: la versión, Actualizar ahora con una nueva, y los dos ajustes.
+      versionM.laNuevaSiHay = async () => ({ version: '9.9.9', deprueba: false });
+      await proveedor.manejar({ tipo: 'verEstaBarra' });
+      assert.equal(ultimo().tipo, 'estaBarra');
+      const html = montarPanel().mandar(ultimo());
+      assert.match(html, /Esta barra/);
+      assert.match(html, /Tienes la 0\.53\.0\. Hay una más nueva: la 9\.9\.9\./);
+      const suyas = accionesDe(html).map((a) => a.tipo);
+      for (const tipo of ['ponerLaNueva', 'probarAntes', 'actualizarSola', 'volver', 'verAyuda']) assert.ok(suyas.includes(tipo), `sin ${tipo}`);
+      assert.match(html, /Probar las versiones nuevas antes/);
+      // Al cambiar un ajuste, se vuelve a la misma pantalla; desde Ayuda, a Ayuda.
+      for (const [tipo, cual] of [['probarAntes', true], ['actualizarSola', false]]) {
+        await proveedor.manejar({ tipo: 'verEstaBarra' });
+        await proveedor.manejar({ tipo, cual });
+        assert.equal(ultimo().tipo, 'estaBarra', `${tipo}: desde Esta barra lleva a otra pantalla`);
+        await proveedor.manejar({ tipo: 'verAyuda' });
+        await proveedor.manejar({ tipo, cual });
+        assert.equal(ultimo().tipo, 'ayuda', `${tipo}: desde Ayuda lleva a otra pantalla`);
+      }
+      // El vigía la repinta con lo de ahora.
+      await proveedor.manejar({ tipo: 'verEstaBarra' });
+      enviados.length = 0;
+      await proveedor.repintarLoQueHaya();
+      assert.equal(ultimo().tipo, 'estaBarra', 'el vigía saca de Esta barra');
+      // Y Ayuda enseña lo mismo (con probar antes puesto, desde arriba).
+      await proveedor.manejar({ tipo: 'verAyuda' });
+      assert.match(montarPanel().mandar(ultimo()), /<h2>Esta barra<\/h2>[\s\S]*Hay una más nueva: la 9\.9\.9\.[\s\S]*Actualizar ahora[\s\S]*Dejar de probarlas antes/);
+      return 'abajo lleva a Esta barra, y sus ajustes vuelven a ella';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.versionDeLaBarra = antes.laDeAhora;
+      versionM.laNuevaSiHay = antes.laNueva;
+      proveedor.donde = antes.donde;
+      vscode.registrado.ajustes.global = antes.global;
+    }
+  });
+
+  await comprobar('un encargo que no cabe va a un fichero fuera de git y se manda una línea, en Mac y en Windows (decisión 166)', async () => {
+    // «Que las ordene» ocupa 2.212 caracteres y el enlace se corta sobre los 2.000
+    // en Windows: iba al portapapeles. Ahora se deja en `02-DOCS/raw/pedidos/` y se
+    // manda una línea, en los dos sistemas.
+    const pedidosM = cargar('pedidos');
+    const asistentesM = cargar('asistentes');
+    const noEntra = require(path.join(RAIZ, 'media', 'railes', 'no-entra-en-git.js'));
+    const cp = require('node:child_process');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'encargo-largo-'));
+    const clave = 'sk_live_51HxQwErTy7788';
+    const poner = (rel, texto) => {
+      fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, rel), texto);
+    };
+    poner('.rsc.json', JSON.stringify({ version: 1, targets: ['claude'] }));
+    poner('02-DOCS/wiki/index.md', '# Índice\n');
+    poner('01-TOOLS/HOLDED/.env.example', 'HOLDED_API_KEY=\n');
+    poner('01-TOOLS/HOLDED/.env', `HOLDED_API_KEY=${clave}\n`);
+    poner('.gitignore', `node_modules/\n${noEntra.elBloque()}\n`);
+    const pedidosDir = path.join(carpeta, '02-DOCS', 'raw', 'pedidos');
+    const suyos = () => (fs.existsSync(pedidosDir) ? fs.readdirSync(pedidosDir).filter((n) => pedidosM.ENCARGO.test(n)).sort() : []);
+    const largo = `Ordena las claves de acceso de esta carpeta. La de Holded es ${clave} y hay que llevarla a su sitio. ${'Ordena las claves de acceso de esta carpeta según el protocolo de la barra. '.repeat(30)}`;
+    const antes = { raiz: vscode.guion.raiz, aviso: vscode.window.showWarningMessage, elDeAhora: asistentesM.elDeAhora, extensiones: vscode.guion.extensionesInstaladas };
+    const avisos = [];
+    vscode.window.showWarningMessage = async (m) => { avisos.push(m); };
+    vscode.guion.raiz = carpeta;
+    const salida = { lineas: [], appendLine(l) { this.lineas.push(l); } };
+    const loPedido = () => decodeURIComponent((vscode.registrado.abiertos.at(-1) || '').split('prompt=')[1] || '');
+    try {
+      // Se mide como el enlace de Claude, y el borde es el de siempre.
+      const base = 'vscode://anthropic.claude-code/open?prompt='.length;
+      assert.equal(cargar('puente').cabeEntero('x'.repeat(2000 - base)), true, 'uno de 2.000 justos no cabe');
+      assert.equal(cargar('puente').cabeEntero('x'.repeat(2001 - base)), false, 'uno de 2.001 cabe');
+      assert.equal(cargar('puente').cabeEntero('ñ'.repeat(400)), false, 'se mide el texto y no el enlace codificado');
+
+      for (const plataforma of ['darwin', 'win32']) {
+        vscode.registrado.abiertos.length = 0;
+        const habia = suyos();
+        const como = await cargar('puente').enviar(largo, salida, { plataforma });
+        assert.equal(como, 'directo', `${plataforma}: no llega a su caja`);
+        const nuevos = suyos().filter((n) => !habia.includes(n));
+        assert.equal(nuevos.length, 1, `${plataforma}: no deja el encargo en un fichero`);
+        const ruta = `02-DOCS/raw/pedidos/${nuevos[0]}`;
+        assert.equal(loPedido(), pedidosM.laLinea(ruta), `${plataforma}: no manda la línea que lo nombra`);
+        assert.ok(vscode.registrado.abiertos.at(-1).length <= 2000, 'la línea no cabe en el enlace');
+        const dejado = fs.readFileSync(path.join(carpeta, ...ruta.split('/')), 'utf8');
+        assert.ok(!dejado.includes(clave), `${plataforma}: el fichero lleva la clave`);
+        assert.ok(dejado.includes(`••••${clave.slice(-4)}`) && dejado.includes('según el protocolo de la barra'), `${plataforma}: el fichero no lleva el encargo, tapado: ${dejado.slice(0, 120)}`);
+        assert.ok(!avisos.some((a) => /portapapeles|copiado/.test(a)), `${plataforma}: se copia igual`);
+      }
+      // Fuera de git, de verdad: lo dice git con el bloque de la barra.
+      cp.spawnSync('git', ['init', '-q'], { cwd: carpeta });
+      const mirado = cp.spawnSync('git', ['check-ignore', '-q', '--no-index', `02-DOCS/raw/pedidos/${suyos()[0]}`], { cwd: carpeta });
+      assert.equal(mirado.status, 0, `el encargo entra en las copias (git check-ignore: ${mirado.status})`);
+      // Lo que cabe va tal cual, sin fichero.
+      const contados = suyos().length;
+      await cargar('puente').enviar('Hola, corto.', salida, { plataforma: 'win32' });
+      assert.equal(loPedido(), 'Hola, corto.');
+      assert.equal(suyos().length, contados, 'uno corto se deja en un fichero');
+
+      // Con Codex, igual: la línea, en el portapapeles.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      asistentesM.elDeAhora = () => asistentesM.porId('codex');
+      vscode.registrado.portapapeles = '';
+      assert.equal(await cargar('puente').enviar(largo, salida, { plataforma: 'darwin' }), 'copiado');
+      assert.match(vscode.registrado.portapapeles, /^Lee el encargo que te he dejado en 02-DOCS\/raw\/pedidos\/encargo-\d{8}-\d{9}-[0-9a-f]{6}\.md y hazlo\./, `con Codex se copia el encargo entero: ${vscode.registrado.portapapeles.slice(0, 80)}`);
+      asistentesM.elDeAhora = antes.elDeAhora;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+
+      // Se guardan los últimos 20, solo los nuestros.
+      for (let i = 0; i < 25; i += 1) poner(`02-DOCS/raw/pedidos/encargo-20200101-0000000${String(i).padStart(2, '0')}-abcdef.md`, 'viejo');
+      poner('02-DOCS/raw/pedidos/encargo-mio.md', 'mío');
+      poner('02-DOCS/raw/pedidos/connect-tool.habilidad', '');
+      await cargar('puente').enviar(largo, salida, { plataforma: 'darwin' });
+      assert.equal(suyos().length, pedidosM.ENCARGOS_GUARDADOS, `se quedan ${suyos().length}`);
+      assert.ok(!suyos().some((n) => n.startsWith('encargo-20200101-000000000')), 'no se recogen los más viejos');
+      assert.ok(suyos().some((n) => pedidosM.laLinea(`02-DOCS/raw/pedidos/${n}`) === loPedido()), 'se recoge el que se acaba de mandar');
+      assert.ok(fs.existsSync(path.join(pedidosDir, 'encargo-mio.md')) && fs.existsSync(path.join(pedidosDir, 'connect-tool.habilidad')), 'se borra lo que no es nuestro');
+
+      // Si no se puede dejar fuera de git, todo como antes: en Windows al
+      // portapapeles, entero; en el Mac, por el enlace.
+      const sinDejarlo = async (que) => {
+        const contadosAhora = suyos().length;
+        vscode.registrado.abiertos.length = 0;
+        vscode.registrado.portapapeles = '';
+        assert.equal(await cargar('puente').enviar(largo, salida, { plataforma: 'win32' }), 'copiado', `${que}: en Windows no va al portapapeles`);
+        assert.equal(vscode.registrado.portapapeles, largo, `${que}: no se copia entero`);
+        assert.equal(await cargar('puente').enviar(largo, salida, { plataforma: 'darwin' }), 'directo', `${que}: en el Mac no va por el enlace`);
+        assert.equal(loPedido(), largo, `${que}: en el Mac no va entero`);
+        assert.equal(suyos().length, contadosAhora, `${que}: se deja en un fichero igual`);
+      };
+      poner('.gitignore', 'node_modules/\n');
+      await sinDejarlo('sin el bloque de la barra');
+      poner('.gitignore', noEntra.elBloque().replace('02-DOCS/raw/pedidos/\n', ''));
+      assert.ok(noEntra.elQueHay(fs.readFileSync(path.join(carpeta, '.gitignore'), 'utf8')), 'la prueba no tiene bloque');
+      await sinDejarlo('con un bloque de antes, sin los pedidos');
+      poner('.gitignore', noEntra.elBloque());
+      // Sin seguir enlaces: ni la carpeta de los pedidos ni `raw` pueden llevar fuera.
+      const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'encargo-fuera-'));
+      fs.rmSync(path.join(carpeta, '02-DOCS', 'raw'), { recursive: true, force: true });
+      fs.symlinkSync(fuera, path.join(carpeta, '02-DOCS', 'raw'), 'dir');
+      await sinDejarlo('con 02-DOCS/raw enlazado fuera');
+      assert.deepEqual(fs.readdirSync(fuera), [], 'escribe fuera de la carpeta');
+      fs.unlinkSync(path.join(carpeta, '02-DOCS', 'raw'));
+      fs.mkdirSync(path.join(carpeta, '02-DOCS', 'raw'));
+      fs.symlinkSync(fuera, pedidosDir, 'dir');
+      await sinDejarlo('con la carpeta de los pedidos enlazada fuera');
+      assert.deepEqual(fs.readdirSync(fuera), [], 'escribe fuera de la carpeta');
+      fs.unlinkSync(pedidosDir);
+      // Sin 02-DOCS no se crea media pieza del suelo.
+      fs.rmSync(path.join(carpeta, '02-DOCS'), { recursive: true, force: true });
+      await sinDejarlo('sin 02-DOCS');
+      assert.ok(!fs.existsSync(path.join(carpeta, '02-DOCS')), 'crea 02-DOCS');
+      // Y se apunta por qué.
+      assert.ok(salida.lineas.some((l) => /^\[puente\] encargo largo: no lo dejo en un fichero/.test(l)), 'no se apunta por qué no se deja');
+
+      // El vigía no repinta por uno de estos, con las dos barras; un pedido sí es un pedido.
+      assert.equal(pedidosM.esUnEncargo('/x/02-DOCS/raw/pedidos/encargo-20261016-101500123-abcdef.md'), true);
+      assert.equal(pedidosM.esUnEncargo('C:\\x\\02-DOCS\\raw\\pedidos\\encargo-20261016-101500123-abcdef.md'), true);
+      assert.equal(pedidosM.esUnEncargo('/x/02-DOCS/raw/pedidos/connect-tool.habilidad'), false);
+      assert.equal(pedidosM.esUnEncargo('/x/02-DOCS/wiki/encargo-1.md'), false);
+      const proveedor = vscode.registrado.proveedor;
+      const repintar = proveedor.repintarLoQueHaya;
+      let repintados = 0;
+      proveedor.repintarLoQueHaya = async () => { repintados += 1; };
+      try {
+        vscode.registrado.vigia.disparar(path.join(empresa, '02-DOCS', 'raw', 'pedidos', 'encargo-20261016-101500123-abcdef.md'));
+        await new Promise((r) => setTimeout(r, 800));
+        assert.equal(repintados, 0, 'el vigía repinta por un encargo que acaba de dejar la barra');
+        vscode.registrado.vigia.disparar(path.join(empresa, '02-DOCS', 'wiki', 'index.md'));
+        await new Promise((r) => setTimeout(r, 800));
+        assert.equal(repintados, 1, 'la prueba del vigía no ve repintar nada');
+      } finally {
+        proveedor.repintarLoQueHaya = repintar;
+      }
+
+      // El raíl se lo dice al asistente, igual en las dos copias, con la misma frase.
+      const raíles = ['skills/executive-lab/SKILL.md', 'extension/media/railes/executive-lab/SKILL.md']
+        .map((r) => fs.readFileSync(path.join(RAIZ, '..', r), 'utf8'));
+      assert.equal(raíles[0], raíles[1], 'las dos copias de SKILL.md no son iguales');
+      assert.ok(raíles[0].includes('«Lee el encargo que te he dejado en `02-DOCS/raw/pedidos/encargo-….md` y hazlo»'), 'el raíl no dice qué es la línea');
+      assert.ok(pedidosM.laLinea('X').startsWith('Lee el encargo que te he dejado en X y hazlo.'), 'la línea no es la que nombra el raíl');
+      assert.match(raíles[0], /Solo el que nombra la conversación/, 'el raíl deja hacer uno que nadie ha pedido');
+      return 'en un fichero tapado y fuera de git, una línea en Mac, Windows y Codex · los últimos 20 · y como antes si no se puede';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      vscode.window.showWarningMessage = antes.aviso;
+      asistentesM.elDeAhora = antes.elDeAhora;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   await comprobar('«Seguir donde lo dejé» dice por dónde ibas: lo de next: o el documento de trabajo en marcha más reciente, sin los terminados, sin seguir enlaces, con tope y limpio', () => {
     // Decisión 160. RSC guarda el siguiente paso en `next:`, y la barra solo leía
     // `files:`. En las carpetas de la barra nadie fusiona: los documentos se quedan
@@ -20037,6 +20567,140 @@ exec git "$@"
       rscM.olvidarLaContinuacion();
       brujulaM.olvidar();
       fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  // ── La revisión de la 166: tres retoques ─────────────────────────────────
+
+  await comprobar('si el encargo no llega al asistente, la barra dice el hecho y que no ha llegado (decisión 166, la revisión)', async () => {
+    // `puente.enviar` puede lanzar (el portapapeles o la conversación rechazan) y
+    // la barra se quedaba muda: sin aviso y sin repintar Documentos.
+    const proveedor = vscode.registrado.proveedor;
+    const otra = montar();
+    const enviados = [];
+    const brujulaM = cargar('brujula');
+    const antes = { enviar: proveedor.enviar, raiz: vscode.guion.raiz, donde: proveedor.donde, escribir: vscode.env.clipboard.writeText, enlace: vscode.guion.enlaceFalla, comandos: vscode.guion.comandosDeClaude, ficheros: vscode.guion.ficheros, olvidar: brujulaM.olvidar };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    let olvidados = 0;
+    brujulaM.olvidar = (...a) => { olvidados += 1; return antes.olvidar(...a); };
+    const uno = (nombre) => ({ nombre, datos: Buffer.from(`papel ${nombre}`).toString('base64') });
+    const NO_LLEGA = 'Documento añadido. No he podido pasarle el encargo a Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.';
+    try {
+      // El enlace no lo recoge nadie y no hay comandos: va al portapapeles, y este rechaza.
+      vscode.guion.enlaceFalla = true;
+      vscode.guion.comandosDeClaude = [];
+      vscode.env.clipboard.writeText = async () => { throw new Error('portapapeles cerrado'); };
+      // Soltado encima de Documentos: se queda en Documentos, con el aviso.
+      proveedor.donde = { tipo: 'documentos' };
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('f.txt')] });
+      assert.ok(fs.existsSync(path.join(otra, '02-DOCS', 'inbox', 'f.txt')), 'el documento no se guarda');
+      const enDocumentos = enviados.at(-1);
+      assert.equal(enDocumentos.tipo, 'documentos', 'no se repinta Documentos');
+      assert.deepEqual([enDocumentos.aviso.texto, enDocumentos.aviso.malo], [NO_LLEGA, true], 'no dice que el encargo no ha llegado');
+      // Soltado en otra pantalla: aviso suelto.
+      proveedor.donde = { tipo: 'principal' };
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('g.txt')] });
+      const suelto = [...enviados].reverse().find((m) => m.tipo === 'aviso');
+      assert.deepEqual([suelto.texto, suelto.malo], [NO_LLEGA, true]);
+      // «Elegirlos»: se llega a la brújula, como en el camino bueno.
+      const elegido = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'elegir-')), 'h.txt');
+      fs.writeFileSync(elegido, 'h');
+      vscode.guion.ficheros = [elegido];
+      olvidados = 0;
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
+      assert.equal(olvidados, 1, 'no se llega a la brújula');
+      assert.equal(enviados.at(-1).tipo, 'documentos');
+      assert.equal(enviados.at(-1).aviso.texto, NO_LLEGA);
+      // Y la marca, por el mismo camino.
+      await proveedor.manejar({ tipo: 'soltarDocumentos', para: 'marca', ficheros: [{ nombre: 'logo.svg', datos: Buffer.from('<svg/>').toString('base64') }] });
+      assert.match(enviados.at(-1).aviso.texto, /^Guardado 1\. No he podido pasarle el encargo a Claude\./);
+      return 'dice el hecho y que no ha llegado, repinta y llega a la brújula';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      vscode.guion.raiz = antes.raiz;
+      vscode.env.clipboard.writeText = antes.escribir;
+      vscode.guion.enlaceFalla = antes.enlace;
+      vscode.guion.comandosDeClaude = antes.comandos;
+      vscode.guion.ficheros = antes.ficheros;
+      brujulaM.olvidar = antes.olvidar;
+    }
+  });
+
+  await comprobar('un doble clic en «Poner Claude» no lo pone dos veces (decisión 166, la revisión)', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, extensiones: vscode.guion.extensionesInstaladas, ejecutar: vscode.commands.executeCommand, vueltas: proveedor.vueltasAlPoner, donde: proveedor.donde };
+    proveedor.enviar = (m) => enviados.push(m);
+    let puestos = 0;
+    vscode.commands.executeCommand = async (id, ...args) => {
+      if (id === 'workbench.extensions.installExtension') {
+        puestos += 1;
+        await new Promise((r) => setTimeout(r, 150));
+        vscode.guion.extensionesInstaladas = [...vscode.guion.extensionesInstaladas, args[0]];
+      }
+    };
+    vscode.guion.extensionesInstaladas = [];
+    proveedor.vueltasAlPoner = 2;
+    try {
+      await Promise.all([proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' }), proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' })]);
+      assert.equal(puestos, 1, `se pone ${puestos} veces`);
+      assert.equal(enviados.filter((m) => m.tipo === 'aviso' && /^Ya está puesto Claude/.test(m.texto)).length, 1, 'se dice dos veces');
+      // Y vale otra vez cuando acaba (si falló, se puede volver a intentar).
+      assert.equal(proveedor.poniendoElAsistente, false, 'se queda puesto el candado');
+      vscode.guion.extensionesInstaladas = [];
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' });
+      assert.equal(puestos, 2, 'después de acabar no se puede volver a poner');
+      return 'una sola vez con dos clics, y el candado se suelta';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      proveedor.vueltasAlPoner = antes.vueltas;
+      vscode.commands.executeCommand = antes.ejecutar;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+    }
+  });
+
+  await comprobar('el encargo largo solo se deja en un fichero si git dice que queda fuera (decisión 166, la revisión)', async () => {
+    // El bloque de la barra puede decir que sí y un `!` más abajo, dejarlo entrar.
+    const pedidosM = cargar('pedidos');
+    const noEntra = require(path.join(RAIZ, 'media', 'railes', 'no-entra-en-git.js'));
+    const cp = require('node:child_process');
+    const hacer = (gitignore, conGit) => {
+      const c = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-de-git-'));
+      fs.mkdirSync(path.join(c, '02-DOCS', 'raw'), { recursive: true });
+      fs.writeFileSync(path.join(c, '.gitignore'), gitignore);
+      if (conGit) cp.spawnSync('git', ['init', '-q'], { cwd: c });
+      return c;
+    };
+    const carpetas = [];
+    try {
+      // Con git y el bloque a secas: fuera, y se deja.
+      const bien = hacer(`${noEntra.elBloque()}\n`, true);
+      carpetas.push(bien);
+      assert.equal(await pedidosM.quedaFueraDeGit(bien), true, 'con git y el bloque, no queda fuera');
+      assert.equal((await pedidosM.dejarUnEncargo(bien, 'hola')).ok, true);
+      // Con git, y algo que lo deja entrar después del bloque: el bloque dice que sí y git que no.
+      const entra = hacer(`${noEntra.elBloque()}\n!02-DOCS/raw/pedidos/\n`, true);
+      carpetas.push(entra);
+      assert.equal(await pedidosM.quedaFueraDeGit(entra), false, 'el bloque dice que sí y git que no, y queda fuera');
+      const noSeDeja = await pedidosM.dejarUnEncargo(entra, 'hola');
+      assert.equal(noSeDeja.ok, false, 'deja el encargo donde git lo recogería');
+      assert.ok(!fs.existsSync(path.join(entra, '02-DOCS', 'raw', 'pedidos')), 'crea la carpeta');
+      // Sin git (no es un repositorio): vale el bloque, como antes.
+      const sinGit = hacer(`${noEntra.elBloque()}\n`, false);
+      carpetas.push(sinGit);
+      assert.equal(await pedidosM.quedaFueraDeGit(sinGit), true, 'sin git, vale el bloque');
+      // Y sin el bloque, no, haya git o no.
+      const sinBloque = hacer('node_modules/\n', true);
+      carpetas.push(sinBloque);
+      assert.equal(await pedidosM.quedaFueraDeGit(sinBloque), false);
+      assert.equal(await pedidosM.quedaFueraDeGit(null), false);
+      return 'git manda sobre el bloque; sin git, el bloque';
+    } finally {
+      for (const c of carpetas) fs.rmSync(c, { recursive: true, force: true });
     }
   });
 
@@ -21126,6 +21790,10 @@ exec git "$@"
   }
 
   console.log(`\n${pasadas} comprobaciones pasadas${process.exitCode ? ' — y alguna ha fallado' : ''}`);
+  if (SOLO) {
+    console.log(`(con HUMO_SOLO: ${saltadas} saltadas. No vale como pasada entera.)`);
+    process.exitCode = 1;
+  }
   terminada = true;
 }
 

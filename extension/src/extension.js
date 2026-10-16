@@ -104,6 +104,11 @@ const porDondeIbas = require('./por-donde-ibas');
 const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } };
 const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que } });
 
+// Lo que se dice cuando un texto ha quedado escrito en la caja del asistente:
+// escrito, no enviado (`asistentes.js`). Lo dicen `pedir` y lo que manda algo
+// detrás de hacer otra cosa, como darle documentos (decisión 166).
+const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
+
 // Lo que se dice al dejar la cuenta de GitHub para más tarde, al montar: dónde
 // queda, con su botón (decisión 164).
 const GITHUB_MAS_TARDE = 'Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.';
@@ -622,6 +627,8 @@ ${cabecera}
     if (d.tipo === 'documentos') return this.verDocumentos(d.aviso);
     if (d.tipo === 'foto') return this.verLaFoto(d.desde, d.aviso);
     if (d.tipo === 'recordatorios') return this.verRecordatorios(d.aviso);
+    // La de la versión, con lo que haya ahora: una puesta sola se ve ahí (decisión 166).
+    if (d.tipo === 'estaBarra') return this.verEstaBarra();
     // En una pantalla de lectura o de resultado no se toca nada: está leyendo.
     if (d.tipo === 'quieto') return undefined;
     return this.refrescar(true);
@@ -801,7 +808,7 @@ ${cabecera}
       return this.enviar({ tipo: 'aviso', texto: 'No he podido guardar el ajuste. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
     }
     await this.contexto.globalState.update(version.CLAVE, undefined);
-    return this.verAyuda();
+    return this.volverALaVersion();
   }
 
   // ── Sola (decisión 136) ───────────────────────────────────────────────
@@ -840,7 +847,7 @@ ${cabecera}
       this.salida.appendLine(`[version] no se guarda actualizar sola: ${error.message}`); // diccionario: interno
       return this.enviar({ tipo: 'aviso', texto: 'No he podido guardar el ajuste. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
     }
-    return this.verAyuda();
+    return this.volverALaVersion();
   }
 
   // Desde el botón: bajarla, comprobarla e instalarla es de `version.js`.
@@ -1208,6 +1215,7 @@ ${cabecera}
       abrirPapel: () => this.abrirPapel(mensaje.ruta),
       quitarPapel: () => this.quitarPapel(mensaje.ruta, mensaje.nombre, mensaje.desde),
       verAyuda: () => this.verAyuda(),
+      verEstaBarra: () => this.verEstaBarra(),
       verDatosDeClientes: () => this.verDatosDeClientes(),
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
@@ -1234,6 +1242,7 @@ ${cabecera}
       ponerPermiso: () => this.cambiarAjuste(ajustes.ponerPermiso, mensaje.cual),
       ponerCadaCuanto: () => this.cambiarAjuste(ajustes.ponerCadaCuanto, mensaje.cual),
       elegirAsistente: () => this.elegirAsistente(mensaje.cual),
+      ponerElAsistente: () => this.ponerElAsistente(mensaje.cual, mensaje.desde),
       prepararTambien: () => this.prepararTambien(mensaje.cual),
       abrirElAjuste: () => vscode.commands.executeCommand('workbench.action.openSettings', asistentes.AJUSTE),
       verDiario: () => this.verDiario(),
@@ -1303,6 +1312,12 @@ ${cabecera}
       return;
     }
 
+    // Sin el asistente en el ordenador no hay caja donde dejarlo: iba al
+    // portapapeles con «pégalo en su caja» (decisión 166). Se dice que falta, con
+    // el botón que lo pone.
+    const quien = asistentes.elDeAhora();
+    if (!asistentes.estaInstalado(quien)) return this.sinAsistente(quien);
+
     await this.anotarLaPeticion(prompt);
     await this.anotarElUso(prompt);
     const como = await puente.enviar(prompt, this.salida);
@@ -1310,7 +1325,35 @@ ${cabecera}
     // escrito en su caja y no lo envían (asistentes.js lo documenta). Decir que
     // ya se lo hemos pedido dejaba a la persona esperando una respuesta que no
     // iba a llegar hasta que ella misma le diera a enviar.
-    if (como === 'directo') this.avisarAqui({ texto: 'Te lo he dejado escrito en la conversación. Dale a enviar.' });
+    if (como === 'directo') this.avisarAqui({ texto: DALE_A_ENVIAR });
+    return undefined;
+  }
+
+  // Lo que se le pasa detrás de algo que la barra ya ha hecho —darle documentos,
+  // el material de la marca—, y la frase de las dos cosas, tal y como han pasado
+  // (decisión 166). Decía «Se lo paso» y el encargo se quedaba escrito en su caja
+  // sin enviar, o en el portapapeles con Codex, y nadie miraba si había llegado.
+  // Ahora dice lo mismo que `pedir`: escrito en la caja, «Dale a enviar»; copiado,
+  // lo dice el aviso del portapapeles; y sin el asistente, que falta, con su botón.
+  //
+  // No se deja de mandar aunque el raíl le diga que lea la bandeja (§4 de
+  // `SKILL.md`): el raíl solo actúa cuando le escriben, y entre mensaje y mensaje
+  // no mira la carpeta. Sin el encargo, los documentos esperarían a que la persona
+  // le escribiera algo, sin saber qué; con él, es un clic.
+  async pasarleYDecir(hecho, encargo) {
+    const quien = asistentes.elDeAhora();
+    if (!asistentes.estaInstalado(quien)) return { ...asistentes.falta(quien), texto: `${hecho} ${asistentes.falta(quien).texto}` };
+    let como;
+    try {
+      como = await puente.enviar(encargo, this.salida);
+    } catch (error) {
+      // El portapapeles o la conversación pueden rechazar: el hecho se dice igual
+      // y se dice que el encargo no ha llegado (decisión 166, la revisión).
+      this.salida.appendLine(`[asistente] el encargo no ha llegado: ${error && error.message}`); // diccionario: interno
+      return { texto: `${hecho} No he podido pasarle el encargo a ${quien.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`, malo: true };
+    }
+    if (como === 'directo') return { texto: `${hecho} ${DALE_A_ENVIAR}`, malo: false };
+    return { texto: hecho, malo: false };
   }
 
   // Ayuda › Conversación nueva. Con Codex no hay comando para eso: se abre su
@@ -1326,9 +1369,56 @@ ${cabecera}
   }
 
   // Sin el asistente no hay con quién hablar: ni se abre nada ni se manda
-  // esperar una respuesta que no va a llegar.
+  // esperar una respuesta que no va a llegar. Y se pone con un clic: decía
+  // «Díselo a tu tutor» y la barra ya sabía ponerlo (decisión 166).
   sinAsistente(quien) {
-    return this.enviar({ tipo: 'aviso', texto: `${quien.nombre} no está en este ordenador. Díselo a tu tutor.`, malo: true });
+    return this.avisarAqui(asistentes.falta(quien));
+  }
+
+  // «Poner Claude», «Poner Codex» (decisión 166): instalar una extensión del
+  // editor es un clic suyo, y es lo que ya hacía el montaje (`arrancar`). Lo que se
+  // dice puesto se mira otra vez: hasta que el editor lo ve, no se puede hablar con
+  // él, y entonces se dice que hay que recargar.
+  async ponerElAsistente(cual, desde = null) {
+    // Un segundo clic mientras se pone no lo instala dos veces (como `poniendoLaNueva`).
+    if (this.poniendoElAsistente) return undefined;
+    this.poniendoElAsistente = true;
+    try {
+      return await this.ponerElAsistenteDeVerdad(cual, desde);
+    } finally {
+      this.poniendoElAsistente = false;
+    }
+  }
+
+  async ponerElAsistenteDeVerdad(cual, desde) {
+    const quien = asistentes.porId(cual);
+    if (!quien) {
+      this.salida.appendLine(`[asistente] poner uno que no existe: ${JSON.stringify(cual)}`); // diccionario: interno
+      return this.avisarAqui({ texto: 'Ese botón está mal montado. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    }
+    if (!asistentes.estaInstalado(quien)) {
+      this.enviar({ tipo: 'esperando', que: `Poniendo ${quien.nombre}…` });
+      const puesto = await arrancar.ponerElAsistente(quien, { callado: true });
+      this.salida.appendLine(`[asistente] poner ${quien.id}: ${puesto ? 'puesto' : 'no'}`); // diccionario: interno
+      if (!puesto) {
+        const noSePudo = { texto: `No he podido poner ${quien.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`, malo: true };
+        if (desde === 'asistente') return this.verAsistente(noSePudo);
+        await this.refrescar(true);
+        return this.enviar({ tipo: 'aviso', ...noSePudo });
+      }
+      // El editor tarda un poco en verlo. Diez segundos, y si no, a recargar.
+      const vueltas = this.vueltasAlPoner === undefined ? 20 : this.vueltasAlPoner;
+      for (let i = 0; i < vueltas && !asistentes.estaInstalado(quien); i += 1) await new Promise((r) => setTimeout(r, 500));
+    }
+    const loVe = asistentes.estaInstalado(quien);
+    const dicho = !loVe
+      ? { texto: `Ya está puesto ${quien.nombre}. Recarga la ventana para empezar a usarlo: no se pierde nada.`, boton: { etiqueta: 'Recargar ahora', accion: { tipo: 'recargar' } } }
+      : (asistentes.elDeAhora().id === quien.id
+        ? { texto: `Ya está puesto ${quien.nombre}. Ábrelo y entra con tu cuenta.`, boton: { etiqueta: `Abrir ${quien.nombre}`, accion: { tipo: 'abrirAsistente' } } }
+        : { texto: `Ya está puesto ${quien.nombre}.` });
+    if (desde === 'asistente') return this.verAsistente(dicho);
+    await this.refrescar(true);
+    return this.enviar({ tipo: 'aviso', ...dicho });
   }
 
   // Ayuda › Pedir ayuda en el foro. El foro tiene muchas puertas, así que no se
@@ -2063,8 +2153,8 @@ ${cabecera}
     if (para === 'marca') {
       const puesto = tema.guardarSoltado(ficheros);
       if (!puesto.ok) return this.verLaCara({ texto: puesto.mensaje, malo: true });
-      await puente.enviar(tema.queLePedimos({ web: tema.comoEstamos().web, puestos: puesto.puestos }));
-      return this.verLaCara({ texto: `${puesto.mensaje} Se lo he pasado al asistente.`, malo: false });
+      // Lo que ha pasado de verdad con el encargo, como al darle documentos (decisión 166).
+      return this.verLaCara(await this.pasarleYDecir(puesto.mensaje, tema.queLePedimos({ web: tema.comoEstamos().web, puestos: puesto.puestos })));
     }
 
     // Soltado encima de Documentos, se queda en Documentos: lo que acaba de
@@ -2073,14 +2163,11 @@ ${cabecera}
     const { ok, cuantos, mensaje } = cerebro.guardarSoltados(ficheros);
     if (!ok) return enDocumentos ? this.verDocumentos({ texto: mensaje, malo: true }) : this.enviar({ tipo: 'aviso', texto: mensaje, malo: true });
 
-    if (enDocumentos) {
-      await this.verDocumentos({ texto: mensaje, malo: false });
-    } else {
-      await this.refrescar(true);
-      this.enviar({ tipo: 'aviso', texto: mensaje });
-    }
-    await puente.enviar(`Te he dejado ${cuantos === 1 ? 'un documento nuevo' : `${cuantos} documentos nuevos`} en la bandeja. Léelos y cuéntame qué has aprendido.`);
-    return undefined;
+    // Primero se le pasa, y después se dice lo que ha pasado de verdad (decisión 166).
+    const dicho = await this.pasarleYDecir(mensaje, cerebro.queLePedimos(cuantos));
+    if (enDocumentos) return this.verDocumentos(dicho);
+    await this.refrescar(true);
+    return this.enviar({ tipo: 'aviso', ...dicho });
   }
 
   // Desde Documentos se vuelve a Documentos; desde lo demás, a Conocimiento, como antes.
@@ -2090,9 +2177,9 @@ ${cabecera}
     if (!ok) return volver({ texto: mensaje, malo: true });
     if (!cuantos) return volver();
 
-    await puente.enviar('He dejado documentos nuevos en la bandeja de entrada. Léelos, guárdalos donde toque y cuéntame en dos líneas qué has aprendido.');
+    const dicho = await this.pasarleYDecir(mensaje, cerebro.queLePedimos(cuantos));
     brujula.olvidar();
-    return volver({ texto: mensaje, malo: false });
+    return volver(dicho);
   }
 
   // ── Documentos, en una pantalla (F7, decisión 151) ─────────────────────
@@ -2284,21 +2371,38 @@ ${cabecera}
   // la pregunta más frecuente que hay y no tenía botón en ningún sitio.
   async verAyuda() {
     this.donde = { tipo: 'quieto' };
-    const laNueva = await version.laNuevaSiHay(this.contexto, this.versionDeLaBarra());
     this.enviar({
       tipo: 'ayuda',
       github: await github.estado(),
       avisos: this.losAvisosQueEsperan(),
       // Qué barra es esta, y si hay otra: aquí sale aunque se apartara con «Ahora no».
-      version: {
-        esta: this.versionDeLaBarra(),
-        nueva: laNueva ? laNueva.version : null,
-        deprueba: Boolean(laNueva && laNueva.deprueba),
-        puesta: this.versionPuesta || null,
-        probarAntes: version.probarAntes(),
-        sola: version.actualizarSola(),
-      },
+      version: await this.laVersionParaEnsenar(),
     });
+  }
+
+  async laVersionParaEnsenar() {
+    const laNueva = await version.laNuevaSiHay(this.contexto, this.versionDeLaBarra());
+    return {
+      esta: this.versionDeLaBarra(),
+      nueva: laNueva ? laNueva.version : null,
+      deprueba: Boolean(laNueva && laNueva.deprueba),
+      puesta: this.versionPuesta || null,
+      probarAntes: version.probarAntes(),
+      sola: version.actualizarSola(),
+    };
+  }
+
+  // «Barra 0.53.0», abajo en la principal: la versión, con Actualizar ahora y
+  // Probar las versiones nuevas antes. Abría Más ayuda (decisión 166). Se repinta
+  // si se pone sola una nueva mientras se mira.
+  async verEstaBarra() {
+    this.donde = { tipo: 'estaBarra' };
+    this.enviar({ tipo: 'estaBarra', version: await this.laVersionParaEnsenar() });
+  }
+
+  // Después de cambiar un ajuste de la versión, a la pantalla de donde se vino.
+  volverALaVersion() {
+    return this.donde && this.donde.tipo === 'estaBarra' ? this.verEstaBarra() : this.verAyuda();
   }
 
   // ── Los datos de clientes (decisión 153) ──────────────────────────────
@@ -2434,6 +2538,8 @@ ${cabecera}
       clave: 'Una conexión dice que le faltan claves y yo creo que ya las tengo puestas.',
       noHace: 'Le pido cosas al asistente y no hace lo que espero.',
       montar: 'Algo no se ha montado bien en esta carpeta.',
+      // Desde «Algo va mal», con todo sano (decisión 166).
+      algoVaMal: 'He pulsado «Algo va mal» y la barra dice que está todo bien, pero algo no me va. Pregúntame qué estaba haciendo.',
     };
 
     let sintoma = SINTOMAS[cual];
@@ -2448,8 +2554,23 @@ ${cabecera}
     }
 
     this.enviar({ tipo: 'esperando', que: 'Mirando cómo está todo…' });
-    const encargo = encargos.resolverUnaIncidencia({ sintoma, queVe: await this.loQueNoCuadra() });
+    const queVe = await this.loQueNoCuadra();
+    // Y lo que acaba de revisar «Algo va mal»: el informe, que ya va sin claves y
+    // está fuera de git, para que no lo repita a ciegas (decisión 166).
+    if (cual === 'algoVaMal') queVe.push(...this.elInformeDeLaRevision());
+    const encargo = encargos.resolverUnaIncidencia({ sintoma, queVe });
     return this.pedir(encargo.prompt);
+  }
+
+  // Dónde está el informe de la última revisión, si está dentro de la carpeta.
+  elInformeDeLaRevision() {
+    const { codigo } = this.ultimaIncidencia || {};
+    const raiz = proyecto.raiz();
+    const fichero = this.ultimoInforme;
+    if (!codigo || !raiz || !fichero) return [];
+    const dentro = path.relative(raiz, fichero);
+    if (!dentro || dentro.startsWith('..') || path.isAbsolute(dentro) || !fs.existsSync(fichero)) return [];
+    return [`El informe de la revisión de «Algo va mal» (código ${codigo}) está en ${dentro.split(path.sep).join('/')}: léelo antes de nada.`];
   }
 
   // Hechos leídos del disco para acompañar a la incidencia. Nada de
@@ -2626,8 +2747,7 @@ ${cabecera}
     if (hecho.cancelado) return this.verLaCara();
     if (!hecho.ok) return this.verLaCara({ texto: hecho.mensaje, malo: true });
 
-    await puente.enviar(tema.queLePedimos({ web: tema.comoEstamos().web, puestos: hecho.puestos }));
-    return this.verLaCara({ texto: `${hecho.mensaje} Se lo he pasado al asistente.`, malo: false });
+    return this.verLaCara(await this.pasarleYDecir(hecho.mensaje, tema.queLePedimos({ web: tema.comoEstamos().web, puestos: hecho.puestos })));
   }
 
   async quitarLaCara() {
@@ -2674,7 +2794,7 @@ ${cabecera}
 
   async elegirAsistente(cual) {
     const nombre = (asistentes.porId(cual) || {}).nombre || cual;
-    const { ok, mensaje, detalle, cancelado } = await asistentes.elegir(cual, {
+    const { ok, mensaje, detalle, cancelado, boton } = await asistentes.elegir(cual, {
       // Si la carpeta no está montada para él, se prepara también para él (E1).
       montar: async (id) => {
         this.enviar({ tipo: 'esperando', que: `Preparando esta carpeta para ${nombre}…` });
@@ -2689,7 +2809,8 @@ ${cabecera}
       vigilarOtraVez();
       await this.refrescar(true);
     }
-    await this.verAsistente({ texto: mensaje, malo: !ok && !cancelado });
+    // Si falta en el ordenador, con el botón que lo pone (decisión 166).
+    await this.verAsistente({ texto: mensaje, malo: !ok && !cancelado, ...(boton ? { boton } : {}) });
   }
 
   // Lo que sabe que no sabe. Estaba al final de la pantalla de conceptos,
@@ -3565,6 +3686,9 @@ function vigilarElArnes(contexto, panel) {
   // Una tanda de cambios (RSC escribe muchos ficheros de golpe) es un solo
   // repintado, no veinte.
   const alCambiar = (uri) => {
+    // Un encargo largo que acaba de dejar la barra no cambia nada de lo que se ve
+    // (decisión 166): repintar ahora solo movería la pantalla.
+    if (pedidos.esUnEncargo(uri.fsPath)) return;
     // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
     if (pedidos.esUnPedido(uri.fsPath)) panel.atenderLosPedidos().catch((error) => panel.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
     const esMarca = uri.fsPath.includes(`${marca.CARPETA.join('/')}/`) || uri.fsPath.includes(marca.FICHERO);

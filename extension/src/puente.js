@@ -9,6 +9,9 @@
 //
 // El orden de los dos primeros está medido, no supuesto: ver `enviar`.
 //
+// Y antes de los tres, un encargo que no cabe se deja en un fichero de la carpeta
+// y se manda la línea que lo nombra (decisión 166, en `cabeEntero`).
+//
 // El paso 3 no es un fallo silencioso: si se llega ahí, el alumno lo sabe y
 // queda anotado en el canal de salida, porque significa que algo ha cambiado
 // en la extensión del asistente.
@@ -82,6 +85,9 @@ const conversacionNueva = () => ejecutarSiExiste(asistentes.elDeAhora().nueva);
 // vacía encima de la que acababa de recibir el texto.
 // ── Un encargo largo, en Windows, por el portapapeles ─────────────────
 //
+// (Desde la decisión 166 esto es el repuesto: primero se deja en un fichero,
+// abajo. Se llega aquí solo si eso no se puede.)
+//
 // El enlace lleva el texto dentro de la URL, y en Windows `ShellExecute` corta
 // las URL sobre los 2.048 caracteres. Si VS Code manda allí su propia URL por el
 // sistema, el encargo de ordenar 120 claves —8.448 caracteres— llegaría a medias,
@@ -91,6 +97,43 @@ const conversacionNueva = () => ejecutarSiExiste(asistentes.elDeAhora().nueva);
 // conversación vacía y tiran el texto (arriba).
 const CABE_EN_UNA_URL_DE_WINDOWS = 2000;
 const cabeEnElEnlace = (uri, plataforma = process.platform) => plataforma !== 'win32' || String(uri).length <= CABE_EN_UNA_URL_DE_WINDOWS;
+
+// ── Y mejor que el portapapeles, un fichero (decisión 166) ───────────────
+//
+// El portapapeles pide pegar, y un encargo de 8.448 caracteres en la caja no se
+// lee. Así que lo que no cabe se deja en un fichero de la carpeta que no entra en
+// git (`pedidos.dejarUnEncargo`), y se manda una sola línea que lo nombra. Igual
+// en el Mac que en Windows, y con Codex igual que con Claude: se mide como si
+// fuera el enlace de Claude, que es el que tiene tope. Así lo que pasa en Windows
+// se ve todos los días en un Mac.
+//
+// Lo que entra en el fichero se tapa como el informe de «Algo va mal», que vive
+// al lado (`conexiones.taparClaves`). Si no se puede dejar —sin el bloque de la
+// barra en el `.gitignore`, sin `02-DOCS`, con un enlace en el camino—, todo
+// sigue como antes: en Windows al portapapeles, y en lo demás por el enlace.
+function cabeEntero(texto) {
+  const claude = asistentes.porId('claude');
+  return cabeEnElEnlace(`${claude.enlace}?${claude.parametro}=${encodeURIComponent(texto)}`, 'win32');
+}
+
+async function dejarloEnUnFichero(texto, salida) {
+  const apuntar = (linea) => { if (salida) salida.appendLine(`[puente] encargo largo: ${linea}`); }; // diccionario: interno
+  let limpio;
+  try {
+    limpio = require('./conexiones').taparClaves(texto);
+  } catch (error) {
+    // Sin poder taparlo, no se escribe en la carpeta.
+    apuntar(`no lo dejo en un fichero, no se ha podido tapar: ${error.message}`);
+    return null;
+  }
+  const hecho = await require('./pedidos').dejarUnEncargo(require('./proyecto').raiz(), limpio);
+  if (!hecho.ok) {
+    apuntar(`no lo dejo en un fichero (${hecho.motivo})`);
+    return null;
+  }
+  apuntar(`en ${hecho.ruta}`);
+  return require('./pedidos').laLinea(hecho.ruta);
+}
 
 // Al portapapeles, y se abre la conversación para pegarlo. Se dice por qué: no es
 // lo mismo un asistente al que no se le puede escribir que un texto largo.
@@ -118,6 +161,9 @@ async function enviar(texto, salida, { plataforma = process.platform } = {}) {
     if (salida) salida.appendLine('[puente] no mando nada: el texto venía vacío'); // diccionario: interno
     return 'vacio';
   }
+
+  // Lo que no cabe, a un fichero, y se manda la línea que lo nombra (arriba).
+  if (!cabeEntero(texto)) texto = await dejarloEnUnFichero(texto, salida) || texto;
 
   const quien = asistentes.elDeAhora();
 
@@ -169,4 +215,4 @@ async function diagnostico(salida) {
   salida.show(true);
 }
 
-module.exports = { enviar, darFoco, abrirConversacion, conversacionNueva, diagnostico, primeroDisponible, cabeEnElEnlace };
+module.exports = { enviar, darFoco, abrirConversacion, conversacionNueva, diagnostico, primeroDisponible, cabeEnElEnlace, cabeEntero };

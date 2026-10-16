@@ -297,6 +297,8 @@ async function calcular() {
     faltaGit: !conGit,
     comoSeInstalaGit: git.comoSeInstala(),
     faltaElAsistente: faltaElAsistente ? quien.nombre : null,
+    // Y el botón que lo pone, hecho aquí, que es quien sabe cuál (decisión 166).
+    ponerElAsistente: faltaElAsistente ? asistentes.falta(quien).boton : null,
     primerPaso: sinEmpezar ? {
       asistente: quien.nombre,
       instalado: asistentes.estaInstalado(quien),

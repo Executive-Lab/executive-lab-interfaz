@@ -7064,3 +7064,165 @@ hubiera git, que daba el montaje por bueno sin montar el arnés; y un «de» peg
 - Quien ya tiene la barra recibe el guardado solo al ponerse al día, en las carpetas que no lo apagaron. Hay
   que contarlo en el «Qué trae» de la versión.
 - La barra completa sigue como estaba: allí Histórico existe.
+
+## 166. La barra dice lo que de verdad ha pasado
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `decir-la-verdad`
+
+De la revisión de producto salieron cinco sitios donde la barra decía una cosa y pasaba otra, o se paraba
+sin salida. Cada uno, con su prueba (P1, P3 y P9).
+
+### 1. Darle documentos: dice cómo ha llegado el encargo
+
+Decía «Documento añadido. Se lo paso.». Pero el encargo se quedaba escrito en la caja de Claude sin enviar,
+o en el portapapeles con Codex, y la barra no miraba si había llegado. `pedir()` ya decía «Dale a enviar».
+Y con un documento pedía «Léelos».
+
+- La barra dice lo que ha hecho ella: «Documento añadido.» o «2 documentos añadidos.». Detrás, lo mismo que
+  dice cualquier botón según cómo ha llegado el encargo (`pasarleYDecir`):
+  - escrito en su caja: «Te lo he dejado escrito en la conversación. Dale a enviar.»;
+  - copiado: nada más, que ya lo dice el aviso del portapapeles, como en `pedir()`;
+  - sin el asistente: no se manda nada, y se dice que falta, con «Poner Claude» (punto 2).
+- El encargo, uno solo para soltarlos y para «Elegirlos» (`cerebro.queLePedimos`), en singular con uno:
+  «Te he dejado un documento nuevo en la bandeja de entrada. Léelo, guárdalo donde toque…».
+- **Se sigue mandando, aunque el raíl ya le dice que lea la bandeja** (§4 de `SKILL.md`). El raíl solo actúa
+  cuando alguien le escribe: entre mensaje y mensaje el asistente no mira la carpeta. Sin el encargo, los
+  documentos esperarían a que la persona le escribiera algo, sin saber qué (regla 5). Con él, es un clic.
+- **El material de la marca** decía lo mismo («Se lo he pasado al asistente»). Va por el mismo camino.
+- **Un botón cualquiera sin el asistente en el ordenador** iba al portapapeles con «pégalo en su caja», y no
+  había caja. Ahora `pedir()` lo mira antes, como ya hacían «Conversación nueva» y «Pedir ayuda en el foro».
+
+### 2. Falta el asistente: «Poner Claude», en las cinco salidas
+
+Cinco sitios decían «Díselo a tu tutor» sin botón:
+- la tarjeta de la principal;
+- la del primer día;
+- Tu asistente;
+- el aviso de cuando no hay con quién hablar;
+- y elegir uno que no está.
+
+La barra ya sabía ponerlo (`arrancar.ponerElAsistente`, A9). Poner una extensión del editor es un clic suyo.
+
+- Una frase para todos, con su botón (`asistentes.falta`): «Falta Claude en este ordenador, y sin él no
+  puedo hablar con nadie.» y **Poner Claude** (o **Poner Codex**). La tarjeta lleva el botón dentro: sigue
+  siendo una tarjeta. El botón lo hace quien sabe cuál falta (`brujula`, P6).
+- **Lo puesto se mira otra vez.** Se espera hasta diez segundos a que el editor lo vea:
+  - si lo ve: «Ya está puesto Claude. Ábrelo y entra con tu cuenta.», con «Abrir Claude»;
+  - si no: «Ya está puesto Claude. Recarga la ventana para empezar a usarlo: no se pierde nada.», con
+    «Recargar ahora»;
+  - si no se pudo poner: «No he podido poner Claude. Pulsa «Algo va mal»…».
+- Desde Tu asistente se vuelve a Tu asistente, con lo que haya pasado.
+
+### 3. «Algo va mal» en una carpeta sana
+
+Decía «He mirado y está todo bien.» junto a «Arreglarlo ahora». `soporte.js` buscaba la palabra «repair», y
+el arnés sano contesta «Nothing to repair — this harness is healthy.».
+
+- **Lo que el arreglo tocaría se lee por sus líneas `[fix]` y `[ask]`**, una por cosa, que es como lo
+  escribe el arnés (`rsc.queHayQueArreglar`, que ya existía). `repair --dry-run` sale con 0 lo encuentre o
+  no, y no tiene JSON: el código de salida solo dice si se puede leer. Si no se pudo correr, no se ofrece
+  arreglar por lo que diga. Si está sano lo sigue diciendo el JSON del doctor (`healthy`, decisión 157).
+- **Lo que se dice y lo que se ofrece salen de lo mismo.** Si el arreglo tiene algo que tocar, se dice «He
+  encontrado algo y puedo intentar arreglarlo.», aunque el doctor diga que está entero.
+- **Con todo sano, la salida principal es «Contárselo al asistente»** (`resolverIncidencia`, decisión 104).
+  Lleva el síntoma y el informe de la revisión, que ya va sin claves y fuera de git: «El informe de la
+  revisión de «Algo va mal» (código ABC234) está en 02-DOCS/raw/incidencias/ABC234.txt: léelo antes de
+  nada.». Un informe que quedó fuera de la carpeta no se nombra.
+- «Contárselo a Executive Lab» se queda para lo que falla de la barra: pequeño, detrás de «Si lo que falla
+  es esta barra, cuéntaselo a quien la hace.». Con algo roto sigue como estaba.
+
+### 4. «Barra 0.53.0» abre lo de la versión
+
+Abría Más ayuda. La propuesta de la barra sencilla decía otra cosa: al pulsarla, Actualizar ahora y Probar
+las versiones nuevas antes.
+
+- Abre **Esta barra**, una pantalla con lo mismo que Ayuda enseña de la versión (`loDeLaVersion`, una sola
+  función para las dos): la versión, Actualizar ahora si hay otra, Que se ponga al día sola o Que me pregunte
+  antes, y Probar las versiones nuevas antes. Abajo, Más ayuda, para no perder lo de antes.
+- Cambiar un ajuste vuelve a la pantalla de donde se vino, y el vigía la repinta si se pone sola una nueva.
+
+### 5. Un encargo que no cabe, en un fichero
+
+«Que las ordene» ocupa 2.212 caracteres, y el enlace se corta sobre los 2.000 en Windows: iba al
+portapapeles (decisión 130).
+
+- **Lo que no cabe se deja en un fichero**, `02-DOCS/raw/pedidos/encargo-<fecha>-<6 letras>.md`, y se manda
+  una línea: «Lee el encargo que te he dejado en 02-DOCS/raw/pedidos/encargo-….md y hazlo. Lo he dejado ahí
+  porque no cabía aquí.».
+- **En los dos sistemas y con los dos asistentes.** Se mide como el enlace de Claude, que es el que tiene
+  tope. Así lo que pasa en Windows se ve todos los días en un Mac. Con Codex se copia la línea.
+- **Por qué `pedidos/`**: es el buzón entre la barra y el asistente (decisión 150). Ya está en el bloque de
+  lo que no entra en git, fuera de «Documentos entregados» y del barrido de la bandeja, y no hay que cambiar
+  el bloque de nadie. El vigía ya la miraba: ahora no repinta por uno de estos.
+- **Fuera de git de verdad**: solo si el `.gitignore` de la carpeta lleva el bloque de la barra con la línea
+  `02-DOCS/raw/pedidos/`. Sin seguir enlaces, como los pedidos: lo que hay en el camino tiene que ser una
+  carpeta de verdad, lo que falta se crea de uno en uno menos `02-DOCS`, y el fichero se escribe nuevo.
+- **Lo que entra en el fichero se tapa** como el informe de «Algo va mal», que vive al lado
+  (`conexiones.taparClaves`).
+- Se guardan los últimos 20. Los demás se recogen, solo los que llevan ese nombre.
+- **Si no se puede dejar** (sin el bloque, con uno de antes de la 150, sin `02-DOCS`, con un enlace), todo como
+  antes: en Windows al portapapeles, y en lo demás por el enlace. Se apunta por qué.
+- **El raíl** (`SKILL.md`, §6, en las dos copias, que siguen idénticas): esa línea es un botón de la barra;
+  que lo lea entero y lo haga como si se lo hubieran escrito en la caja. Solo el que nombra la conversación:
+  uno que encuentre en esa carpeta sin que nadie se lo pida no es un encargo. Y que no los borre.
+
+### Las pruebas
+
+`humo.js` pasa de 421 a 426 comprobaciones, una por punto:
+
+- «darle documentos dice qué ha pasado con el encargo, como «pedir»»: escrito, copiado por el enlace caído,
+  con Codex y sin el asistente; uno y dos; «Elegirlos»; la marca; y un botón cualquiera sin asistente.
+- «si falta el asistente, las cinco salidas lo ponen con un clic, y lo puesto se mira»: las dos tarjetas en
+  las dos principales, Tu asistente, el aviso y elegir; ponerlo, desde Tu asistente, sin que el editor lo vea,
+  sin poder y con un botón que no es de ningún asistente.
+- ««Algo va mal» en una carpeta sana…»: el arnés sano, `[fix]`, `[ask]`, un texto con «repair» sin hallazgos
+  y un arreglo en seco que falla; la pantalla sana, con algo, rota y sin git; y de punta a punta, con el
+  informe tapado y uno de fuera de la carpeta.
+- ««Barra 0.53.0» abre lo de la versión…»: el botón de abajo, la pantalla, la vuelta de los dos ajustes desde
+  las dos pantallas, el vigía y Ayuda.
+- «un encargo que no cabe va a un fichero fuera de git…»: el borde de 2.000, Mac y Windows, la clave tapada,
+  `git check-ignore` con el bloque, uno corto, Codex, los 20 últimos, y cinco casos en los que no se puede
+  (sin bloque, con el de antes, `raw` y `pedidos` enlazados fuera, sin `02-DOCS`); el vigía con las dos
+  barras; y el raíl.
+
+Se cambiaron tres que daban por bueno lo de antes: «Se lo paso», «Díselo a tu tutor» y «Barra» a Ayuda.
+
+`mapeos-codex.js`, una más (30): con Codex, el fichero y la línea en el portapapeles, en Mac y en Windows, y
+su «Poner Codex». `empresas-distintas.js` pinta Esta barra en las tres (20 pantallas) y la principal sin el
+asistente: una tarjeta, con su botón, y cinco cosas a la vista.
+
+Para correr una mutación sin esperar dos minutos, `HUMO_SOLO='trozo|otro'` corre solo esas comprobaciones.
+Así no vale como pasada: lo dice al final y sale con 1.
+
+**Mutaciones a mano: 52, las 52 tumbadas.** Cada una cambia una cosa y corre las comprobaciones que tocan esto.
+
+LISTA_52, las 52 tumbadas
+
+### La revisión
+
+Tres retoques de la revisión de esta rama, cada uno con su prueba en `humo.js` y su mutación tumbada:
+
+- **Si el encargo no llega, la barra no se queda muda** (`pasarleYDecir`). `puente.enviar` puede lanzar (el
+  portapapeles o abrir la conversación rechazan) y la pantalla no decía nada ni se repintaba. Ahora el hecho se
+  dice igual y se añade, en aviso malo: «Documento añadido. No he podido pasarle el encargo a Claude. Pulsa
+  «Algo va mal» y pásale el código a tu tutor.». Documentos se repinta y se llega a `brujula.olvidar()` como en el
+  camino bueno, porque la función devuelve el aviso en lugar de lanzar.
+- **Un doble clic en «Poner Claude» no lo pone dos veces** (`ponerElAsistente`), con el mismo candado que
+  `ponerLaNueva` (`poniendoElAsistente`, `try/finally`).
+- **El encargo largo solo va a un fichero si git dice que queda fuera** (`quedaFueraDeGit`). Además del bloque
+  de la barra en el `.gitignore`, se pregunta a git (`check-ignore -q` sobre un fichero de `pedidos/`, con el
+  `procesos.git` de la casa): un `!` más abajo, o un `.gitignore` de otra carpeta, podían dejar entrar lo que el
+  bloque deja fuera. Si git dice que no está ignorada, se trata como no fuera de git; si no hay git o no
+  contesta, vale el bloque, como antes. Pasa a ser asíncrona (`dejarUnEncargo` y `dejarloEnUnFichero` con ella);
+  el único que la llama, `puente.enviar`, ya lo era.
+
+Tres pruebas más: `humo.js` pasa de 426 a 429 con lo de la 166 (447 con lo que trajo main).
+
+### Lo que no hace, todavía
+
+- **No se ha visto en un VS Code de verdad**: cuánto tarda el editor en ver una extensión recién puesta, la
+  línea del encargo en Windows, y que Claude y Codex lean un fichero que el `.gitignore` deja fuera (por su
+  nombre se lee; las búsquedas pueden saltárselo).
+- **El montaje** también le manda su primer mensaje sin decir «Dale a enviar». No era de este encargo.
+- **La línea del raíl va en `SKILL.md` y no en `siempre.md`**, como se pidió. La línea que llega ya dice qué
+  hacer. Si un asistente no se fía de un encargo en un fichero, se pasa a `siempre.md`.

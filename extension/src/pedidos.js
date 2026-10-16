@@ -1,4 +1,5 @@
-// Lo que el asistente le pide a la barra (decisión 150).
+// Lo que el asistente le pide a la barra (decisión 150), y lo que la barra le deja
+// cuando un encargo no cabe en su caja (decisión 166, abajo).
 //
 // La regla 7 de los raíles decía «dile que la busque en la barra y la pulse»: el
 // alumno, que estaba hablando con el asistente, tenía que irse a otra pantalla a
@@ -176,4 +177,122 @@ function contestar(raiz, id, texto) {
   return escrita;
 }
 
-module.exports = { CARPETA, POR_VEZ, POR_SESION, carpeta, losQueHay, esUnPedido, lasQueSeParecen, queHacer, sePide, respuesta, olvidarLaRespuesta, sigue, contestar };
+// ── Y al revés: lo que la barra le deja al asistente (decisión 166) ───────
+//
+// Un encargo que no cabe en el enlace —en Windows se corta sobre los 2.048
+// caracteres, y «Que las ordene» ya ocupa 2.212— se deja aquí, en un fichero, y
+// al asistente le llega una sola línea que lo nombra. Igual en los dos sistemas,
+// para que lo que pasa en Windows se vea también en un Mac.
+//
+// Esta carpeta, y no otra, porque es el buzón entre los dos: ya está fuera de
+// git en el bloque de la barra, fuera de «Documentos entregados» y del barrido
+// de la bandeja. Y si en esta carpeta no está fuera de git, no se escribe nada.
+//
+// Sin seguir enlaces, como lo de arriba: lo que ya hay en el camino tiene que ser
+// una carpeta de verdad, lo que falta se crea de uno en uno, y el fichero se
+// escribe nuevo (`wx`), con un nombre que no puede estar.
+const ENCARGO = /^encargo-\d{8}-\d{9}-[0-9a-f]{6}\.md$/;
+// Los últimos que se guardan. Uno que no se llegó a mandar se queda un rato; no
+// se acumulan para siempre.
+const ENCARGOS_GUARDADOS = 20;
+
+// Si esta carpeta queda fuera de git. Primero se mira el bloque de la barra en el
+// `.gitignore`, la línea exacta (uno de antes de la decisión 150 no la lleva); y
+// después, lo que de verdad dice git (`check-ignore`): un `!` más abajo, o un
+// `.gitignore` de otra carpeta, puede dejar entrar lo que el bloque deja fuera.
+// Si git dice que no, no está fuera. Si no hay git o no contesta, vale lo que dice
+// el bloque, como antes (decisión 166, la revisión).
+async function quedaFueraDeGit(raiz) {
+  if (!elBloqueLoDeja(raiz)) return false;
+  let codigo = -1;
+  try {
+    ({ codigo } = await require('./procesos').git('-C', raiz, 'check-ignore', '-q', '--', `${CARPETA.join('/')}/encargo-x.md`));
+  } catch { /* sin git: vale el bloque */ }
+  return codigo !== 1;
+}
+
+function elBloqueLoDeja(raiz) {
+  if (!raiz) return false;
+  let texto;
+  try {
+    const fichero = path.join(raiz, '.gitignore');
+    if (!fs.lstatSync(fichero).isFile()) return false;
+    texto = fs.readFileSync(fichero, 'utf8');
+  } catch {
+    return false;
+  }
+  const bloque = require('../media/railes/no-entra-en-git').elQueHay(texto);
+  return Boolean(bloque) && bloque.split(/\r?\n/).some((linea) => linea.trim() === `${CARPETA.join('/')}/`);
+}
+
+// La carpeta, creando lo que falte menos `02-DOCS`: sin él no hay arnés, y no se
+// fabrica media pieza del suelo.
+function carpetaParaEscribir(raiz) {
+  if (!raiz) return null;
+  let donde = raiz;
+  for (const [i, trozo] of CARPETA.entries()) {
+    donde = path.join(donde, trozo);
+    let info = null;
+    try {
+      info = fs.lstatSync(donde);
+    } catch (error) {
+      if (error.code !== 'ENOENT' || i === 0) return null;
+    }
+    if (info && (info.isSymbolicLink() || !info.isDirectory())) return null;
+    if (!info) {
+      try {
+        fs.mkdirSync(donde);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return donde;
+}
+
+// Los de otras veces, menos los últimos. Solo ficheros de verdad con nuestro
+// nombre: quitar un enlace no toca lo que apunta, pero no se toca lo que no es nuestro.
+function recogerLosViejos(donde) {
+  let suyos;
+  try {
+    suyos = fs.readdirSync(donde, { withFileTypes: true }).filter((e) => e.isFile() && ENCARGO.test(e.name)).map((e) => e.name).sort();
+  } catch {
+    return;
+  }
+  for (const nombre of suyos.slice(0, Math.max(0, suyos.length - ENCARGOS_GUARDADOS))) {
+    try {
+      fs.unlinkSync(path.join(donde, nombre));
+    } catch { /* ya no estaba */ }
+  }
+}
+
+// Deja el encargo y dice dónde, relativo a la carpeta de trabajo y con `/`, que
+// es como lo lee el asistente. Lo que llega aquí ya va limpio de claves: lo tapa
+// quien llama, como el informe de «Algo va mal».
+async function dejarUnEncargo(raiz, texto, ahora = new Date()) {
+  if (!await quedaFueraDeGit(raiz)) return { ok: false, motivo: 'el .gitignore no deja fuera los pedidos' }; // diccionario: interno
+  const donde = carpetaParaEscribir(raiz);
+  if (!donde) return { ok: false, motivo: 'la carpeta de los pedidos no es una carpeta de verdad' }; // diccionario: interno
+  // Con los milésimos: por el nombre se sabe cuáles son los viejos.
+  const sello = ahora.toISOString().slice(0, 23).replace(/[-:.]/g, '').replace('T', '-');
+  const nombre = `encargo-${sello}-${require('node:crypto').randomBytes(3).toString('hex')}.md`;
+  try {
+    fs.writeFileSync(path.join(donde, nombre), `${String(texto).trim()}\n`, { flag: 'wx' });
+  } catch (error) {
+    return { ok: false, motivo: error.message };
+  }
+  recogerLosViejos(donde);
+  return { ok: true, ruta: [...CARPETA, nombre].join('/') };
+}
+
+// La línea que se le manda. Dice de dónde sale para que lo haga como si se lo
+// hubieran escrito en la caja: lo manda la persona, con su «enviar».
+const laLinea = (ruta) => `Lee el encargo que te he dejado en ${ruta} y hazlo. Lo he dejado ahí porque no cabía aquí.`;
+
+// Un cambio del vigía que es uno de estos: no hay nada que repintar.
+const esUnEncargo = (ruta) => /[\\/]02-DOCS[\\/]raw[\\/]pedidos[\\/]encargo-[^\\/]+\.md$/.test(String(ruta || ''));
+
+module.exports = {
+  CARPETA, POR_VEZ, POR_SESION, carpeta, losQueHay, esUnPedido, lasQueSeParecen, queHacer, sePide, respuesta, olvidarLaRespuesta, sigue, contestar,
+  ENCARGO, ENCARGOS_GUARDADOS, quedaFueraDeGit, carpetaParaEscribir, dejarUnEncargo, laLinea, esUnEncargo,
+};

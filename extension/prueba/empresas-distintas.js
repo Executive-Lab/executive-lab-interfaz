@@ -157,6 +157,8 @@ for (const [nombre, montar] of TODAS) {
   anadir('foto', { ...fotoM.laFoto(wiki, cargar('cerebro').todosLosDocumentos()), desde: 'documentos', aviso: null }, null);
   anadir('diario', { sesiones: cargar('diario').sesiones(), decisiones: cargar('diario').decisiones(), aprendido: [] }, null);
   anadir('sugerencias', { ahora: [], hayAgentes: cargar('agentes').hayAlguno(), hayProyectos: cargar('proyectos').hayAlgo() }, null);
+  // La de la versión, a la que lleva «Barra x» de abajo (decisión 166).
+  anadir('estaBarra', { version: { esta: '0.0.0', nueva: '9.9.9', deprueba: false, puesta: null, probarAntes: false, sola: true } }, null);
   // Por dónde ibas, como lo lee la brújula, sin continuación (decisión 160).
   const ibasPor = cargar('por-donde-ibas').porDondeIbas(vscode.guion.raiz, null);
   anadir('estado', {
@@ -248,6 +250,25 @@ for (const [nombre, montar] of TODAS) {
     }
     if (!pintado || pintado.length < 20) rotas.push(`${tipo}: no pinta nada`);
     else if (/no se ha podido pintar/.test(pintado)) rotas.push(`${tipo}: cae en la pantalla de fallo`);
+  }
+
+  // Sin el asistente, la tarjeta que lo dice va delante de todo, con el botón que
+  // lo pone dentro: sigue siendo una tarjeta, y cinco cosas como mucho (decisión 166).
+  try {
+    const quien = cargar('asistentes').elDeAhora();
+    const sinEl = panel.mandar({
+      tipo: 'estado',
+      ...conLasDos,
+      estado: { ...conLasDos.estado, faltaElAsistente: quien.nombre, ponerElAsistente: cargar('asistentes').falta(quien).boton },
+    });
+    const tarjetas = (sinEl.match(/<div class="(consejo|aviso)/g) || []).length;
+    if (tarjetas !== 1) rotas.push(`sin el asistente: ${tarjetas} tarjetas a la vez`);
+    if (cosasALaVista(sinEl) > 5) rotas.push(`sin el asistente: ${cosasALaVista(sinEl)} cosas a la vista`);
+    const laTarjeta = (sinEl.match(/<div class="aviso malo">[\s\S]*?<\/div>/) || [''])[0];
+    if (!laTarjeta.includes(`Poner ${quien.nombre}`) || !laTarjeta.includes('ponerElAsistente')) rotas.push('sin el asistente: la tarjeta no trae el botón que lo pone');
+    vistas.push(`sin ${quien.nombre}, ${cosasALaVista(sinEl)} cosas a la vista y en la tarjeta «Poner ${quien.nombre}»`);
+  } catch (e) {
+    rotas.push(`sin el asistente: ${e.message}`);
   }
 
   // La principal sencilla, plegada: como mucho cinco cosas a la vista (la

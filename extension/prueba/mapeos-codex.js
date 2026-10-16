@@ -194,6 +194,39 @@ test('Codex recibe el texto entero por el portapapeles y el atajo de cada sistem
   assert.ok(vscode.registrado.ejecutados.every((e) => e.id === 'chatgpt.openSidebar'));
 });
 
+// Decisión 166: con el bloque de la barra en el `.gitignore`, lo que no cabe en el
+// enlace se deja en un fichero que no entra en git, y a Codex se le copia la línea
+// que lo nombra. Sin el bloque, lo de arriba: entero, por el portapapeles.
+test('con Codex, un encargo que no cabe va a un fichero y se copia la línea que lo nombra', async () => {
+  const puente = cargar('puente');
+  const pedidos = cargar('pedidos');
+  poner('.gitignore', `${require(path.join(extension, 'media', 'railes', 'no-entra-en-git.js')).elBloque()}\n`);
+  poner('02-DOCS/wiki/index.md', '# Índice\n');
+  const texto = 'Prepara el informe con sus tildes.\n'.repeat(300);
+  const losQueHay = () => {
+    try {
+      return fs.readdirSync(path.join(raiz, '02-DOCS', 'raw', 'pedidos')).filter((n) => pedidos.ENCARGO.test(n));
+    } catch {
+      return [];
+    }
+  };
+  for (const [plataforma, atajo] of [['darwin', 'Cmd+V'], ['win32', 'Ctrl+V']]) {
+    vscode.registrado.portapapeles = '';
+    const habia = losQueHay();
+    assert.equal(await puente.enviar(texto, null, { plataforma }), 'copiado');
+    const nuevos = losQueHay().filter((n) => !habia.includes(n));
+    assert.equal(nuevos.length, 1, `${plataforma}: no deja un fichero`);
+    const ruta = `02-DOCS/raw/pedidos/${nuevos[0]}`;
+    assert.equal(vscode.registrado.portapapeles, pedidos.laLinea(ruta), `${plataforma}: se copia otra cosa`);
+    assert.equal(fs.readFileSync(path.join(raiz, ...ruta.split('/')), 'utf8'), `${texto.trim()}\n`, `${plataforma}: el fichero no lleva el encargo`);
+    assert.ok(vscode.registrado.mensajes.at(-1).includes(`Con Codex no puedo escribirle yo. Te lo he copiado: pégalo con ${atajo}`), 'no se dice que lo pegue');
+  }
+  // Y si falta Codex en el ordenador, el botón que lo pone es el suyo.
+  vscode.guion.extensionesInstaladas = [];
+  const asistentes = cargar('asistentes');
+  assert.deepEqual(asistentes.falta(asistentes.elDeAhora()).boton, { etiqueta: 'Poner Codex', accion: { tipo: 'ponerElAsistente', cual: 'codex' } });
+});
+
 test('los raíles no escriben a través de un override enlazado', { skip: process.platform === 'win32' }, () => {
   const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'override-de-otra-empresa-'));
   const fichero = path.join(fuera, 'reglas.md');
