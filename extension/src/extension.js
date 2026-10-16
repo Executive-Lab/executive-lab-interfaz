@@ -20,6 +20,7 @@ const identidad = require('./identidad');
 const puente = require('./puente');
 const acciones = require('./acciones');
 const conexiones = require('./conexiones');
+const mcp = require('./mcp');
 const informatico = require('./informatico');
 // La guía para sacar la clave, en PDF (decisión 159). `guia` a secas ya es el paso de la guía de la barra.
 const guiaPdf = require('./guia');
@@ -1781,12 +1782,27 @@ ${cabecera}
 
   // ------------------------------------------------------- conexiones
 
+  // Las conexiones MCP de los asistentes de esta carpeta (decisión 175): nombre,
+  // asistente, de dónde sale y qué tipo es, nunca un valor. Solo se lee.
+  lasDeMcp(proveedores) {
+    try {
+      let quienes = asistentes.losDelArnes().map((a) => a.id);
+      if (!quienes.length) quienes = [asistentes.conQuien().id];
+      return mcp.conLasConocidas(mcp.leer({ raiz: proyecto.raiz(), asistentes: quienes }).servidores, proveedores);
+    } catch (error) {
+      this.salida.appendLine(`[mcp] ${error.message}`); // diccionario: interno
+      return [];
+    }
+  }
+
   verConexiones() {
     this.donde = { tipo: 'conexiones' };
+    const lista = conexiones.proveedores();
     this.enviar({
       tipo: 'conexiones',
+      mcp: this.lasDeMcp(lista),
       // Cada una, con cómo fue su última prueba, si sus claves no han cambiado.
-      proveedores: conexiones.proveedores().map((p) => ({ ...p, prueba: this.laUltimaPrueba(p.id), caduca: this.loQueCaduca(p.id) })),
+      proveedores: lista.map((p) => ({ ...p, prueba: this.laUltimaPrueba(p.id), caduca: this.loQueCaduca(p.id) })),
       // Si el arnés se montó sobre un proyecto que ya existía, puede haber
       // claves guardadas donde estuvieran. Aquí no se leen: se avisa.
       sueltas: sueltas.resumen(),
