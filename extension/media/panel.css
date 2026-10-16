@@ -349,6 +349,17 @@ button.discreto:hover { background: var(--superficie-2, var(--superficie)); colo
   padding-left: 2px;
 }
 
+/* «Suéltalo aquí»: el fichero de acceso de una conexión (decisión 156). Con
+   el borde de lo que se arrastra, para que se vea dónde cae. */
+.conexion.soltar-aqui { border: 2px dashed var(--borde); }
+.conexion .soltar {
+  margin: 6px 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+}
+body.soltando .conexion.soltar-aqui { border-color: var(--acento); }
+
 input[type="text"], input[type="password"], textarea.caja {
   width: 100%;
   min-height: 40px;

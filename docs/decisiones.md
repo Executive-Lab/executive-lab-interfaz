@@ -5907,3 +5907,143 @@ solo donde hace falta; lo que decide la persona, a un clic; y las cosas se llama
 
 Cada comprobación nueva de esta revisión, y las de la 154, se rompió a mano en una copia: 61 mutaciones, las
 61 tumbadas.
+
+## 156. Conexiones II: cada acceso, su forma, y lo que pedirle al informático
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** hecho (F5 del plan de simplificar la barra)
+
+Jose, al pedir el plan: *«lo que más fricción da es conectar las conexiones y tools […] y que se pueda
+saber qué preguntar a informáticos y técnicos»*. La 146 dejó la guía de un paso cada vez. Faltaban dos
+cosas de la propuesta: que no todas las herramientas piden una clave, y que muchas veces la clave la
+tiene otra persona.
+
+- **La clase de acceso, en una línea de `CREDENTIALS.md`**, junto a la URL de su panel:
+  `- Tipo de acceso: Una clave`. La propuesta decía una columna, pero la tabla de verdad no tiene una
+  forma fija: la plantilla de RSC trae cuatro columnas, sus propios ejemplos traen tres, y alguno ni
+  empieza por «Variable». Una columna nueva cambiaría la posición de lo que ya se lee («Dónde se
+  saca» es la tercera). Y es una tabla de variables: una herramienta en la que se entra con tu cuenta,
+  o que solo pide un fichero, no tiene fila donde escribirlo. La línea va donde la barra ya lee la URL,
+  y no toca nada de lo que se leía. Si el asistente la escribe como columna, también vale.
+- **Cinco clases, y cada una su pantalla:**
+  - *Una clave*: un campo, como hasta ahora.
+  - *Usuario y contraseña*: los dos juntos, con un solo «Guardar». Con uno por campo se escribían los
+    dos, se pulsaba el de abajo, y el de arriba se perdía al repintar.
+  - *Un fichero de acceso* (cuenta de servicio, certificado): «Suéltalo aquí», encima de la barra, o
+    «Elegir el fichero». Va a `keys/` de esa conexión, y solo si `sueltas.js` lo reconoce: una factura
+    soltada por error no acaba entre las llaves. Si la conexión dice qué fichero busca
+    (`keys/cuenta-de-servicio.json`), se guarda con ese nombre. El de antes se queda al lado, como
+    `.anterior-<fecha>`, porque sobrescribir no se deshace (P4). La pantalla dice «no sale de este
+    ordenador», así que se comprueba con git (más abajo). Al ponerlo, si ya está todo, se prueba
+    sola, como una clave (P9).
+  - *Entrar con tu cuenta* (OAuth): no hay nada que pegar. «Entrar» se lo pide al asistente, que abre
+    el navegador. Es un botón porque sale de su ordenador en su nombre.
+  - *Una dirección que te dan* (un webhook): un campo para la dirección, con dónde sale.
+  - Puede nombrar dos («Un fichero de acceso y entrar con tu cuenta»), y salen las dos.
+  - **Sin la línea, como antes (P1).** La lista dice «le falta su fichero de acceso» o «falta entrar con
+    tu cuenta» en vez de «falta una clave».
+  - Ninguna herramienta va nombrada en el código: las clases salen de lo que escribió el asistente.
+- **«Pídeselo a tu informático»**, en cada conexión. Arma un mensaje listo para mandar, con «Copiarlo»
+  y «Mandarlo por correo». La barra no manda nada: copia el mensaje, o abre el correo de esa persona con
+  él puesto y sin destinatario, y lo manda ella.
+  - **Lo de cada herramienta lo escribe el asistente** en el README, bajo `## Para tu informático`:
+    para qué es, qué acceso y con qué permisos mínimos, si basta con leer, la página y qué preguntarle.
+    La barra lo copia tal cual, en texto llano (P5). Si no está, arma lo que sabe del disco: la
+    clase de acceso, el nombre de cada clave y dónde se saca, y la página. Además ofrece «Que lo
+    escriba el asistente».
+  - **La parte de seguridad la pone la barra**, escrita una vez en `informatico.js`. Es el riesgo que
+    nombraba la propuesta: el consejo no cambia de una conversación a otra. Con una clave dice:
+    > Cómo hacérmela llegar, por seguridad:
+    > - Nunca me la mandes por correo ni por mensajería, ni la pegues en la conversación con el
+    >   asistente: ahí se queda guardada y se puede reenviar.
+    > - Lo mejor es que la pegues tú mismo en mi ordenador, en la barra de Executive Lab: Conexiones
+    >   (tools) → Holded. Para eso tienes que estar delante de él, o conectado a él. Así no pasa por
+    >   ningún otro sitio.
+    > - Si no puede ser, compártela conmigo con un gestor de contraseñas.
+    > - Mejor una nueva, solo para esto y con los permisos mínimos, que una que ya se use para otra
+    >   cosa: así se puede quitar sin romper nada.
+    > - Si se le puede poner fecha de caducidad, pónsela y dime cuál es.
+    > - Si ya me la has mandado por correo o por mensajería, anúlala y saca otra: esa ya no es segura.
+
+    Es lo de siempre con un secreto (la *Secrets Management Cheat Sheet* de OWASP): que no viaje por
+    donde se queda guardado, solo lo mínimo, uno para cada uso y con caducidad. La fecha la pregunta la
+    barra desde la 149. Con usuario y contraseña, y con un fichero, dice lo mismo en su forma. Entrando
+    con tu cuenta, que no hace falta mandar ninguna clave, y que si hay que autorizarlo como
+    administrador, diga qué hay que aceptar.
+  - **Nunca un valor de una clave**, ni aunque el asistente la haya pegado donde no debe: sale
+    «[clave quitada]» (cómo, en la revisión de seguridad, abajo). El mensaje se arma en la extensión
+    cada vez, y los botones solo dicen de qué conexión es: el texto no vuelve desde la pantalla. La
+    pantalla no promete que no lleva claves: dice «Lo he revisado para quitar las claves: léelo antes
+    de mandarlo».
+  - **Primero lo de la barra, y después, marcado, lo del asistente.** El README lo puede escribir
+    quien prepara la carpeta, va en primera persona y acaba en manos de un tercero. Así que va detrás
+    de la parte de seguridad, bajo «Lo que preparó el asistente para esta herramienta:», con cada
+    línea citada con «>». Sin direcciones de correo («[correo quitado]»), y con las páginas que no son
+    de la herramienta a la vista en la pantalla, antes de mandarlo.
+  - **El `mailto:` se abre como texto, no con `Uri.parse`.** El editor decodifica lo que va detrás del
+    `?` al leer la dirección, y al abrirla la vuelve a codificar a su manera
+    (`encodeURI(uri.toString(true))`, en su `openerService`). Un «?» del mensaje llegaba como «%3F» y un
+    «&» partía el cuerpo en dos. Con el texto, su código lo abre «AS IS». Asunto y cuerpo van con
+    `encodeURIComponent` y los saltos como `%0D%0A`, como pide la norma (RFC 6068). En Windows, una
+    dirección de más de 2.000 caracteres se corta (decisión 130): el mensaje va al portapapeles y el
+    correo se abre con una línea que dice que lo pegue.
+- **El raíl** (`SKILL.md`, §2, en las dos copias) pasa de tres a cinco cosas que el panel enseña tal
+  cual: d) la clase de acceso, con las cinco palabras que la barra lee, y e) la sección para el
+  informático, con su ejemplo. «Conectar algo nuevo» también las pide. Una prueba lee las cinco
+  palabras de los raíles y su ejemplo con el código de la barra, para que no se separen.
+
+**Lo que encontró la revisión de seguridad** (PR #40), arreglado y con su prueba:
+
+- **La clave salía a trozos en el mensaje.** Se pasaba a texto llano antes de tapar, y eso quita `__`,
+  `**` y comillas invertidas: la clave ya no casaba. Y el corte a 4.000 caracteres podía partirla.
+  Ahora se tapa sobre el texto crudo y otra vez sobre el mensaje entero, y se corta por líneas
+  enteras. Además se tapa cada valor también codificado como en una dirección, en base64 (también
+  dentro de otro base64) y partido por espacios, saltos, guiones o puntos. Los de 4 o 5 caracteres de
+  una clave secreta por su nombre se tapan como palabra entera. También se tapa la clave de
+  `https://usuario:clave@sitio`, y lo que parece una clave por lo revuelto que es.
+- **Un `keys/.gitignore` que ya venía se daba por bueno.** Con `!*` dentro, la cuenta de servicio
+  entraba en git (reproducido con `git add -A`). Ahora, después de ponerlo, se pregunta a git
+  (`check-ignore`). Si no queda fuera, se añade su nombre a ese `.gitignore`, y si aun así entraría
+  (porque git ya lo seguía), no se deja: el de antes vuelve a su sitio y se dice, con su botón. Y el
+  `.gitignore` nuevo se escribe sin seguir un enlace que esté colgando.
+- **Expresiones lentas con un fichero preparado.** La de la línea del tipo de acceso tardaba segundos
+  con cien espacios delante, y corre en cada repintado. La de los marcadores y la de los enlaces eran
+  cuadráticas. Ahora tienen tope por línea y por tramo, y la primera se lee a mano.
+- **El asunto del correo:** el nombre sale de la primera línea del README, y un `\r` dentro abría otra
+  cabecera. Ahora va en una línea. Un emoji partido hacía fallar el correo: se corta por letras
+  enteras y lo que queda suelto se cambia.
+- **El de antes, con fecha**: con `.anterior` a secas, la tercera vez se perdía el primero.
+- **Un `.json` dice lo que es por dentro**: un `credentials.json` con una factura entraba por el
+  nombre.
+- **La parte de seguridad** dice qué hacer si ya se mandó (anularla y sacar otra), y que pegarla en
+  la barra supone estar en ese ordenador.
+
+**Lo que encontró la revisión de corrección** (PR #40), arreglado y con su prueba:
+
+- **La clase de acceso se leía de la frase entera.** «Una clave de API (va en el .env, no hace falta
+  ningún archivo)» salía clave y fichero, y la barra decía que le faltaba un fichero que no pedía.
+  Ahora se lee solo la primera frase (hasta el primer punto, paréntesis o coma). No cuenta lo que va
+  detrás de «no», «ni» o «sin», y con «o» entre dos vale cualquiera, sin exigir las dos. «Entra con
+  tu cuenta», «Entrar con la cuenta de Google» e «Inicia sesión con tu cuenta» son entrar con tu
+  cuenta, y «Basic auth», usuario y contraseña.
+- **Sin el fichero no se probaba sola**: decía «Falta su fichero de acceso» y se paraba (rompía la
+  146). Ahora, si trae prueba, se prueba igual y ella dice lo que falta. Sin prueba, se dice. Y la
+  pregunta de cuándo caduca espera a que esté el fichero.
+- **El nombre que busca la prueba** se lee también de la prueba misma (`test_connection.*`), que manda
+  sobre los documentos. Si los documentos nombran más de uno, se dice que no se sabe.
+- **Con una sola clase «dirección», cualquier clave se pintaba como dirección**, y un secreto de firma
+  salía a la vista. Ahora se mira el nombre de cada clave, y un secreto nunca se pinta como texto.
+- **El mensaje tapaba también los ajustes**: la dirección de su panel o `production`, y el informático
+  se quedaba sin saber adónde ir. Ahora se tapan solo las claves secretas por su nombre, los ficheros
+  de acceso y las formas de clave.
+- **«Entrar con tu cuenta» con un ID y un secreto por pegar** no tenía dónde pegarlos, y al
+  informático le decía que no hacía falta ninguna clave. Ahora «solo entrar» es cuando no queda
+  ninguna clave por poner. Si quedan, salen con su campo y el mensaje lleva la parte de seguridad de
+  una clave. El raíl lo dice: son dos clases.
+- **«Dónde se saca» se lee por su cabecera**: si el asistente pone el tipo de acceso como tercera
+  columna, ya no sale como dónde se saca.
+- **Menores:** la guía habla en plural con usuario y contraseña, y no dice «suéltalo» con el fichero
+  ya puesto.
+
+Queda fuera: lo que parece una clave se mira con una regla (mayúsculas, minúsculas y cifras revueltas,
+o una ristra hexadecimal larga). Una clave de solo minúsculas que no esté en esta carpeta pasaría, y
+un identificador revuelto que no lo es se taparía.

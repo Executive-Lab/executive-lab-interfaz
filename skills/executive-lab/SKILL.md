@@ -148,7 +148,7 @@ excluye de las copias. Tres cosas al moverlas:
   a medias: no le inventes claves que no pide.
 
 Sigue el protocolo de `harness`: `cp -r 01-TOOLS/_TEMPLATE 01-TOOLS/<NOMBRE>` y completa
-`.env.example` y `test_connection.sh`. Y además **tres cosas que el panel enseña tal cual**, así que
+`.env.example` y `test_connection.sh`. Y además **cinco cosas que el panel enseña tal cual**, así que
 escríbelas pensando en quien las va a leer:
 
 **a) Los pasos, en el `README.md`, bajo `## Cómo conectarla`.** Salen numerados encima de los campos,
@@ -179,6 +179,54 @@ abajo:
 
 **c) La URL del panel del proveedor**, en `## Provider dashboard → URL:`. De ahí sale el botón *Abrir
 su página para sacar la clave*.
+
+**d) Qué clase de acceso pide, en `CREDENTIALS.md`**, en una línea debajo de la URL. Una de estas
+cinco, con esas palabras:
+
+```markdown
+- URL: https://app.holded.com/api
+- Tipo de acceso: Una clave
+```
+
+*Una clave* · *Usuario y contraseña* · *Un fichero de acceso* (una cuenta de servicio, un
+certificado) · *Entrar con tu cuenta* (OAuth) · *Una dirección que te dan* (un webhook). Si pide dos,
+nómbralas las dos: `- Tipo de acceso: Un fichero de acceso y entrar con tu cuenta`. La barra elige la
+pantalla según eso: un campo para la clave, el usuario y la contraseña juntos, «Suéltalo aquí» para el
+fichero, un botón «Entrar» que te lo pide a ti, o un campo para la dirección con dónde sale. Va en una
+línea y no en una columna de la tabla: una herramienta en la que se entra con la cuenta, o que solo
+pide un fichero, no tiene variable donde escribirlo.
+
+- **Un fichero de acceso** lo pone la barra en `keys/`, con su nombre. Si la prueba lo busca con otro,
+  escríbelo una vez como `keys/<nombre>`, en el `.env.example` o en `CREDENTIALS.md`, y lo guarda así.
+- **Entrar con tu cuenta**: «Entrar» te pide que le abras el navegador para que entre y dé permiso.
+  Guarda lo que devuelva donde lo busque la prueba, sin enseñárselo. Si además hay que pegar un ID y
+  un secreto (una aplicación OAuth), son dos clases: `- Tipo de acceso: Entrar con tu cuenta y una
+  clave`. Y en `.env.example`, solo lo que él pega: lo que devuelve el navegador no, que la barra lo
+  tomaría por una clave que le falta.
+- Escribe solo la clase, sin explicarla en la misma frase: lo que va detrás de un punto, una coma o un
+  paréntesis no se lee, y «no», «ni» o «sin» delante de una clase la quitan. Con «o» entre dos, vale
+  cualquiera de las dos.
+
+**e) Lo que pedirle a su informático, en el `README.md`, bajo `## Para tu informático`.** Muchas
+veces la clave la tiene quien administra la cuenta, o hay que dar permisos que él no sabe dar. La
+barra tiene un botón, *Pídeselo a tu informático*, que arma un mensaje con esta sección tal cual para
+que lo copie o lo mande por correo. Lo lee alguien técnico, así que aquí sí van los nombres exactos de
+los permisos. Investígalo de verdad, como los pasos:
+
+```markdown
+## Para tu informático
+
+- **Para qué es**: que el asistente lea las facturas y los clientes de Holded para el resumen del mes.
+- **Qué acceso**: una clave de su API, con permiso solo de lectura si su panel deja elegirlo.
+- **¿Basta con leer?**: sí. No tiene que poder crear, cambiar ni borrar nada.
+- **Dónde se hace**: https://app.holded.com/api → «Crear clave nueva».
+- **Si no está claro, pregúntale**:
+  - ¿Tenemos cuenta de empresa en Holded, o cada uno la suya?
+  - ¿Quién es el administrador de la cuenta?
+```
+
+Ni una clave aquí, ni cómo hacérsela llegar: eso lo pone la barra debajo, igual para todos, para que el
+consejo de seguridad no cambie de una conversación a otra.
 
 Mientras no escribas los pasos, el panel le ofrece al alumno un botón para que te los pida. Mejor
 escribirlos a la primera.

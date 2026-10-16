@@ -55,7 +55,16 @@ function montarPanel(fichero = path.join(__dirname, '..', 'media', 'panel.js')) 
       body: { classList: { add() {}, remove() {} } },
     },
     window: { addEventListener(que, fn) { oyentes[que] = fn; } },
-    FileReader: class { readAsDataURL() {} },
+    // Lee de verdad lo que se suelta con `soltar` (decisión 156): el de antes no
+    // contestaba nunca, y lo que cae encima de la barra no se podía probar.
+    FileReader: class {
+      readAsDataURL(fichero) {
+        setImmediate(() => {
+          this.result = `data:application/octet-stream;base64,${Buffer.from(fichero.contenido || '').toString('base64')}`;
+          if (this.onload) this.onload();
+        });
+      }
+    },
     setInterval: () => 0,
     clearInterval() {},
     setTimeout: () => 0,
@@ -73,6 +82,11 @@ function montarPanel(fichero = path.join(__dirname, '..', 'media', 'panel.js')) 
       if (!oyentes.message) throw new Error('el panel no escucha mensajes');
       oyentes.message({ data: mensaje });
       return pintado;
+    },
+    // Suelta ficheros encima de la barra, como se arrastran: `{ name, size, contenido }`.
+    async soltar(ficheros) {
+      if (!oyentes.drop) throw new Error('el panel no recibe lo que se suelta');
+      await oyentes.drop({ preventDefault() {}, dataTransfer: { files: ficheros } });
     },
     enviados,
   };
