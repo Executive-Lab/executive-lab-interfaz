@@ -365,7 +365,8 @@ Para alguien que no es técnico, el miedo a romper algo paraliza más que cualqu
 que:
 
 - **Las copias se guardan solas por defecto**, cada hora mientras la ventana está abierta y haya algo
-  nuevo («Cada cuánto guarda solo», que hoy viene apagado).
+  nuevo («Cada cuánto guarda solo», que hoy viene apagado). Hecho en la decisión 164: encendido de fábrica,
+  cada hora.
 - **«Volver a como estaba»** vive en la línea de las copias. Antes de mover nada se guarda una copia de lo
   de ahora, como hoy.
 - Guardar a mano, en la misma línea de las copias; o se le pide al asistente, que ya lo ofrece al terminar

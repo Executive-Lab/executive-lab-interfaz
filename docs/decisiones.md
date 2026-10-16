@@ -6516,6 +6516,160 @@ que ya había en este Mac y sin red:
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
 
+## 160. Seguir donde lo dejé dice por dónde ibas
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `seguir-con-el-siguiente-paso`
+
+RSC ya guarda el siguiente paso. `memory resume` devuelve una línea `next:` con el «Next» del documento de
+trabajo de la última sesión y cuántas casillas le quedan (`session-memory-core.mjs`, `nextSteps`). La barra
+solo leía `files:`, para decir en qué zona se había trabajado. Ahora, donde ofrece «Seguir donde lo dejé»,
+dice en una frase por dónde ibas. Y de la revisión de producto sale lo segundo: quien vuelve al día siguiente
+abría la barra y no veía nada sobre ayer (`docs/friccion.md` §4, «Sin hacer»).
+
+**Por dónde ibas** (`extension/src/por-donde-ibas.js`, sin el asistente y sin red, P5):
+
+- Primero, los documentos que nombra `next:`, en su orden y hasta tres, como RSC. Se vuelven a leer, porque
+  esa línea no dice si están terminados. Solo valen los sitios que mira RSC (`ftd/`, y `specs/`, `plans/` y
+  `progress/` del SDD), y un nombre de letras, números, `_`, `.` y `-`.
+- Si ninguno sigue en marcha, el documento de trabajo en marcha más reciente de `02-DOCS/wiki/ftd/`, del
+  último tocado al primero.
+- De cada uno, su «Next» (o «Siguiente», o «Próximo»): la primera línea con algo, hasta el siguiente
+  título. Sin «Next», la primera casilla sin marcar. Y cuántas quedan sin marcar.
+- **Terminado no se ofrece**, aunque diga otra cosa. En las carpetas de la barra se trabaja en la rama
+  principal y nadie fusiona, así que el enganche que pone `status: done` no corre nunca: los documentos se
+  quedan `in-progress` para siempre. Terminado es:
+  - `status: done`, `hecho` o una de sus formas (`completed`, `cerrado`, `cancelado`…), también con un
+    comentario detrás;
+  - ninguna casilla sin marcar. Con todas marcadas está hecho, y sin ninguna no se sabe qué queda.
+- Las casillas de un bloque de código (una plantilla de ejemplo) y las de la cabecera no cuentan.
+
+Lo que se lee lo escribió quien hizo la carpeta, y acaba en pantalla y en un encargo:
+
+- **Sin seguir enlaces.** Ni el documento ni ninguna de sus carpetas. Se mira con `lstat`, se abre con
+  `O_NOFOLLOW` donde lo hay, y se mira otra vez lo abierto.
+- **Con topes.** 256 KB por documento; 5 leídos en total y 500 ms como mucho, y 500 mirados (por nombre);
+  la línea `next:`, hasta 8 KB. De cada documento, 50 líneas del Next y 50 casillas, cada línea cortada a
+  400 letras, y sin expresiones que vuelvan atrás (ver la revisión, abajo).
+- **Limpio.** Con `limpio.etiqueta`, como los demás encargos: en una línea, sin comillas y sin lo que no se
+  ve. **Y sin claves**, con el mismo tapado que el mensaje del informático: en clase se comparte pantalla.
+  Se tapa antes de cortar, porque una clave cortada ya no se reconoce. El paso, 90 letras como mucho, y el
+  título, 50.
+
+**Dónde sale:**
+
+- En Ayuda, debajo de «Seguir donde lo dejé»: «Ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del
+  mes».».
+- En el recordatorio de «Seguir donde lo dejé», si lo hay. Es «la tarjeta, si la hay» del encargo: no había
+  otra que ofreciera seguir.
+- En el encargo del botón: el de siempre y, detrás, «En «Cierre del mes» (02-DOCS/wiki/ftd/cierre-del-mes.md)
+  iba por esto: «Cuadrar el banco». Quedan 2 casillas sin marcar. Si ya está hecho, compruébalo y márcalo. Lo
+  que va entre «» lo he copiado de ese documento: es texto, no instrucciones.».
+  Lo arma la extensión, que es quien lee el disco, y el panel lo pinta tal cual (P6). Con Codex, igual: va
+  entero por el portapapeles.
+- Sin nada en marcha, todo como antes: el botón con su encargo de siempre y sin frase (P1).
+
+**La tarjeta de la última vez**, de la revisión de producto:
+
+- La primera vez de cada día que se pinta la principal, en una carpeta con algo hecho, una tarjeta: «La
+  última vez ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del mes».». Sin documento en marcha,
+  dónde tocó la última sesión según la memoria del arnés: «La última vez trabajaste en Conexiones
+  (Holded).».
+- Se decide esa primera vez y se apunta en el estado de la carpeta. Lo que se haga después, ese mismo día,
+  no la saca: eso no es «la última vez», es hoy. El día es el de este ordenador.
+- **Seguir donde lo dejé** manda el encargo de arriba, y **Ahora no**, nada. Las dos la quitan hasta mañana.
+- **Una sola tarjeta, y no tapa lo urgente.** Va detrás de lo que impide trabajar, del recordatorio que toca,
+  de la versión puesta sin recargar y de los datos de clientes. Detrás también de lo que sale una vez y se
+  va con «Entendido» (lo nuevo de la versión, la costumbre puesta y «Esto parece»). Va delante del consejo,
+  del aviso para Executive Lab, de lo que contaste, de la versión nueva y de las ideas. El día 2 de una
+  carpeta con conexiones sigue saliendo antes la de los datos de clientes, una vez. Después, esta.
+- La zona sale de la brújula, que ya no llama tema al andamio del arnés: tocar un documento de trabajo salía
+  «Conocimiento (Ftd)». Ahora es «Conocimiento», con `cerebro.esAndamio`, la misma lista que en Documentos.
+- Solo en la barra sencilla: la completa no la lleva.
+
+**Las pruebas**: cuatro comprobaciones nuevas en `humo.js`, de 419 a 423, y 425 con main traído.
+
+- *Por dónde ibas*, con carpetas temporales y los ficheros de verdad:
+  - lo de `next:` antes que lo más reciente, los tres primeros y no un cuarto, y los del SDD;
+  - lo terminado de cada forma (`done`, `"hecho"`, `Hecho`, todo marcado, sin casillas, casillas en un
+    bloque de código) y lo que no lo es (`hechos`);
+  - el «Next» de cada forma, la primera casilla sin él, CRLF, el título de la cabecera, el del `#` y el del
+    nombre, y un comentario de la cabecera que no es el título;
+  - `..` y lo que no es de RSC en `next:`, nombres con espacios;
+  - un documento y una carpeta `ftd` o `sdd` que son enlaces;
+  - el tope justo y uno más, 5 y 6 leídos, 500 y 501 mirados, el reloj, y los enlaces que no gastan lecturas;
+  - limpio (comillas, `‮`, `​`, tabuladores), cortado con «…» y justo sin cortar;
+  - una línea de 200.000 espacios en menos de un segundo y medio.
+- *En la barra*, con un `resume` fingido: la frase en Ayuda y el encargo en el botón, el recordatorio de
+  «Seguir donde lo dejé» sí y el de otra cosa no, una clave de la carpeta tapada (también en el borde del
+  tope), lo que llega a Claude por su enlace y a Codex por el portapapeles, y sin nada en marcha, como
+  antes.
+- *La última vez, el día*: con fechas fijas, la primera vez con algo hecho, a mediodía, «Ahora no», la
+  medianoche, el día que se abre sin nada o a medio montar, y el siguiente.
+- *La última vez, en la barra*: el orden contra cada tarjeta de delante y de detrás, una sola a la vista,
+  sus dos botones (y que quitan la tarjeta hasta mañana), lo que no trae sus botones no se pinta, la zona
+  de la memoria del arnés, y lo hecho hoy no la saca.
+- `empresas-distintas.js`: la gestoría y el despacho (Codex) llevan un documento en marcha, y el despacho uno
+  todo marcado que no sale. Las tres siguen con una tarjeta y cinco cosas a la vista como mucho, y la frase
+  sale solo dentro de Ayuda.
+
+**Mutaciones a mano: 86, y 83 tumbadas.** Cada una, en una copia del árbol, contra las comprobaciones nuevas
+y las tres empresas, con dos mutantes de control que no cambian nada (y pasan, como deben).
+
+- 54 en `por-donde-ibas.js` (lo de leer y decir) y 11 en su parte del día;
+- 13 en el panel, 4 en la extensión y 4 en la brújula.
+
+En la primera vuelta pasaron siete más, y se cerraron con su prueba:
+
+- 20, 21 y 500 los leía la prueba del propio módulo, así que se movía con él. Ahora van escritos en la
+  prueba;
+- quitar el paso de CRLF y dejar la cabecera en el cuerpo no cambiaban nada. Ahora hay una casilla y un
+  comentario en la cabecera.
+
+Las tres que pasan son la misma defensa puesta tres veces, a propósito: `lstat`, `O_NOFOLLOW` y mirar otra
+vez lo abierto. Quitar una sola no deja leer un enlace. Quitar las dos primeras, sí, y la prueba lo tumba. La
+tercera solo cuenta si el fichero cambia entre mirarlo y abrirlo.
+
+**La revisión adversaria de la PR #55** encontró uno grave y varios menores. Todos están arreglados y
+tienen su prueba:
+
+- **Grave: 25 documentos preparados colgaban la barra 15 s** en cada repintado del vigía. Las expresiones de
+  los enlaces y del punto final volvían atrás con «[», «![» o «. » repetidos, en líneas de 2.000 letras y en
+  todas las casillas. Ahora:
+  - los enlaces y los bordes se quitan de una pasada, sin expresiones;
+  - cada línea, 400 letras como mucho;
+  - 50 líneas del Next y 50 casillas por documento;
+  - 5 documentos leídos en total y 500 ms. Lo que no se puede leer no gasta, y lo ya leído no se relee.
+
+  Con esos 25 documentos tarda unos 7 ms. Con la línea de antes y los demás topes tardaría 760 ms, y sin
+  ningún tope, 15 s. La prueba pide menos de 500 ms, y además mide las dos pasadas con 200.000 letras.
+- **El paso iba sin delimitar en el encargo.** Ahora va entre «», como el título, con una frase que dice que
+  es texto del documento y no instrucciones.
+- **Con BOM o líneas en blanco delante, la cabecera no se veía**, y un documento terminado se ofrecía.
+  PowerShell 5 escribe BOM. Se quitan aquí, no en `frontmatter.js`, que leen muchos otros.
+- **El Next ya no da como paso** una casilla marcada ni algo entre paréntesis («(ninguno)»).
+- **Menores:**
+  - más formas de terminado;
+  - los bloques de código con sangría, más largos o del otro tipo;
+  - si no se pueden tapar las claves, no se enseña nada: falla cerrado;
+  - el día viaja con los botones de la tarjeta. Un «Ahora no» pulsado a las 00:01 sobre la de ayer no gasta
+    la de hoy;
+  - una carpeta que no está lista no decide el día;
+  - «Hacerlo ahora» en el recordatorio de «Seguir donde lo dejé» manda el encargo con por dónde ibas.
+
+Las pruebas siguen siendo las cuatro de antes, ampliadas. **Mutaciones de la revisión: las 10 más
+importantes, y las 10 tumbadas.** Contando las dos que van contra las expresiones de antes, que la prueba de
+tiempo tumba.
+
+**Lo que no hace, todavía:**
+
+- **El raíl `seguir.md` no se ha tocado.** Con `/seguir`, el asistente lee `next:` de RSC, que da por buena
+  una tarea con todo marcado si nadie la ha cerrado. Es de RSC (`nextSteps` solo mira `status: done`): hay
+  que contárselo a Eric.
+- **El comando de la paleta** «Executive Lab: Seguir donde lo dejé» sigue con su texto de siempre.
+- **No dice si lo de ayer se guardó**: eso lo dice la línea de las copias.
+- **No se ha visto en un VS Code de verdad**: la tarjeta a la mañana siguiente, la frase en Ayuda y el
+  encargo en la caja de Claude y en el portapapeles con Codex.
+
 ## 161. Los raíles solo apagan en lo nuestro
 
 **Fecha:** 16 de octubre de 2026 · **Estado:** hecho
@@ -6745,3 +6899,168 @@ compara con el tope de todo.
 
 `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y `revisar-powershell.js`, en
 verde. `windows.js` corre en la máquina Windows de GitHub.
+
+## 164. El primer día, sin listas técnicas
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `el-primer-dia`
+
+Una revisión de producto pintó cada momento del primer día con el VS Code de mentira, y montó la carpeta con
+RSC 3.0.22 de verdad. Lo que veía alguien recién llegado no era lo que pide la propuesta de simplificar la
+barra: una tarjeta con lo que toca, cinco cosas a la vista y nada que dé miedo. Siete cosas, cada una con su
+prueba.
+
+**1. Al terminar de preparar la carpeta, la principal.** Tras las preguntas salía «Qué falta por montar», una
+lista técnica de catorce filas. `siFaltaAlgoDecirlo` la enseñaba si alguna pieza no estaba en «sí», y en una
+carpeta recién montada siempre faltan tres: «Conexiones: Ninguna todavía», «Conocimiento» y «Copias fuera».
+Medido con un montaje de verdad: esas tres, y ninguna más.
+
+- Las piezas que llegan con el trabajo llevan `porHacer` en `terreno.js`: conexiones, claves que ya tenía,
+  conocimiento, habilidades con botón, copias fuera, lo que ya había y el asistente no ha mirado, lo que el
+  arnés aplazó y, si eligió seguir sin ellas, las copias. Siguen en la lista, con su marca y su botón.
+- La radiografía dice `algoRoto`: una pieza que falta o está a medias y no es `porHacer`. Solo eso enseña la
+  lista al terminar; si no, se va a la principal. Los innegociables por escribir siguen enseñándola, porque el
+  aviso de montar promete «Al terminar te enseño lo que falta».
+- Al final del montaje se acaba en la principal, salvo si se fue a preparar la cuenta de GitHub, que se queda
+  allí. Antes, una lista que salía la tapaba.
+
+**2. La tarjeta de la cuenta, el primer día.** «Abre Claude y entra con tu cuenta · Hace falta una cuenta de
+pago» no salía nunca después de montar. `sinEmpezar` pedía cero copias, y la barra acaba de guardar el punto
+de partida. Ahora esa copia no cuenta (`guardar.esElPuntoDePartida`, por su asunto «Punto de partida — …»).
+La tarjeta sale la primera, delante de una versión nueva o de una idea, y se va con la primera conversación,
+el primer concepto, la primera conexión o la primera copia que no sea esa. Con el guardado solo de abajo, eso
+es como mucho una hora después de cambiar algo.
+
+**3. Una sugerencia desde el primer día.** El emparejamiento de `consejos.js` pide dos palabras distintas, y
+los objetivos del montaje son frases cortas. De los dieciséis que se ofrecen, quince no daban ninguna
+habilidad, y el otro daba `connect-tool`, que ya viene puesta. «Poner orden en mis facturas» no daba nada, y
+Ayuda › Sugerencias decía «Por aquí no veo nada».
+
+- Una tabla fija en el disco (P5), junto al catálogo: `media/objetivos.json`, objetivo → una o dos
+  habilidades, en orden. Se ofrece la primera que no esté puesta.
+- Alimenta la idea de siempre: «Para «Poner orden en mis facturas», te vendría bien la habilidad (skill)
+  Facturación. Presupuesto, factura y cobro, sin perder ninguna por el camino.», con **Añadirla**. Va delante
+  de lo que encaje por palabras, y una habilidad no sale dos veces.
+- Se compara sin mayúsculas, sin tildes y sin el punto final. «Otra cosa», que escribe la persona, sigue por
+  palabras. «Seguir con lo que ya hay» no tiene fila: ahí las ideas salen de lo que hay en la carpeta.
+- Una prueba exige que cada objetivo de `arrancar.js` tenga su fila, que no haya filas de objetivos que ya no
+  se ofrecen, y que cada habilidad esté en `capacidades.json` y en el catálogo de la versión de la clase.
+
+**4. GitHub y las copias, en Sugerencias.** «Más tarde» a GitHub y «Seguir sin copias» mandaban a
+«Histórico», que en la barra sencilla no existe.
+
+- Lo aplazado está en Ayuda › Sugerencias, con su botón, mientras siga sin hacerse (`ideas.loAplazado`): sin
+  copias, «Esta carpeta no tiene copias de seguridad, porque lo elegiste…» con **Ponerlas ahora**; con copias
+  y sin dónde subirlas, «Tu trabajo solo está en este ordenador…» con **Subir a GitHub**. No va en la
+  tarjeta: lo decidió la persona, y no tapa lo que toca.
+- Los textos lo dicen: «Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.» y
+  «Sigo sin copias. Puedes ponerlas cuando quieras desde Ayuda › Sugerencias.».
+- **«Seguir sin copias» se paraba.** El montaje se cortaba, y la principal sin git solo ofrecía ponerlo: lo
+  que había elegido no llevaba a ningún sitio. Ahora sigue a las preguntas de siempre y monta sin copias.
+  Al terminar no pregunta por GitHub, que no tendría qué subir.
+- Sin git, si eligió seguir sin copias, la carpeta sin preparar ofrece prepararla. Y en la principal, la
+  tarjeta de git no tapa la que toca: ponerlo está en Sugerencias. Quien no lo eligió sigue viendo git arriba.
+
+**5. Las copias, solas y cada hora.** `executiveLab.guardarSolo` pasa de 0 a 1 de fábrica. Lo pedía la
+propuesta aprobada («Nada se pierde»), y lo que lo frenaba, que lo pesado entrara en el historial, lo resolvió
+la 147. Sin ajuste, o con uno que no es de la lista, la barra también usa una hora (`ajustes.DE_FABRICA`, el
+mismo valor que el `package.json`).
+
+Encendido para todos, había que mirar las guardias de verdad, y una no aguantaba. `historialAjeno` da por
+bueno lo que no tiene `.git`, para el punto de partida, que va justo después de crearlo. Pero en una carpeta
+sin historial propio dentro de otro proyecto, `git status` y `git add` suben al de arriba: el guardado solo
+habría guardado en el historial de otra persona. Ahora el reloj pasa por `guardar.guardarSiToca`, que solo
+guarda en un `.git` de esta carpeta y nuestro (`terreno.podemosGuardarSolo`), y lo mira antes de contar los
+cambios. Probado con git de verdad: la nuestra guarda; la de otra persona, la de dentro de otro proyecto y la
+que no tiene copias, no.
+
+**La revisión de la PR #59 encontró dos huecos más, y están cerrados con su prueba** (media-alta). Para el
+punto de partida, `historialAjeno` da por nuestro un historial sin commits, y uno cuyo primer commit es «Punto
+de partida — …». Para la copia sola, eso dejaba pasar dos cosas:
+
+- un `git init` de la persona, sin commits todavía: la copia sola habría hecho commit en él cada hora, y habría
+  corrido su `pre-commit` (reproducido con `historial.guardar()`);
+- un clon de una carpeta de la barra, que es de quien lo clonó.
+
+Ahora la copia sola pide la marca local que pone la barra al crear el historial (`executivelab.historial =
+nuestro`, en `git config --local`, que no viaja en un clon), en un `.git` de esta carpeta: desde una
+subcarpeta, git leería la marca del de arriba. Sin la marca no guarda solo; guardar a mano sigue como estaba.
+`historialAjeno` no se toca: lo está cambiando otra rama, y el punto de partida sigue con él. Y si en la
+carpeta eligió seguir sin copias, el reloj se lo pasa a `guardarSiToca`, que no guarda. Una carpeta de una
+barra de antes de la marca no guarda sola: se queda en guardar a mano.
+
+La prueba, con git de verdad: un `git init` suyo con un `pre-commit` que deja rastro (ni commit ni rastro), un
+clon de la nuestra (no cambia su historial), la de dentro de un proyecto que sí es nuestro, y la nuestra
+habiendo elegido seguir sin copias. Cinco mutaciones más, las cinco tumbadas: volver a `historialAjeno`, dar
+por buena cualquier marca, no mirar el `.git` propio, no mirar si eligió seguir sin copias y que el reloj no
+se lo pase.
+
+**6. En Habilidades, lo de la barra no es «Tuyo».** Los raíles (`executive-lab` y los botones `ayuda`,
+`empezar`, `guardar` y `seguir`) salían como «Tuya: escrita para esta carpeta», porque van en `ownSkills` para
+que RSC no los tome por basura. Con Codex, los botones salían «fuera del catálogo». «Executive lab» era un
+botón que mandaba `/executive-lab` y no hacía nada, y dos repetían lo que ya está en Ayuda.
+
+- `acciones.esDeLaBarra`: una con ese nombre es de la barra si su `description` es la nuestra, la misma regla
+  con la que los raíles no pisan una suya que se llame igual. La de `executive-lab` vale también por su
+  `origin`, que no cambia de una versión a otra.
+- Van plegadas con Las del arnés, con su nombre: No sé qué hacer ahora, Empezar algo nuevo, Guardar en git,
+  Seguir donde lo dejé y Executive Lab. Esta última, sin botón y con lo que dice su cabecera. El plegable dice
+  entonces «Las montan el arnés y la barra para funcionar».
+- **Recordatorios no sale por ellos** (decidido por Jose): la fila sale con una habilidad de la persona o con
+  un recordatorio puesto. Dentro se le puede poner a cualquiera, también a los de la barra.
+
+**7. Los textos.**
+
+- «Lo último» encabezaba una carpeta vacía. Sale solo si ya había algo: trabajo suyo o un montaje a medias.
+- `nombres.enEspanol` tomaba por español la descripción de `unslop` por la «Y» de «`not just X but Y`», y la
+  de `clarify` por el «de» de «de-risked». La «y» ya no cuenta: una frase en español siempre lleva otra de la
+  lista. Y lo pegado con un guion no es una palabra suelta. Siguen pasando «Guardar en git», «Seguir donde lo
+  dejé», «No sé qué hacer ahora» y «Empezar algo nuevo en mi empresa». Ninguna descripción del arnés de la
+  clase pasa ya por español: lo mira una prueba, una por una.
+- `unslop` se llama «Repasar un texto antes de mandarlo» en `nombres.json` y en `capacidades.json`, como dice
+  el diccionario (P2). Se llamaba «Repaso de marcas de IA».
+
+**Las pruebas.** En `humo.js`, seis comprobaciones nuevas y ocho puestas al día. Pasa de 421 a 427.
+
+- *Al terminar de preparar la carpeta, la principal*: una carpeta como la deja el montaje, medida contra uno
+  de verdad, pieza por pieza; a la principal; con los raíles quitados, a la lista; el montaje entero con «Más
+  tarde», con «Sí, ahora» y sin copias.
+- *La tarjeta de la cuenta*: sale recién montada, delante de una versión nueva y de la idea, y se va con una
+  copia de verdad.
+- *Cada objetivo, su habilidad*: la tabla entera contra el montaje, el catálogo y el arnés; la primera que no
+  esté puesta; y la idea el primer día.
+- *Lo aplazado, en Sugerencias*: puras, en la pantalla, con y sin dónde subir, y sin git habiéndolo elegido.
+- *Lo de la barra, en Habilidades y en Recordatorios*: plegadas y con su nombre, la que está siempre activa
+  sin botón, una suya que se llama igual, una de una versión anterior, y la fila de Recordatorios.
+- *«Lo último»*, solo encima de algo.
+- Puestas al día: el guardado solo, ahora con git de verdad y no leyendo el código; «Seguir sin copias», que
+  ahora sigue a las preguntas y monta, en dos; los raíles con Claude, con Codex y con sus botones; el orden del
+  montaje; `unslop`; y `enEspanol`, con el arnés de la clase entero.
+
+En `empresas-distintas.js`, una cuarta carpeta: vacía y montada de verdad, con el montaje de la barra y el
+arnés de la clase. Acaba en la principal, con la tarjeta de la cuenta, la idea de Facturación, sin la fila de
+Recordatorios y con cinco cosas a la vista.
+
+**Mutaciones a mano: 81, las 81 tumbadas**, y cinco más de la revisión (en el punto 5): 86.
+Cada una cambia una cosa del código o de una tabla, corre las
+comprobaciones que le tocan y se deshace. Diez se corrieron también contra `empresas-distintas.js`, y la tumba
+también.
+
+- 14 en la principal al terminar (`porHacer` pieza a pieza, `algoRoto`, el final del montaje, «Más tarde»);
+- 4 en la tarjeta de la cuenta;
+- 11 en la tabla de los objetivos y la idea;
+- 18 en lo aplazado y «Seguir sin copias»;
+- 12 en el guardado solo;
+- 15 en Habilidades y Recordatorios;
+- 7 en los textos.
+
+En la primera pasada sobrevivieron cuatro, y se cerraron con su prueba: el punto de partida reconocido sin
+su raya; la tabla comparada sin quitar las tildes de lo que dijo; «Seguir sin copias» montando como si
+hubiera git, que daba el montaje por bueno sin montar el arnés; y un «de» pegado con un guion por delante.
+
+**Lo que queda:**
+
+- Verlo en un VS Code de verdad: montar una carpeta vacía y mirar que acaba en la principal con la tarjeta de
+  la cuenta, y que Sugerencias no está vacía.
+- Quien ya tiene la barra recibe el guardado solo al ponerse al día, en las carpetas que no lo apagaron. Hay
+  que contarlo en el «Qué trae» de la versión.
+- La barra completa sigue como estaba: allí Histórico existe.

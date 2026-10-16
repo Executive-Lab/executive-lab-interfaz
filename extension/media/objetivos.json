@@ -1,0 +1,35 @@
+{
+  "_comentario": [
+    "Qué habilidad del catálogo le viene bien a cada objetivo de «¿Qué te gustaría resolver primero?» (decisión 164).",
+    "",
+    "El emparejamiento por palabras de consejos.js pide dos palabras distintas, y los objetivos del montaje son",
+    "frases cortas: de los dieciséis, quince no daban ninguna, y el otro daba una que ya viene puesta. «Poner orden",
+    "en mis facturas» no daba nada, y Ayuda › Sugerencias decía «no veo nada» justo el primer día. Esta tabla lo",
+    "arregla sin adivinar nada (P5).",
+    "",
+    "Las claves son las frases tal cual las ofrece arrancar.js (OBJETIVOS_POR_TIPO), y RSC las guarda así en el",
+    "perfil («Goal: …»). Cada una lleva una o dos habilidades, en orden: se ofrece la primera que no esté puesta.",
+    "Solo identificadores que estén en capacidades.json y en el catálogo de la versión de la clase; hay una prueba",
+    "que lo exige, y otra que exige que todos los objetivos del montaje tengan su fila.",
+    "«Seguir con lo que ya hay» no lleva ninguna: ahí las ideas salen de lo que hay en la carpeta. «Otra cosa» la",
+    "escribe la persona, y la lleva el emparejamiento por palabras de siempre."
+  ],
+  "objetivos": {
+    "Poner orden en mis facturas": ["invoicing", "bookkeeping"],
+    "Atender mejor a mis clientes": ["customer-support", "client-onboarding"],
+    "Organizar el papeleo": ["document-processing", "sop-builder"],
+    "Vender más y hacer seguimiento": ["sales-pipeline", "proposals"],
+    "Quitarme tareas repetitivas": ["automation-flows", "automation-strategy"],
+    "Escribir para mi web o mi blog": ["article-writing", "landing-copy"],
+    "Escribir para mi web": ["landing-copy", "article-writing"],
+    "Llevar las redes sociales": ["social-publisher", "content-engine"],
+    "Preparar presentaciones": ["presentations"],
+    "Hacer vídeos": ["video-shorts", "shortform-editing"],
+    "Montar una web sencilla": ["landing-copy", "wordpress"],
+    "Automatizar algo que hago a mano": ["automation-flows", "automation-strategy"],
+    "Conectar dos herramientas que ya uso": ["automation-flows", "api-connector-builder"],
+    "Entender a mi competencia": ["competitor-watch", "market-research"],
+    "Estudiar una normativa que me afecta": ["compliance", "research-ops"],
+    "Buscar oportunidades en mi sector": ["market-research", "grants"]
+  }
+}

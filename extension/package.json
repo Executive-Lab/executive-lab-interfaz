@@ -179,7 +179,7 @@
       "properties": {
         "executiveLab.guardarSolo": {
           "type": "number",
-          "default": 0,
+          "default": 1,
           "enum": [
             0,
             1,
@@ -191,7 +191,7 @@
             "Un par de veces al día"
           ],
           "scope": "resource",
-          "description": "Cada cuántas horas se guarda una copia sola, mientras esta ventana esté abierta y haya algo nuevo. Nunca escribe en el historial de otra persona."
+          "description": "Cada cuántas horas se guarda una copia sola, mientras esta ventana esté abierta y haya algo nuevo. Nunca escribe en el historial de otra persona, ni en una carpeta sin copias."
         },
         "executiveLab.vistaSencilla": {
           "type": "boolean",

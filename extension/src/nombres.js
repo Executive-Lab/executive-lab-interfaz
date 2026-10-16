@@ -168,6 +168,12 @@ const esFontaneria = (id) => tabla().fontaneria.includes(id);
 // ahora». Van también `en`, `mi`, `lo`, `algo` y `donde`, que en inglés no son
 // palabras sueltas, y «qué», que `\b` no sabe cortar por la tilde: se mira que no
 // haya una letra ni un número a cada lado («a11y» no lleva una «y»).
-const enEspanol = (frase) => /(?<![\p{L}\p{N}])(el|la|los|las|un|una|de|del|que|qué|para|con|por|cuando|siempre|tu|tus|se|y|en|mi|mis|lo|algo|donde)(?![\p{L}\p{N}])/iu.test(String(frase || ''));
+//
+// Dos que dejaban pasar el inglés (decisión 164), y por eso salía entera la
+// descripción de `unslop` y la de `clarify`:
+//   · la «y» ya no cuenta: en inglés sale suelta («`not just X but Y`»), y una
+//     frase en español siempre lleva alguna otra de la lista;
+//   · lo pegado con un guion no es una palabra suelta: «de-risked» no lleva un «de».
+const enEspanol = (frase) => /(?<![\p{L}\p{N}-])(el|la|los|las|un|una|de|del|que|qué|para|con|por|cuando|siempre|tu|tus|se|en|mi|mis|lo|algo|donde)(?![\p{L}\p{N}-])/iu.test(String(frase || ''));
 
 module.exports = { comoSeLlama, humanizar, loQueTraduce, esFontaneria, enEspanol, FICHERO };
