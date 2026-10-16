@@ -51,15 +51,70 @@ const origen = __dirname;
 const hechos = [];
 const pendientes = [];
 
+// ── Nada se escribe a través de un enlace que lleve fuera ────────────────
+//
+// Un `AGENTS.md`, un `.agents/skills` o un `.claude` enlazados a otro sitio
+// hacían que los raíles escribieran fuera de esta carpeta: en la de otra empresa,
+// o en unas habilidades que comparte todo el ordenador. La 154 lo cerró solo para
+// `AGENTS.override.md` (revisión adversaria de la 154). Ahora todo lo que
+// escriben los raíles pasa por aquí: cada trozo del camino desde la carpeta, o no
+// es un enlace, o lleva a un sitio que sigue dentro. Un enlace roto tampoco vale:
+// escribir en él crea el fichero donde apunte.
+const noEscritos = [];
+
+function porDondeSale(fichero, raiz) {
+  let real;
+  try {
+    real = fs.realpathSync(raiz);
+  } catch {
+    return '.';
+  }
+  const fuera = (rel) => path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`);
+  if (fuera(path.relative(raiz, fichero))) return path.relative(raiz, fichero);
+  let camino = raiz;
+  for (const trozo of path.relative(raiz, fichero).split(path.sep).filter(Boolean)) {
+    camino = path.join(camino, trozo);
+    let info;
+    try {
+      info = fs.lstatSync(camino);
+    } catch {
+      return null; // lo que falta se crea, y dentro
+    }
+    if (!info.isSymbolicLink()) continue;
+    try {
+      if (!fuera(path.relative(real, fs.realpathSync(camino)))) continue;
+    } catch { /* roto: no se sabe adónde va */ }
+    return path.relative(raiz, camino);
+  }
+  return null;
+}
+
+function escribirSinEnlaces(fichero, contenido, raiz = destino) {
+  const enlace = porDondeSale(fichero, raiz);
+  if (enlace) {
+    noEscritos.push(enlace.split(path.sep).join('/'));
+    return false;
+  }
+  fs.mkdirSync(path.dirname(fichero), { recursive: true });
+  fs.writeFileSync(fichero, contenido);
+  return true;
+}
+
+// Si la ha copiado entera. Lo que no, no se da por puesto (revisión de la PR #48).
 function copiarCarpeta(desde, hasta) {
-  fs.mkdirSync(hasta, { recursive: true });
+  let entera = true;
   for (const entrada of fs.readdirSync(desde, { withFileTypes: true })) {
     const a = path.join(desde, entrada.name);
     const b = path.join(hasta, entrada.name);
-    if (entrada.isDirectory()) copiarCarpeta(a, b);
-    else fs.copyFileSync(a, b);
+    const hecho = entrada.isDirectory() ? copiarCarpeta(a, b) : escribirSinEnlaces(b, fs.readFileSync(a));
+    entera = entera && hecho;
   }
+  return entera;
 }
+
+// Para quién quedó puesta la habilidad. Sin ella no se apunta a su `siempre.md`
+// ni se engancha su freno: se apuntaría a algo que no está.
+const habilidadPuesta = new Set();
 
 // 0. Para qué asistentes se montó esta carpeta: para todos los declarados (E2).
 //
@@ -95,8 +150,12 @@ const comoSeEscribe = (partes) => partes.join('/');
 // hay ninguno que leer, nunca. Así que se dice, en vez de dejarlos en una
 // carpeta muerta. La barra ya sabe explicar ese hueco (`donde.puedeTenerBotones`).
 function ponerLaHabilidadYLosComandos(quien, suyo) {
-  copiarCarpeta(path.join(origen, 'executive-lab'), en(...suyo.habilidades, 'executive-lab'));
-  hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/`);
+  if (copiarCarpeta(path.join(origen, 'executive-lab'), en(...suyo.habilidades, 'executive-lab'))) {
+    habilidadPuesta.add(quien);
+    hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/`);
+  } else {
+    hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/ va por un enlace a otro sitio: no la pongo`);
+  }
   // Con Claude y con Codex, los botones son habilidades (decisión 141).
   if (suyo.botones) {
     ponerLosBotonesComoHabilidades(quien, suyo);
@@ -107,7 +166,6 @@ function ponerLaHabilidadYLosComandos(quien, suyo) {
     return;
   }
   const comandos = en(...suyo.comandos);
-  fs.mkdirSync(comandos, { recursive: true });
   // Con el nombre que les da ese asistente: Copilot solo lee `.prompt.md` (E3).
   //
   // Y uno suyo que se llame como uno nuestro no se pisa (revisión de F4, m8): es
@@ -123,7 +181,7 @@ function ponerLaHabilidadYLosComandos(quien, suyo) {
       suyos.push(fichero.replace(/\.md$/, ''));
       continue;
     }
-    fs.writeFileSync(hasta, nuestro);
+    if (!escribirSinEnlaces(hasta, nuestro)) suyos.push(fichero.replace(/\.md$/, ''));
   }
   hechos.push(`${comoSeEscribe(suyo.comandos)}/ (${cuantos.length - suyos.length} comandos${suyos.length ? `; ${suyos.map((s) => `«${s}»`).join(', ')} es tuyo y no lo toco` : ''})`);
 }
@@ -160,11 +218,9 @@ function ponerLosBotonesComoHabilidades(quien, suyo) {
       suyos.push(nombre);
       continue;
     }
-    fs.mkdirSync(carpeta, { recursive: true });
-    fs.writeFileSync(hasta, skill);
-    if (openai) {
-      fs.mkdirSync(path.join(carpeta, 'agents'), { recursive: true });
-      fs.writeFileSync(path.join(carpeta, 'agents', 'openai.yaml'), openai);
+    if (!escribirSinEnlaces(hasta, skill) || (openai && !escribirSinEnlaces(path.join(carpeta, 'agents', 'openai.yaml'), openai))) {
+      suyos.push(nombre);
+      continue;
     }
     // Las que caen donde RSC guarda las suyas se declaran como propias, igual que
     // `executive-lab`, para que un `repair` no las tome por basura.
@@ -215,8 +271,7 @@ function ponerElTrozo(fichero, trozo, { desde: DESDE_AQUI = DESDE, entre = ENTRE
     texto += `${texto.endsWith('\n') ? '' : '\n'}\n${trozo}\n`;
   }
 
-  fs.mkdirSync(path.dirname(fichero), { recursive: true });
-  fs.writeFileSync(fichero, texto);
+  return escribirSinEnlaces(fichero, texto);
 }
 
 // Los ficheros de siempre ya nombrados en esta pasada. Dos asistentes pueden leer
@@ -226,6 +281,7 @@ function ponerElTrozo(fichero, trozo, { desde: DESDE_AQUI = DESDE, entre = ENTRE
 const yaNombrados = new Map();
 
 function nombrarLaHabilidad(quien, suyo) {
+  if (!habilidadPuesta.has(quien)) return `${quien}: la habilidad no está puesta, y no apunto a ella`;
   if (!suyo.siempre) return `${quien} encuentra la habilidad solo`;
   const partes = sitios.dondeVaLoDeSiempre(quien, destino) || suyo.siempre.fichero;
   const suFichero = comoSeEscribe(partes);
@@ -239,8 +295,10 @@ function nombrarLaHabilidad(quien, suyo) {
   // nuestra va en el suyo, que se aplica siempre y nombra lo demás.
   if (suyo.habilidadEnUnFichero) {
     const suyaEn = `${comoSeEscribe(suyo.habilidades)}/executive-lab${suyo.habilidadEnUnFichero}`;
-    fs.writeFileSync(en(...suyo.habilidades, `executive-lab${suyo.habilidadEnUnFichero}`),
-      `---\ndescription: Executive Lab, la habilidad siempre activa de esta carpeta\nalwaysApply: true\n---\n${loQueDice}\n`);
+    if (!escribirSinEnlaces(en(...suyo.habilidades, `executive-lab${suyo.habilidadEnUnFichero}`),
+      `---\ndescription: Executive Lab, la habilidad siempre activa de esta carpeta\nalwaysApply: true\n---\n${loQueDice}\n`)) {
+      return `${suyaEn} va por un enlace a otro sitio: no escribo a través de él`;
+    }
     return `${suyaEn} (se aplica siempre y apunta a la habilidad)`;
   }
   if (!suyo.siempre.compartido) {
@@ -261,7 +319,7 @@ function nombrarLaHabilidad(quien, suyo) {
     pendientes.push('el bloque de Cómo se trabaja aquí');
     return `${suFichero} (el trozo, pendiente: toca sus instrucciones, y se pide antes)`;
   }
-  ponerElTrozo(fichero, `${DESDE}\n${loQueDice}\n${HASTA}`);
+  if (!ponerElTrozo(fichero, `${DESDE}\n${loQueDice}\n${HASTA}`)) return `${suFichero} va por un enlace a otro sitio: no escribo a través de él`;
   yaNombrados.set(suFichero, quien);
   return `${suFichero} (apunta a la habilidad)`;
 }
@@ -342,6 +400,7 @@ function esDeAlguien(fichero) {
 
 function ponerLoDeSiempre(quien, suyo) {
   if (quien !== 'claude') return null;
+  if (!habilidadPuesta.has(quien)) return 'CLAUDE.md (sin el bloque: la habilidad no está puesta, y no apunto a lo que no hay)';
   const fichero = en('CLAUDE.md');
   const antes = fs.existsSync(fichero) ? fs.readFileSync(fichero, 'utf8') : null;
   const viejo = antes && antes.match(ENTRE_MARCAS);
@@ -359,7 +418,7 @@ function ponerLoDeSiempre(quien, suyo) {
   const conAgents = loLeia && esDeAlguien(en('AGENTS.md'));
   const deAgents = !conAgents ? [] : [llevaLoDeRsc(en('AGENTS.md')) ? LEE_TAMBIEN_AGENTS : '@AGENTS.md'];
   const lineas = [`@${comoSeEscribe(suyo.habilidades)}/executive-lab/siempre.md`, ...deAgents];
-  ponerElTrozo(fichero, [DESDE, ...lineas, HASTA].join('\n'));
+  if (!ponerElTrozo(fichero, [DESDE, ...lineas, HASTA].join('\n'))) return 'CLAUDE.md va por un enlace a otro sitio: no escribo a través de él';
   return `CLAUDE.md (se carga siempre.md en cada conversación${conAgents ? ', y se le apunta su AGENTS.md' : ''})`;
 }
 
@@ -405,13 +464,11 @@ const CALLAR = [
 
 function callarLosAvisos() {
   const carpeta = en('.rsc');
-  fs.mkdirSync(carpeta, { recursive: true });
   const puestos = [];
   for (const [nombre, porque] of CALLAR) {
     const fichero = path.join(carpeta, `.${nombre}`);
     if (fs.existsSync(fichero)) continue;
-    fs.writeFileSync(fichero, `${porque}\n`);
-    puestos.push(nombre);
+    if (escribirSinEnlaces(fichero, `${porque}\n`)) puestos.push(nombre);
   }
   return puestos.length ? `.rsc/ (callados: ${puestos.join(', ')})` : '.rsc/ (los avisos ya estaban callados)';
 }
@@ -436,6 +493,8 @@ hechos.push(callarLosAvisos());
 // ofrece con su botón, que es `--poner-freno`.
 function engancharElFreno(quien, suyo) {
   if (!suyo.frenos || !suyo.ajustes) return `sin freno: ${quien} no tiene dónde engancharlo`;
+  // El freno vive en la habilidad: sin ella, cada orden llamaría a un fichero que no está.
+  if (!habilidadPuesta.has(quien)) return 'sin freno: la habilidad no está puesta';
   const ORDEN_DEL_FRENO = 'node "${CLAUDE_PROJECT_DIR}/' + comoSeEscribe(suyo.habilidades) + '/executive-lab/freno.mjs" "${CLAUDE_PROJECT_DIR}"';
   const ENTRADA_DEL_FRENO = { matcher: 'Bash', hooks: [{ type: 'command', command: ORDEN_DEL_FRENO }] };
   const fichero = en(...suyo.ajustes);
@@ -470,8 +529,7 @@ function engancharElFreno(quien, suyo) {
     .filter((grupo) => !Array.isArray(grupo.hooks) || grupo.hooks.length);
   ajustes.hooks = ajustes.hooks || {};
   ajustes.hooks.PreToolUse = [...sinLasNuestras, ENTRADA_DEL_FRENO];
-  fs.mkdirSync(path.dirname(fichero), { recursive: true });
-  fs.writeFileSync(fichero, `${JSON.stringify(ajustes, null, 2)}\n`);
+  if (!escribirSinEnlaces(fichero, `${JSON.stringify(ajustes, null, 2)}\n`)) return `${dondeVa} va por un enlace a otro sitio: el freno no se engancha`;
   return `${dondeVa} (el freno ante órdenes peligrosas, enganchado)`;
 }
 
@@ -501,7 +559,7 @@ function ponerLoQueNoEntra() {
     pendientes.push('la lista de lo que no entra en git');
     return '.gitignore (lo que no entra en git, pendiente: es suyo, y se pide antes)';
   }
-  ponerElTrozo(fichero, noEntra.elBloque(), { desde: noEntra.DESDE, entre: noEntra.ENTRE_MARCAS });
+  if (!ponerElTrozo(fichero, noEntra.elBloque(), { desde: noEntra.DESDE, entre: noEntra.ENTRE_MARCAS })) return '.gitignore va por un enlace a otro sitio: no escribo a través de él';
   return '.gitignore (lo que no entra en git: claves y ficheros de acceso)';
 }
 hechos.push(ponerLoQueNoEntra());
@@ -521,8 +579,7 @@ const perfil = path.join(destino, '02-DOCS', 'wiki', 'harness', 'user-profile.md
 
 function ajustarPerfil() {
   if (!fs.existsSync(perfil)) {
-    fs.mkdirSync(path.dirname(perfil), { recursive: true });
-    fs.copyFileSync(path.join(origen, 'perfil-de-usuario.md'), perfil);
+    if (!escribirSinEnlaces(perfil, fs.readFileSync(path.join(origen, 'perfil-de-usuario.md')))) return '02-DOCS/wiki/harness/user-profile.md va por un enlace a otro sitio: no lo toco';
     return '02-DOCS/wiki/harness/user-profile.md (nuevo)';
   }
 
@@ -541,7 +598,7 @@ function ajustarPerfil() {
   }
   frontmatter = frontmatter.replace(/^\n+/, '');
 
-  fs.writeFileSync(perfil, texto.replace(bloque[0], `---\n${frontmatter}\n---\n`));
+  if (!escribirSinEnlaces(perfil, texto.replace(bloque[0], `---\n${frontmatter}\n---\n`))) return '02-DOCS/wiki/harness/user-profile.md va por un enlace a otro sitio: no lo toco';
 
   const nivel = (frontmatter.match(/^technical_level:\s*(\S+)/m) || [])[1] || '?';
   return `02-DOCS/wiki/harness/user-profile.md (idioma es · se respeta ${nivel})`;
@@ -561,8 +618,9 @@ if (fs.existsSync(declaracion)) {
     if (nuestras.some((id) => !propias.has(id))) {
       nuestras.forEach((id) => propias.add(id));
       rsc.ownSkills = [...propias];
-      fs.writeFileSync(declaracion, `${JSON.stringify(rsc, null, 2)}\n`);
-      hechos.push('.rsc.json (declarada en ownSkills)');
+      hechos.push(escribirSinEnlaces(declaracion, `${JSON.stringify(rsc, null, 2)}\n`)
+        ? '.rsc.json (declarada en ownSkills)'
+        : '.rsc.json va por un enlace a otro sitio: no lo toco');
     }
   } catch {
     hechos.push('.rsc.json (no he podido leerlo — decláralo a mano en ownSkills)');
@@ -574,4 +632,5 @@ if (fs.existsSync(declaracion)) {
 console.log(`Raíles puestos en ${destino}\n`);
 hechos.forEach((h) => console.log(`  · ${h}`));
 if (pendientes.length) console.log(`\nPendiente, hasta que se diga que sí: ${[...new Set(pendientes)].join(', ')}.`);
+if (noEscritos.length) console.log(`\nNo escribo a través de un enlace que sale de la carpeta: ${[...new Set(noEscritos)].join(', ')}.`);
 console.log('\nAbre una conversación nueva para que se carguen.');

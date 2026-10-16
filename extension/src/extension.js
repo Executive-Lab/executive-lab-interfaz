@@ -606,7 +606,7 @@ ${cabecera}
     // que tenían: guardar la foto o soltar un documento es lo que despierta al vigía.
     if (d.tipo === 'documentos') return this.verDocumentos(d.aviso);
     if (d.tipo === 'foto') return this.verLaFoto(d.desde, d.aviso);
-    if (d.tipo === 'rutinas') return this.verRutinas(d.aviso);
+    if (d.tipo === 'recordatorios') return this.verRecordatorios(d.aviso);
     // En una pantalla de lectura o de resultado no se toca nada: está leyendo.
     if (d.tipo === 'quieto') return undefined;
     return this.refrescar(true);
@@ -635,6 +635,8 @@ ${cabecera}
       hayProyectos: proyectos.hayAlgo(),
       // Los ayudantes tampoco salen hasta que hay uno.
       hayAgentes: agentes.hayAlguno(),
+      // Ni Recordatorios, hasta que hay una habilidad con botón o un recordatorio.
+      hayRecordatorios: recordatorios.hayAlgo(),
       modo: disfraz.modoDeEstaVentana(),
       // Si la empresa aún no tiene cara puesta, el panel la ofrece en vez de
       // esperar a que el alumno caiga en contarlo.
@@ -1103,10 +1105,10 @@ ${cabecera}
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
-      verRutinas: () => this.verRutinas(),
-      crearRutina: () => this.pedir(rutinas.CREAR_RUTINA),
+      verRecordatorios: () => this.verRecordatorios(),
+      crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
       ponerHorario: () => this.ponerHorario(mensaje.nombre),
-      prepararTareaProgramada: () => this.prepararTareaProgramada(mensaje.nombre),
+      queSeHagaSola: () => this.queSeHagaSola(),
       entendidaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, false),
       noHaceFaltaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, true),
       conversacionNueva: () => this.conversacionNueva(),
@@ -1231,6 +1233,10 @@ ${cabecera}
 
     const accion = rutas[mensaje.tipo];
     if (!accion) return;
+    // En Recordatorios, lo que se dijo vale hasta la siguiente cosa que se pulsa,
+    // como en la principal: después ya no se repinta con ello (revisión
+    // adversaria de la 155).
+    if (this.donde && this.donde.tipo === 'recordatorios' && this.donde.aviso) this.donde = { ...this.donde, aviso: null };
 
     if (ESCRIBEN_CON_EL_ARNES.has(mensaje.tipo) && rsc.vaPorDelante()) return this.enviar({ tipo: 'aviso', texto: POR_DELANTE });
     if (LOS_DEL_ARNES.has(mensaje.tipo)) {
@@ -1324,18 +1330,36 @@ ${cabecera}
     await this.almacen().update(CLAVE_USOS, [...antes, { nombre: boton.nombre, t: Date.now() }].slice(-200));
   }
 
-  async verRutinas(avisoLocal = null) {
-    this.donde = { tipo: 'rutinas', aviso: avisoLocal };
+  // Recordatorios (decisiones 144 y 155): los de esta carpeta, los pendientes
+  // primero, y cada uno con lo que se puede hacer con él de verdad.
+  async verRecordatorios(avisoLocal = null) {
+    this.donde = { tipo: 'recordatorios', aviso: avisoLocal };
     const pendientes = new Set((await this.losRecordatoriosQueTocan()).map((r) => r.nombre));
     const ahora = Date.now();
     const horarios = recordatorios.conHorario().map((r) => {
       const proxima = cuando.proximaVez(r.cuando, ahora);
+      const puedeQuitar = recordatorios.puedeQuitar(r);
       return { nombre: r.nombre, etiqueta: r.etiqueta, enPalabras: cuando.enPalabras(r.cuando),
         pendiente: pendientes.has(r.nombre), proxima: rutinas.fecha(proxima), proximaHora: proxima,
-        puedeCambiar: r.fichero.endsWith('SKILL.md') };
+        // Una compartida con otra carpeta se lee aquí y se cambia allí: sin
+        // botones que fallarían al pulsarlos.
+        puedeCambiar: recordatorios.puedeCambiar(r), puedeQuitar, compartida: !puedeQuitar };
     }).sort((a, b) => Number(b.pendiente) - Number(a.pendiente)
       || (a.proximaHora ?? Infinity) - (b.proximaHora ?? Infinity) || a.etiqueta.localeCompare(b.etiqueta, 'es'));
-    this.enviar({ tipo: 'rutinas', horarios, automatica: rutinas.automatica(asistentes.elDeAhora().id), aviso: avisoLocal });
+    this.enviar({
+      tipo: 'recordatorios', horarios,
+      hayHabilidades: recordatorios.disponibles().some((b) => recordatorios.puedeCambiar(b)),
+      queSeHagaSola: rutinas.explicacion(asistentes.elDeAhora().nombre),
+      aviso: avisoLocal,
+    });
+  }
+
+  // Al terminar algo que empezó en Recordatorios: si sigue allí, en la pantalla;
+  // si se ha ido a otra mientras elegía, no se le devuelve: se le dice con un
+  // aviso del editor (revisión adversaria de la 155).
+  avisarDeLosRecordatorios(aviso) {
+    if (this.donde && this.donde.tipo === 'recordatorios') return this.verRecordatorios(aviso);
+    return aviso.malo ? vscode.window.showWarningMessage(aviso.texto) : vscode.window.showInformationMessage(aviso.texto);
   }
 
   async ponerHorario(nombre) {
@@ -1344,23 +1368,30 @@ ${cabecera}
     const raiz = proyecto.raiz();
     const quien = asistentes.elDeAhora().id;
     try {
+      // Solo las que se pueden cambiar desde aquí: una compartida se cambia allí.
+      const disponibles = recordatorios.disponibles().filter((b) => recordatorios.puedeCambiar(b));
       let boton;
-      if (nombre) boton = recordatorios.disponibles().find((b) => b.nombre === nombre);
+      if (nombre) boton = disponibles.find((b) => b.nombre === nombre);
       else {
-        const opciones = recordatorios.disponibles().map((b) => ({ label: b.etiqueta,
-          description: b.cuando ? cuando.enPalabras(b.cuando) || 'Revisar horario' : 'Sin horario', boton: b }));
-        if (!opciones.length) return this.pedir(rutinas.CREAR_RUTINA);
+        if (!disponibles.length) return this.pedir(rutinas.CREAR_RECORDATORIO);
+        // Y si no es ninguna de las que hay, se le pide al asistente.
+        const opciones = [...disponibles.map((b) => ({ label: b.etiqueta,
+          description: b.cuando ? cuando.enPalabras(b.cuando) || 'Hay que revisar el horario' : 'Sin recordatorio', boton: b })),
+        { label: 'Crear un recordatorio nuevo', description: 'Se lo pido al asistente', crear: true }];
         const elegida = await vscode.window.showQuickPick(opciones, {
-          title: 'Rutinas y horarios', placeHolder: '¿Qué habilidad quieres que te recuerde?',
+          title: 'Poner un recordatorio', placeHolder: '¿Qué habilidad quieres que te recuerde?',
         });
         if (!elegida) return;
+        if (elegida.crear) return this.pedir(rutinas.CREAR_RECORDATORIO);
         boton = elegida.boton;
       }
-      if (!boton) return this.verRutinas({ texto: 'Esa habilidad ya no está en esta carpeta.', malo: true });
+      if (!boton) return this.avisarDeLosRecordatorios({ texto: 'Esa habilidad ya no está en esta carpeta.', malo: true });
       const cron = await rutinas.elegirHorario(boton.etiqueta, boton.cuando || '');
+      // Mientras elegía ha podido cambiar de carpeta o de asistente: entonces no
+      // se escribe nada, que ese botón ya no es de lo que tiene delante.
       if (!cron || proyecto.raiz() !== raiz || asistentes.elDeAhora().id !== quien) return;
       const hecho = recordatorios.ponerCuando(boton.nombre, cron);
-      if (!hecho.ok) return this.verRutinas({ texto: 'No he podido cambiar ese horario. Pídele al asistente que revise esa habilidad.', malo: true });
+      if (!hecho.ok) return this.avisarDeLosRecordatorios({ texto: 'No he podido cambiar ese horario. Pídele al asistente que revise esa habilidad.', malo: true });
       // Contar desde ahora, incluso al volver a poner la misma hora. Un aviso
       // anterior no puede reaparecer después de haberlo quitado y vuelto a poner.
       await this.marcarHecho(boton.nombre);
@@ -1370,20 +1401,33 @@ ${cabecera}
         puestas[boton.nombre] = { ...puestas[boton.nombre], porDecir: false };
         await this.almacen().update(CLAVE_COSTUMBRES, puestas);
       }
-      return this.verRutinas({ texto: `Te recordaré «${hecho.boton.etiqueta}» ${hecho.enPalabras}.` });
+      return this.avisarDeLosRecordatorios({ texto: `Te recordaré «${hecho.boton.etiqueta}» ${hecho.enPalabras}.` });
     } finally {
       this.eligiendoHorario = false;
     }
   }
 
-  async prepararTareaProgramada(nombre) {
-    const r = nombre && recordatorios.conHorario().find((b) => b.nombre === nombre);
-    const detalle = r ? ` Quiero repetir «${r.etiqueta}», ${cuando.enPalabras(r.cuando) || 'con un horario por concretar'}, usando la habilidad que aquí se pide con ${r.prompt}. Lee la habilidad para conservar exactamente sus instrucciones y su horario.` : '';
-    return this.pedir(rutinas.automatica(asistentes.elDeAhora().id).prompt + detalle);
+  // «Que se haga sola»: se elige la habilidad, y se prepara el encargo para el
+  // gestor del asistente, donde de verdad puede ir (`rutinas.queSeHagaSola`).
+  async queSeHagaSola() {
+    const raiz = proyecto.raiz();
+    const quien = asistentes.elDeAhora().id;
+    const disponibles = recordatorios.disponibles().filter((b) => recordatorios.dentroDeLaCarpeta(b.fichero));
+    if (!disponibles.length) return undefined;
+    // Con alguna conexión en la carpeta, la nube de Claude no: ante la duda, escritorio.
+    const conConexiones = recordatorios.tieneConexiones();
+    const dondeIria = rutinas.dondeSeHaceSola(quien, conConexiones).descripcion;
+    const opciones = disponibles.map((b) => ({ label: b.etiqueta, description: dondeIria, boton: b }));
+    const elegida = await vscode.window.showQuickPick(opciones, { title: 'Que se haga sola', placeHolder: '¿Qué habilidad?' });
+    if (!elegida || proyecto.raiz() !== raiz || asistentes.elDeAhora().id !== quien) return undefined;
+    const { boton } = elegida;
+    return this.pedir(rutinas.queSeHagaSola({
+      quien, etiqueta: boton.etiqueta, invocacion: boton.prompt, enPalabras: boton.cuando ? cuando.enPalabras(boton.cuando) : null, conConexiones,
+    }));
   }
 
   actualizarRecordatorios() {
-    return this.donde && this.donde.tipo === 'rutinas' ? this.verRutinas(this.donde.aviso) : this.refrescar(true);
+    return this.donde && this.donde.tipo === 'recordatorios' ? this.verRecordatorios(this.donde.aviso) : this.refrescar(true);
   }
 
   // Los que tocan, del más antiguo al más nuevo. La principal enseña uno; el
@@ -1464,9 +1508,8 @@ ${cabecera}
     const vistos = { ...(this.almacen().get(CLAVE_RECORDATORIOS_VISTOS) || {}) };
     delete vistos[nombre];
     await this.almacen().update(CLAVE_RECORDATORIOS_VISTOS, vistos);
-    if (this.donde && this.donde.tipo === 'rutinas') return this.verRutinas({ texto: `Ya no te recordaré «${hecho.boton.etiqueta}».` });
-    else if (this.donde && this.donde.tipo === 'quieto') await this.verSaberes();
-    else await this.refrescar(true);
+    if (this.donde && this.donde.tipo === 'recordatorios') return this.verRecordatorios({ texto: `Ya no te recordaré «${hecho.boton.etiqueta}».` });
+    await this.refrescar(true);
     return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
   }
 
@@ -1490,7 +1533,7 @@ ${cabecera}
     for (const t of sinAvisar) avisados[t.nombre] = t.ultima;
     await this.almacen().update(CLAVE_AVISADOS, avisados);
     if (!this.donde || this.donde.tipo === 'principal') await this.refrescar(true);
-    else if (this.donde.tipo === 'rutinas') await this.verRutinas(this.donde.aviso);
+    else if (this.donde.tipo === 'recordatorios') await this.verRecordatorios(this.donde.aviso);
     // Sin esperar a uno para enseñar el siguiente: cada aviso, con su botón.
     await Promise.all(sinAvisar.map(async (t) => {
       const quiere = await vscode.window.showInformationMessage(`Toca: ${t.etiqueta}.`, 'Hacerlo ahora');
@@ -2037,7 +2080,7 @@ ${cabecera}
   // corrección, 1). En las demás, como siempre.
   avisarAqui(aviso) {
     const d = this.donde || {};
-    if (d.tipo === 'rutinas') return this.verRutinas(aviso);
+    if (d.tipo === 'recordatorios') return this.verRecordatorios(aviso);
     if (d.tipo === 'documentos') return this.verDocumentos(aviso);
     if (d.tipo === 'foto') return this.verLaFoto(d.desde, aviso);
     return this.enviar({ tipo: 'aviso', ...aviso });
@@ -2092,8 +2135,9 @@ ${cabecera}
       otras: sabe.otras,
       // Las que el arnés monta para funcionar. Plegadas, pero se ven.
       deSerie: sabe.deSerie,
-      // Lo que se recuerda, y cuándo: se ve y se quita aquí (decisión 144).
-      recordatorios: recordatorios.losQueHay().map((r) => ({ nombre: r.nombre, etiqueta: r.etiqueta, enPalabras: r.enPalabras })),
+      // Los recordatorios se gestionan en su pantalla, con un solo nombre; desde
+      // aquí se llega a ella si hay algo (revisión adversaria de la 155).
+      hayRecordatorios: recordatorios.hayAlgo(),
       // Los comandos de antes, que son habilidades (decisión 141). Si ya hay una
       // habilidad con ese nombre, manda ella, como en Claude.
       // Y por el rótulo: el «resume-session» del arnés se llama «Seguir donde lo
@@ -2233,7 +2277,7 @@ ${cabecera}
   // Nuestra en GitHub (el repositorio de la barra, `sitio.js`), o de Anthropic u
   // OpenAI, de las que da la tabla de los datos de clientes.
   esUnaPaginaNuestra(direccion) {
-    if (['claude', 'codex'].some((id) => rutinas.automatica(id).guia === direccion.href)) return true;
+    if (Object.values(rutinas.DONDE).some((d) => d.guia === direccion.href)) return true;
     if (direccion.hostname === 'github.com') {
       return sitio.esNuestro(direccion.pathname.split('/').filter(Boolean).slice(0, 2).join('/'));
     }
@@ -3540,7 +3584,7 @@ function activate(contexto) {
     comando('executiveLab.cerebro', () => panel.verCerebro()),
     comando('executiveLab.radiografia', () => panel.verRadiografia()),
     comando('executiveLab.saberes', () => panel.verSaberes()),
-    comando('executiveLab.rutinas', () => panel.verRutinas()),
+    comando('executiveLab.recordatorios', () => panel.verRecordatorios()),
     comando('executiveLab.salidas', () => panel.verSalidas()),
     comando('executiveLab.huecos', () => panel.verHuecos()),
     comando('executiveLab.papeles', () => panel.verPapeles()),

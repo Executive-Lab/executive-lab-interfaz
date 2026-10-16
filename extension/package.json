@@ -110,8 +110,8 @@
         "title": "Executive Lab: Habilidades (skills)"
       },
       {
-        "command": "executiveLab.rutinas",
-        "title": "Executive Lab: Rutinas y horarios"
+        "command": "executiveLab.recordatorios",
+        "title": "Executive Lab: Recordatorios"
       },
       {
         "command": "executiveLab.salidas",

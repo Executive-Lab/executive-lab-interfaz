@@ -51,6 +51,9 @@ function lasSuyas() {
 // Con los demás asistentes no hay barra: se le pide con palabras, nombrando la
 // habilidad por su identificador, que es lo que él tiene en su carpeta.
 function comoSePide(id) {
+  // Un identificador que no es un nombre de verdad no entra en un encargo: esa
+  // habilidad se ve, pero no se pide desde la barra (revisión de la PR #48).
+  if (!require('./limpio').invocable(id)) return null;
   if (donde.paraQuien() === 'claude') return `/${id}`;
   // Las de botón, donde Codex las encuentra solo, se piden como él: `$id`
   // (decisión 141). Las de RSC, que lee por su AGENTS.md, con palabras.

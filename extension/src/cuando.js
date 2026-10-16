@@ -31,7 +31,12 @@ function campo(texto, [min, max]) {
   return valores;
 }
 
+// Un horario de verdad cabe en una línea corta. Lo que pase de aquí no se lee:
+// lo escribe quien hizo la carpeta (revisión adversaria de la 155).
+const TOPE = 100;
+
 function leer(cron) {
+  if (String(cron || '').length > TOPE) return null;
   const partes = String(cron || '').trim().split(/\s+/);
   if (partes.length !== 5) return null;
   const campos = partes.map((p, i) => campo(p, LIMITES[i]));
@@ -56,6 +61,27 @@ function tocaEseDia(c, fecha) {
   return true;
 }
 
+// Esa hora de ese día, en la hora del ordenador. Si no existe porque ese día se
+// adelanta el reloj (las 2:30 del último domingo de marzo, en España), el primer
+// momento que sí existe después: las 3:00. Así se avisa, como hace cron, en vez
+// de saltarse el día (revisión adversaria de la 155). Con el reloj atrasado, la
+// primera de las dos.
+function aSuHora(dia, h, m) {
+  const fecha = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m);
+  if (fecha.getHours() === h && fecha.getMinutes() === m && fecha.getDate() === dia.getDate()) return fecha.getTime();
+  // Un hueco: de minuto en minuto hacia atrás, mientras el reloj siga marcando
+  // esa hora o una posterior del mismo día. Ningún hueco pasa de unas horas.
+  const pedida = h * 60 + m;
+  let t = fecha.getTime();
+  for (let paso = 0; paso < 6 * 60; paso += 1) {
+    const antes = new Date(t - 60000);
+    if (antes.getDate() !== dia.getDate() || antes.getHours() * 60 + antes.getMinutes() < pedida) break;
+    t -= 60000;
+  }
+  const primera = new Date(t);
+  return primera.getDate() === dia.getDate() ? primera.getTime() : null;
+}
+
 // La última vez que tocó, como mucho hace 62 días; o null. En la hora del
 // ordenador, que es la de quien lo usa.
 function ultimaVez(cron, ahora = Date.now()) {
@@ -69,9 +95,8 @@ function ultimaVez(cron, ahora = Date.now()) {
     const minutos = [...c.minuto].sort((a, b) => b - a);
     for (const h of horas) {
       for (const m of minutos) {
-        const fecha = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m);
-        if (fecha.getHours() !== h || fecha.getMinutes() !== m || fecha.getDate() !== dia.getDate()) continue;
-        if (fecha.getTime() <= ahora) return fecha.getTime();
+        const fecha = aSuHora(dia, h, m);
+        if (fecha !== null && fecha <= ahora) return fecha;
       }
     }
   }
@@ -91,10 +116,9 @@ function proximaVez(cron, ahora = Date.now()) {
     const dia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + adelante);
     if (!tocaEseDia(c, dia)) continue;
     for (const h of horas) for (const m of minutos) {
-      const fecha = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m);
-      // Una hora que no existe por el cambio de hora no se desplaza a otra.
-      if (fecha.getHours() !== h || fecha.getMinutes() !== m || fecha.getDate() !== dia.getDate()) continue;
-      if (fecha.getTime() > ahora) return fecha.getTime();
+      // Una hora que no existe por el cambio de hora, en el primer momento que sí.
+      const fecha = aSuHora(dia, h, m);
+      if (fecha !== null && fecha > ahora) return fecha;
     }
   }
   return null;
@@ -122,7 +146,8 @@ function enPalabras(cron) {
     const plurales = dias.map(enPlural);
     return `los ${plurales.slice(0, -1).join(', ')} y ${plurales[plurales.length - 1]}${unaHora}`;
   }
-  if (se === '*' && /^\d+$/.test(di)) return `el día ${di} de cada mes${unaHora}`;
+  // Del 29 en adelante, no todos los meses lo tienen: se dice, y esos se saltan.
+  if (se === '*' && /^\d+$/.test(di)) return Number(di) >= 29 ? `el día ${di}, en los meses que lo tienen,${unaHora}` : `el día ${di} de cada mes${unaHora}`;
   return `en fechas fijas${unaHora}`;
 }
 

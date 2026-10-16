@@ -23,6 +23,30 @@ const disponibles = () => acciones.acciones().filter(esHabilidad);
 // quien lo puso esperando un aviso que nunca llegará.
 const conHorario = () => acciones.acciones().filter((b) => b.cuando);
 
+// La fila de Recordatorios sale si hay algo que recordar o algo a lo que
+// ponérselo: una habilidad con botón, o un recordatorio (solo sale lo que se tiene).
+const hayAlgo = () => disponibles().length > 0 || conHorario().length > 0;
+
+// Si el fichero de un botón está de verdad en esta carpeta: con los enlaces
+// seguidos. Una habilidad compartida con otra carpeta se lee aquí, pero su
+// horario se cambia allí. Un enlace roto no lanza: no está (revisión
+// adversaria de la 155).
+function dentroDeLaCarpeta(fichero) {
+  const raiz = proyecto.raiz();
+  if (!raiz || !fichero) return false;
+  try {
+    const relativa = path.relative(fs.realpathSync(raiz), fs.realpathSync(fichero));
+    return relativa !== '' && !path.isAbsolute(relativa) && relativa !== '..' && !relativa.startsWith(`..${path.sep}`);
+  } catch {
+    return false;
+  }
+}
+
+// Cambiar el horario, solo en una habilidad de esta carpeta; quitarlo, también
+// de un comando de antes.
+const puedeCambiar = (boton) => Boolean(boton && esHabilidad(boton) && dentroDeLaCarpeta(boton.fichero));
+const puedeQuitar = (boton) => Boolean(boton && dentroDeLaCarpeta(boton.fichero));
+
 const losQueHay = () => conHorario()
   .filter((b) => cuando.valido(b.cuando))
   .map((b) => ({ ...b, enPalabras: cuando.enPalabras(b.cuando) }));
@@ -120,13 +144,34 @@ function ponerCuando(nombre, cron) {
   if (cron && !esHabilidad(boton)) return { ok: false, motivo: 'esUnComando' };
   // Un botón puede leerse a través de un enlace compartido. Su horario no da
   // permiso para cambiar otra carpeta al escribir en esa habilidad.
-  const raiz = proyecto.raiz();
-  const relativa = raiz && path.relative(fs.realpathSync(raiz), fs.realpathSync(boton.fichero));
-  if (!raiz || path.isAbsolute(relativa) || relativa === '..' || relativa.startsWith(`..${path.sep}`)) return { ok: false, motivo: 'fueraDeLaCarpeta' };
+  if (!dentroDeLaCarpeta(boton.fichero)) return { ok: false, motivo: 'fueraDeLaCarpeta' };
   const nuevo = conCuando(fs.readFileSync(boton.fichero, 'utf8'), cron, boton.fichero.endsWith('SKILL.md'));
   if (nuevo === null) return { ok: false, motivo: 'sinCabecera' };
   fs.writeFileSync(boton.fichero, nuevo);
   return { ok: true, boton, enPalabras: cron ? cuando.enPalabras(cron) : null };
 }
 
-module.exports = { disponibles, conHorario, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando };
+// ── Si esta carpeta tiene conexiones ─────────────────────────────────────
+//
+// Las rutinas de Claude en la nube trabajan con una copia de lo subido a GitHub:
+// el `.env` y `keys/` no viajan. Adivinar leyendo la habilidad si usa una
+// conexión se engañaba —«Sube el informe a Google Drive» con la carpeta
+// GOOGLE_DRIVE, una habilidad que remite a otro fichero, «lee el .env»—. Jose,
+// en la revisión de la PR #48: ante la duda, escritorio. La nube solo se ofrece
+// si la carpeta no tiene ninguna conexión: ninguna carpeta en `01-TOOLS/` salvo
+// la plantilla, y ninguna clave en un `.env` ni fichero de acceso (lo que ya
+// encuentra `sueltas.js`). Si no se puede mirar, también escritorio.
+function tieneConexiones() {
+  const base = proyecto.ruta('01-TOOLS');
+  try {
+    if (fs.readdirSync(base, { withFileTypes: true }).some((e) => (e.isDirectory() || e.isSymbolicLink()) && e.name !== '_TEMPLATE')) return true;
+  } catch { /* sin 01-TOOLS */ }
+  try {
+    const { claves, ficheros } = require('./sueltas').paraProteger();
+    return claves.length > 0 || ficheros.length > 0;
+  } catch {
+    return true;
+  }
+}
+
+module.exports = { disponibles, conHorario, hayAlgo, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando, dentroDeLaCarpeta, puedeCambiar, puedeQuitar, tieneConexiones };
