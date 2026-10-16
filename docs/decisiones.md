@@ -8347,6 +8347,58 @@ Batería entera, una vez, tras traer `origin/main` (173 y 174 ya estaban; la 175
 resolución de módulos sin ninguna comprobación en rojo, al correr justo después de `humo.js`, y no se repitió
 (pasó la segunda); ajena.
 
+## 176. Recordar entre conversaciones, a un clic
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · FTD `la-memoria-a-un-clic`
+
+La 172 puso en «Las reglas › Cómo trabaja el asistente» tres interruptores de RSC. Faltaba el cuarto: que el
+asistente se acuerde de lo que hicisteis la última vez. La barra solo sabía leer `memory: false` de `.rsc.json`
+(para marcar la fila «La memoria entre conversaciones» como apagada); apagarla o encenderla era pedírselo
+al asistente por chat.
+
+### Lo que trae RSC 3.0.22 (`scripts/rsc.js`, `targets/memory.js`, comprobado con el paquete)
+
+`memory on` / `memory off` **existen**. Escriben en `.rsc.json` `memory: { enabled: true }` o `memory: false` (el
+manifiesto va a git: **es una decisión del equipo**, y la línea del botón lo dice) y rehacen lo montado de cada
+asistente declarado (`syncInstalled`). Con `off`, `unwireMemory` quita el enganche de la memoria de
+`.claude/settings.local.json` y de `.codex/hooks.json`; con `on`, `wireMemory` lo vuelve a poner. Claude y Codex
+están los dos en modo `full` de `MEMORY_TARGETS`. Los ficheros `.rsc/session-memory*.mjs` se quedan. No escribe
+ninguna marca `.no-*`.
+
+### Lo que hace la barra
+
+- **Una cuarta entrada** en «Cómo trabaja el asistente»: *Recordar entre conversaciones*. Encendido: «El asistente
+  se acuerda de lo que hicisteis la última vez y sigue por ahí.» → **Dejar de recordar entre conversaciones**
+  (`memory off`). Apagado: «El asistente empieza cada conversación de cero.» → **Recordar entre conversaciones**
+  (`memory on`). Con la línea de que es del equipo y lo que cambia encima del botón.
+- **El mismo manejador y el mismo patrón que la 172**: tabla de botones de la barra, `rsc.correr` con sus guardas,
+  confianza, carpeta montada, que no esté arreglando sola, y «Hecho.» solo si `.rsc.json` ha quedado como toca.
+  `memory` entra en `QUE_ESCRIBEN` de `rsc.js`, para que también pase por la comprobación de nombres y de la
+  carpeta por delante.
+- **Dónde sale**: con Claude o con Codex (cualquiera de los declarados, o el de la ventana si no hay
+  declaración) y donde RSC trae su pieza (`session-memory.mjs` o `trunk-policy.mjs` en `.rsc/`, o la memoria ya
+  apagada: con `off` la pieza sigue, pero se cuenta por si acaso). A diferencia de los tres de la 172 **no pide
+  frenos**, así que en una carpeta de Codex el apartado sale solo con esta entrada. Con Cursor, Gemini u otro, no
+  sale: la barra no los ofrece.
+- **El texto**, en `docs/diccionario.md`. Ninguna orden ni fichero en pantalla.
+
+### Lo que no se ha hecho
+
+- Con Codex, RSC dice `hook-trust-required`: hay que confiar una vez en el enganche con `/hooks` dentro de Codex
+  para que recuerde. La barra no lo comprueba ni lo dice; el botón enciende lo que RSC monta.
+- No cambia lo ya guardado: apagar no borra la memoria que hubiera, solo deja de leerla y de escribirla.
+- No se ha visto con una persona delante, ni con un VS Code de verdad.
+
+### Las pruebas
+
+La comprobación de los interruptores de la 172 en `humo.js` pasa a cuatro: las dos órdenes nuevas, el estado, el
+texto, el fallo y el «sí» que no cambia, con Codex (sale solo la memoria), con Cursor (nada), sin la pieza y con la
+memoria apagada, y un arnés de la 2. `memory resume` y `metrics` no cuentan como escribir. Con `--con-arnes`, el RSC
+de verdad: `memory off` deja `memory: false` en `.rsc.json` y quita el enganche, `memory on` lo vuelve a poner.
+`humo.js` 483, con `--con-arnes` 491. Once mutaciones a mano (las dos órdenes, el estado, Claude/Codex/otro, la
+memoria apagada sin pieza, el «llega», `memory` en las órdenes que escriben, `resume` como escritura, el texto y la
+puerta del botón): las once tumbadas.
+
 
 ## 177. En una carpeta de alguien, lo que no se hace solo se ofrece con su botón
 
@@ -8439,3 +8491,4 @@ mirar escriba.
   que se volverá a proponer. Mutación: decir lo de antes.
 
 Seis mutaciones más, las seis tumbadas.
+
