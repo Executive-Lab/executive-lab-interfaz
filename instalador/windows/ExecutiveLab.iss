@@ -26,7 +26,7 @@
 ;      una pared.
 
 #define Nombre "Executive Lab"
-#define Version "0.53.0"
+#define Version "0.54.0"
 
 [Setup]
 AppName={#Nombre}
@@ -145,7 +145,14 @@ begin
     True, False);
   PaginaAsistente.Add('Claude');
   PaginaAsistente.Add('Codex');
+  PaginaAsistente.Add('Los dos');
   PaginaAsistente.SelectedValueIndex := 0;
+  // En silencio no hay quien elija: `/ASISTENTE=codex` o `/ASISTENTE=losDos`
+  // (decisión 168). Sin nada, o con algo que no se entiende, Claude.
+  if CompareText(ExpandConstant('{param:ASISTENTE|}'), 'codex') = 0 then
+    PaginaAsistente.SelectedValueIndex := 1
+  else if CompareText(ExpandConstant('{param:ASISTENTE|}'), 'losDos') = 0 then
+    PaginaAsistente.SelectedValueIndex := 2;
 
   PaginaDescarga := CreateDownloadPage('Descargando el editor',
     'Son unos 100 MB. Tarda según tu conexión.', @AlDescargar);
@@ -185,6 +192,8 @@ function AsistenteElegido(Param: String): String;
 begin
   if PaginaAsistente.SelectedValueIndex = 1 then
     Result := 'codex'
+  else if PaginaAsistente.SelectedValueIndex = 2 then
+    Result := 'losDos'
   else
     Result := 'claude';
 end;

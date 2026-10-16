@@ -7729,6 +7729,49 @@ vale», la raíz de una aplicación y los asistentes). Para la prueba de `git`, 
 
 
 
+## 168. Los instaladores, con los dos asistentes y comprobados
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · FTD `los-instaladores-con-los-dos`
+
+Lo de la 163 dejaba tres cosas cojas: el `.dmg` ponía siempre Claude, el `.exe` no ofrecía «Los dos»
+aunque `preparar.js` ya lo admitía, y las pruebas de los instaladores miraban 4 claves de las que se
+ponen, no todas.
+
+- **El `.dmg` pregunta con qué asistente**, en un diálogo de Apple con tres botones: Claude (por
+  defecto), Codex, Los dos. Las mismas palabras que la página del `.exe`. La app se lo pasa a
+  `arrancar.sh` y este a `instalar.js` con `--asistente claude|codex|losDos`; sin nada, o con algo
+  que no se entiende, Claude. De ahí salen las extensiones que se ponen (`anthropic.claude-code` y,
+  si toca, `openai.chatgpt`) y los asistentes con los que se llama a `ajustes-del-editor.js`. El
+  control remoto de Claude solo se pone si se ha elegido Claude.
+- **El `.exe` ofrece «Los dos»** como tercera opción, y le manda `losDos` a `preparar.js`. En
+  silencio se elige con `/ASISTENTE=codex` o `/ASISTENTE=losDos`.
+- **`probar.sh` y `probar.ps1` comprueban todo lo que se pone**: cada clave de los ajustes de
+  usuario con su valor y su apunte en la constancia (la tabla va escrita a mano en los dos, no
+  sacada del módulo, para que un valor cambiado en el módulo les salte); con Claude, su
+  `extensions.confirmedUriHandlerExtensionIds`, `claudeCode.focusView` y `claudeCode.hideOnboarding`;
+  con Codex solo, `chatgpt.openOnStartup`; `remoteControlAtStartup: true` en el `settings.json` de
+  Claude con su marca (respetando `CLAUDE_CONFIG_DIR`); y que la extensión de cada asistente elegido
+  está puesta. Con `--asistente` (Mac) y `-Asistente` (Windows) se dice con cuál se instaló. Son 10
+  claves con Claude o con los dos y 8 con Codex solo (11 distintas en total).
+- **El CI**: la máquina del Mac instala y comprueba con **los dos** (poner una extensión más sale
+  barato y prueba también Codex); la de Windows sigue con Claude, así que los dos caminos quedan
+  cubiertos.
+- **Idioma de Codex: no se pone.** Se leyó el 16-10-2026 la página de ajustes de la extensión
+  (developers.openai.com/codex/ide/settings, que redirige a learn.chatgpt.com/docs/developer-settings)
+  y el `package.json` de `openai.chatgpt` 26.51007.21434. `chatgpt.localeOverride` es una cadena libre
+  (`string | null`, de programa) con la descripción *«Preferred language for the Codex UI. Leave empty
+  to auto detect.»*; ni la página ni el manifiesto traen una lista de valores, ni dicen si se entiende
+  `es` o `es-ES`. Un valor sin documentar podría dejar la ventana en blanco o en inglés sin que nada
+  lo avise, así que queda como estaba (propuesto desde la 163). Cuando OpenAI publique los valores,
+  basta una clave más en `ajustes-del-editor.js`, con su constancia, como las otras.
+- **Nada de `~/.codex/config.toml` de usuario**: la barra lo gestiona por carpeta.
+
+### Lo que no se ha podido ver
+
+El diálogo del `.dmg` y la página del `.exe` no se han visto con una persona delante: se comprueba
+que la app compila (`osacompile`), el texto y el paso de lo elegido. La extensión de Codex en las
+máquinas de GitHub se ve en `el-dmg`.
+
 
 ## 169. Todo lo de RSC tiene nombre, también los automatismos
 

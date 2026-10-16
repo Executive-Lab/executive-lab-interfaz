@@ -5,6 +5,7 @@
 #   ./probar.sh                       # sobre esta máquina
 #   ./probar.sh --casa /tmp/casa-falsa   # sobre una carpeta personal de mentira
 #   ./probar.sh --sin-firma              # donde no hay certificado (la máquina macOS de GitHub)
+#   ./probar.sh --asistente losDos       # con qué asistente se instaló: claude (por defecto), codex o losDos
 #
 # Deja un informe de texto al lado. Las comprobaciones que no vienen a cuento
 # (por ejemplo, las de "ya instalado" cuando todavía no lo está) salen como "·"
@@ -15,6 +16,7 @@ set -uo pipefail
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 CASA="$HOME"
 SIN_FIRMA=0
+ASISTENTE="claude"
 while [ $# -gt 0 ]; do
   case "$1" in
     # Sin carpeta detrás, se para: con `--casa --sin-firma` se tomaba «--sin-firma»
@@ -26,6 +28,11 @@ while [ $# -gt 0 ]; do
       fi
       CASA="$2"; shift ;;
     --sin-firma) SIN_FIRMA=1 ;;
+    --asistente)
+      case "${2:-}" in
+        claude|codex|losDos) ASISTENTE="$2"; shift ;;
+        *) echo "Con --asistente va claude, codex o losDos. Por ejemplo: ./probar.sh --asistente losDos" >&2; exit 2 ;;
+      esac ;;
   esac
   shift
 done
@@ -33,6 +40,13 @@ done
 APP="$CASA/Library/Application Support/ExecutiveLab"
 ACCESO="$CASA/Applications/Mi Empresa.app"
 AJUSTES="$CASA/Library/Application Support/Code/User/settings.json"
+# Los ajustes de Claude, donde los lee él: CLAUDE_CONFIG_DIR si está, y si no ~/.claude.
+CLAUDE_AJUSTES="${CLAUDE_CONFIG_DIR:-$CASA/.claude}"
+case "$ASISTENTE" in
+  claude) CON_CLAUDE=1; CON_CODEX=0 ;;
+  codex) CON_CLAUDE=0; CON_CODEX=1 ;;
+  losDos) CON_CLAUDE=1; CON_CODEX=1 ;;
+esac
 INFORME="$AQUI/informe-$(date +%Y%m%d-%H%M%S).txt"
 
 BIEN=0; MAL=0; SALTADAS=0
@@ -179,24 +193,87 @@ comprobar 'el arranque del shell lleva nuestro Node' bash -c '
   grep -q ">>> Executive Lab >>>" "'"$CASA"'/.zprofile" 2>/dev/null || { echo "falta el bloque en .zprofile"; exit 1; }
   echo "en .zprofile"'
 
-# Lo del editor y lo de Claude (decisión 163), y la constancia de lo puesto: sin
-# ella, desinstalar no sabría qué es nuestro y qué es suyo.
-comprobar 'lo del editor está puesto, y apuntado para desinstalar' bash -c '
-  [ -d "'"$APP"'" ] && [ -f "'"$AJUSTES"'" ] || { echo "SALTADA"; exit 0; }
-  for clave in security.workspace.trust.enabled update.mode workbench.startupEditor claudeCode.focusView; do
-    grep -q "\"$clave\"" "'"$AJUSTES"'" || { echo "falta $clave"; exit 1; }
-  done
-  constancia="$(dirname "'"$AJUSTES"'")/.executive-lab-ajustes.json"
-  [ -f "$constancia" ] || { echo "no queda constancia de lo puesto: desinstalar no sabría qué quitar"; exit 1; }
-  grep -q "claudeCode.focusView" "$constancia" || { echo "la constancia no dice lo que se puso"; exit 1; }
-  echo "la confianza, la bienvenida y la vista enfocada, con su constancia"'
+# Lo del editor y lo del asistente elegido (decisiones 163 y 168), cada clave
+# con su valor, y la constancia de lo puesto: sin ella, desinstalar no sabría qué
+# es nuestro y qué es suyo. La tabla está escrita aquí a mano, no sacada del
+# módulo: si el módulo cambiara un valor, esto debe enterarse.
+#
+# Node: el que dejó la instalación, o el del sistema.
+elNode() {
+  if [ -x "$APP/runtime/bin/node" ]; then echo "$APP/runtime/bin/node"; else command -v node; fi
+}
 
-comprobar 'las dos piezas del editor están instaladas' bash -c '
-  ext="'"$CASA"'/.vscode/extensions"
-  [ -d "'"$APP"'" ] && [ -d "$ext" ] || { echo "SALTADA"; exit 0; }
-  ls "$ext" | grep -q "^executivelab.arnes-ui" || { echo "falta la nuestra"; exit 1; }
-  ls "$ext" | grep -q "^anthropic.claude-code" || { echo "falta la del asistente"; exit 1; }
-  echo "la nuestra y la del asistente"'
+losAjustesDelEditor() {
+  [ -d "$APP" ] && [ -f "$AJUSTES" ] || { echo "SALTADA"; return 0; }
+  local nodo; nodo="$(elNode)"
+  [ -n "$nodo" ] || { echo "no hay Node con que leer los ajustes"; return 1; }
+  "$nodo" - "$AJUSTES" "$ASISTENTE" "$AQUI/carga/ajustes.js" <<'JS'
+const fs = require('fs');
+const path = require('path');
+const [fichero, asistente, modulo] = process.argv.slice(2);
+const conClaude = asistente !== 'codex';
+const conCodex = asistente !== 'claude';
+const esperado = {
+  'security.workspace.trust.enabled': false,
+  'update.mode': 'none',
+  'update.showReleaseNotes': false,
+  'telemetry.telemetryLevel': 'off',
+  'extensions.ignoreRecommendations': true,
+  'workbench.startupEditor': 'none',
+  'workbench.welcomePage.walkthroughs.openOnInstall': false,
+  ...(conClaude ? {
+    'extensions.confirmedUriHandlerExtensionIds': ['anthropic.claude-code'],
+    'claudeCode.focusView': true,
+    'claudeCode.hideOnboarding': true,
+  } : {}),
+  ...(conCodex && !conClaude ? { 'chatgpt.openOnStartup': true } : {}),
+};
+let leer = JSON.parse;
+try { leer = require(modulo).leerJsonc || JSON.parse; } catch { /* JSON a secas */ }
+const texto = fs.readFileSync(fichero, 'utf8');
+const actuales = leer(texto);
+if (!actuales) { console.log('no entiendo los ajustes del editor'); process.exit(1); }
+const constanciaFichero = path.join(path.dirname(fichero), '.executive-lab-ajustes.json');
+if (!fs.existsSync(constanciaFichero)) { console.log('no queda constancia de lo puesto: desinstalar no sabría qué quitar'); process.exit(1); }
+const puestas = (JSON.parse(fs.readFileSync(constanciaFichero, 'utf8')).puestas) || {};
+const mal = [];
+for (const [clave, valor] of Object.entries(esperado)) {
+  if (!(clave in actuales)) mal.push(`falta ${clave}`);
+  else if (JSON.stringify(actuales[clave]) !== JSON.stringify(valor)) mal.push(`${clave} vale ${JSON.stringify(actuales[clave])} y debía valer ${JSON.stringify(valor)}`);
+  else if (JSON.stringify(puestas[clave]) !== JSON.stringify(valor)) mal.push(`la constancia no dice ${clave}`);
+}
+if (mal.length) { console.log(mal.join('; ')); process.exit(1); }
+console.log(`${Object.keys(esperado).length} claves, cada una con su valor y su constancia`);
+JS
+}
+comprobar 'lo del editor y lo del asistente están puestos, con su valor y apuntados para desinstalar' losAjustesDelEditor
+
+# El control remoto de Claude (decisión 143): su clave en los ajustes de Claude
+# y la marca que deja, que es lo que permite quitarlo al desinstalar.
+elControlRemoto() {
+  [ -d "$APP" ] || { echo "SALTADA"; return 0; }
+  [ "$CON_CLAUDE" = "1" ] || { echo "SALTADA"; return 0; }
+  local f="$CLAUDE_AJUSTES/settings.json"
+  [ -f "$f" ] || { echo "no hay $f"; return 1; }
+  tr -d ' \n\t' < "$f" | grep -q '"remoteControlAtStartup":true' || { echo "remoteControlAtStartup no está a true"; return 1; }
+  [ -f "$CLAUDE_AJUSTES/.executive-lab-control-remoto" ] || { echo "no queda la marca: desinstalar no sabría que es nuestro"; return 1; }
+  echo "remoteControlAtStartup a true, con su marca"
+}
+comprobar 'el control remoto de Claude está puesto, con su marca' elControlRemoto
+
+lasExtensiones() {
+  local ext="$CASA/.vscode/extensions"
+  [ -d "$APP" ] && [ -d "$ext" ] || { echo "SALTADA"; return 0; }
+  ls "$ext" | grep -q "^executivelab.arnes-ui" || { echo "falta la nuestra"; return 1; }
+  if [ "$CON_CLAUDE" = "1" ]; then
+    ls "$ext" | grep -q "^anthropic.claude-code" || { echo "falta la de Claude"; return 1; }
+  fi
+  if [ "$CON_CODEX" = "1" ]; then
+    ls "$ext" | grep -q "^openai.chatgpt" || { echo "falta la de Codex"; return 1; }
+  fi
+  echo "la nuestra y la del asistente elegido ($ASISTENTE)"
+}
+comprobar 'las piezas del editor están instaladas' lasExtensiones
 
 # El instalador escribe en os.tmpdir(), que en macOS NO es /tmp: es el $TMPDIR
 # privado de cada usuario. Mirar solo en /tmp hacía que esto se saltara siempre,
