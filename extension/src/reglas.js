@@ -210,6 +210,87 @@ function loApagado() {
   return lista;
 }
 
+// ── Los tres interruptores que la persona mueve con un clic (decisión 172) ─
+//
+// RSC 3.0.22 trae una orden oficial para cada uno: `main lock|unlock`,
+// `isolation on|off` y `knowledge-sync on|off`. Escriben la marca de `.rsc/`, la
+// apuntan en `.rsc.json` (que va a git: es una decisión del equipo) y rehacen lo
+// montado. La barra llama a la orden, nunca escribe las marcas a mano.
+//
+// El estado sale de las mismas marcas que lee el propio RSC (`trunkPolicy`,
+// `branch-guard.mjs`, `knowledge-sync.mjs`), no de las filas de «Lo que se
+// comprueba solo»: esas dependen de qué guardianes se montaron, y en una carpeta
+// de empresa, sin código, no hay freno de la rama principal aunque la marca
+// siga mandando en lo demás. Se enseña donde está `trunk-policy.mjs`, que RSC
+// copia con todo arnés de la 3 para Claude, y con Codex no, que no engancha nada.
+const EQUIPO = 'Es una decisión del equipo: queda apuntada para guardarla en git y que todos trabajen igual.';
+const INTERRUPTORES = {
+  principal: {
+    nombre: 'La rama principal',
+    // `.no-trunk-guard` la abre y manda sobre todo; `.no-trunk-open` la cierra; sin ninguna
+    // decide el proyecto: se cierra sola con equipo, CI o publicación (`trunkPolicy`).
+    estado: () => (hayEnRsc('.no-trunk-guard') ? 'abierta' : (hayEnRsc('.no-trunk-open') ? 'cerrada' : 'segun')),
+    dice: {
+      abierta: 'La rama principal está abierta: el asistente trabaja directamente en ella, sin preguntar.',
+      cerrada: 'La rama principal está cerrada: el asistente trabaja en una copia aparte y te pregunta antes de tocarla.',
+      segun: 'La rama principal se cierra sola si el proyecto tiene equipo o está publicado; si no, el asistente decide.',
+    },
+    botones: { abierta: ['principal-cerrar'], cerrada: ['principal-abrir'], segun: ['principal-cerrar', 'principal-abrir'] },
+  },
+  aparte: {
+    nombre: 'El trabajo aparte',
+    estado: () => (hayEnRsc('.no-worktree-isolation') ? 'apagado' : 'encendido'),
+    dice: {
+      encendido: 'Con otra conversación en esta carpeta, lo nuevo se hace en una copia aparte para no pisarla.',
+      apagado: 'Todas las conversaciones trabajan en esta misma carpeta.',
+    },
+    botones: { encendido: ['aparte-apagar'], apagado: ['aparte-encender'] },
+  },
+  wiki: {
+    nombre: 'Compartir el conocimiento con el equipo',
+    estado: () => (hayEnRsc('.no-knowledge-sync') ? 'apagado' : 'encendido'),
+    dice: {
+      encendido: 'Las conexiones y lo que sabe de tu empresa se suben solos a la copia compartida, y se traen los de los demás.',
+      apagado: 'Cada uno trabaja con lo suyo: nada se sube ni se trae solo.',
+    },
+    botones: { encendido: ['wiki-dejar'], apagado: ['wiki-compartir'] },
+  },
+};
+
+// Cada botón: su orden, lo que cambia al pulsarlo y cómo tiene que quedar la
+// carpeta después. Lo único que manda el panel es el nombre del botón.
+const BOTONES = {
+  'principal-cerrar': { cual: 'principal', etiqueta: 'Cerrar la rama principal', args: ['main', 'lock'], llega: 'cerrada', queCambia: 'Si la cierras, el asistente trabaja en una copia aparte y te pregunta antes de tocarla.' },
+  'principal-abrir': { cual: 'principal', etiqueta: 'Abrir la rama principal', args: ['main', 'unlock'], llega: 'abierta', queCambia: 'Si la abres, el asistente trabaja directamente en ella, sin preguntar.' },
+  'aparte-apagar': { cual: 'aparte', etiqueta: 'Apagar el trabajo aparte', args: ['isolation', 'off'], llega: 'apagado', queCambia: 'Si lo apagas, todas las conversaciones trabajan en esta misma carpeta.' },
+  'aparte-encender': { cual: 'aparte', etiqueta: 'Encender el trabajo aparte', args: ['isolation', 'on'], llega: 'encendido', queCambia: 'Si lo enciendes, con otra conversación en marcha lo nuevo se hace en una copia aparte.' },
+  'wiki-dejar': { cual: 'wiki', etiqueta: 'Dejar de compartir el conocimiento', args: ['knowledge-sync', 'off'], llega: 'apagado', queCambia: 'Si lo dejas, cada uno trabaja con lo suyo.' },
+  'wiki-compartir': { cual: 'wiki', etiqueta: 'Compartir el conocimiento', args: ['knowledge-sync', 'on'], llega: 'encendido', queCambia: 'Si lo compartes, las conexiones y lo que sabe de tu empresa se suben solos y se traen los de los demás.' },
+};
+
+const hayArnesDeLaTres = () => donde.puedeTenerFrenos() && hayEnRsc('trunk-policy.mjs');
+
+// Lo que enseña la pantalla: cómo está cada uno, y los botones que tocan.
+function losInterruptores() {
+  if (!hayArnesDeLaTres()) return [];
+  return Object.entries(INTERRUPTORES).map(([cual, i]) => {
+    const estado = i.estado();
+    return {
+      cual,
+      nombre: i.nombre,
+      estado,
+      dice: i.dice[estado],
+      equipo: EQUIPO,
+      botones: i.botones[estado].map((id) => ({ id, etiqueta: BOTONES[id].etiqueta, queCambia: BOTONES[id].queCambia })),
+    };
+  });
+}
+
+// El botón que se ha pulsado, si es uno nuestro y hay algo que cambiar aquí. Una
+// cadena y nada más: `__proto__` o un array no son un nombre.
+const elBoton = (id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOTONES, id) && hayArnesDeLaTres() ? BOTONES[id] : null);
+const estadoDe = (cual) => INTERRUPTORES[cual].estado();
+
 // El freno ante órdenes peligrosas puede venir de dos sitios (C1): el de RSC,
 // que solo se engancha cuando el plan practica la cadena SDD, y el nuestro, que
 // ponen los raíles con la misma copia (`freno.mjs`). Si están los dos, manda el
@@ -383,6 +464,8 @@ function queHay() {
     // ninguno, así que la lista vacía no es un descuido de quien montó esto y la
     // pantalla lo tiene que decir en vez de enseñar un cero.
     puedeTenerFrenos: donde.puedeTenerFrenos(),
+    // Y los tres que se cambian con un clic (decisión 172).
+    interruptores: losInterruptores(),
     deLaCasa: puntosDe(primero, 'Working rules').length
       ? puntosDe(primero, 'Working rules')
       : conCodex ? puntosDe(primero) : puntosDe(segundo, 'Working rules'),
@@ -414,5 +497,5 @@ function dondeVive(cual) {
 }
 
 module.exports = {
-  queHay, dondeVive, losGuardianes, losAutomatismos, loApagado, GUARDIANES, AUTOMATISMOS, enganchadoAntesDeBash,
+  queHay, dondeVive, losInterruptores, elBoton, estadoDe, INTERRUPTORES, BOTONES, losGuardianes, losAutomatismos, loApagado, GUARDIANES, AUTOMATISMOS, enganchadoAntesDeBash,
 };

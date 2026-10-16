@@ -8061,6 +8061,174 @@ comportamiento, y en Windows ya buscaba `node.exe`: lo que fallaba eran las prue
 Una prueba que no es de esta rama falló una vez en Windows («lo que pide el asistente», «no son los tres
 primeros»): una vuelta que se adelanta a otra. No se ha tocado.
 
+---
+
+## 172. Los interruptores de RSC, a un clic
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · FTD `los-interruptores-de-rsc`
+
+Al montar una carpeta, la barra deja puestas las marcas `.rsc/.no-trunk-guard`, `.no-worktree-isolation` y
+`.no-knowledge-sync` (decisiones 145 y 157), y «Las reglas › Lo que se comprueba solo» las enseñaba, pero sin
+interruptor: cambiarlas solo se podía pidiéndoselo al asistente por chat. RSC 3.0.22 trae una orden oficial
+para cada una, y la persona decide cómo trabaja (P9): su clic es su sí.
+
+### Lo que trae RSC 3.0.22 (`scripts/rsc.js`, comprobado con el paquete)
+
+| Orden | Escribe | Dice |
+|---|---|---|
+| `main unlock` / `main lock` | `.rsc/.no-trunk-guard` (unlock); `.rsc/.no-trunk-open` (lock). Cada una quita la marca de la otra: `lock` es una decisión, no un volver a adivinar | «Commit .rsc.json so the team gets the same decision» |
+| `isolation off` / `on` | `.rsc/.no-worktree-isolation` (off la pone, on la quita) | lo mismo |
+| `knowledge-sync off` / `on` | `.rsc/.no-knowledge-sync` (off la pone, on la quita) | lo mismo |
+
+Las tres rehacen lo montado de cada asistente (`syncInstalled`) y por eso la marca llega a `optOuts` de
+`.rsc.json`, que va a git: **son decisiones del equipo**, y lo dice la línea de cada botón. Existen las tres
+parejas, así que no queda ninguna sin botón.
+
+### Lo que hace la barra
+
+- **Un apartado nuevo en «Las reglas»**, «Cómo trabaja el asistente» (entre los botones de añadir una regla y
+  «Lo que se comprueba solo», visible y sin plegar: son decisiones, no avisos), con tres entradas. Cada una dice
+  cómo está ahora, que es del equipo, y qué cambia al pulsar, con el botón debajo:
+  - **La rama principal**: *abierta* → **Cerrar la rama principal** (`main lock`); *cerrada* → **Abrir la rama
+    principal** (`main unlock`); *según el proyecto* (ninguna marca: RSC la cierra sola con equipo, CI o
+    despliegue) → los dos. Manda `.no-trunk-guard` sobre `.no-trunk-open`, como `trunkPolicy`;
+  - **El trabajo aparte**: **Apagar** / **Encender el trabajo aparte** (`isolation off|on`);
+  - **Compartir el conocimiento con el equipo**: **Dejar de compartir** / **Compartir el conocimiento**
+    (`knowledge-sync off|on`).
+- **No son botones de las filas de «Lo que se comprueba solo»**. Se probó así primero y se dejó: esas filas
+  existen según qué guardianes se montaron, y en una carpeta de empresa sin código (la que sale del
+  asistente de montaje) el freno de la rama principal no se monta, aunque `trunk-policy.mjs` y su marca siguen
+  mandando en lo demás (`userprompt-gate`, el aviso de arranque); además la del trabajo aparte solo salía
+  apagada. El estado sale de las marcas, que es lo que lee RSC.
+- **Solo donde RSC los trae**: con la 3 y con Claude (`trunk-policy.mjs` en `.rsc/`, que RSC copia con todo
+  arnés de la 3). Con una carpeta de la 2 esas órdenes no existen; con Codex RSC no engancha frenos y la
+  pantalla ya lo dice. Ahí no sale el apartado.
+- **Por la vía de siempre**: `rsc.correr`, con sus guardas: nombres que salen de la carpeta, carpeta por
+  delante de la barra (con su frase), el relevo, y las marcas de la barra antes de escribir (`decidir.js`,
+  que en una carpeta ya en la 3 no se mete). Además, aparte: **confianza del editor**, **carpeta montada**
+  (`.rsc.json`) y **que no esté arreglando sola** (`conElArnes`). Cuenta como botón del arnés mientras
+  corre, para que el vigía no repinte a medias.
+- **El panel solo manda el nombre del botón** (`principal-cerrar`, `aparte-apagar`…). La orden sale de una
+  tabla de la barra: `__proto__`, `constructor`, un array o «main lock» no llegan a nada.
+- **Se dice lo que ha pasado de verdad**: «Hecho.» más cómo queda, y solo si el disco ha quedado como toca;
+  si RSC falla, «No he podido cambiarlo. El arnés dice: «…»» con las tres últimas líneas de su salida, sin
+  claves y a 300 letras (como la 166); si RSC dice que sí y la carpeta sigue igual, se dice eso. La pantalla se
+  repinta con lo nuevo.
+- **El texto**, en `docs/diccionario.md`. Nada de nombres de órdenes, marcas ni ficheros en pantalla.
+
+### Lo que no se ha hecho
+
+- Ningún confirmar aparte: el clic es el sí. Abrir la rama principal a un equipo es lo más serio de los
+  tres; la línea de arriba lo dice con todas las letras, y el botón contrario deshace.
+- No se guarda el cambio en git: eso sigue siendo guardar.
+- No se ha visto con una persona delante, ni con un VS Code de verdad.
+
+### Las pruebas
+
+`humo.js`, una comprobación nueva (de 478 a 479): los botones de cada entrada según su estado (con las tres
+marcas de la rama), la pantalla, las seis órdenes con sus marcas, el fallo con su salida, el «sí» que no
+cambia nada, la carpeta por delante, sin confianza, sin montar, nombres que no son suyos, un arnés de la 2,
+Codex y el arreglo en marcha. Y con `--con-arnes`, el
+paso a paso con el RSC de verdad sobre la carpeta recién montada (487): cada botón, su marca, `.rsc.json` y
+vuelta. Quince mutaciones a mano (la orden de cada botón, la confianza, la carpeta montada, el arreglo en
+marcha, el «sí» que no cambia nada, la carpeta por delante, el nombre del panel, la salida del fallo, la
+precedencia de las marcas, el Codex y la 2, el botón y el texto del equipo): las quince tumbadas.
+
+
+## 173. Deshacer con RSC: quitar una habilidad y volver a la copia
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **FTD** `02-DOCS/wiki/ftd/deshacer-con-rsc.md`
+
+Hasta hoy la barra no dejaba quitar una habilidad ni un agente que se había añadido, ni volver a lo que había
+antes de montar. RSC 3.0.22 trae los dos subcomandos; la barra solo los leía (`laCopiaDelMontaje`, `ideas.js`).
+Se leyó qué hacen de verdad (`scripts/rsc.js`, `install-apply.js`, `lib/backups.js`) y se probaron con una
+carpeta montada.
+
+### Lo que hacen los subcomandos
+- **`uninstall <id…> [--dry-run] [--target <a,b>]`** quita una habilidad o un agente del catálogo. Borra los
+  ficheros de la habilidad y los agentes que ya no pide nadie; quita el id de `skills` y `agents` de `.rsc.json` y
+  del estado de cada asistente (`.rsc-state.json`), de modo que `sync` no la vuelve a poner; deja una copia del
+  estado anterior en `.rsc/backups/` (operación `uninstall`). **No pregunta nada y no sincroniza.** Con un id que
+  no conoce sale con 1 y dice «unknown skill or agent». Un agente que una habilidad puesta todavía necesita sale
+  bien, se quita del apunte y **el fichero se queda**. Lo que RSC equipa siempre (`orient`, `suggest`, `unslop`,
+  `ftd`, `connect-tool`) lo vuelve a poner `sync`.
+- **`backups`** lista las copias; **`restore <id|latest> [--dry-run]`** devuelve el contenido de una. Por cada
+  ruta que la copia recogió: si existía, la sustituye por lo guardado; si no existía, la **borra**. **No pregunta, no
+  guarda lo de ahora antes y no sincroniza.** `--dry-run` imprime las rutas, una por línea y con dos espacios delante.
+  Restaurar la copia del montaje (`onboarding-transaction`) deja la carpeta como antes de montar el arnés: vuelve lo
+  suyo que se tocó, y se quita lo que el arnés puso en esos sitios (también `.rsc.json`).
+
+### Lo que se hace
+1. **«Quitarla»** en la (i) de cada habilidad **instalada del catálogo** (Habilidades) y **«Quitarlo»** en la de cada
+   agente que `.rsc.json` apunta como pedido a RSC (Agentes). Con un clic y una pregunta que dice qué se quita:
+   «Voy a quitar «Facturación» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede
+   volver a añadir desde el catálogo.». Se corre `uninstall <id> --target <los asistentes declarados>` (los mismos
+   que usa «Añadir»).
+2. **«Recuperar lo que había»**, en la pantalla de las copias, junto a «Ver la copia» (que solo sale si el arnés
+   guardó algo suyo). Antes de preguntar se corre `restore <copia> --dry-run` para decir cuántos sitios son; la
+   pregunta es: «Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes,
+   lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos N sitios se pierde. Antes guardo
+   una copia de lo de ahora.». Con el sí, **la barra guarda lo de ahora** en `.rsc/antes-de-recuperar/<fecha>/files/`
+   (RSC no lo hace, y su restore no se deshace) y entonces corre `restore <copia>`. Si no puede guardarlo, no
+   restaura nada. La copia usada es la de `laCopiaDelMontaje` (el primer montaje), buscada otra vez en disco.
+3. **Después, repintar y decir lo que ha pasado**: «Facturación ya no está puesta.» / «Hecho: la carpeta está como
+   antes de montar el arnés. Lo de antes de recuperar está en …»; si RSC falla o no ha quitado lo que dijo, «No he
+   podido… El arnés ha dicho: «…»» con su última línea (como la 166), y todo en el registro. Un agente cuyo
+   fichero sigue tras el `uninstall` dice solo eso: «No se ha podido quitar {nombre}: sigue puesto.», sin inventar la
+   causa. Lo que cuenta es el disco, no el código de salida.
+
+### Lo que no se ofrece
+Nunca «Quitarla» en: lo suyo (`ownSkills` y lo de fuera del catálogo), lo que ponen los raíles de la barra
+(`acciones.esDeLaBarra`), el suelo de RSC (`orient`, `suggest`, `unslop`, `ftd`, `connect-tool`), la fontanería del
+arnés (`nombres.esFontaneria`) ni nada con un nombre que no sea un nombre. Nunca «Quitarlo» en un agente que la
+persona escribió. El manejador lo vuelve a comprobar con lo que hay en disco: el panel solo dice qué botón se
+pulsó. Las tres acciones van con las del arnés (`LOS_DEL_ARNES`: no se pisan con un arreglo en marcha, dan la
+carpeta por conocida) y esperan si la carpeta va por delante (`ESCRIBEN_CON_EL_ARNES`).
+
+### Dudas que quedan
+- **«Recuperar» es grande**: deshace el montaje entero, no solo lo suyo. Se dice en la pregunta y se guarda lo de
+  ahora, pero tras él la barra ve una carpeta sin arnés (con el botón de montarlo otra vez). RSC no tiene un
+  «recuperar solo lo suyo»; no se inventa.
+- **Un agente quitable puede venir del montaje**, no de un «añadir» de la persona: `.rsc.json` no distingue. Se
+  ofrece igual (es del catálogo de RSC y la pregunta lo dice).
+- **Los agentes sueltos de Codex/otros** no cambian: el subcomando es el mismo.
+
+### Las pruebas
+`humo.js`: tres comprobaciones nuevas con un RSC de mentira (qué se ofrece y en qué pantalla; sin el sí no corre ni
+se quita nada y con él corre el subcomando; recuperar con su copia, y fallos con la salida de RSC) y una con el
+arnés de verdad (`--con-arnes`: `onboard`, `add`, `uninstall` y `restore` reales). 12 mutaciones (sin confirmar en
+las tres acciones, suelo vacío, ofrecer lo suyo / lo de la barra / la fontanería, agente suyo, restaurar sin guardar
+lo de ahora, todo quitable, el manejador sin volver a comprobar, dar por quitada sin mirar el disco): las 12 tumbadas.
+Una cosa que salió de probar con el de verdad: RSC escribe las rutas con los enlaces resueltos (`/private/var/…` en
+un Mac), y comparar con la ruta de la carpeta sin resolver las descartaba todas.
+
+### La revisión
+
+La revisión de la PR #69 encontró un fallo grave y otro que fallaba abierto. Arreglados, cada uno con su prueba y su
+mutación.
+
+- **Un agente llamado `--all` corría `rsc uninstall --all`**, que en RSC es un alias de `purge` (comprobado con
+  `--dry-run`): un repositorio ajeno con `.claude/agents/--all.md` y `"agents":["--all"]` en `.rsc.json` habría
+  borrado el arnés entero con un clic. Tres guardas, cada una sola basta: (a) un id no puede empezar por `-`
+  (`/^[a-z0-9][a-z0-9-]{1,59}$/`, y `{1,39}` en las habilidades); (b) un agente solo se ofrece si está en la lista
+  cerrada del catálogo de RSC (`media/agentes-del-catalogo.json`, que una prueba compara con `stackAgentNames()` del
+  paquete) y además lo apunta `.rsc.json`: lo que diga `.rsc.json` lo escribe quien hizo la carpeta; (c) `quitarAgente`
+  vuelve a comprobar las dos cosas antes de correr nada, para un mensaje a mano. **No se usa `--` como fin de
+  opciones**: el analizador de RSC (`rsc.js`) lo salta como a cualquier `--algo` y no lo entiende como separador,
+  así que no protege y no se pasa.
+- **`recuperar` seguía aunque no hubiera guardado nada.** `lasRutasDeLaSalida` descartaba en silencio las rutas que no
+  cuadraban con la carpeta (en Windows, `C:\` frente a `c:\`), y con ellas la copia de lo de ahora. Ahora cuenta las
+  rutas de `--dry-run` antes de filtrar: con 0, o con alguna que no es de la carpeta, no se restaura y se dice
+  («No he tocado nada: …»). Se compara con `path.relative` (`path.win32` sin distinguir mayúsculas en Windows) y con
+  `fs.realpathSync.native`. Y tras el sí se vuelve a correr `--dry-run`: si la lista cambió, no se restaura (la copia de
+  lo de ahora cubre exactamente lo que se toca).
+- **Texto:** el agente cuyo fichero sigue ya no dice por qué (antes: «lo necesita una habilidad», que era una suposición).
+
+Pruebas: una comprobación nueva para el `--all` (cada guarda sola, el manejador con el mensaje a mano, y nada corrido) y
+casos nuevos en la de recuperar (ruta de fuera, 0 rutas, lista que cambia, y letra de unidad en otra caja con un RSC de
+mentira que escribe `c:\…`). 10 mutaciones, 8 tumbadas; las dos vivas son equivalentes: `path.win32.relative` ya
+ignora la caja por sí mismo, y una ruta relativa se resuelve contra la carpeta de trabajo y cae fuera de todos modos.
+
 
 ## 174. Las pruebas no fallan en falso
 

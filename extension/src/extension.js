@@ -47,6 +47,7 @@ const git = require('./git');
 const github = require('./github');
 const terreno = require('./terreno');
 const saberes = require('./saberes');
+const deshacer = require('./deshacer');
 const salidas = require('./salidas');
 // La foto del cerebro (decisión 151): el dibujo es puro; aquí solo se lee y se guarda.
 const foto = require('./foto');
@@ -63,11 +64,11 @@ const solo = require('./solo');
 // P9: la carpeta que este ordenador ya conoce, los botones que corren el arnés o
 // tocan sus copias, y lo que se dice si se pulsan mientras la barra arregla sola.
 const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
-const LOS_DEL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'prepararTambien', 'aprenderCapacidad']);
+const LOS_DEL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'prepararTambien', 'aprenderCapacidad', 'quitarHabilidad', 'quitarAgente', 'recuperarLoQueHabia']);
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // En una carpeta que va por delante, lo que escribe con el arnés espera a que la
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
-const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad']);
+const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad', 'cambiarInterruptor', 'quitarHabilidad', 'quitarAgente', 'recuperarLoQueHabia']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
@@ -1216,6 +1217,99 @@ ${cabecera}
     });
   }
 
+  // ── Deshacer con RSC (decisión 173) ──────────────────────────────────
+  //
+  // Quitar una habilidad o un agente que se añadió, y volver a la copia que guardó
+  // RSC al montar. Las dos cosas borran o sustituyen ficheros: con el clic de la
+  // persona y una pregunta que dice qué se va a quitar, nunca solas (P9). Lo que se
+  // ofrece se vuelve a decidir aquí, con lo que hay en el disco: el panel solo dice
+  // qué botón se pulsó.
+  async quitarHabilidad(id) {
+    const ella = saberes.queSabe(this.contexto.extensionPath, this.corpus()).sabe.find((c) => c.id === id && c.quitable);
+    if (!ella) return this.enviar({ tipo: 'aviso', texto: 'Esa habilidad no se puede quitar desde aquí.', malo: true });
+    const seguro = await vscode.window.showWarningMessage(
+      `Voy a quitar «${ella.nombre}» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede volver a añadir desde el catálogo.`,
+      { modal: true },
+      'Sí, quítala',
+    );
+    if (seguro !== 'Sí, quítala') return undefined;
+    this.enviar({ tipo: 'esperando', que: `Quitando ${ella.nombre}…` });
+    const hecho = await deshacer.quitar(id);
+    this.salida.appendLine(`[quitar] ${id}: ${hecho.ok}${hecho.dijo ? ` · ${hecho.dijo}` : ''}`); // diccionario: interno
+    await this.refrescar(true);
+    await this.verSaberes();
+    return this.enviar({
+      tipo: 'aviso',
+      texto: hecho.ok
+        ? `${ella.nombre} ya no está puesta.`
+        : `No he podido quitar ${ella.nombre}.${hecho.dijo ? ` El arnés ha dicho: «${hecho.dijo}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`,
+      malo: !hecho.ok,
+    });
+  }
+
+  async quitarAgente(fichero) {
+    const el = agentes.queHay().find((a) => a.fichero === fichero && a.quitable);
+    const donde2 = el && agentes.dondeVive(fichero);
+    if (!el || !donde2) return this.enviar({ tipo: 'aviso', texto: 'Ese agente no se puede quitar desde aquí.', malo: true });
+    const nombre = el.nombre.charAt(0).toUpperCase() + el.nombre.slice(1);
+    const seguro = await vscode.window.showWarningMessage(
+      `Voy a quitar el agente «${nombre}» de esta carpeta: se borra su fichero y queda apuntado como no puesto.`,
+      { modal: true },
+      'Sí, quítalo',
+    );
+    if (seguro !== 'Sí, quítalo') return undefined;
+    this.enviar({ tipo: 'esperando', que: `Quitando ${nombre}…` });
+    const hecho = await deshacer.quitarAgente(el.id, [donde2]);
+    this.salida.appendLine(`[quitar] agente ${el.id}: ${hecho.ok}${hecho.dijo ? ` · ${hecho.dijo}` : ''}`); // diccionario: interno
+    await this.refrescar(true);
+    await this.verAgentes();
+    let texto = `${nombre} ya no está puesto.`;
+    // Si el fichero sigue, se dice eso y no se inventa por qué.
+    if (hecho.siguePuesto) texto = `No se ha podido quitar ${nombre}: sigue puesto.`;
+    else if (!hecho.ok) texto = `No he podido quitar ${nombre}.${hecho.dijo ? ` El arnés ha dicho: «${hecho.dijo}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`;
+    return this.enviar({ tipo: 'aviso', texto, malo: !hecho.ok });
+  }
+
+  // Por qué no se ha podido mirar qué cambiaría; en ningún caso se ha tocado nada.
+  noSePuedeMirar(toca) {
+    this.salida.appendLine(`[recuperar] ${toca.motivo || toca.dijo || ''}`); // diccionario: interno
+    if (toca.motivo === 'vacia') return 'No he tocado nada: no he podido saber qué cambiaría.';
+    if (toca.motivo === 'ajenas') return 'No he tocado nada: el arnés ha nombrado sitios que no reconozco en esta carpeta.';
+    return `No he podido mirar qué cambiaría.${toca.dijo ? ` El arnés ha dicho: «${toca.dijo}».` : ''} No he tocado nada.`;
+  }
+
+  async recuperarLoQueHabia() {
+    const copia = ideas.laCopiaDelMontaje(proyecto.raiz());
+    if (!copia) return this.enviar({ tipo: 'aviso', texto: 'Esa copia ya no está.', malo: true });
+    // Lo que RSC tocaría, sin tocar nada: para decirle a la persona cuántos sitios son.
+    const toca = await deshacer.loQueTocaria(copia.id);
+    if (!toca.ok) return this.enviar({ tipo: 'aviso', texto: this.noSePuedeMirar(toca), malo: true });
+    const sitios = toca.rutas.length === 1 ? '1 sitio' : `${toca.rutas.length} sitios`;
+    const seguro = await vscode.window.showWarningMessage(
+      `Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes, lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos ${sitios} se pierde. Antes guardo una copia de lo de ahora.`,
+      { modal: true },
+      'Sí, recupéralo',
+    );
+    if (seguro !== 'Sí, recupéralo') return undefined;
+    // Otra vez, justo antes: la copia de lo de ahora tiene que cubrir exactamente lo que se va a tocar.
+    const otra = await deshacer.loQueTocaria(copia.id);
+    if (!otra.ok) return this.enviar({ tipo: 'aviso', texto: this.noSePuedeMirar(otra), malo: true });
+    if ([...otra.rutas].sort().join('\n') !== [...toca.rutas].sort().join('\n')) {
+      return this.enviar({ tipo: 'aviso', texto: 'No he tocado nada: lo que iba a cambiar ya no es lo mismo. Vuelve a pulsar «Recuperar lo que había».', malo: true });
+    }
+    this.enviar({ tipo: 'esperando', que: 'Recuperando lo que había…' });
+    const hecho = await deshacer.recuperar(copia.id, otra.rutas);
+    this.salida.appendLine(`[recuperar] ${copia.id}: ${hecho.ok}${hecho.dijo ? ` · ${hecho.dijo}` : ''}`); // diccionario: interno
+    await this.refrescar(true);
+    await this.verCopias();
+    const dondeLoDeAhora = hecho.guardado ? path.relative(proyecto.raiz(), hecho.guardado).split(path.sep).join('/') : null;
+    let texto;
+    if (!hecho.guardado) texto = 'No he tocado nada: no he podido guardar antes una copia de lo de ahora.';
+    else if (hecho.ok) texto = `Hecho: la carpeta está como antes de montar el arnés. Lo de antes de recuperar está en ${dondeLoDeAhora}.`;
+    else texto = `No he podido recuperarlo, y puede haber quedado a medias.${hecho.dijo ? ` El arnés ha dicho: «${hecho.dijo}».` : ''} Lo de antes está en ${dondeLoDeAhora}. Pulsa «Algo va mal» y pásale el código a tu tutor.`;
+    return this.enviar({ tipo: 'aviso', texto, malo: !hecho.ok });
+  }
+
   async manejar(mensaje) {
     const rutas = {
       listo: () => this.refrescar(),
@@ -1318,6 +1412,7 @@ ${cabecera}
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
+      cambiarInterruptor: () => this.cambiarInterruptor(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
       // Sin `que`, todo lo de la barra; con una lista, solo eso; con otra cosa, nada.
@@ -1361,6 +1456,10 @@ ${cabecera}
       entendidoLoQueParece: () => this.entendidoLoQueParece(),
       verLaCopiaDelMontaje: () => this.verLaCopiaDelMontaje(),
       aprenderCapacidad: () => this.aprenderCapacidad(mensaje.capacidad, mensaje.nombre),
+      // Decisión 173: quitar lo que se añadió y volver a la copia, con la pregunta delante.
+      quitarHabilidad: () => this.quitarHabilidad(mensaje.habilidad),
+      quitarAgente: () => this.quitarAgente(mensaje.fichero),
+      recuperarLoQueHabia: () => this.recuperarLoQueHabia(),
       verEditorCompleto: () => this.verEditorCompleto(),
       modoSencillo: () => this.modoSencillo(),
     };
@@ -2763,9 +2862,47 @@ ${cabecera}
   // Las reglas que el asistente respeta siempre. Son tres sitios de RSC y no se
   // veía ninguno — y uno de ellos, la constitución, es de los dos ficheros que
   // el arnés marca como "léete esto antes de cada cosa que hagas".
-  async verReglas() {
+  async verReglas(avisoLocal = null) {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'reglas', ...reglas.queHay() });
+    this.enviar({ tipo: 'reglas', ...reglas.queHay(), ...(avisoLocal ? { aviso: avisoLocal } : {}) });
+  }
+
+  // Los interruptores de RSC, a un clic (decisión 172): la rama principal, el
+  // trabajo aparte y compartir el conocimiento. El clic es el sí de la persona (P9);
+  // lo que cambia lo cambia la orden oficial del arnés, por la misma vía que todo
+  // lo que la barra le manda (`rsc.correr`: nombres que salen de la carpeta, carpeta
+  // que va por delante, relevo), y después se mira el disco: se dice lo que ha pasado
+  // de verdad, no lo que RSC contesta.
+  async cambiarInterruptor(boton) {
+    const decir = (texto, malo = false) => this.verReglas({ texto, malo });
+    // `boton` solo elige de una tabla de la barra: la orden no viene del panel.
+    const que = reglas.elBoton(boton);
+    if (!que) return decir('Eso ya no se puede cambiar desde aquí. Pídeselo al asistente.', true);
+    if (vscode.workspace.isTrusted === false) return decir('Esta carpeta no es de confianza en el editor, y la barra no cambia nada en ella. Si confías en ella, dale tu confianza y vuelve a pulsar.', true);
+    if (!proyecto.raiz() || !proyecto.existe('.rsc.json')) return decir('Esta carpeta todavía no está preparada. Prepárala y vuelve a pulsar.', true);
+    if (this.conElArnes()) return decir(OCUPADA, true);
+
+    this.botonesDelArnes = (this.botonesDelArnes || 0) + 1;
+    let hecho;
+    try {
+      this.enviar({ tipo: 'esperando', que: 'Cambiándolo…' });
+      hecho = await rsc.correr(que.args, { tiempoMaximo: 120000 });
+    } finally {
+      this.botonesDelArnes -= 1;
+    }
+    const salida = String(hecho.error || hecho.salida || '').trim();
+    this.salida.appendLine(`[interruptor] ${que.args.join(' ')}: ${hecho.codigo}${salida ? ` · ${salida}` : ''}`); // diccionario: interno
+    if (hecho.porDelante) return decir(POR_DELANTE, true);
+    if (hecho.codigo !== 0) {
+      // Con lo que el arnés ha dicho, sin claves y sin pasarse de largo.
+      const suya = conexiones.taparClaves(salida).split('\n').filter(Boolean).slice(-3).join(' · ').slice(0, 300);
+      return decir(`No he podido cambiarlo.${suya ? ` El arnés dice: «${suya}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`, true);
+    }
+    // El arnés dijo que sí: se mira en el disco que la carpeta haya quedado como toca.
+    if (reglas.estadoDe(que.cual) !== que.llega) {
+      return decir('El arnés dice que lo ha hecho, pero la carpeta sigue igual. Pulsa «Algo va mal» y pásale el código a tu tutor.', true);
+    }
+    return decir(`Hecho. ${reglas.INTERRUPTORES[que.cual].dice[que.llega]}`);
   }
 
   // ── Los raíles de esta carpeta, al día ─────────────────────────────────

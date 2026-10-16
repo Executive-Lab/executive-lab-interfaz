@@ -501,7 +501,9 @@ const filaDeHabilidad = (c) => (c.siempre
   accion: { tipo: 'pedir', prompt: c.prompt },
   nombreReal: c.prompt && c.prompt.startsWith('/') ? c.prompt : c.id,
   seEscribe: Boolean(c.prompt && c.prompt.startsWith('/')),
-  dentro: ORIGEN[c.origen] ? `<p>${ORIGEN[c.origen]}</p>` : '',
+  dentro: `${ORIGEN[c.origen] ? `<p>${ORIGEN[c.origen]}</p>` : ''}${c.quitable
+    ? boton({ etiqueta: 'Quitarla', icono: '🗑️', pequeno: true, discreto: true, accion: { tipo: 'quitarHabilidad', habilidad: c.id, nombre: c.nombre } })
+    : ''}`,
 }));
 
 // Una del catálogo que todavía no está: se pulsa y se añade (`rsc add`).
@@ -651,7 +653,7 @@ const MARCA_GUARDIAN = { armado: '●', apagado: '○', noAplica: '·', pendient
 
 function pantallaReglas({
   innegociables = [], deLaCasa = [], guardianes = [], automatismos = [], hay = {}, cual = 'claude',
-  puedeTenerFrenos = true,
+  puedeTenerFrenos = true, interruptores = [], aviso: avisoLocal,
 }) {
   const lista = (reglas, vacio, comoQuitar) => (reglas.length
     ? reglas.map((r) => `<div class="entrada"><p class="nombre">${enLinea(r)}</p></div>`).join('')
@@ -659,7 +661,7 @@ function pantallaReglas({
 
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Las reglas' }])}
-    ${bloqueAviso()}
+    ${bloqueAviso(avisoLocal)}
     ${volver()}
 
     <div class="brujula">
@@ -688,6 +690,20 @@ function pantallaReglas({
       icono: '🚫',
       accion: { tipo: 'pedir', prompt: 'Hay cosas que no quiero que hagas nunca en esta carpeta. Pregúntame cuáles son, una a una, y déjalas escritas donde te las leas siempre.' },
     })}
+
+    ${/* Lo que se cambia con un clic (decisión 172): cómo está, qué cambia y su
+          botón. El clic es el sí de quien lo pulsa; lo hace la orden del arnés. */''}
+    ${interruptores.length ? `
+      <hr class="separador">
+      <h2>Cómo trabaja el asistente</h2>
+      ${interruptores.map((i) => `
+        <div class="pieza si">
+          <span class="pieza-nombre">${texto(i.nombre)}</span>
+        </div>
+        <p class="detalle">${texto(i.dice)} ${texto(i.equipo)}</p>
+        ${i.botones.map((b) => `
+          <p class="detalle">${texto(b.queCambia)}</p>
+          ${boton({ etiqueta: b.etiqueta, icono: '🔧', pequeno: true, accion: { tipo: 'cambiarInterruptor', cual: b.id } })}`).join('')}`).join('')}` : ''}
 
     ${/* Lo único del arnés que puede decir que NO. Va al final y plegado
           (decisión 101): es automático y de dentro, así que casi nunca se abre.
@@ -911,7 +927,8 @@ function pantallaAgentes({ agentes = [] }) {
         nombreReal: a.id || a.fichero.replace(/\.[^.]+$/, ''),
         // El encargo entero va detrás de la (i): interesa una vez, y antes
         // competía con el botón que de verdad se pulsa.
-        dentro: boton({ etiqueta: 'Ver sus instrucciones', icono: '📄', pequeno: true, discreto: true, accion: { tipo: 'verAgente', fichero: a.fichero } }),
+        dentro: boton({ etiqueta: 'Ver sus instrucciones', icono: '📄', pequeno: true, discreto: true, accion: { tipo: 'verAgente', fichero: a.fichero } })
+          + (a.quitable ? boton({ etiqueta: 'Quitarlo', icono: '🗑️', pequeno: true, discreto: true, accion: { tipo: 'quitarAgente', fichero: a.fichero, nombre: a.nombre } }) : ''),
       }))).join('')
       : nada('Todavía no hay ninguno.')}
 
@@ -3310,7 +3327,8 @@ function pantallaCopias({ copias, delMontaje = null }) {
     <hr class="separador">
     <h2>Copias que guarda el arnés</h2>
     <p class="detalle">${texto(delMontaje.texto)}</p>
-    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}` : '';
+    ${boton({ etiqueta: 'Ver la copia', icono: '🗂️', pequeno: true, accion: delMontaje.accion })}
+    ${boton({ etiqueta: 'Recuperar lo que había', icono: '↩️', pequeno: true, discreto: true, accion: { tipo: 'recuperarLoQueHabia' } })}` : '';
 
   if (!copias.length) {
     return `<p class="titulo">Volver atrás</p>${nada('Todavía no has guardado ninguna copia.')}${delArnes}${volver()}`;
