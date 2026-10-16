@@ -7393,7 +7393,7 @@ exec git "$@"
     }
   });
 
-  await comprobar('la rama principal, el trabajo aparte y compartir el conocimiento se cambian con un clic, por la orden de RSC (decisión 172)', async () => {
+  await comprobar('la rama principal, el trabajo aparte, compartir el conocimiento y recordar entre conversaciones se cambian con un clic, por la orden de RSC (decisiones 172 y 176)', async () => {
     const reglas = cargar('reglas');
     const rscM = cargar('rsc');
     const p = require('./panel-falso').montarPanel();
@@ -7422,6 +7422,9 @@ exec git "$@"
       'isolation on': () => quitar('.no-worktree-isolation'),
       'knowledge-sync off': () => poner('.no-knowledge-sync'),
       'knowledge-sync on': () => quitar('.no-knowledge-sync'),
+      // `memory on|off` (scripts/rsc.js, 3.0.22): lo apunta en `.rsc.json`, no en `.rsc/`.
+      'memory off': () => declarar({ memory: false }),
+      'memory on': () => declarar({ memory: { enabled: true } }),
     };
     rscM.correr = async (args) => {
       llamadas.push(args);
@@ -7440,11 +7443,11 @@ exec git "$@"
     };
     try {
       // Cómo está cada uno, y los botones que tocan; sin marcas, la rama la decide el proyecto: los dos.
-      assert.deepEqual(Object.keys(losDe()), ['principal', 'aparte', 'wiki']);
+      assert.deepEqual(Object.keys(losDe()), ['principal', 'aparte', 'wiki', 'memoria']);
       assert.deepEqual(losDe().principal.botones.map((b) => b.id), ['principal-cerrar', 'principal-abrir']);
-      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Abrir la rama principal', 'Apagar el trabajo aparte', 'Dejar de compartir el conocimiento']);
+      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Abrir la rama principal', 'Apagar el trabajo aparte', 'Dejar de compartir el conocimiento', 'Dejar de recordar entre conversaciones']);
       poner('.no-trunk-guard', '.no-worktree-isolation', '.no-knowledge-sync');
-      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Encender el trabajo aparte', 'Compartir el conocimiento']);
+      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Encender el trabajo aparte', 'Compartir el conocimiento', 'Dejar de recordar entre conversaciones']);
       assert.equal(losDe().principal.estado, 'abierta');
       quitar('.no-trunk-guard'); poner('.no-trunk-open');
       assert.deepEqual([losDe().principal.estado, losDe().principal.botones.map((b) => b.etiqueta)], ['cerrada', ['Abrir la rama principal']]);
@@ -7452,14 +7455,17 @@ exec git "$@"
       assert.equal(losDe().principal.estado, 'abierta', 'abierta manda sobre cerrada, como en trunkPolicy');
       quitar('.no-trunk-open');
       assert.match(losDe().principal.equipo, /decisión del equipo.*git/, 'dice que es del equipo');
+      assert.match(losDe().memoria.equipo, /decisión del equipo.*git/, 'la memoria también va a .rsc.json');
+      assert.deepEqual([losDe().memoria.estado, losDe().memoria.dice], ['encendido', 'El asistente se acuerda de lo que hicisteis la última vez y sigue por ahí.']);
 
       // En la pantalla: un botón por orden, que manda solo su nombre, con lo que cambia.
       const html = p.mandar({ tipo: 'reglas', ...reglas.queHay() });
       assert.match(html, /Cómo trabaja el asistente/);
-      for (const id of ['principal-cerrar', 'aparte-encender', 'wiki-compartir']) assert.ok(html.includes(`&quot;cual&quot;:&quot;${id}&quot;`), `sin botón ${id}`);
+      for (const id of ['principal-cerrar', 'aparte-encender', 'wiki-compartir', 'memoria-dejar']) assert.ok(html.includes(`&quot;cual&quot;:&quot;${id}&quot;`), `sin botón ${id}`);
       assert.match(html, /Si la cierras, el asistente trabaja en una copia aparte/);
       assert.match(html, /Es una decisión del equipo/);
-      assert.ok(!/main lock|unlock|knowledge-sync|\.no-|&quot;args/.test(html), 'sale el nombre de una orden, de una marca o la orden misma');
+      assert.match(html, /Si lo dejas, el asistente empieza cada conversación de cero\./);
+      assert.ok(!/main lock|unlock|knowledge-sync|memory (on|off)|\.no-|&quot;args/.test(html), 'sale el nombre de una orden, de una marca o la orden misma');
 
       // Cada botón llama a la orden oficial, sin escribir las marcas a mano, y dice lo que ha pasado.
       let r = await pulsar('principal-cerrar');
@@ -7476,6 +7482,15 @@ exec git "$@"
       await pulsar('principal-abrir'); assert.deepEqual(llamadas.pop(), ['main', 'unlock']); assert.ok(hay('.no-trunk-guard') && !hay('.no-trunk-open'));
       await pulsar('aparte-apagar'); assert.deepEqual(llamadas.pop(), ['isolation', 'off']); assert.ok(hay('.no-worktree-isolation'));
       await pulsar('wiki-dejar'); assert.deepEqual(llamadas.pop(), ['knowledge-sync', 'off']); assert.ok(hay('.no-knowledge-sync'));
+      // La memoria: la orden oficial, `.rsc.json` y lo que dice la pantalla.
+      r = await pulsar('memoria-dejar');
+      assert.deepEqual(llamadas.pop(), ['memory', 'off']);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8')).memory, false);
+      assert.deepEqual([r.aviso.malo, r.aviso.texto], [false, 'Hecho. El asistente empieza cada conversación de cero.']);
+      assert.deepEqual(r.interruptores.find((i) => i.cual === 'memoria').botones.map((b) => b.etiqueta), ['Recordar entre conversaciones']);
+      r = await pulsar('memoria-recordar');
+      assert.deepEqual(llamadas.pop(), ['memory', 'on']);
+      assert.equal(r.aviso.texto, 'Hecho. El asistente se acuerda de lo que hicisteis la última vez y sigue por ahí.');
       assert.equal(llamadas.length, 0);
 
       // Si RSC falla, se dice con lo que ha dicho, y no se da nada por hecho.
@@ -7513,16 +7528,34 @@ exec git "$@"
       assert.deepEqual(reglas.queHay().interruptores, [], 'con un arnés de la 2 no hay nada que ofrecer: no trae esas órdenes');
       r = await pulsar('principal-cerrar');
       assert.match(r.aviso.texto, /Eso ya no se puede cambiar/);
+      r = await pulsar('memoria-dejar');
+      assert.match(r.aviso.texto, /Eso ya no se puede cambiar/);
       fs.renameSync(marca('guardada.mjs'), marca('trunk-policy.mjs'));
+      // Con Codex no hay frenos, así que no salen los tres; la memoria sí, que RSC la monta también para Codex.
       declarar({ targets: ['codex'] });
-      assert.deepEqual(reglas.queHay().interruptores, [], 'con Codex no hay frenos, y se ofrece cambiar uno');
+      assert.deepEqual(Object.keys(losDe()), ['memoria'], 'con Codex no hay frenos, y se ofrece cambiar uno');
+      r = await pulsar('principal-cerrar');
+      assert.match(r.aviso.texto, /Eso ya no se puede cambiar/);
+      r = await pulsar('memoria-dejar');
+      assert.match(r.aviso.texto, /^Hecho\./, 'la memoria también va con Codex');
+      assert.deepEqual(llamadas.splice(0), [['memory', 'off']]);
+      // Con otro asistente (Cursor, Gemini…) la barra no la ofrece, ni la manda.
+      declarar({ targets: ['cursor'] });
+      assert.deepEqual(reglas.queHay().interruptores, []);
+      r = await pulsar('memoria-dejar');
+      assert.match(r.aviso.texto, /Eso ya no se puede cambiar/);
+      // Apagada en la declaración, sin que quede nada montado (RSC no deja la pieza con una carpeta sin ella): sigue saliendo para encenderla.
+      declarar({ memory: false });
+      fs.rmSync(marca('trunk-policy.mjs'));
+      assert.deepEqual(losDe().memoria.botones.map((b) => b.id), ['memoria-recordar']);
+      fs.writeFileSync(marca('trunk-policy.mjs'), '// pieza del arnés');
       declarar({});
       proveedor.arreglandoSolo = true;
       r = await pulsar('principal-cerrar');
       proveedor.arreglandoSolo = false;
       assert.match(r.aviso.texto, /Estoy arreglando esta carpeta/);
       assert.equal(llamadas.length, 0, `se ha corrido ${JSON.stringify(llamadas)}`);
-      return 'tres interruptores, seis órdenes, y nada se da por hecho';
+      return 'cuatro interruptores, ocho órdenes, y nada se da por hecho';
     } finally {
       rscM.correr = antes.correr;
       proveedor.enviar = antes.enviar;
@@ -13823,7 +13856,7 @@ exec git "$@"
     vscode.guion.raiz = r;
     try {
       assert.equal(rscM.vaPorDelante(), true);
-      for (const orden of [['sync'], ['repair'], ['add', 'bookkeeping'], ['git-permissions', 'off'], ['knowledge-sync', 'on']]) {
+      for (const orden of [['sync'], ['repair'], ['add', 'bookkeeping'], ['git-permissions', 'off'], ['knowledge-sync', 'on'], ['memory', 'off']]) {
         const hecho = await rscM.correr(orden);
         assert.equal(hecho.porDelante, true, `${orden.join(' ')} se corre en una carpeta que va por delante`);
       }
@@ -13831,7 +13864,7 @@ exec git "$@"
       for (const orden of [['doctor', '--json'], ['memory', 'resume'], ['repair', '--dry-run'], ['git-permissions', 'status']]) await rscM.correr(orden);
       assert.equal(lanzados.length, 4, 'mirar no se deja');
       assert.ok(!lanzados.some((a) => a.some((x) => /npx|@ericrisco\/rsc@/.test(String(x)))), `se ha usado npx: ${JSON.stringify(lanzados)}`);
-      return 'cinco órdenes que escriben, paradas; cuatro que miran, con la de dentro; npx, nunca';
+      return 'seis órdenes que escriben, paradas; cuatro que miran, con la de dentro; npx, nunca';
     } finally {
       Object.assign(procesosM, { node: antes.node, delPath: antes.delPath });
       entornoM.npxCli = antes.npxCli;
@@ -24722,7 +24755,7 @@ exec git "$@"
       const botones = cargar('acciones').acciones().map((a) => a.etiqueta);
       assert.deepEqual(botones.sort(), ['Empezar algo nuevo', 'No sé qué hacer ahora', 'Seguir donde lo dejé']);
 
-      // Y los tres interruptores de «Las reglas» (decisión 172), con el RSC de verdad:
+      // Y los cuatro interruptores de «Las reglas» (decisiones 172 y 176), con el RSC de verdad:
       // cada botón llama a su orden, la marca cambia, `.rsc.json` lo apunta, y vuelta.
       {
         const proveedor = vscode.registrado.proveedor;
@@ -24736,7 +24769,7 @@ exec git "$@"
         const botones = () => reglasM.losInterruptores().flatMap((i) => i.botones.map((b) => b.id));
         try {
           // Recién montada: la rama abierta, el trabajo aparte apagado y sin compartir.
-          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir'], 'los botones de una carpeta recién montada');
+          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir', 'memoria-dejar'], 'los botones de una carpeta recién montada');
           for (const [ir, volver, marca, optOut, estaba, llega] of [
             ['principal-cerrar', 'principal-abrir', '.no-trunk-guard', 'trunk-guard', 'abierta', 'cerrada'],
             ['aparte-encender', 'aparte-apagar', '.no-worktree-isolation', 'worktree-isolation', 'apagado', 'encendido'],
@@ -24758,7 +24791,28 @@ exec git "$@"
             assert.ok(marcaDe(marca) && optOuts().includes(optOut), `${volver}: no vuelve`);
             assert.equal(reglasM.estadoDe(cual), estaba);
           }
-          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir'], 'queda como estaba');
+          // La memoria (decisión 176), con el RSC de verdad: `.rsc.json` y los enganches de cada asistente.
+          const declaradaMemoria = () => JSON.parse(fs.readFileSync(path.join(vacia, '.rsc.json'), 'utf8')).memory;
+          const enganchada = () => ['.claude/settings.local.json', '.codex/hooks.json']
+            .filter((f) => fs.existsSync(path.join(vacia, f)) && fs.readFileSync(path.join(vacia, f), 'utf8').replaceAll('\\\\', '/').includes('.rsc/session-memory-adapter.mjs'));
+          assert.equal(reglasM.estadoDe('memoria'), 'encendido');
+          assert.notEqual(declaradaMemoria(), false);
+          const conEnganche = enganchada();
+          assert.ok(conEnganche.includes('.claude/settings.local.json'), `la memoria de Claude no está enganchada: ${conEnganche}`);
+          dichos.length = 0;
+          await proveedor.manejar({ tipo: 'cambiarInterruptor', cual: 'memoria-dejar' });
+          let aviso = dichos.filter((m) => m.tipo === 'reglas').pop().aviso;
+          assert.equal(aviso.malo, false, aviso.texto);
+          assert.equal(declaradaMemoria(), false, 'RSC no lo ha apuntado en .rsc.json');
+          assert.deepEqual(enganchada(), [], 'apagada y sigue enganchada');
+          assert.deepEqual(botones().slice(-1), ['memoria-recordar']);
+          dichos.length = 0;
+          await proveedor.manejar({ tipo: 'cambiarInterruptor', cual: 'memoria-recordar' });
+          aviso = dichos.filter((m) => m.tipo === 'reglas').pop().aviso;
+          assert.equal(aviso.malo, false, aviso.texto);
+          assert.notEqual(declaradaMemoria(), false);
+          assert.deepEqual(enganchada(), conEnganche, 'encendida y no vuelve a engancharse');
+          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir', 'memoria-dejar'], 'queda como estaba');
         } finally {
           proveedor.enviar = guardado.enviar;
           vscode.guion.confianza = guardado.confianza;
