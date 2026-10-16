@@ -328,7 +328,23 @@ async function main() {
       assert.deepEqual([...targets].sort(), ['claude', 'codex'], `RSC lo ha montado para ${targets.join(', ')}`);
       assert.ok(fs.existsSync(path.join(carpeta, '.codex', 'rsc')), 'sin las habilidades de Codex');
       assert.ok(fs.existsSync(path.join(carpeta, '.claude', 'skills')), 'sin las de Claude');
-      return `montado para ${targets.join(' y ')}`;
+      // Y los raíles, para cada uno: las habilidades de los raíles donde las lee
+      // cada uno, `.claude/skills` y `.agents/skills`, y las que llevan botón
+      // (decisión 141), con su botón en la cabecera.
+      assert.ok(await arrancar.ponerLosRailes({ extensionPath: RAIZ }), 'los raíles no se ponen');
+      const cabecera = (texto) => (texto.match(/^---\r?\n([\s\S]*?)\r?\n---/) || [])[1] || '';
+      const fuentes = path.join(RAIZ, 'media', 'railes', 'comandos');
+      const DE_LOS_RAILES = fs.readdirSync(fuentes).map((f) => f.replace(/\.md$/, '')).sort();
+      const BOTONES = DE_LOS_RAILES.filter((id) => /^boton:/m.test(cabecera(fs.readFileSync(path.join(fuentes, `${id}.md`), 'utf8'))));
+      assert.ok(BOTONES.length, 'los raíles no traen ninguna con botón: la prueba no mira nada');
+      for (const donde of [['.claude', 'skills'], ['.agents', 'skills']]) {
+        const suya = (id) => path.join(carpeta, ...donde, id, 'SKILL.md');
+        const faltan = DE_LOS_RAILES.filter((id) => !fs.existsSync(suya(id)));
+        assert.deepEqual(faltan, [], `en ${donde.join('/')} faltan habilidades de los raíles`);
+        const conBoton = DE_LOS_RAILES.filter((id) => /^\s*boton:/m.test(cabecera(fs.readFileSync(suya(id), 'utf8'))));
+        assert.deepEqual(conBoton, BOTONES, `en ${donde.join('/')} no salen los botones`);
+      }
+      return `montado para ${targets.join(' y ')}, con ${BOTONES.length} habilidades con botón para cada uno`;
     } finally {
       vscode.guion.extensionesInstaladas = antes.instaladas;
       if (antes.ajuste === undefined) delete vscode.registrado.ajustes.global['executiveLab.asistente'];

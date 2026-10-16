@@ -395,7 +395,17 @@ ${cabecera}
   // arnés. Lo que tocaría algo suyo no se hace solo (P4): se deja a un clic. Sin
   // el otro en el ordenador, se ofrece ponerlo. Y los botones siguen hablando con
   // el de antes: preparar no es cambiar de asistente.
-  async prepararParaLosDos() {
+  //
+  // Una sola a la vez: la del arranque y la de cambiar el ajuste podían correr
+  // juntas y preparar dos veces. La segunda se queda con la que ya está en marcha.
+  prepararParaLosDos() {
+    if (!this.preparando) this.preparando = this.prepararParaLosDosYa().finally(() => { this.preparando = null; });
+    return this.preparando;
+  }
+
+  // Para cuáles falta prepararla ahora mismo, con las guardas de lo que se hace
+  // solo. Vacío si no toca.
+  faltaParaLosDos() {
     if (asistentes.elAjuste() !== 'losDos') return [];
     if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return [];
     const declarados = (proyecto.declaracion() || {}).targets;
@@ -411,16 +421,22 @@ ${cabecera}
       this.salida.appendLine('[losDos] carpeta de un arnés más nuevo que el de la clase: no se toca sola'); // diccionario: interno
       return [];
     }
+    return faltan;
+  }
 
+  async prepararParaLosDosYa() {
+    const faltan = this.faltaParaLosDos();
     for (const otro of faltan.filter((a) => !asistentes.estaInstalado(a))) {
       const poner = `Poner ${otro.nombre}`;
       this.unaVez(`poner:${otro.id}`, async () => {
         const quiere = await vscode.window.showInformationMessage(`En los ajustes elegiste los dos asistentes, y ${otro.nombre} no está en este ordenador. ¿Lo pongo?`, poner);
-        if (quiere === poner && await arrancar.ponerElAsistente(otro)) await this.prepararParaLosDos();
+        if (quiere !== poner || !(await arrancar.ponerElAsistente(otro))) return;
+        // Después de la que esté en marcha, que no lo contaba.
+        await this.preparando;
+        await this.prepararParaLosDos();
       });
     }
-    const listos = faltan.filter(asistentes.estaInstalado);
-    if (!listos.length) return [];
+    if (!faltan.some(asistentes.estaInstalado)) return [];
 
     const vueltas = this.vueltasDeEspera === undefined ? 360 : this.vueltasDeEspera; // tres minutos
     for (let i = 0; i < vueltas && this.conElArnes(); i += 1) await new Promise((r) => setTimeout(r, 500));
@@ -428,6 +444,10 @@ ${cabecera}
       this.salida.appendLine('[losDos] el arnés sigue ocupado: se deja para otra vez'); // diccionario: interno
       return [];
     }
+    // Mientras esperaba ha podido cambiar todo: el ajuste, la confianza, lo
+    // montado o la carpeta. Se mira otra vez.
+    const listos = this.faltaParaLosDos().filter(asistentes.estaInstalado);
+    if (!listos.length) return [];
     const conQuienAntes = asistentes.conQuien();
     const hechos = [];
     this.arreglandoSolo = true;

@@ -160,13 +160,14 @@ async function ponerUnAsistente() {
   return (await ponerElAsistente(cual.asistente)) ? cual.asistente.id : null;
 }
 
-// Ponerlo en el ordenador, con su botón ya pulsado. Si no se puede, se dice.
-async function ponerElAsistente(asistente) {
+// Ponerlo en el ordenador, con su botón ya pulsado. Si no se puede, se dice, salvo
+// que lo diga quien llama (`callado`).
+async function ponerElAsistente(asistente, { callado = false } = {}) {
   try {
     await vscode.commands.executeCommand('workbench.extensions.installExtension', asistente.extension);
     return true;
   } catch {
-    await vscode.window.showWarningMessage(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    if (!callado) await vscode.window.showWarningMessage(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return false;
   }
 }
@@ -192,10 +193,20 @@ async function conElAjuste(ajuste) {
 
   if (seguir && elegido === seguir) return puesto.id;
   if (elegido !== poner) return null;
+  const fallan = [];
   for (const asistente of faltan) {
-    if (!(await ponerElAsistente(asistente))) return null;
+    if (!(await ponerElAsistente(asistente, { callado: true }))) fallan.push(asistente);
   }
-  return queridos.map((a) => a.id).join(',');
+  const hay = queridos.filter((a) => !fallan.includes(a));
+  const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
+  if (!hay.length) {
+    await vscode.window.showWarningMessage(`${noSePuso}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    return null;
+  }
+  // Con los dos, si uno no se pudo poner, se sigue con el que sí está, como con
+  // «Seguir con…», y se dice.
+  if (fallan.length) await vscode.window.showWarningMessage(`${noSePuso}: sigo solo con ${hay[0].nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+  return hay.map((a) => a.id).join(',');
 }
 
 // Cómo se llama esto. Dos nombres, y los pone el alumno: para qué es esta

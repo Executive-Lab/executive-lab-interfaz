@@ -10779,7 +10779,21 @@ exec git "$@"
       r = await con('claude', ['openai.chatgpt'], { 'En los ajustes elegiste Claude': 'Poner Claude' });
       assert.equal(r.hecho, null, 'sin poderlo poner, se monta igual');
       assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.'), 'no se dice');
-      return 'ponerlo · seguir con el que hay · sin contestar · los dos · ninguno · sin poder';
+      r = await con('losDos', [], { [PIDE_NINGUNO]: 'Poner los dos' });
+      assert.equal(r.hecho, null, 'sin poder poner ninguno, se monta igual');
+      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Claude ni Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.'), 'no se dice');
+      // Con los dos, si uno no se puede poner, se sigue con el que sí está, y se dice.
+      vscode.commands.executeCommand = async (id, ...args) => {
+        if (id === 'workbench.extensions.installExtension' && args[0] === 'openai.chatgpt') throw new Error('sin red');
+        return antes.ejecutar(id, ...args);
+      };
+      r = await con('losDos', [], { [PIDE_NINGUNO]: 'Poner los dos' });
+      assert.equal(r.hecho, 'claude', 'con Claude ya puesto, no se monta');
+      assert.deepEqual(puestas(), ['anthropic.claude-code']);
+      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Codex: sigo solo con Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.'), `no se dice: ${r.vistas.map((v) => v.pregunta).join(' | ')}`);
+      r = await con('losDos', ['anthropic.claude-code'], { [PIDE_LOS_DOS]: 'Poner Codex' });
+      assert.equal(r.hecho, 'claude', 'con Claude puesto y Codex sin poder ponerse, no se monta');
+      return 'ponerlo · seguir con el que hay · sin contestar · los dos · ninguno · sin poder, y con uno que sí';
     } finally {
       ponerElAjuste(undefined);
       vscode.guion.extensionesInstaladas = antes.instaladas;
@@ -10811,6 +10825,15 @@ exec git "$@"
       memoria.set('executiveLab.conQuien', 'codex');
       assert.equal(asistentesM.conQuien().id, 'codex', 'el ajuste pisa lo elegido en la carpeta');
       memoria.delete('executiveLab.conQuien');
+      // Lo que apunta la barra sola va detrás del ajuste y delante de lo declarado.
+      memoria.set('executiveLab.conQuienPorDefecto', 'codex');
+      assert.equal(asistentesM.conQuien().id, 'claude', 'lo apuntado por la barra pisa el ajuste');
+      ponerElAjuste('losDos');
+      assert.equal(asistentesM.conQuien().id, 'codex', 'lo apuntado por la barra no cuenta');
+      ponerElAjuste(undefined);
+      assert.equal(asistentesM.conQuien().id, 'codex', 'en automático, lo apuntado por la barra no cuenta');
+      memoria.delete('executiveLab.conQuienPorDefecto');
+      ponerElAjuste('claude');
       // Con uno para el que no está montada no se habla: sería sin sus habilidades.
       ponerElAjuste('codex');
       conTargets(['claude']);
@@ -10910,12 +10933,16 @@ exec git "$@"
       correr: rscM.correr, version: proyectoM.versionDelCatalogo, enviar: proveedor.enviar, refrescar: proveedor.refrescar,
       vista: proveedor.vista, donde: proveedor.donde, confianza: vscode.guion.confianza, eleccion: vscode.guion.eleccion,
       conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'), conQuien: contexto.workspaceState.get('executiveLab.conQuien'),
+      apunte: contexto.workspaceState.get('executiveLab.conQuienPorDefecto'),
       prepararTambien: proveedor.prepararTambien, ocupados: proveedor.botonesDelArnes,
     };
+    // Si la barra está ocupada mientras corre el arnés de verdad (lo que no deja pisarla).
+    const ocupadaAlPreparar = [];
     rscM.correr = async (args) => {
       pedidos.push(args.join(' '));
       if (args[0] !== 'sync') return { codigo: 0, salida: '' };
       if (args.includes('--dry-run')) return enSeco === null ? { codigo: 1, salida: '', error: 'roto por dentro' } : { codigo: 0, salida: enSeco };
+      ocupadaAlPreparar.push(proveedor.arreglandoSolo === true);
       const d = JSON.parse(fs.readFileSync(path.join(r, '.rsc.json'), 'utf8'));
       poner('.rsc.json', JSON.stringify({ ...d, targets: ['claude', 'codex'] }, null, 2));
       poner('.claude/skills/bro/SKILL.md', '# bro\n');
@@ -10931,6 +10958,7 @@ exec git "$@"
     vscode.guion.raiz = r;
     vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
     await contexto.workspaceState.update('executiveLab.conQuien', undefined);
+    await contexto.workspaceState.update('executiveLab.conQuienPorDefecto', undefined);
     // Cuántas veces se llega a prepararla, con lo de verdad debajo.
     const arrancarM = cargar('arrancar');
     const prepararAntes = arrancarM.prepararTambienPara;
@@ -10961,6 +10989,25 @@ exec git "$@"
       assert.deepEqual(await proveedor.prepararParaLosDos(), [], 'con el arnés ocupado');
       proveedor.botonesDelArnes = antes.ocupados;
       delete proveedor.vueltasDeEspera;
+      // Sin nada declarado no se monta nada sin preguntar: eso es el montaje, con sus preguntas.
+      poner('.rsc.json', JSON.stringify({ version: 1, catalogVersion: rscM.VERSION_DE_RESPALDO, targets: [], skills: [] }, null, 2));
+      assert.deepEqual(await proveedor.prepararParaLosDos(), [], 'sin nada declarado, monta sin preguntar');
+      soloCodex();
+      // Lo que cambia mientras espera a que el arnés quede libre se mira otra vez:
+      // el ajuste, o lo montado, que otro ya la preparó.
+      proveedor.vueltasDeEspera = 3;
+      const mientras = (cambiar) => {
+        let vez = 0;
+        proveedor.conElArnes = () => { vez += 1; if (vez === 1) { cambiar(); return true; } return false; };
+      };
+      mientras(() => ponerElAjuste('automatico'));
+      assert.deepEqual(await proveedor.prepararParaLosDos(), [], 'con el ajuste cambiado mientras esperaba, la prepara igual');
+      ponerElAjuste('losDos');
+      mientras(() => poner('.rsc.json', JSON.stringify({ version: 1, catalogVersion: rscM.VERSION_DE_RESPALDO, targets: ['claude', 'codex'], skills: ['bro'] }, null, 2)));
+      assert.deepEqual(await proveedor.prepararParaLosDos(), [], 'ya preparada mientras esperaba, la prepara otra vez');
+      delete proveedor.conElArnes;
+      delete proveedor.vueltasDeEspera;
+      soloCodex();
       assert.deepEqual(pedidos, [], 'en alguno de esos casos ha corrido el arnés');
       assert.deepEqual(llamadas, [], 'en alguno de esos casos se ha intentado prepararla');
 
@@ -10975,12 +11022,20 @@ exec git "$@"
       await proveedor.prepararParaLosDos();
       await respirar();
       assert.equal(ofertas() - yaHabia, 1, 'no se ofrece ponerlo, o se ofrece cada vez');
+      // En otra carpeta es otra oferta.
+      const r2 = fs.mkdtempSync(path.join(os.tmpdir(), 'ajuste-los-dos-otra-'));
+      fs.writeFileSync(path.join(r2, '.rsc.json'), JSON.stringify({ version: 1, catalogVersion: rscM.VERSION_DE_RESPALDO, targets: ['codex'], skills: [] }, null, 2));
+      vscode.guion.raiz = r2;
+      await proveedor.prepararParaLosDos();
+      await respirar();
+      vscode.guion.raiz = r;
+      assert.equal(ofertas() - yaHabia, 2, 'en otra carpeta no se ofrece, porque ya se ofreció en esta');
       // Al volver a ponerlo en los ajustes se ofrece otra vez, y con su sí, se pone.
       vscode.guion.eleccion = 'Poner Claude';
       vscode.registrado.ejecutados.length = 0;
       await cambiarElAjuste('losDos');
       await respirar();
-      assert.equal(ofertas() - yaHabia, 2, 'al cambiar el ajuste no se vuelve a ofrecer');
+      assert.equal(ofertas() - yaHabia, 3, 'al cambiar el ajuste no se vuelve a ofrecer');
       assert.ok(vscode.registrado.ejecutados.some((e) => e.id === 'workbench.extensions.installExtension' && e.args[0] === 'anthropic.claude-code'), 'con su sí no se pone');
       vscode.guion.eleccion = undefined;
       assert.deepEqual(pedidos, [], 'sin Claude se ha corrido el arnés');
@@ -11001,9 +11056,22 @@ exec git "$@"
       pedidos.length = 0;
 
       // Con los dos puestos: se prepara, se dice en una frase y los botones siguen con Codex.
+      // Con el arnés ocupado la primera vuelta, espera; y dos a la vez (al abrir y al
+      // cambiar el ajuste) son la misma, que prepara una vez.
       assert.equal(asistentesM.conQuien().id, 'codex');
       enviados.length = 0;
-      assert.deepEqual(await proveedor.prepararParaLosDos(), ['claude']);
+      let vueltasOcupada = 0;
+      proveedor.conElArnes = () => { vueltasOcupada += 1; return vueltasOcupada === 1; };
+      proveedor.vueltasDeEspera = 3;
+      const una = proveedor.prepararParaLosDos();
+      const otra = proveedor.prepararParaLosDos();
+      assert.equal(una, otra, 'dos a la vez van cada una por su lado');
+      assert.deepEqual(await una, ['claude']);
+      delete proveedor.conElArnes;
+      delete proveedor.vueltasDeEspera;
+      assert.ok(vueltasOcupada >= 2, 'no espera a que el arnés quede libre');
+      assert.equal(pedidos.filter((p) => p === 'sync --target claude').length, 1, `prepara más de una vez: ${pedidos.join(' · ')}`);
+      assert.deepEqual(ocupadaAlPreparar, [true], 'mientras corre el arnés, la barra no está ocupada para los botones');
       assert.ok(pedidos.includes('sync --target claude'), `no se prepara con el arnés de dentro: ${pedidos.join(' · ')}`);
       assert.deepEqual(JSON.parse(fs.readFileSync(path.join(r, '.rsc.json'), 'utf8')).targets, ['claude', 'codex']);
       assert.ok(fs.existsSync(path.join(r, '.claude', 'skills', 'executive-lab', 'SKILL.md')), 'Claude, sin sus raíles');
@@ -11011,6 +11079,15 @@ exec git "$@"
       assert.deepEqual(avisos, ['He preparado esta carpeta también para Claude, como pide el ajuste de los dos asistentes.'], 'no se dice en una frase');
       assert.equal(asistentesM.conQuien().id, 'codex', 'preparar la carpeta para Claude cambia con quién hablan los botones');
       assert.equal(proveedor.arreglandoSolo, false, 'se queda ocupada');
+      // Lo que apuntó la barra no es una elección: si después se pone Claude en el
+      // ajuste, manda el ajuste. Lo que elige la persona, sí manda.
+      assert.equal(contexto.workspaceState.get('executiveLab.conQuien'), undefined, 'lo apuntado por la barra cuenta como elegido');
+      ponerElAjuste('claude');
+      assert.equal(asistentesM.conQuien().id, 'claude', 'lo apuntado por la barra manda sobre el ajuste');
+      await contexto.workspaceState.update('executiveLab.conQuien', 'codex');
+      assert.equal(asistentesM.conQuien().id, 'codex', 'el ajuste manda sobre lo que eligió la persona');
+      await contexto.workspaceState.update('executiveLab.conQuien', undefined);
+      ponerElAjuste('losDos');
       // Montada ya para los dos, no se vuelve a correr nada.
       const cuantos = pedidos.length;
       assert.deepEqual(await proveedor.prepararParaLosDos(), []);
@@ -11023,6 +11100,7 @@ exec git "$@"
       poner('.claude/skills/review/SKILL.md', '# la mía\n');
       enSeco = `Would sync claude:\n  ${path.join(r, '.claude', 'skills', 'review')}\n`;
       await contexto.workspaceState.update('executiveLab.conQuien', undefined);
+      await contexto.workspaceState.update('executiveLab.conQuienPorDefecto', undefined);
       pedidos.length = 0;
       const pulsados = [];
       proveedor.prepararTambien = async (cual) => { pulsados.push(cual); };
@@ -11058,7 +11136,7 @@ exec git "$@"
       assert.ok(conSi.vistas.some((v) => v.pregunta === 'He preparado esta carpeta también para Claude. Tu habilidad «review» ahora se llama «review-propia».'),
         conSi.vistas.map((v) => v.pregunta).join(' | '));
       assert.equal(asistentesM.conQuien().id, 'codex', 'con el botón, cambia con quién hablan los botones');
-      return 'nada en automático, sin confianza, sin conocerla, por delante u ocupada · ofrece ponerlo una vez · la prepara y lo dice · lo suyo, a un clic';
+      return 'nada en automático, sin confianza, sin conocerla, por delante, ocupada o sin montar · lo que cambia mientras espera · ofrece ponerlo una vez por carpeta · la prepara una vez y lo dice · el ajuste manda sobre lo apuntado · lo suyo, a un clic';
     } finally {
       arrancarM.prepararTambienPara = prepararAntes;
       ponerElAjuste(undefined);
@@ -11075,6 +11153,8 @@ exec git "$@"
       vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
       await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
       await contexto.workspaceState.update('executiveLab.conQuien', antes.conQuien);
+      await contexto.workspaceState.update('executiveLab.conQuienPorDefecto', antes.apunte);
+      delete proveedor.conElArnes;
     }
   });
 

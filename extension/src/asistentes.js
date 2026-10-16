@@ -93,9 +93,10 @@ function losDelArnes() {
 //
 //   1. el que se eligió en esta carpeta, si el arnés está montado para él;
 //   2. el que pide el ajuste, igual (decisión 158);
-//   3. el primero declarado que esté instalado;
-//   4. el primero declarado, aunque no esté, para poder decir qué falta;
-//   5. sin nada declarado, el que esté instalado, y si no, Claude.
+//   3. el que apuntó la barra al prepararla para el otro, igual (decisión 158);
+//   4. el primero declarado que esté instalado;
+//   5. el primero declarado, aunque no esté, para poder decir qué falta;
+//   6. sin nada declarado, el que esté instalado, y si no, Claude.
 //
 // Hablar con uno para el que no está montado el arnés sería hablar sin sus
 // habilidades, así que lo declarado va antes que lo instalado.
@@ -107,13 +108,20 @@ const CLAVE_DE_LA_ELECCION = 'executiveLab.conQuien';
 let estado = null;
 const saberDondeGuardar = (workspaceState) => { estado = workspaceState || null; };
 
-function laEleccion() {
+// Y lo que apunta la barra sola, que no es una elección: al preparar la carpeta
+// también para el otro, el asistente con el que ya se hablaba (decisión 158). Va
+// aparte para que un cambio del ajuste mande sobre él; lo elegido no.
+const CLAVE_DEL_APUNTE = 'executiveLab.conQuienPorDefecto';
+
+function leer(clave) {
   try {
-    return estado ? estado.get(CLAVE_DE_LA_ELECCION) || null : null;
+    return estado ? estado.get(clave) || null : null;
   } catch {
     return null;
   }
 }
+
+const laEleccion = () => leer(CLAVE_DE_LA_ELECCION);
 
 // ── El ajuste, para todo el editor (decisión 158) ───────────────────────
 //
@@ -150,6 +158,9 @@ function conQuien() {
   // Lo que pide el ajuste, si esta carpeta está montada para él (decisión 158).
   const delAjuste = porId(elAjuste());
   if (sePuede(delAjuste)) return delAjuste;
+  // Lo que apuntó la barra sola, que no es elegir: va detrás del ajuste.
+  const apuntado = porId(leer(CLAVE_DEL_APUNTE));
+  if (sePuede(apuntado)) return apuntado;
   return declarados.find(estaInstalado) || declarados[0] || ASISTENTES.find(estaInstalado) || ASISTENTES[0];
 }
 
@@ -184,11 +195,12 @@ function comoEstamos() {
 
 // Seguir con el de antes en esta carpeta, sin montar nada. Al prepararla también
 // para el otro por el ajuste de los dos, RSC lo pone delante en `targets`, y los
-// botones cambiarían de asistente sin que nadie lo pidiera (decisión 158).
+// botones cambiarían de asistente sin que nadie lo pidiera (decisión 158). Se
+// apunta aparte de lo elegido: si después se cambia el ajuste, manda el ajuste.
 async function seguirCon(id) {
   if (!estado || !porId(id)) return false;
   try {
-    await estado.update(CLAVE_DE_LA_ELECCION, id);
+    await estado.update(CLAVE_DEL_APUNTE, id);
     return true;
   } catch {
     return false;
