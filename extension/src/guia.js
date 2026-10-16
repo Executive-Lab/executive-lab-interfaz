@@ -37,6 +37,7 @@ const conexiones = require('./conexiones');
 const informatico = require('./informatico');
 const proyecto = require('./proyecto');
 const pdf = require('./pdf');
+const limpio = require('./limpio');
 const { quedaDentro } = require('./foto');
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -66,10 +67,13 @@ function nombreDelFichero(nombre, n = 1) {
 
 // Lo que se le pide al asistente cuando todavía no hay pasos (P1): que los escriba
 // de la documentación oficial, donde la barra los lee.
-// El nombre sale de la primera línea del README: en una línea, con tope y tapado.
+// El nombre sale de la primera línea del README, y la carpeta la nombra quien la
+// hizo: los dos pasan por `limpio.etiqueta` (en una línea, sin comillas ni «», sin
+// lo que no se ve y con tope, como en los demás encargos), y el nombre, tapado.
 function loQueSeLePide(etiqueta, proveedorId) {
-  const nombre = enUnaLinea(informatico.sinClaves(enUnaLinea(etiqueta, 200)), 80) || proveedorId;
-  return `Prepara la guía para sacar la clave de ${nombre} (01-TOOLS/${proveedorId}/), como dice tu habilidad executive-lab: `
+  const carpeta = limpio.etiqueta(proveedorId, 80);
+  const nombre = limpio.etiqueta(informatico.sinClaves(limpio.etiqueta(etiqueta, 200)), 80) || carpeta;
+  return `Prepara la guía para sacar la clave de ${nombre} (01-TOOLS/${carpeta}/), como dice tu habilidad executive-lab: `
     + 'busca en su documentación oficial cómo se saca y escribe los pasos en su README, bajo «## Cómo conectarla», numerados y con los nombres exactos de los menús y los botones. '
     + 'Pon delante lo que hace falta («Antes de empezar: …») y detrás la página oficial y el día en que lo comprobaste («Fuente: … · comprobado el …»). '
     + 'No escribas ningún paso que no hayas comprobado, y no pongas ninguna clave.';
