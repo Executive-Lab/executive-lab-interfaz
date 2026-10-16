@@ -525,4 +525,5 @@ module.exports = {
   yaLeidos,
   originales,
   anadirDocumentos,
+  esAndamio,
 };

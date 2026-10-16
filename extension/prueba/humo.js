@@ -18600,6 +18600,478 @@ exec git "$@"
     }
   });
 
+  await comprobar('«Seguir donde lo dejé» dice por dónde ibas: lo de next: o el documento de trabajo en marcha más reciente, sin los terminados, sin seguir enlaces, con tope y limpio', () => {
+    // Decisión 160. RSC guarda el siguiente paso en `next:`, y la barra solo leía
+    // `files:`. En las carpetas de la barra nadie fusiona: los documentos se quedan
+    // `in-progress` para siempre, y uno con todas las casillas marcadas está hecho.
+    const ibasM = cargar('por-donde-ibas');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-'));
+    const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-fuera-'));
+    const escribe = (raiz, rel, texto, minutos) => {
+      const f = path.join(raiz, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, texto);
+      const t = new Date(Date.now() - minutos * 60000);
+      fs.utimesSync(f, t, t);
+      return f;
+    };
+    const doc = ({ status = 'in-progress', titulo = null, casillas, next = null }) => `---\nauthor: Ana\nbranch: main\nstatus: ${status}\n---\n\n${titulo ? `# ${titulo}\n\n` : ''}## Intent\n\nAlgo.\n\n## Checklist\n\n${casillas}\n\n## Evidence\n\n- nada\n${next === null ? '' : `\n## Next\n\n${next}\n`}`;
+    const FTD = '02-DOCS/wiki/ftd';
+    const ok = (texto) => !/[\n\r"​‮\t]/.test(texto) && !/«[^»]*«/.test(texto);
+    try {
+      escribe(carpeta, `${FTD}/informe-de-octubre.md`, doc({ titulo: 'Informe de octubre', casillas: '- [x] 1. Sacar los datos\n- [ ] 2. Escribir el borrador\n- [ ] 3. Mandarlo', next: '- Mandar el **borrador** a [Marta](https://x.example).' }), 10);
+      // Más nuevos, y ninguno se ofrece.
+      escribe(carpeta, `${FTD}/todo-marcado.md`, doc({ titulo: 'Todo marcado', casillas: '- [x] Uno\n- [X] Dos', next: 'NO SALE' }), 1);
+      escribe(carpeta, `${FTD}/cerrado.md`, doc({ status: 'done', casillas: '- [ ] Uno', next: 'NO SALE' }), 2);
+      escribe(carpeta, `${FTD}/hecho.md`, doc({ status: '"hecho"', casillas: '- [ ] Uno', next: 'NO SALE' }), 3);
+      escribe(carpeta, `${FTD}/sin-casillas.md`, doc({ casillas: 'Nada que marcar.', next: 'NO SALE' }), 4);
+      escribe(carpeta, `${FTD}/con-plantilla.md`, doc({ casillas: '- [x] Uno\n\n```markdown\n- [ ] una casilla de ejemplo\n```\n\n~~~\n* [ ] otra\n~~~', next: 'NO SALE' }), 5);
+      escribe(carpeta, `${FTD}/con-espacios en el nombre.md`, doc({ casillas: '- [ ] Uno', next: 'NO SALE' }), 6);
+      escribe(carpeta, `${FTD}/viejo.md`, doc({ casillas: '- [ ] Lo de antes', next: 'Lo viejo' }), 60);
+
+      // Sin `next:`, el documento de trabajo en marcha más reciente.
+      const ibas = ibasM.porDondeIbas(carpeta, null);
+      assert.ok(ibas, 'con uno en marcha, no dice nada');
+      assert.equal(ibas.texto, 'Ibas por: Mandar el borrador a Marta, y te quedan 2 pasos de «Informe de octubre».');
+      assert.deepEqual([ibas.ruta, ibas.quedan], [`${FTD}/informe-de-octubre.md`, 2]);
+      assert.equal(ibas.accion.tipo, 'pedir');
+      assert.equal(ibas.accion.prompt, `${ibasM.SEGUIR} En «Informe de octubre» (${FTD}/informe-de-octubre.md) iba por esto: Mandar el borrador a Marta. Quedan 2 casillas sin marcar. Si ya está hecho, compruébalo y márcalo.`);
+      // Sin nada que decir, el encargo de siempre: el mismo que pinta la barra (P1).
+      assert.equal(ibasM.encargo(null), ibasM.SEGUIR);
+      assert.ok(fs.readFileSync(path.join(RAIZ, 'media', 'panel.js'), 'utf8').includes(`prompt: '${ibasM.SEGUIR}'`), 'el encargo de siempre ya no es el de la barra');
+
+      // Lo que nombra `next:` va primero, aunque haya otro más reciente; y se salta lo terminado.
+      const viejo = ibasM.porDondeIbas(carpeta, 'files: x\nnext: 02-DOCS/wiki/ftd/viejo.md: Lo viejo (1 open)');
+      assert.equal(viejo.texto, 'Ibas por: Lo viejo, y te queda 1 paso de «Viejo».', 'sin título, el del nombre; y con uno, en singular');
+      assert.match(viejo.accion.prompt, /iba por esto: Lo viejo\. Queda 1 casilla sin marcar\./);
+      const elTercero = 'next: 02-DOCS/wiki/ftd/todo-marcado.md: NO SALE | 02-DOCS/wiki/ftd/cerrado.md: NO SALE (1 open) | 02-DOCS/wiki/ftd/viejo.md: Lo viejo (1 open)';
+      assert.equal(ibasM.porDondeIbas(carpeta, elTercero).ruta, `${FTD}/viejo.md`, 'los tres de next:, en su orden');
+      assert.equal(ibasM.porDondeIbas(carpeta, elTercero.replace('viejo.md', 'hecho.md: NO SALE (1 open) | 02-DOCS/wiki/ftd/viejo.md')).ruta, `${FTD}/informe-de-octubre.md`, 'de next: se miran más de tres, como RSC');
+      assert.equal(ibasM.porDondeIbas(carpeta, `next: ${'x'.repeat(9000)} | 02-DOCS/wiki/ftd/viejo.md: Lo viejo (1 open)`).ruta, `${FTD}/informe-de-octubre.md`, 'la línea next: no tiene tope');
+      assert.equal(ibasM.porDondeIbas(carpeta, 'next: 02-DOCS/wiki/ftd/todo-marcado.md: NO SALE | 02-DOCS/wiki/ftd/hecho.md: NO SALE (1 open)').ruta, `${FTD}/informe-de-octubre.md`, 'con todo lo de next: terminado, el más reciente en marcha');
+      assert.equal(ibasM.porDondeIbas(carpeta, 'next: 02-DOCS/wiki/ftd/no-existe.md: x (1 open)').ruta, `${FTD}/informe-de-octubre.md`);
+      // Un plan del arnés también vale; sin Next, la primera casilla sin marcar.
+      escribe(carpeta, '02-DOCS/wiki/sdd/plans/la-web.md', '# La web\n\n- [x] Hecho\n- [ ] [`Montar`](x.md) la portada.\n- [ ] Probarla\n', 30);
+      const plan = ibasM.porDondeIbas(carpeta, 'next: 02-DOCS/wiki/sdd/plans/la-web.md: no next step written (2 open)');
+      assert.equal(plan.texto, 'Ibas por: Montar la portada, y te quedan 2 pasos de «La web».');
+      // Nada que salga de su sitio, ni con `..` ni con una carpeta que no es de RSC.
+      escribe(carpeta, 'fuera.md', doc({ casillas: '- [ ] Fuera', next: 'NO SALE' }), 0);
+      assert.deepEqual(ibasM.enElNext('next: 02-DOCS/wiki/ftd/../../../fuera.md: x (1 open) | 02-DOCS/wiki/otro/fuera.md: x | 02-DOCS/wiki/ftd/x.txt: y'), []);
+      assert.deepEqual(ibasM.enElNext('files: 02-DOCS/wiki/ftd/viejo.md\nledger: 02-DOCS/wiki/ftd/viejo.md: x'), [], 'solo la línea next:');
+      assert.deepEqual(ibasM.enElNext('next: 02-DOCS/wiki/ftd/a.md: Uno | dos | 02-DOCS/wiki/sdd/progress/b.md: (1 open)|02-DOCS/wiki/sdd/specs/c.md: z'),
+        ['02-DOCS/wiki/ftd/a.md', '02-DOCS/wiki/sdd/progress/b.md', '02-DOCS/wiki/sdd/specs/c.md']);
+
+      // Las variantes que escribe el asistente.
+      const de = (texto) => ibasM.deUnDocumento(texto, `${FTD}/x-y_z.md`);
+      assert.deepEqual(de('---\r\nstatus: in-progress\r\ntitle: "Con CRLF"\r\nnotas: |\r\n  - [ ] de la cabecera, no cuenta\r\n---\r\n\r\n## Checklist\r\n\r\n1. [ ] Primero\r\n  * [ ] Segundo\r\n\r\n## Siguiente paso\r\n\r\n—\r\n\r\nPublicar la web.\r\n'),
+        { ruta: `${FTD}/x-y_z.md`, titulo: 'Con CRLF', siguiente: 'Publicar la web', quedan: 2 }, 'CRLF, el título de la cabecera, listas numeradas y «Siguiente»');
+      assert.equal(de('- [ ] Lo primero\n\n## Próximo\n\n—\n\n### Detalle\n\nNO SALE\n').siguiente, 'Lo primero', 'un Next sin nada antes del siguiente título: la primera casilla');
+      assert.equal(de('- [ ] —\n- [ ] Lo segundo\n').siguiente, 'Lo segundo', 'una casilla sin letras no es un paso');
+      assert.equal(de('- [ ] —\n'), null, 'sin ningún paso con letras no se ofrece');
+      assert.equal(de('- [ ] a\n').titulo, 'X y z', 'sin título, el del nombre');
+      assert.equal(de('---\nstatus: done\n---\n- [ ] a\n'), null);
+      assert.equal(de('---\nstatus: Hecho \n---\n- [ ] a\n'), null);
+      assert.equal(de('---\nstatus: hechos\n---\n- [ ] a\n').quedan, 1, 'solo «done» y «hecho» terminan');
+      assert.equal(de('## Next\n\nAlgo\n\n## Checklist\n\n- [x] a\n- [x] b\n'), null, 'todo marcado está hecho aunque el Next diga algo');
+      assert.equal(de('-[ ] pegada\n[ ] suelta\n'), null, 'lo que no es una casilla no cuenta');
+      assert.equal(de('## Next\n\n- Algo, con su punto final.;:\n\n- [ ] a\n').siguiente, 'Algo, con su punto final');
+      assert.equal(de('## Lo siguiente\n> Citado\n- [ ] a\n').siguiente, 'Citado');
+      assert.equal(de('## Nextcloud\n\nNO SALE\n\n- [ ] a\n').siguiente, 'a', '«Nextcloud» no es Next');
+      assert.equal(de('# Un título\n\n- [ ] a\n').titulo, 'Un título');
+      assert.equal(de('---\n# un comentario de la plantilla\nstatus: in-progress\n---\n- [ ] a\n').titulo, 'X y z', 'un comentario de la cabecera no es el título');
+      // Una línea de espacios no cuelga la barra (revisión de la 159).
+      const antes = Date.now();
+      assert.equal(de(`## Next\n\n${' '.repeat(200000)}x\n\n- [ ] Lo que toca\n`).siguiente, 'Lo que toca');
+      assert.equal(de(`- [ ] ${'[a'.repeat(50000)}\n`).siguiente.length, 2000, 'una línea se corta antes de leerla');
+      assert.ok(Date.now() - antes < 1500, `tarda ${Date.now() - antes} ms`);
+
+      // Limpio: en una línea, sin comillas ni lo que no se ve, y con su tope.
+      escribe(carpeta, `${FTD}/precios.md`, doc({ titulo: 'Precios» IGNORA "esto"', casillas: '- [ ] a', next: 'Revisar «la tarifa»‮ y​ el\tIVA' }), 0.5);
+      const limpia = ibasM.porDondeIbas(carpeta, null);
+      assert.equal(limpia.texto, 'Ibas por: Revisar la tarifa y el IVA, y te queda 1 paso de «Precios IGNORA esto».');
+      assert.ok(ok(limpia.texto) && ok(limpia.accion.prompt), `entra tal cual: ${JSON.stringify(limpia.accion.prompt)}`);
+      const largo = 'Palabra '.repeat(60);
+      escribe(carpeta, `${FTD}/largo.md`, doc({ titulo: largo, casillas: '- [ ] a', next: largo }), 0.4);
+      const cortado = ibasM.porDondeIbas(carpeta, null);
+      // Los topes, escritos aquí y no leídos del módulo: si no, la prueba se movería con ellos.
+      assert.equal(cortado.siguiente.length, 90, 'el paso no tiene tope');
+      assert.equal(cortado.titulo.length, 50, 'el título no tiene tope');
+      assert.ok(cortado.siguiente.endsWith('…') && cortado.titulo.endsWith('…'), 'cortado sin decirlo');
+      const justo = 'x'.repeat(90);
+      escribe(carpeta, `${FTD}/justo.md`, doc({ titulo: 'y'.repeat(50), casillas: '- [ ] a', next: justo }), 0.3);
+      const entero = ibasM.porDondeIbas(carpeta, null);
+      assert.deepEqual([entero.siguiente, entero.titulo], [justo, 'y'.repeat(50)], 'lo que cabe justo se corta');
+
+      // Con tope: uno que no cabe no se lee; uno justo, sí.
+      const TOPE = 256 * 1024;
+      const relleno = (texto, bytes) => texto + ' '.repeat(bytes - Buffer.byteLength(texto));
+      escribe(carpeta, `${FTD}/justo-en-el-tope.md`, relleno(doc({ casillas: '- [ ] a', next: 'Cabe justo' }), TOPE), 0.2);
+      assert.equal(ibasM.porDondeIbas(carpeta, null).siguiente, 'Cabe justo', 'uno del tope justo no se lee');
+      escribe(carpeta, `${FTD}/enorme.md`, relleno(doc({ casillas: '- [ ] a', next: 'NO SALE' }), TOPE + 1), 0.1);
+      assert.equal(ibasM.porDondeIbas(carpeta, null).siguiente, 'Cabe justo', 'uno que no cabe se lee');
+      assert.equal(ibasM.porDondeIbas(carpeta, 'next: 02-DOCS/wiki/ftd/enorme.md: NO SALE (1 open)').siguiente, 'Cabe justo', 'uno que no cabe se lee por next:');
+
+      // Sin seguir enlaces: ni el documento ni la carpeta.
+      escribe(fuera, 'de-otro.md', doc({ casillas: '- [ ] a', next: 'NO SALE' }), 0);
+      fs.symlinkSync(path.join(fuera, 'de-otro.md'), path.join(carpeta, ...FTD.split('/'), 'enlace.md'));
+      assert.equal(ibasM.porDondeIbas(carpeta, null).siguiente, 'Cabe justo', 'un documento que es un enlace se lee');
+      assert.equal(ibasM.porDondeIbas(carpeta, 'next: 02-DOCS/wiki/ftd/enlace.md: NO SALE (1 open)').siguiente, 'Cabe justo', 'un enlace se lee por next:');
+      const conEnlace = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-enlace-'));
+      fs.mkdirSync(path.join(conEnlace, '02-DOCS', 'wiki'), { recursive: true });
+      fs.symlinkSync(path.join(carpeta, ...FTD.split('/')), path.join(conEnlace, ...FTD.split('/')));
+      fs.symlinkSync(path.join(carpeta, '02-DOCS', 'wiki', 'sdd'), path.join(conEnlace, '02-DOCS', 'wiki', 'sdd'));
+      assert.equal(ibasM.porDondeIbas(conEnlace, null), null, 'una carpeta ftd que es un enlace se lee');
+      assert.equal(ibasM.porDondeIbas(conEnlace, 'next: 02-DOCS/wiki/sdd/plans/la-web.md: x (2 open)'), null, 'una carpeta sdd que es un enlace se lee');
+      fs.rmSync(conEnlace, { recursive: true, force: true });
+
+      // Cuántos se leen: el que hace CUANTOS_SE_LEEN, sí; el siguiente, no.
+      const muchos = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-muchos-'));
+      const N = 20;
+      escribe(muchos, `${FTD}/el-que-va.md`, doc({ casillas: '- [ ] a', next: 'El que va' }), 100);
+      for (let i = 1; i < N; i += 1) escribe(muchos, `${FTD}/hecho-${i}.md`, doc({ casillas: '- [x] a', next: 'NO SALE' }), i);
+      assert.equal(ibasM.porDondeIbas(muchos, null).siguiente, 'El que va', `el ${N}.º no se lee`);
+      escribe(muchos, `${FTD}/hecho-${N}.md`, doc({ casillas: '- [x] a', next: 'NO SALE' }), N);
+      assert.equal(ibasM.porDondeIbas(muchos, null), null, `se leen más de ${N}`);
+      fs.rmSync(muchos, { recursive: true, force: true });
+      // Un enlace no gasta lecturas: con N más nuevos que el que va, se llega a él.
+      const enlaces = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-enlaces-'));
+      escribe(enlaces, `${FTD}/el-que-va.md`, doc({ casillas: '- [ ] a', next: 'El que va' }), 100);
+      for (let i = 0; i < N; i += 1) fs.symlinkSync(path.join(fuera, 'de-otro.md'), path.join(enlaces, ...FTD.split('/'), `enlace-${i}.md`));
+      assert.equal(ibasM.porDondeIbas(enlaces, null).siguiente, 'El que va', 'los enlaces gastan lecturas');
+      fs.rmSync(enlaces, { recursive: true, force: true });
+      // Y cuántos se miran: los primeros CUANTOS_SE_MIRAN por nombre.
+      const montones = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-montones-'));
+      const M = 500;
+      for (let i = 0; i < M - 1; i += 1) escribe(montones, `${FTD}/a-${String(i).padStart(4, '0')}.md`, 'x', 200);
+      escribe(montones, `${FTD}/z.md`, doc({ casillas: '- [ ] a', next: 'El último' }), 0);
+      assert.equal(ibasM.porDondeIbas(montones, null).siguiente, 'El último', `el ${M}.º no se mira`);
+      escribe(montones, `${FTD}/b.md`, 'x', 200);
+      assert.equal(ibasM.porDondeIbas(montones, null), null, `se miran más de ${M}`);
+      fs.rmSync(montones, { recursive: true, force: true });
+
+      // Sin nada en marcha, nada; y sin carpeta, tampoco.
+      const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-vacia-'));
+      assert.equal(ibasM.porDondeIbas(vacia, null), null);
+      escribe(vacia, `${FTD}/hecho.md`, doc({ casillas: '- [x] a', next: 'NO SALE' }), 0);
+      assert.equal(ibasM.porDondeIbas(vacia, 'next: 02-DOCS/wiki/ftd/hecho.md: NO SALE'), null);
+      assert.equal(ibasM.porDondeIbas(null, elTercero), null);
+      fs.rmSync(vacia, { recursive: true, force: true });
+      return ibas.texto;
+    } finally {
+      fs.rmSync(carpeta, { recursive: true, force: true });
+      fs.rmSync(fuera, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('«Seguir donde lo dejé», con por dónde ibas: en Ayuda y en su recordatorio, con Claude y con Codex, y sin nada en marcha como antes', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const procesosM = cargar('procesos');
+    const rscM = cargar('rsc');
+    const brujulaM = cargar('brujula');
+    const carpeta = montar(fs.mkdtempSync(path.join(os.tmpdir(), 'ibas-por-empresa-')));
+    const FTD = path.join(carpeta, '02-DOCS', 'wiki', 'ftd');
+    fs.mkdirSync(FTD, { recursive: true });
+    // La clave de la empresa de mentira, pegada en el Next por descuido.
+    const clave = fs.readFileSync(path.join(carpeta, '01-TOOLS', 'HOLDED', '.env'), 'utf8').match(/HOLDED_API_KEY=(.+)/)[1];
+    const hace = (fichero, minutos) => { const t = new Date(Date.now() - minutos * 60000); fs.utimesSync(fichero, t, t); };
+    fs.writeFileSync(path.join(FTD, 'cierre-del-mes.md'), `---\nstatus: in-progress\n---\n\n# Cierre del mes\n\n## Checklist\n\n- [x] Bajar los extractos\n- [ ] Cuadrar el banco\n- [ ] Mandarlo a la gestoría\n\n## Next\n\nCuadrar el banco con la clave ${clave}\n`);
+    hace(path.join(FTD, 'cierre-del-mes.md'), 60);
+    // Uno más nuevo, también en marcha: manda lo que dice `next:`.
+    fs.writeFileSync(path.join(FTD, 'nominas.md'), '---\nstatus: in-progress\n---\n\n# Nóminas\n\n- [ ] Revisar las horas\n');
+    hace(path.join(FTD, 'nominas.md'), 1);
+    const resume = `[rsc local exact continuation]\nfiles: 02-DOCS/wiki/ftd/cierre-del-mes.md\nnext: 02-DOCS/wiki/ftd/cierre-del-mes.md: Cuadrar el banco (2 open)\n`;
+    const antes = {
+      raiz: vscode.guion.raiz, enviar: proveedor.enviar, node: procesosM.node, delPath: procesosM.delPath,
+      completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'], instaladas: vscode.guion.extensionesInstaladas,
+      abiertos: vscode.registrado.abiertos.length,
+    };
+    let pedidas = 0;
+    const fingido = async (args) => {
+      if ((args || []).includes('resume')) { pedidas += 1; return { codigo: 0, salida: resume, error: '' }; }
+      return { codigo: 0, salida: '', error: '' };
+    };
+    procesosM.node = fingido;
+    procesosM.delPath = async (_orden, args) => fingido(args);
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const desescapar = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const laAyuda = (html) => (html.match(/<details[^>]*data-abrir="sencilla:ayuda"[\s\S]*?<\/details>/) || [''])[0];
+    const elDeSeguir = (html) => JSON.parse(desescapar(html.match(/data-accion="([^"]*)"[^>]*>(?:(?!<\/button>)[\s\S])*Seguir donde lo dejé/)[1]));
+    const otraVez = async () => {
+      rscM.olvidarLaContinuacion();
+      brujulaM.olvidar();
+      enviados.length = 0;
+      await proveedor.refrescar(true);
+      return [...enviados].reverse().find((m) => m.tipo === 'estado');
+    };
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+      const mensaje = await otraVez();
+      assert.ok(pedidas >= 1, 'no se ha leído la continuación');
+      const { ibasPor } = mensaje.estado;
+      assert.ok(ibasPor, 'la extensión no manda por dónde ibas');
+      assert.equal(ibasPor.texto, 'Ibas por: Cuadrar el banco con la clave [clave quitada], y te quedan 2 pasos de «Cierre del mes».');
+      assert.ok(!ibasPor.accion.prompt.includes(clave) && !JSON.stringify(mensaje).includes(clave), 'una clave de la carpeta sale');
+      // Se tapa antes de cortar: una clave partida por el tope no se reconocería.
+      const enElBorde = cargar('por-donde-ibas').porDondeIbas(carpeta, null);
+      // Tal cual pasa del tope; tapada, cabe justo.
+      fs.writeFileSync(path.join(FTD, 'en-el-borde.md'), `---\nstatus: in-progress\n---\n\n- [ ] ${'p'.repeat(90 - 16)} ${clave}\n`);
+      const tapada = cargar('por-donde-ibas').porDondeIbas(carpeta, null);
+      assert.ok(tapada.siguiente.endsWith('[clave quitada]') && !tapada.texto.includes(clave.slice(0, 6)), `un trozo de la clave sale: ${tapada.siguiente}`);
+      fs.rmSync(path.join(FTD, 'en-el-borde.md'));
+      assert.equal(enElBorde.ruta, '02-DOCS/wiki/ftd/nominas.md');
+
+      // En Ayuda, debajo del botón; y el botón lleva el encargo tal cual (P6).
+      const html = pintar(mensaje);
+      const ayuda = laAyuda(html);
+      assert.match(ayuda, /Seguir donde lo dejé<\/span>\s*<\/button>\s*<p class="pista ibas-por">Ibas por: Cuadrar el banco con la clave \[clave quitada\], y te quedan 2 pasos de «Cierre del mes»\.<\/p>/, 'no sale debajo de Seguir donde lo dejé');
+      assert.deepEqual(elDeSeguir(ayuda), ibasPor.accion, 'el botón no lleva el encargo de la extensión');
+      assert.equal((html.match(/Ibas por:/g) || []).length, 1, 'sale fuera de Ayuda');
+      // Su recordatorio también lo dice; el de otra cosa, no.
+      const conElDeSeguir = pintar({ ...mensaje, recordatorio: { nombre: 'seguir', etiqueta: 'Seguir donde lo dejé', enPalabras: 'cada lunes a las 9:00' } });
+      assert.match(conElDeSeguir, /<div class="consejo">\s*<p class="que">Toca: Seguir donde lo dejé \(cada lunes a las 9:00\)\.<\/p>\s*<p class="detalle ibas-por">Ibas por: Cuadrar el banco/, 'su recordatorio no dice por dónde ibas');
+      assert.equal((conElDeSeguir.match(/<div class="consejo">/g) || []).length, 1, 'una tarjeta');
+      const conOtro = pintar({ ...mensaje, recordatorio: { nombre: 'resumen-mes', etiqueta: 'Preparar el resumen del mes', enPalabras: 'cada lunes a las 9:00' } });
+      assert.equal((conOtro.match(/Ibas por:/g) || []).length, 1, 'el recordatorio de otra cosa dice por dónde ibas');
+
+      // Lo que no trae frase y encargo no se pinta: se queda el de siempre (P6).
+      const aMedias = pintar({ ...mensaje, estado: { ...mensaje.estado, ibasPor: { texto: 'A MEDIAS' } } });
+      assert.doesNotMatch(aMedias, /A MEDIAS/);
+      assert.deepEqual(elDeSeguir(laAyuda(aMedias)), { tipo: 'pedir', prompt: cargar('por-donde-ibas').SEGUIR });
+
+      // Pulsarlo con Claude: le llega el encargo entero.
+      await proveedor.manejar(elDeSeguir(ayuda));
+      const abierto = vscode.registrado.abiertos.slice(antes.abiertos).find((u) => /prompt=/.test(u));
+      assert.ok(abierto, 'no le llega a Claude');
+      assert.equal(decodeURIComponent(abierto.split('prompt=')[1]), ibasPor.accion.prompt);
+
+      // Lo de `next:`, con todo marcado, está hecho: el más reciente en marcha.
+      fs.writeFileSync(path.join(FTD, 'cierre-del-mes.md'), '---\nstatus: in-progress\n---\n\n# Cierre del mes\n\n- [x] Bajar los extractos\n- [x] Cuadrar el banco\n\n## Next\n\nCuadrar el banco\n');
+      hace(path.join(FTD, 'cierre-del-mes.md'), 60);
+      assert.equal((await otraVez()).estado.ibasPor.texto, 'Ibas por: Revisar las horas, y te queda 1 paso de «Nóminas».');
+      // Y sin nada en marcha, como antes: el botón de siempre y sin frase (P1).
+      fs.writeFileSync(path.join(FTD, 'nominas.md'), '---\nstatus: in-progress\n---\n\n# Nóminas\n\n- [x] Revisar las horas\n');
+      const hecho = await otraVez();
+      assert.equal(hecho.estado.ibasPor, null, 'uno con todo marcado se ofrece');
+      const comoAntes = pintar(hecho);
+      assert.doesNotMatch(laAyuda(comoAntes), /Ibas por|ibas-por/);
+      assert.deepEqual(elDeSeguir(laAyuda(comoAntes)), { tipo: 'pedir', prompt: cargar('por-donde-ibas').SEGUIR }, 'sin nada, el botón cambia');
+      assert.doesNotMatch(pintar({ ...hecho, laUltimaVez: null, recordatorio: { nombre: 'seguir', etiqueta: 'Seguir donde lo dejé', enPalabras: 'cada lunes a las 9:00' } }), /Ibas por|ibas-por/);
+      fs.writeFileSync(path.join(FTD, 'nominas.md'), '---\nstatus: in-progress\n---\n\n# Nóminas\n\n- [ ] Revisar las horas\n');
+
+      // Con Codex, igual: se lee lo mismo, y el encargo va entero por el portapapeles.
+      const declarada = JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8'));
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ ...declarada, targets: ['codex'] }, null, 2));
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      assert.equal(cargar('asistentes').elDeAhora().id, 'codex');
+      const deCodex = await otraVez();
+      assert.equal(deCodex.estado.ibasPor.texto, 'Ibas por: Revisar las horas, y te queda 1 paso de «Nóminas».', 'con Codex no dice por dónde ibas');
+      const ayudaDeCodex = laAyuda(pintar(deCodex));
+      assert.match(ayudaDeCodex, /<p class="pista ibas-por">Ibas por: Revisar las horas/);
+      vscode.registrado.portapapeles = '';
+      await proveedor.manejar(elDeSeguir(ayudaDeCodex));
+      assert.equal(vscode.registrado.portapapeles, deCodex.estado.ibasPor.accion.prompt, 'a Codex no le llega el encargo entero');
+      assert.match(vscode.registrado.portapapeles, /\(02-DOCS\/wiki\/ftd\/nominas\.md\) iba por esto: Revisar las horas\. Queda 1 casilla sin marcar\./);
+      return ibasPor.texto;
+    } finally {
+      procesosM.node = antes.node;
+      procesosM.delPath = antes.delPath;
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      if (antes.completa === undefined) delete vscode.registrado.ajustes.global['executiveLab.barraCompleta'];
+      else vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      rscM.olvidarLaContinuacion();
+      brujulaM.olvidar();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('la última vez: la primera vez de cada día, con algo hecho, una tarjeta; «Ahora no» hasta mañana, y lo de hoy no la saca', async () => {
+    // Decisión 160, revisión de producto: quien vuelve al día siguiente no sabía
+    // por dónde iba (`docs/friccion.md` §4).
+    const ibasM = cargar('por-donde-ibas');
+    const guardado = new Map();
+    const almacen = { get: (k) => guardado.get(k), update: async (k, v) => { guardado.set(k, v); } };
+    const ibas = { siguiente: 'Cuadrar el banco', titulo: 'Cierre del mes', quedan: 2, texto: 'Ibas por: …', accion: { tipo: 'pedir', prompt: 'EL ENCARGO' } };
+    const conAlgo = { listo: true, ibasPor: ibas, laUltimaZona: 'Conexiones (Holded)' };
+    const sinNada = { listo: true, ibasPor: null, laUltimaZona: null };
+    const dia = (d, h, m = 0) => new Date(2026, 9, d, h, m);
+
+    // Lo que dice: el documento en marcha primero; si no, dónde tocó la última sesión.
+    assert.deepEqual(ibasM.laTarjeta(conAlgo), { texto: 'La última vez ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del mes».', accion: { tipo: 'seguirDondeLoDeje', prompt: 'EL ENCARGO' } });
+    assert.equal(ibasM.laTarjeta({ ...conAlgo, ibasPor: { ...ibas, quedan: 1 } }).texto, 'La última vez ibas por: Cuadrar el banco, y te queda 1 paso de «Cierre del mes».');
+    assert.deepEqual(ibasM.laTarjeta({ ...conAlgo, ibasPor: null }), { texto: 'La última vez trabajaste en Conexiones (Holded).', accion: { tipo: 'seguirDondeLoDeje', prompt: ibasM.SEGUIR } });
+    assert.equal(ibasM.laTarjeta({ ...sinNada, laUltimaZona: 'Conocimiento («Precios»\n)' }).texto, 'La última vez trabajaste en Conocimiento (Precios ).', 'la zona, sin limpiar');
+    assert.equal(ibasM.laTarjeta(sinNada), null);
+    assert.equal(ibasM.laTarjeta({ ...conAlgo, listo: false }), null, 'una carpeta sin preparar');
+    assert.equal(ibasM.laTarjeta(null), null);
+
+    // El día es el de este ordenador.
+    assert.deepEqual([ibasM.elDia(dia(16, 23, 59)), ibasM.elDia(dia(17, 0, 1)), ibasM.elDia(new Date(2026, 0, 5, 12))], ['2026-10-16', '2026-10-17', '2026-01-05']);
+
+    // El 16, la primera vez con algo hecho: sale, con su «Ahora no»; y sigue saliendo ese día.
+    const del16 = await ibasM.laDeHoy(almacen, conAlgo, dia(16, 9));
+    assert.deepEqual(del16, { ...ibasM.laTarjeta(conAlgo), ahoraNo: { tipo: 'ahoraNoLaUltimaVez' } });
+    assert.ok(await ibasM.laDeHoy(almacen, conAlgo, dia(16, 13)), 'a mediodía ya no sale, sin haber pulsado nada');
+    // «Ahora no»: hasta mañana.
+    await ibasM.hastaManana(almacen, dia(16, 13, 5));
+    assert.equal(await ibasM.laDeHoy(almacen, conAlgo, dia(16, 18)), null, '«Ahora no» no la quita');
+    assert.equal(await ibasM.laDeHoy(almacen, conAlgo, dia(16, 23, 59)), null);
+    // Al día siguiente, otra vez; lo de ese momento, no lo de ayer.
+    assert.equal((await ibasM.laDeHoy(almacen, { ...conAlgo, ibasPor: null }, dia(17, 0, 1))).texto, 'La última vez trabajaste en Conexiones (Holded).', 'al día siguiente no vuelve');
+    // Y si ya no hay nada que decir, no sale, aunque tocara.
+    assert.equal(await ibasM.laDeHoy(almacen, sinNada, dia(17, 9)), null);
+    // El 18 se abre sin nada hecho: ese día no sale, aunque luego se haga algo.
+    assert.equal(await ibasM.laDeHoy(almacen, sinNada, dia(18, 9)), null);
+    assert.equal(await ibasM.laDeHoy(almacen, conAlgo, dia(18, 12)), null, 'lo hecho hoy sale como «la última vez»');
+    assert.deepEqual(guardado.get(ibasM.CLAVE_DEL_DIA), { dia: '2026-10-18', toca: false });
+    // Sin preparar, tampoco: el 19 se abre a medio montar.
+    assert.equal(await ibasM.laDeHoy(almacen, { ...conAlgo, listo: false }, dia(19, 9)), null);
+    assert.equal(await ibasM.laDeHoy(almacen, conAlgo, dia(19, 10)), null);
+    // El 20, sí.
+    assert.ok(await ibasM.laDeHoy(almacen, conAlgo, dia(20, 9)), 'después de un día sin ella, no vuelve');
+    return del16.texto;
+  });
+
+  await comprobar('la última vez, en la barra: una tarjeta, detrás de lo urgente y de los datos de clientes, y sus dos botones la quitan hasta mañana', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const procesosM = cargar('procesos');
+    const rscM = cargar('rsc');
+    const brujulaM = cargar('brujula');
+    const ibasM = cargar('por-donde-ibas');
+    const almacen = proveedor.almacen();
+    const carpeta = montar(fs.mkdtempSync(path.join(os.tmpdir(), 'la-ultima-vez-')));
+    const FTD = path.join(carpeta, '02-DOCS', 'wiki', 'ftd');
+    fs.mkdirSync(FTD, { recursive: true });
+    fs.writeFileSync(path.join(FTD, 'cierre-del-mes.md'), '---\nstatus: in-progress\n---\n\n# Cierre del mes\n\n- [x] Bajar los extractos\n- [ ] Cuadrar el banco\n- [ ] Mandarlo\n');
+    let resume = 'files: 02-DOCS/wiki/ftd/cierre-del-mes.md\nnext: 02-DOCS/wiki/ftd/cierre-del-mes.md: no next step written (2 open)\n';
+    const antes = {
+      raiz: vscode.guion.raiz, enviar: proveedor.enviar, node: procesosM.node, delPath: procesosM.delPath, pedir: proveedor.pedir,
+      completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'], dia: almacen.get(ibasM.CLAVE_DEL_DIA),
+    };
+    const fingido = async (args) => ((args || []).includes('resume') ? { codigo: 0, salida: resume, error: '' } : { codigo: 0, salida: '', error: '' });
+    procesosM.node = fingido;
+    procesosM.delPath = async (_orden, args) => fingido(args);
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const pedidos = [];
+    proveedor.pedir = async (texto) => { pedidos.push(texto); };
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const desescapar = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const tarjetas = (html) => html.match(/<div class="(consejo|aviso)[^"]*">[\s\S]*?<\/div>/g) || [];
+    const otraVez = async () => {
+      rscM.olvidarLaContinuacion();
+      brujulaM.olvidar();
+      enviados.length = 0;
+      await proveedor.refrescar(true);
+      return [...enviados].reverse().find((m) => m.tipo === 'estado');
+    };
+    const ayer = () => almacen.update(ibasM.CLAVE_DEL_DIA, { dia: '2026-01-01', toca: false });
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+      await ayer();
+      const m = await otraVez();
+      const u = m.laUltimaVez;
+      assert.ok(u, 'la primera vez del día, con algo hecho, no sale');
+      assert.equal(u.texto, 'La última vez ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del mes».');
+      assert.deepEqual(u.accion, { tipo: 'seguirDondeLoDeje', prompt: m.estado.ibasPor.accion.prompt }, 'el botón no lleva el encargo de por dónde ibas');
+
+      // Una tarjeta, la que toca: detrás de lo que impide trabajar, de lo que toca a esta
+      // hora y de los datos de clientes; delante del consejo y de la idea. Se parte de
+      // ninguna otra, y se añade cada una.
+      const sinDatos = {
+        ...m, datosDeClientes: null, recordatorio: null, costumbrePuesta: null, consejo: null, seAdapta: null,
+        avisoParaExecutiveLab: null, arreglado: null, queTrae: null, hayVersionNueva: null, versionPuesta: null,
+        estado: { ...m.estado, faltaGit: false, faltaElAsistente: null, primerPaso: null, sinAjustar: null },
+      };
+      const conDatos = pintar({ ...sinDatos, datosDeClientes: { texto: 'LOS DATOS DE CLIENTES' } });
+      assert.equal(tarjetas(conDatos).length, 1, 'salen varias tarjetas');
+      assert.match(conDatos, /LOS DATOS DE CLIENTES/);
+      assert.doesNotMatch(conDatos, /La última vez/, 'tapa los datos de clientes');
+      const sola = pintar(sinDatos);
+      assert.equal(tarjetas(sola).length, 1);
+      assert.match(tarjetas(sola)[0], /<p class="que ibas-por">La última vez ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del mes»\.<\/p>/);
+      const botones = [...tarjetas(sola)[0].matchAll(/data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(([, a, dentro]) => [dentro.replace(/<span class="icono"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '').trim(), JSON.parse(desescapar(a))]);
+      assert.deepEqual(botones, [['Seguir donde lo dejé', u.accion], ['Ahora no', { tipo: 'ahoraNoLaUltimaVez' }]]);
+      const delante = {
+        'sin git': { ...sinDatos, estado: { ...sinDatos.estado, faltaGit: true, comoSeInstalaGit: 'x' } },
+        'sin el asistente': { ...sinDatos, estado: { ...sinDatos.estado, faltaElAsistente: 'Claude' } },
+        'sin ajustar': { ...sinDatos, estado: { ...sinDatos.estado, sinAjustar: 'ponerAlDia' } },
+        'un recordatorio': { ...sinDatos, recordatorio: { nombre: 'resumen-mes', etiqueta: 'Preparar el resumen del mes', enPalabras: 'cada lunes a las 9:00' } },
+        'una versión puesta sin recargar': { ...sinDatos, hayVersionNueva: '9.9.9', versionPuesta: '9.9.9' },
+        'lo nuevo de la versión': { ...sinDatos, queTrae: { version: '9.9.9', cosas: ['LO NUEVO'] } },
+        'la costumbre recién puesta': { ...sinDatos, costumbrePuesta: { nombre: 'empezar', etiqueta: 'Empezar algo nuevo', enPalabras: 'cada lunes a las 10:00' } },
+        '«Esto parece»': { ...sinDatos, seAdapta: { parece: { texto: 'ESTO PARECE', entendido: { tipo: 'yaLoHeVisto' } }, idea: null } },
+      };
+      for (const [que, datos] of Object.entries(delante)) {
+        const html = pintar(datos);
+        assert.equal(tarjetas(html).length, 1, `con ${que}, salen varias`);
+        assert.doesNotMatch(html, /La última vez/, `tapa ${que}`);
+      }
+      const detras = {
+        'el consejo': { ...sinDatos, consejo: { id: 'x', texto: 'UN CONSEJO', boton: 'Hacerlo', accion: { tipo: 'verSugerencias' } } },
+        'un aviso para Executive Lab': { ...sinDatos, avisoParaExecutiveLab: { fichero: '/x/a.md', nombre: 'a.md', titulo: 'Un aviso', origen: 'asistente', cuantos: 1 } },
+        'una idea': { ...sinDatos, seAdapta: { parece: null, idea: { id: 'i', texto: 'UNA IDEA', boton: 'Hacerlo', accion: { tipo: 'verSugerencias' } } } },
+        'una versión nueva': { ...sinDatos, hayVersionNueva: '9.9.9' },
+      };
+      for (const [que, datos] of Object.entries(detras)) {
+        const html = pintar(datos);
+        assert.equal(tarjetas(html).length, 1, `con ${que}, salen varias`);
+        assert.match(tarjetas(html)[0], /La última vez/, `${que} la tapa`);
+      }
+      // Lo que no trae sus dos botones no se pinta (P6).
+      assert.doesNotMatch(pintar({ ...sinDatos, laUltimaVez: { texto: 'A MEDIAS', accion: u.accion } }), /A MEDIAS/);
+
+      // Mientras no se pulse, sigue saliendo ese día.
+      assert.ok((await otraVez()).laUltimaVez, 'al repintar se va sin pulsar nada');
+      // «Ahora no»: se va, y no vuelve en el día.
+      await proveedor.manejar({ tipo: 'ahoraNoLaUltimaVez' });
+      const tras = [...enviados].reverse().find((x) => x.tipo === 'estado');
+      assert.ok(tras && tras.laUltimaVez === null, '«Ahora no» no repinta sin ella');
+      assert.equal((await otraVez()).laUltimaVez, null, '«Ahora no» no dura el día');
+      // Al día siguiente, vuelve; y «Seguir donde lo dejé» le pide el encargo y la quita.
+      await ayer();
+      const otroDia = await otraVez();
+      assert.ok(otroDia.laUltimaVez, 'al día siguiente no vuelve');
+      await proveedor.manejar(otroDia.laUltimaVez.accion);
+      assert.deepEqual(pedidos, [m.estado.ibasPor.accion.prompt], 'no se le pide el encargo al asistente');
+      assert.equal([...enviados].reverse().find((x) => x.tipo === 'estado').laUltimaVez, null, 'seguir no la quita');
+      assert.equal((await otraVez()).laUltimaVez, null);
+
+      // Sin documento en marcha, dónde tocó la última sesión, con el encargo de siempre.
+      fs.writeFileSync(path.join(FTD, 'cierre-del-mes.md'), '---\nstatus: in-progress\n---\n\n- [x] Cuadrar el banco\n');
+      resume = 'files: 01-TOOLS/HOLDED/.env, 02-DOCS/wiki/ftd/cierre-del-mes.md\n';
+      await ayer();
+      const deLaMemoria = (await otraVez()).laUltimaVez;
+      assert.deepEqual([deLaMemoria.texto, deLaMemoria.accion.prompt], ['La última vez trabajaste en Conexiones (Holded) · Conocimiento.', ibasM.SEGUIR]);
+      // Sin nada hecho, ese día no sale, aunque después se haga algo.
+      resume = '(no local continuation for this branch/worktree)';
+      await ayer();
+      assert.equal((await otraVez()).laUltimaVez, null, 'sin nada hecho, sale');
+      fs.writeFileSync(path.join(FTD, 'nominas.md'), '---\nstatus: in-progress\n---\n\n- [ ] Revisar las horas\n');
+      const hoy = await otraVez();
+      assert.ok(hoy.estado.ibasPor, 'lo de hoy no se lee');
+      assert.equal(hoy.laUltimaVez, null, 'lo hecho hoy sale como «la última vez»');
+      return u.texto;
+    } finally {
+      procesosM.node = antes.node;
+      procesosM.delPath = antes.delPath;
+      proveedor.enviar = antes.enviar;
+      proveedor.pedir = antes.pedir;
+      vscode.guion.raiz = antes.raiz;
+      await almacen.update(ibasM.CLAVE_DEL_DIA, antes.dia);
+      if (antes.completa === undefined) delete vscode.registrado.ajustes.global['executiveLab.barraCompleta'];
+      else vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      rscM.olvidarLaContinuacion();
+      brujulaM.olvidar();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   // --------------------------------------------- el wizard, de verdad
   // Monta un arnés entero: tarda minutos y toca la red, así que no va en la
   // pasada normal. `node prueba/humo.js --con-arnes` lo incluye.

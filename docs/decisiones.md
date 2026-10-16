@@ -6493,3 +6493,124 @@ que ya había en este Mac y sin red:
   un documento, y el diccionario lo dice.
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
+
+## 160. Seguir donde lo dejé dice por dónde ibas
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `seguir-con-el-siguiente-paso`
+
+RSC ya guarda el siguiente paso. `memory resume` devuelve una línea `next:` con el «Next» del documento de
+trabajo de la última sesión y cuántas casillas le quedan (`session-memory-core.mjs`, `nextSteps`). La barra
+solo leía `files:`, para decir en qué zona se había trabajado. Ahora, donde ofrece «Seguir donde lo dejé»,
+dice en una frase por dónde ibas. Y de la revisión de producto sale lo segundo: quien vuelve al día siguiente
+abría la barra y no veía nada sobre ayer (`docs/friccion.md` §4, «Sin hacer»).
+
+**Por dónde ibas** (`extension/src/por-donde-ibas.js`, sin el asistente y sin red, P5):
+
+- Primero, los documentos que nombra `next:`, en su orden y hasta tres, como RSC. Se vuelven a leer, porque
+  esa línea no dice si están terminados. Solo valen los sitios que mira RSC (`ftd/`, y `specs/`, `plans/` y
+  `progress/` del SDD), y un nombre de letras, números, `_`, `.` y `-`.
+- Si ninguno sigue en marcha, el documento de trabajo en marcha más reciente de `02-DOCS/wiki/ftd/`, del
+  último tocado al primero.
+- De cada uno, su «Next» (o «Siguiente», o «Próximo»): la primera línea con algo, hasta el siguiente
+  título. Sin «Next», la primera casilla sin marcar. Y cuántas quedan sin marcar.
+- **Terminado no se ofrece**, aunque diga otra cosa. En las carpetas de la barra se trabaja en la rama
+  principal y nadie fusiona, así que el enganche que pone `status: done` no corre nunca: los documentos se
+  quedan `in-progress` para siempre. Terminado es:
+  - `status: done`, o `hecho`, como los de este repositorio;
+  - ninguna casilla sin marcar. Con todas marcadas está hecho, y sin ninguna no se sabe qué queda.
+- Las casillas de un bloque de código (una plantilla de ejemplo) y las de la cabecera no cuentan.
+
+Lo que se lee lo escribió quien hizo la carpeta, y acaba en pantalla y en un encargo:
+
+- **Sin seguir enlaces.** Ni el documento ni ninguna de sus carpetas. Se mira con `lstat`, se abre con
+  `O_NOFOLLOW` donde lo hay, y se mira otra vez lo abierto.
+- **Con topes.** 256 KB por documento, 20 leídos y 500 mirados como mucho (por nombre), y la línea `next:`
+  hasta 8 KB. Un enlace o una carpeta no gastan lecturas. Cada línea se corta a 2.000 letras antes de
+  pasarle una expresión: una de 200.000 espacios colgaba la barra (revisión de seguridad de la 159).
+- **Limpio.** Con `limpio.etiqueta`, como los demás encargos: en una línea, sin comillas y sin lo que no se
+  ve. **Y sin claves**, con el mismo tapado que el mensaje del informático: en clase se comparte pantalla.
+  Se tapa antes de cortar, porque una clave cortada ya no se reconoce. El paso, 90 letras como mucho, y el
+  título, 50.
+
+**Dónde sale:**
+
+- En Ayuda, debajo de «Seguir donde lo dejé»: «Ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del
+  mes».».
+- En el recordatorio de «Seguir donde lo dejé», si lo hay. Es «la tarjeta, si la hay» del encargo: no había
+  otra que ofreciera seguir.
+- En el encargo del botón: el de siempre y, detrás, «En «Cierre del mes» (02-DOCS/wiki/ftd/cierre-del-mes.md)
+  iba por esto: Cuadrar el banco. Quedan 2 casillas sin marcar. Si ya está hecho, compruébalo y márcalo.».
+  Lo arma la extensión, que es quien lee el disco, y el panel lo pinta tal cual (P6). Con Codex, igual: va
+  entero por el portapapeles.
+- Sin nada en marcha, todo como antes: el botón con su encargo de siempre y sin frase (P1).
+
+**La tarjeta de la última vez**, de la revisión de producto:
+
+- La primera vez de cada día que se pinta la principal, en una carpeta con algo hecho, una tarjeta: «La
+  última vez ibas por: Cuadrar el banco, y te quedan 2 pasos de «Cierre del mes».». Sin documento en marcha,
+  dónde tocó la última sesión según la memoria del arnés: «La última vez trabajaste en Conexiones
+  (Holded).».
+- Se decide esa primera vez y se apunta en el estado de la carpeta. Lo que se haga después, ese mismo día,
+  no la saca: eso no es «la última vez», es hoy. El día es el de este ordenador.
+- **Seguir donde lo dejé** manda el encargo de arriba, y **Ahora no**, nada. Las dos la quitan hasta mañana.
+- **Una sola tarjeta, y no tapa lo urgente.** Va detrás de lo que impide trabajar, del recordatorio que toca,
+  de la versión puesta sin recargar y de los datos de clientes. Detrás también de lo que sale una vez y se
+  va con «Entendido» (lo nuevo de la versión, la costumbre puesta y «Esto parece»). Va delante del consejo,
+  del aviso para Executive Lab, de lo que contaste, de la versión nueva y de las ideas. El día 2 de una
+  carpeta con conexiones sigue saliendo antes la de los datos de clientes, una vez. Después, esta.
+- La zona sale de la brújula, que ya no llama tema al andamio del arnés: tocar un documento de trabajo salía
+  «Conocimiento (Ftd)». Ahora es «Conocimiento», con `cerebro.esAndamio`, la misma lista que en Documentos.
+- Solo en la barra sencilla: la completa no la lleva.
+
+**Las pruebas**: cuatro comprobaciones nuevas en `humo.js`, de 419 a 423 antes de traer main.
+
+- *Por dónde ibas*, con carpetas temporales y los ficheros de verdad:
+  - lo de `next:` antes que lo más reciente, los tres primeros y no un cuarto, y los del SDD;
+  - lo terminado de cada forma (`done`, `"hecho"`, `Hecho`, todo marcado, sin casillas, casillas en un
+    bloque de código) y lo que no lo es (`hechos`);
+  - el «Next» de cada forma, la primera casilla sin él, CRLF, el título de la cabecera, el del `#` y el del
+    nombre, y un comentario de la cabecera que no es el título;
+  - `..` y lo que no es de RSC en `next:`, nombres con espacios;
+  - un documento y una carpeta `ftd` o `sdd` que son enlaces;
+  - el tope justo y uno más, 20 y 21 leídos, 500 y 501 mirados, y los enlaces que no gastan lecturas;
+  - limpio (comillas, `‮`, `​`, tabuladores), cortado con «…» y justo sin cortar;
+  - una línea de 200.000 espacios en menos de un segundo y medio.
+- *En la barra*, con un `resume` fingido: la frase en Ayuda y el encargo en el botón, el recordatorio de
+  «Seguir donde lo dejé» sí y el de otra cosa no, una clave de la carpeta tapada (también en el borde del
+  tope), lo que llega a Claude por su enlace y a Codex por el portapapeles, y sin nada en marcha, como
+  antes.
+- *La última vez, el día*: con fechas fijas, la primera vez con algo hecho, a mediodía, «Ahora no», la
+  medianoche, el día que se abre sin nada o a medio montar, y el siguiente.
+- *La última vez, en la barra*: el orden contra cada tarjeta de delante y de detrás, una sola a la vista,
+  sus dos botones (y que quitan la tarjeta hasta mañana), lo que no trae sus botones no se pinta, la zona
+  de la memoria del arnés, y lo hecho hoy no la saca.
+- `empresas-distintas.js`: la gestoría y el despacho (Codex) llevan un documento en marcha, y el despacho uno
+  todo marcado que no sale. Las tres siguen con una tarjeta y cinco cosas a la vista como mucho, y la frase
+  sale solo dentro de Ayuda.
+
+**Mutaciones a mano: 86, y 83 tumbadas.** Cada una, en una copia del árbol, contra las comprobaciones nuevas
+y las tres empresas, con dos mutantes de control que no cambian nada (y pasan, como deben).
+
+- 54 en `por-donde-ibas.js` (lo de leer y decir) y 11 en su parte del día;
+- 13 en el panel, 4 en la extensión y 4 en la brújula.
+
+En la primera vuelta pasaron siete más, y se cerraron con su prueba:
+
+- 20, 21 y 500 los leía la prueba del propio módulo, así que se movía con él. Ahora van escritos en la
+  prueba;
+- quitar el paso de CRLF y dejar la cabecera en el cuerpo no cambiaban nada. Ahora hay una casilla y un
+  comentario en la cabecera.
+
+Las tres que pasan son la misma defensa puesta tres veces, a propósito: `lstat`, `O_NOFOLLOW` y mirar otra
+vez lo abierto. Quitar una sola no deja leer un enlace. Quitar las dos primeras, sí, y la prueba lo tumba. La
+tercera solo cuenta si el fichero cambia entre mirarlo y abrirlo.
+
+**Lo que no hace, todavía:**
+
+- **El raíl `seguir.md` no se ha tocado.** Con `/seguir`, el asistente lee `next:` de RSC, que da por buena
+  una tarea con todo marcado si nadie la ha cerrado. Es de RSC (`nextSteps` solo mira `status: done`): hay
+  que contárselo a Eric.
+- **El comando de la paleta** «Executive Lab: Seguir donde lo dejé» sigue con su texto de siempre.
+- **No dice si lo de ayer se guardó**: eso lo dice la línea de las copias.
+- **No se ha visto en un VS Code de verdad**: la tarjeta a la mañana siguiente, la frase en Ayuda y el
+  encargo en la caja de Claude y en el portapapeles con Codex.
