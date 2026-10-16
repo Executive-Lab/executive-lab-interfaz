@@ -7803,3 +7803,76 @@ nuevo, interruptor nuevo, una fila de `noSeEnsena` quitada y otra que ya no exis
 
 **Lo que no hace.** Un `.mjs` que RSC pase a enseñarse en pantalla (por ejemplo un sello activable) sigue
 pidiendo a mano su pieza en `reglas.js`: la prueba obliga a decidirlo, no a hacerlo.
+
+## 170. Las credenciales que no son un .env
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** decidido
+
+Pendiente apuntado por Jose el 22-09 (`02-DOCS/wiki/ftd/cada-clave-tiene-un-sitio.md`): cuentas de
+servicio en JSON, `.pem`/`.key`/`.p12`, `token.json` de OAuth. Antes de tocar nada se probó, con una
+carpeta temporal y el código, qué cubría ya la 105 (con la 156 y la 167 encima).
+
+### Lo que ya estaba cubierto
+
+- **Reconocer**: cuentas de servicio por contenido (`"type": "service_account"`, `private_key`,
+  `client_secret`) o por nombre inequívoco (`credentials.json`, `token.json`, `client_secret*.json`…);
+  `.pem`, `.p8`, `.p12`, `.pfx`, `.key` (solo si empieza por `-----BEGIN`, no una presentación de Keynote),
+  `.jks`, `id_rsa`…; sin sacar de dentro más que `type` y `client_email`.
+- **Contar**: «fuera de sitio» / «Que las ordene» / Conexiones; su sitio es `01-TOOLS/<X>/keys/` según
+  el dueño (carpeta, nombre o proyecto de la cuenta) y, si no hay dueño, se pregunta.
+- **No subir**: `guardar.loQueNoEntra` las deja fuera de cada copia, y `estanSubidas` avisa si ya están en
+  git; el soltar de la 156 las deja en `keys/`.
+- **Encargo**: sin contenido, con las rutas por `ruta()` (`limpio.etiqueta` + `RUTA_SEGURA`, de la 167).
+- **Lo de una aplicación** (135 y 167): protegido y no desordenado. No se ha movido.
+
+### Lo que faltaba, y se añade
+
+- **Sesiones de OAuth con cualquier nombre**: un `.json` con `"refresh_token"` dentro cuenta
+  (`mi-token-de-google.json`, el `authorized_user` de gcloud). Antes solo `token.json` por nombre. Es la
+  misma lista que ya usaba el soltar de la 156, que sí lo tenía: las dos puertas decían cosas distintas.
+- **`.ppk`** (claves de PuTTY) por nombre.
+- **Un nivel más de carpetas**: `datos/google/cuenta.json` se quedaba fuera, y por tanto dentro de las
+  copias. Hasta 40 subcarpetas por carpeta, con el mismo tope de lecturas, sin las carpetas que el inventario
+  nunca mira ni las que son una aplicación (una aplicación dentro de `datos/` es suya, como en la 135).
+- **Las que lee el sistema de un sitio fijo** (`.netrc`, `.pgpass`, `.git-credentials`, `.htpasswd`,
+  `.aws/credentials`): entran en `paraProteger` (no van a una copia, se tapan sus valores, avisa si ya están
+  en git) y **no** en el desorden. Decisión conservadora: moverlas a `keys/` dejaría a `git`, `psql` o `aws`
+  sin encontrarlas. Se avisa, no se mueve. Tampoco se mandan al asistente a mover.
+- **Taparlas de lo que el asistente imprima**: la clave de un `.ppk`, la contraseña de un `.netrc`, de un
+  `.pgpass`, de un `.htpasswd` o de un `.git-credentials`, y las claves de `.aws/credentials`
+  (`conexiones.secretosDeTexto`). Antes solo se tapaban JSON y PEM.
+
+### Lo que no hace
+
+- **No mira más abajo del segundo nivel** ni dentro de dotcarpetas que no sean `.aws`. El tope existe porque
+  esto corre en cada repintado.
+- **Los ficheros de acceso de la raíz de una aplicación** siguen contando como fuera de sitio, como dice la 105
+  y su prueba; es el caso que la 167 dejó apuntado. No se decide aquí.
+- **`~/.aws` y `gcloud` de la casa de la persona** no se miran: están fuera de la carpeta.
+- Si los del sistema ya están en git, el aviso sale con el texto de «aplicación con credenciales» de la 135;
+  la acción (dejar de guardarlas, cambiarlas donde se sacaron) es la buena, la frase es la que no es exacta.
+
+### Pruebas
+
+`humo.js`: una comprobación nueva junto a la de los ficheros de acceso, con valores falsos construidos en
+tiempo de ejecución. 8 mutaciones (quitar `refresh_token`, quitar el segundo nivel, quitar lo del sistema de
+`paraProteger`, quitar el taparlas de texto, mirar dentro de aplicaciones anidadas, `.ppk`, quitar
+`limpio.etiqueta` de `ruta()` y quitar `RUTA_SEGURA`): 7 tumbadas. Sobrevive quitar solo `limpio.etiqueta`, porque
+`RUTA_SEGURA` ya cubre sola ese caso (dos defensas, la 167 las puso juntas). Ninguna palabra nueva en pantalla: el diccionario no cambia.
+
+### La revisión
+
+La revisión de seguridad de la PR #67 encontró tres cosas, arregladas:
+
+- **Una expresión regular que se disparaba** (`conexiones.secretosDeTexto`, URL con usuario y contraseña): un fichero de
+  63 KB con `http://a:` repetido tardaba 750 ms. Usuario `{1,64}` y contraseña `{1,256}`; con la entrada del
+  informe ahora tarda menos de 100 ms (prueba con tiempo, entrada construida al ejecutar).
+- **`.netrc` con la contraseña entre comillas** (`password "ab cd efghijklmnop"`) solo tapaba `"ab`. Ahora va primero
+  la alternativa con comillas.
+- **El tope de 60 lecturas** se gastaba en el segundo nivel antes de llegar a lo importante. Ahora el orden es: el primer
+  nivel, las subcarpetas con nombre de credenciales (`keys`, `secrets`, `credentials`…) y después el resto del segundo
+  nivel; y un `.json` que su nombre ya identifica (`credentials.json`) no gasta lectura. Prueba: 37 subcarpetas con 2
+  `.json` y credenciales en `zeta/`, `secrets/` y `datos/keys/`, que se siguen viendo.
+
+Una mutación por retoque (quitar las cotas, quitar las comillas, volver al orden de antes, y contar de nuevo los
+nombres inequívocos): las cuatro tumbadas.
