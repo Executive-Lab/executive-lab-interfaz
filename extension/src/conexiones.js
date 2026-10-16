@@ -374,9 +374,17 @@ function laSeccionDeLosPasos(texto) {
 function comoSeConecta(carpeta, tope = 8) {
   const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
   if (texto === null) return [];
-  const seccion = laSeccionDeLosPasos(texto);
-  if (!seccion) return [];
+  // «Cómo conectarla» manda, pero si no da pasos, la primera de las otras, como
+  // antes (revisión de corrección de la 159).
+  const secciones = texto.split(/^##\s+/m);
+  for (const seccion of [laSeccionDeLosPasos(texto), secciones.find((t) => TITULOS.test(t))]) {
+    const pasos = seccion ? losPasosDe(seccion, tope) : [];
+    if (pasos.length) return pasos;
+  }
+  return [];
+}
 
+function losPasosDe(seccion, tope) {
   const util = (linea) => linea && !/[{<]/.test(linea) && !/\bcp\b|chmod|\.env\b/.test(linea) && !noEsUnPaso(linea);
 
   const pasos = seccion.split('\n')
@@ -442,7 +450,15 @@ function laFecha(texto) {
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 }
 
-const UNA_DIRECCION = /https?:\/\/[^\s<>()"'«»[\]]{1,500}/;
+// Con paréntesis dentro, como las de la Wikipedia: `…/API_(informática)`. Uno de
+// cierre que sobra al final es de la frase, no de la dirección.
+const UNA_DIRECCION = /https?:\/\/[^\s<>"'«»[\]]{1,500}/;
+const LAS_DIRECCIONES = new RegExp(UNA_DIRECCION.source, 'g');
+function sinLoDeLaFrase(direccion) {
+  let limpia = direccion.replace(/[.,;:]+$/, '');
+  while (limpia.endsWith(')') && (limpia.match(/\)/g) || []).length > (limpia.match(/\(/g) || []).length) limpia = limpia.slice(0, -1).replace(/[.,;:]+$/, '');
+  return limpia;
+}
 function deDondeSale(carpeta) {
   const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
   if (texto === null) return null;
@@ -452,7 +468,11 @@ function deDondeSale(carpeta) {
     if (!resto) continue;
     const direccion = (resto.match(UNA_DIRECCION) || [])[0];
     if (!direccion) continue;
-    return { url: direccion.replace(/[.,;:]+$/, ''), fecha: laFecha(resto.replace(UNA_DIRECCION, ' ')) };
+    // La fecha, de lo que no es una dirección (una dirección puede llevar otra
+    // fecha dentro), y primero de lo que va detrás de «comprobado».
+    const sinDirecciones = resto.replace(LAS_DIRECCIONES, ' ');
+    const trasComprobado = (sinDirecciones.match(/comprobad[oa]\b([\s\S]*)$/i) || [])[1];
+    return { url: sinLoDeLaFrase(direccion), fecha: laFecha(trasComprobado) || laFecha(sinDirecciones) };
   }
   return null;
 }

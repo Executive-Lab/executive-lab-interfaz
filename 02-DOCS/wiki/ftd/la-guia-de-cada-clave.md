@@ -52,24 +52,34 @@ Decisión 159, sobre las pantallas de la 156 (clases de acceso y «Pídeselo a t
 
 ## Checklist
 
-- [x] 1. `pdf.js`: estructura, tabla `xref`, WinAnsi, anchos, partir, páginas, pie, enlaces — 20 mutaciones,
-  las 20 tumbadas.
+- [x] 1. `pdf.js`: estructura, tabla `xref`, WinAnsi, anchos, partir, páginas, pie, enlaces — 25 mutaciones,
+  las 25 tumbadas.
 - [x] 2. `guia.js` y los lectores: secciones, tapado, fuente y fecha, clases de acceso, sin pisar ni seguir
-  enlaces, sin pasos — 20 mutaciones, las 20 tumbadas.
-- [x] 3. Extensión y panel: el botón, el aviso que se queda y lo de sin pasos — 7 mutaciones, las 7 tumbadas.
-- [x] 4. La seguridad para quien la saca y el raíl en las dos copias — 4 mutaciones, las 4 tumbadas.
-- [x] 5. Diccionario, decisión 159 y todas las comprobaciones en verde.
+  enlaces, sin pasos — 44 mutaciones, las 44 tumbadas.
+- [x] 3. Extensión y panel: el botón, el aviso que se queda y lo de sin pasos — 9 mutaciones, las 9 tumbadas.
+- [x] 4. La seguridad para quien la saca, el tapado y el raíl en las dos copias — 6 mutaciones, las 6
+  tumbadas.
+- [x] 5. Revisión de seguridad y de corrección: lo confirmado, arreglado con su prueba (decisión 159).
+- [x] 6. Main traído (la 157 y los recordatorios ordenados): lo que se le pide al asistente pasa por
+  `limpio.etiqueta`.
+- [x] 7. Diccionario, decisión 159 y todas las comprobaciones en verde.
 
 ## Evidence
 
-- `node extension/prueba/humo.js`: 403 comprobaciones (eran 401). Las dos nuevas:
+- `node extension/prueba/humo.js`: 411 comprobaciones con main traído (eran 409). Las dos nuevas:
   - «el PDF a mano: tabla de saltos exacta, acentos en WinAnsi, líneas por su ancho, varias páginas, títulos
     no huérfanos y enlaces solo https»;
   - «la guía para sacar la clave, en PDF: cada sección del disco o de la barra, ningún valor de clave, no pisa
     ni sigue enlaces, y sin pasos se le pide al asistente».
 - `mapeos-codex.js`, `contrato.js` (14), `empresas-distintas.js` y `comprobar-diccionario.js`, en verde.
-- Mutaciones: 51, las 51 tumbadas. Una sobrevivió a la primera pasada (la fuente como punto de la lista) y se
-  cerró con su prueba.
+- Mutaciones: 84, las 84 tumbadas: 51 de la primera pasada y 33 de las revisiones. En la primera sobrevivió
+  una (la fuente como punto de la lista), y la revisión de corrección encontró siete más que pasaban. Todas
+  cerradas con su prueba.
+- Revisión de seguridad: dos confirmadas (una clave con algo invisible en medio salía en el PDF; un README
+  con una línea de espacios colgaba el repintado) y dos dudosas, todo arreglado.
+- Revisión de corrección: cuatro confirmadas (sin claves la guía se contradecía; el aviso tapaba la pregunta
+  de la clave que puede escribir; la fecha y la dirección de la fuente; siete mutantes vivos) y varias dudosas,
+  arregladas las que decían algo falso.
 - El PDF de las pruebas, leído en una carpeta temporal con lo que ya había en el Mac y sin red:
   - poppler (`pdftotext`, `pdfinfo`, `pdffonts`), `mutool clean` y Ghostscript, sin un aviso;
   - `pypdf` estricto: título, páginas y los dos enlaces;

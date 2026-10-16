@@ -16859,6 +16859,17 @@ exec git "$@"
     assert.equal(pdfM.ancho('Hola', true, 1000), 2167, 'en negrita');
     assert.deepEqual(['ñ', 'Ñ', '¿', '€', '—', '«'].map((l) => [pdfM.ancho(l, false, 1000), pdfM.ancho(l, true, 1000)]), [[556, 611], [722, 722], [611, 611], [556, 556], [1000, 1000], [556, 556]]);
     assert.equal(pdfM.ancho('Hola', false, 11), 2056 * 11 / 1000, 'con el tamaño de la letra');
+    // Las dos tablas enteras: la suma, y la suma con el número de cada letra, para que un ancho
+    // cambiado o dos cambiados de sitio no pasen. Son las de los AFM de Adobe (las comprobó reportlab).
+    const suma = (t) => [t.reduce((a, b) => a + b, 0), t.reduce((a, b, i) => a + b * i, 0)];
+    assert.deepEqual(suma(pdfM.ANCHOS.normal), [118723, 17295049], 'la tabla de Helvetica');
+    assert.deepEqual(suma(pdfM.ANCHOS.negrita), [123009, 17897649], 'la tabla de Helvetica-Bold');
+    assert.deepEqual([pdfM.ANCHOS.normal.length, pdfM.ANCHOS.negrita.length], [256, 256]);
+    // El guion blando no se ve; una lista de dibujos no se salta números ni deja un hueco.
+    assert.equal(pdfM.aWinAnsi('con\u00adtraseña'), 'contrase\xf1a', 'el guion blando sale');
+    const saltos = leerPdf(pdfM.documento({ bloques: [{ tipo: 'lista', numerada: true, elementos: ['uno', '😀😀', 'tres'] }, { tipo: 'lista', elementos: [] }] }));
+    assert.deepEqual(saltos.paginas[0].lineas.map((l) => l.texto), ['1.', 'uno', '2.', 'tres'], 'una lista con un elemento que se queda en nada');
+    assert.equal(leerPdf(pdfM.documento({ bloques: [{ tipo: 'lista', elementos: [] }, { tipo: 'parrafo', texto: '' }] })).paginas.length, 1, 'un documento sin nada que escribir');
     // Partir: ninguna línea se pasa, no se pierde nada, y una palabra que no cabe se parte por letras.
     const largo = `${'Configuración de la cuenta y permisos de administrador, '.repeat(12)}${'x'.repeat(300)} fin`;
     const partidas = pdfM.partir(largo, 200, 11);
@@ -17003,6 +17014,31 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 1 });
       await proveedor.repintarLoQueHaya();
       assert.equal(ultimo('conexion').aviso, null, 'el aviso se queda para siempre');
+      // Si la última prueba dijo que la clave puede escribir, esa pregunta va por delante del aviso
+      // (revisión de corrección de la 159), también al repintar.
+      const pruebas = proveedor.almacen().get('executiveLab.pruebasDeConexion');
+      await proveedor.almacen().update('executiveLab.pruebasDeConexion', { Facturas: { ok: true, mensaje: 'Conecta, pero esta clave puede cambiar y borrar cosas en Facturas, no solo mirarlas.', cuando: Date.now(), huella: conexionesM.huella('Facturas'), puedeEscribir: true } });
+      try {
+        await proveedor.manejar({ tipo: 'guiaEnPdf', proveedor: 'Facturas' });
+        assert.ok((ultimo('conexion').aviso.botones || []).some((b) => b.etiqueta === 'Dejarla así'), 'el aviso de la guía tapa la pregunta de la clave que puede escribir');
+        await proveedor.repintarLoQueHaya();
+        assert.ok((ultimo('conexion').aviso.botones || []).some((b) => b.etiqueta === 'Dejarla así'), 'al repintar, la pregunta no vuelve');
+      } finally {
+        await proveedor.almacen().update('executiveLab.pruebasDeConexion', pruebas);
+        fs.rmSync(path.join(fuera, 'Guía para sacar la clave de Facturas (2).pdf'), { force: true });
+      }
+      // Si no se puede abrir, se dice, y está guardada.
+      const papelesM = cargar('papeles');
+      const abrirDeVerdad = papelesM.abrirFichero;
+      papelesM.abrirFichero = async () => { throw new Error('sin programa para abrirlo'); };
+      try {
+        await proveedor.manejar({ tipo: 'guiaEnPdf', proveedor: 'Facturas' });
+        assert.equal(ultimo('conexion').aviso.texto, 'He guardado la guía, pero no he podido abrirla. La tienes en Resultados (out), dentro de Documentos: «Guía para sacar la clave de Facturas (2).pdf».');
+        assert.ok(fs.existsSync(path.join(fuera, 'Guía para sacar la clave de Facturas (2).pdf')));
+      } finally {
+        papelesM.abrirFichero = abrirDeVerdad;
+        fs.rmSync(path.join(fuera, 'Guía para sacar la clave de Facturas (2).pdf'), { force: true });
+      }
       // Y sale en Documentos, en Resultados (out), con lo de esa conexión.
       assert.deepEqual(cargar('salidas').loQueHaProducido().map((p) => [p.id, p.archivos.map((a) => a.fichero)]), [['Facturas', ['Guía para sacar la clave de Facturas.pdf']]]);
 
@@ -17133,6 +17169,10 @@ exec git "$@"
       // Lo de antes de empezar, también en su propia sección, delante: los pasos siguen saliendo de «Cómo conectarla».
       fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Antes de empezar\n\n- Una cuenta de empresa.\n- Ser administrador.\n\n## Cómo conectarla\n\n1. Entra en facturas.test.\n2. Pulsa «Crear clave nueva».\n');
       assert.deepEqual(conexionesM.laGuia('Facturas').pasos, ['Entra en facturas.test.', 'Pulsa «Crear clave nueva».'], 'los pasos salen de «Antes de empezar»');
+      // Pero si «Cómo conectarla» no trae pasos y otra sección sí, salen los de la otra, como antes.
+      fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Pasos\n\n1. Entra.\n2. Crea la clave.\n\n## Cómo conectarla\n\nVer arriba.\n');
+      assert.deepEqual(conexionesM.claves('Facturas').proveedor.pasos, ['Entra.', 'Crea la clave.'], '«Cómo conectarla» sin pasos deja la guía vacía');
+      fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Antes de empezar\n\n- Una cuenta de empresa.\n- Ser administrador.\n\n## Cómo conectarla\n\n1. Entra en facturas.test.\n2. Pulsa «Crear clave nueva».\n');
       assert.ok(enPdf().includes('Antes de empezar • Una cuenta de empresa. • Ser administrador. Los pasos'), 'la sección de antes de empezar');
       fs.writeFileSync(path.join(suya, 'README.md'), '# Facturas\n\n## Cómo conectarla\n\n1. Entra en facturas.test.\n');
       assert.ok(!enPdf().includes('Antes de empezar •') && !guiaM.contenido('Facturas').bloques.some((b) => b.texto === 'Antes de empezar'), 'sin nada que lo diga, sale la sección');
@@ -17140,6 +17180,40 @@ exec git "$@"
       fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas\n\n## Cómo conectarla\n\n${Array.from({ length: 12 }, (_, i) => `${i + 1}. Paso número ${i + 1}.`).join('\n')}\n`);
       assert.equal(conexionesM.claves('Facturas').proveedor.pasos.length, 8);
       assert.ok(enPdf().includes('12. Paso número 12.'), 'el PDF corta los pasos');
+
+      // De dónde sale, con otras direcciones en la línea (revisión de corrección de la 159): la fecha,
+      // la de detrás de «comprobado» y no la de otra dirección; la dirección, con sus paréntesis.
+      const fuenteDe = (linea) => {
+        fs.writeFileSync(path.join(suya, 'README.md'), readme(linea));
+        return conexionesM.laGuia('Facturas').fuente;
+      };
+      assert.deepEqual(fuenteDe('Fuente: https://a.test/ver · comprobado el 15-10-2026 con https://b.test/2024-05-05/x'), { url: 'https://a.test/ver', fecha: '2026-10-15' }, 'la fecha de otra dirección');
+      assert.deepEqual(fuenteDe('Fuente: https://a.test/ver (actualizada el 2024-05-05) · comprobado el 15-10-2026'), { url: 'https://a.test/ver', fecha: '2026-10-15' }, 'otra fecha delante de «comprobado»');
+      assert.deepEqual(fuenteDe('Fuente: https://a.test/x(2020-01-01) · comprobado el 15-10-2026'), { url: 'https://a.test/x(2020-01-01)', fecha: '2026-10-15' }, 'la fecha de dentro de la dirección');
+      assert.deepEqual(fuenteDe('Fuente: https://es.wikipedia.org/wiki/API_(informática). Comprobado el 15-10-2026'), { url: 'https://es.wikipedia.org/wiki/API_(informática)', fecha: '2026-10-15' }, 'una dirección con paréntesis');
+      assert.deepEqual(fuenteDe('Fuente (https://a.test/x), comprobado el 15-10-2026'), null, '«Fuente (…)» no es la línea');
+      assert.deepEqual(fuenteDe('Fuente: la ayuda (https://a.test/x), comprobado el 15-10-2026'), { url: 'https://a.test/x', fecha: '2026-10-15' }, 'el paréntesis de la frase');
+      assert.equal(fuenteDe(`Fuente: ${'x'.repeat(1200)} https://larga.test/ · comprobado el 15-10-2026`), null, 'una línea de más de 1.000 letras se lee');
+      assert.equal(conexionesM.laFecha('15-10-2101'), null, 'una fecha de dentro de un siglo');
+      assert.equal(conexionesM.laFecha('31-12-1999'), null, 'una fecha del siglo pasado');
+      fs.writeFileSync(path.join(suya, 'README.md'), readme());
+      // CREDENTIALS.md y .env.example, sin seguir enlaces: ni dónde se saca cada clave, ni su página.
+      if (process.platform !== 'win32') {
+        const aparte = fs.mkdtempSync(path.join(os.tmpdir(), 'guia-aparte-'));
+        for (const fichero of ['CREDENTIALS.md', '.env.example']) {
+          fs.renameSync(path.join(suya, fichero), path.join(aparte, fichero));
+          fs.symlinkSync(path.join(aparte, fichero), path.join(suya, fichero));
+        }
+        fs.appendFileSync(path.join(aparte, '.env.example'), '# Generate at: https://facturas.test/generar\n');
+        const porEnlace = conexionesM.claves('Facturas');
+        assert.equal(porEnlace.proveedor.ayuda, null, 'la página sale de un CREDENTIALS.md o un .env.example que son un enlace');
+        assert.ok(porEnlace.claves.every((c) => !c.donde), 'dónde se saca, de un CREDENTIALS.md que es un enlace');
+        for (const fichero of ['CREDENTIALS.md', '.env.example']) {
+          fs.rmSync(path.join(suya, fichero));
+          fs.renameSync(path.join(aparte, fichero), path.join(suya, fichero));
+        }
+        fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_API_KEY=\nFACTURAS_ENV=test\n');
+      }
 
       // Dónde ponerla y Por seguridad, según la clase de acceso (decisión 156). Sin el .env:
       // lo que ya está puesto también cuenta como un dato que se pega.
@@ -17167,6 +17241,28 @@ exec git "$@"
       fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Una clave y un fichero de acceso'));
       texto = enPdf();
       assert.ok(texto.includes(`${informaticoM.POR_SEGURIDAD_PARA_TI.clave[0]}`) && texto.includes('• Y lo mismo con el fichero de acceso: tampoco por correo ni por mensajería.'), 'con una clave y un fichero, la seguridad');
+      // Un fichero sin claves, con prueba: se prueba sola al soltarlo.
+      fs.writeFileSync(path.join(suya, '.env.example'), '');
+      fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Un fichero de acceso'));
+      assert.ok(enPdf().includes('› Facturas › suelta el fichero de acceso encima de la barra, o pulsa «Elegir el fichero». Se prueba sola y te dice si funciona.'), 'un fichero sin claves');
+      // Entrar con tu cuenta y además un secreto que pegar: la seguridad de una clave.
+      fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_CLIENT_ID=\nFACTURAS_CLIENT_SECRET=\n');
+      fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Entrar con tu cuenta'));
+      texto = enPdf();
+      assert.ok(texto.includes(informaticoM.POR_SEGURIDAD_PARA_TI.clave[0]) && !texto.includes(informaticoM.POR_SEGURIDAD_PARA_TI.cuenta[0]), 'entrando con tu cuenta y un secreto, la seguridad de no pegar nada');
+      // Usuario y contraseña con un solo dato: una casilla normal, como en la pantalla.
+      fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_EMAIL=\n');
+      fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Usuario y contraseña'));
+      assert.ok(enPdf().includes('› Facturas › pega cada dato en su casilla › Guardar.'), 'con un solo dato, «el usuario y la contraseña»');
+      // Sin claves: a medio hacer, se dice; sin nada que pegar, no se habla de casillas.
+      fs.writeFileSync(path.join(suya, '.env.example'), '<TOOL>_API_KEY=\n');
+      fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Una clave'));
+      texto = enPdf();
+      assert.ok(texto.includes('Qué dato es cada cosa El asistente ha empezado esta conexión y no la ha terminado: todavía no se sabe qué claves pide. Dónde ponerla Abre la barra de Executive Lab › Conexiones (tools) › Facturas. Cuando el asistente termine esta conexión, cada dato tendrá allí su casilla.'), 'a medio hacer');
+      fs.writeFileSync(path.join(suya, '.env.example'), '');
+      fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales(''));
+      texto = enPdf();
+      assert.ok(texto.includes('Esta conexión no pide ninguna clave. Dónde ponerla No hay nada que pegar en la barra: esta conexión no pide ninguna clave.') && !texto.includes('casilla › Guardar'), 'sin claves, se habla de casillas');
       fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_WEBHOOK_URL=\n');
       fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), credenciales('Una dirección que te dan'));
       assert.ok(enPdf().includes('› Facturas › pega la dirección entera en su casilla › Guardar.'), 'con una dirección');

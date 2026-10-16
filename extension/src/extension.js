@@ -1432,7 +1432,8 @@ ${cabecera}
     this.donde = { tipo: 'conexion', proveedor, ...(aviso && aviso.seQueda ? { aviso } : {}) };
     // Conecta con una clave que puede escribir y no ha dicho qué hace: la pregunta
     // sigue aquí, también si se fue mientras se probaba (revisión del punto 7).
-    if (!aviso) {
+    // Y por delante del aviso que se queda, que es solo decir algo (revisión de corrección de la 159).
+    if (!aviso || aviso.seQueda) {
       const ultima = this.laUltimaPrueba(proveedor);
       if (ultima && ultima.puedeEscribir) aviso = this.loQueDijoLaPrueba(proveedor, { ok: true, puedeEscribir: true, mensaje: ultima.mensaje, huella: conexiones.huella(proveedor) });
     }
@@ -1477,7 +1478,16 @@ ${cabecera}
       this.salida.appendLine(`[guiaEnPdf] ${hecho.motivo}${hecho.detalle ? `: ${hecho.detalle}` : ''}`); // diccionario: interno
       return this.verConexion(proveedor, { texto: 'No he podido guardar la guía. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
     }
-    await papeles.abrirFichero(hecho.completa);
+    try {
+      await papeles.abrirFichero(hecho.completa);
+    } catch (error) {
+      this.salida.appendLine(`[guiaEnPdf] no se abre: ${error.message}`); // diccionario: interno
+      return this.verConexion(proveedor, {
+        texto: `He guardado la guía, pero no he podido abrirla. La tienes en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
+        malo: true,
+        seQueda: true,
+      });
+    }
     return this.verConexion(proveedor, {
       texto: `Te he abierto la guía, y la tienes en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
       malo: false,

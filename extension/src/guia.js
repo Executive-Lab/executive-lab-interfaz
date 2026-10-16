@@ -83,18 +83,27 @@ function loQueSeLePide(etiqueta, proveedorId) {
 // mismo que se ve en la pantalla de la conexión.
 function dondePonerla(datos, nombre, conPrueba) {
   const clases = datos.proveedor.acceso || [];
+  const camino = `Abre la barra de Executive Lab → Conexiones (tools) → ${nombre}`;
   const acciones = [];
   if (clases.includes('cuenta')) acciones.push('pulsa «Entrar»: el asistente te abre el navegador para que entres con tu cuenta');
   if (clases.includes('fichero')) acciones.push('suelta el fichero de acceso encima de la barra, o pulsa «Elegir el fichero»');
   const formas = datos.claves.map((c) => c.forma);
-  if (formas.length || !acciones.length) {
-    if (formas.length && formas.every((f) => f === 'usuario' || f === 'contrasena')) acciones.push('escribe el usuario y la contraseña en sus casillas → Guardar');
-    else if (formas.length && formas.every((f) => f === 'direccion')) acciones.push('pega la dirección entera en su casilla → Guardar');
+  // Sin claves ni nada que soltar o pulsar, no hay casillas: no se dice que las haya
+  // (revisión de corrección de la 159).
+  if (!formas.length && !acciones.length) {
+    return [{ tipo: 'parrafo', texto: datos.proveedor.aMedioHacer
+      ? `${camino}. Cuando el asistente termine esta conexión, cada dato tendrá allí su casilla.`
+      : 'No hay nada que pegar en la barra: esta conexión no pide ninguna clave.' }];
+  }
+  if (formas.length) {
+    // Juntos, como en la pantalla, solo con dos o más y sin nada más (decisión 156).
+    const juntas = formas.filter((f) => f === 'usuario' || f === 'contrasena').length;
+    if (juntas >= 2 && juntas === formas.length) acciones.push('escribe el usuario y la contraseña en sus casillas → Guardar');
+    else if (formas.every((f) => f === 'direccion')) acciones.push('pega la dirección entera en su casilla → Guardar');
     else acciones.push('pega cada dato en su casilla → Guardar');
   }
   // Se prueba sola al guardar o al soltar el fichero, si trae prueba (decisiones 146 y 156).
   const sola = conPrueba && (formas.length || clases.includes('fichero')) ? 'Se prueba sola y te dice si funciona.' : '';
-  const camino = `Abre la barra de Executive Lab → Conexiones (tools) → ${nombre}`;
   if (acciones.length === 1) return [{ tipo: 'parrafo', texto: `${camino} → ${acciones[0]}.${sola ? ` ${sola}` : ''}` }];
   return [
     { tipo: 'parrafo', texto: `${camino}, y allí:` },
@@ -148,6 +157,7 @@ function contenido(proveedorId, { cuando = new Date() } = {}) {
   if (clases.includes('fichero')) cadaUno.push([{ texto: 'Fichero de acceso: ', negrita: true }, { texto: 'una cuenta de servicio o un certificado.' }]);
   if (cadaUno.length) bloques.push({ tipo: 'lista', elementos: cadaUno });
   else if (clases.includes('cuenta')) bloques.push({ tipo: 'parrafo', texto: `No hay nada que pegar: entras con tu cuenta de ${nombre} en el navegador, y el asistente hace el resto.` });
+  else if (datos.proveedor.aMedioHacer) bloques.push({ tipo: 'parrafo', texto: 'El asistente ha empezado esta conexión y no la ha terminado: todavía no se sabe qué claves pide.' });
   else bloques.push({ tipo: 'parrafo', texto: 'Esta conexión no pide ninguna clave.' });
 
   // Dónde ponerla, Si no puedes sacarla tú y Por seguridad: lo pone la barra.

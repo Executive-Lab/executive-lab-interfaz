@@ -6301,7 +6301,8 @@ comprobado. «Conectar algo nuevo» también lo pide. Los pasos siguen saliendo 
 haya una sección «Antes de empezar» delante. Esas dos líneas no cuentan como pasos, ni en la barra ni en el
 PDF.
 
-**Las pruebas**: `humo.js` pasa de 401 a 403.
+**Las pruebas**: dos comprobaciones nuevas en `humo.js`, que con main traído (la 157 y los recordatorios
+ordenados) pasa de 409 a 411.
 
 - *El PDF a mano*: la tabla de saltos al byte, `/Size`, `/Count` y `/Length`, las fuentes con WinAnsi, cada
   sustitución de letra, los anchos, partir sin pasarse ni perder nada, setenta pasos en varias páginas sin
@@ -6323,19 +6324,67 @@ PDF.
   - sin pasos, en el panel y al pulsar;
   - y el ejemplo de los raíles, tal cual, en las dos copias.
 
-**Mutaciones a mano: 51, las 51 tumbadas.** Cada una cambia una cosa y corre las pruebas de la guía:
+**Mutaciones a mano: 84, las 84 tumbadas.** Cada una cambia una cosa y corre las pruebas de la guía. Son 51
+de la primera pasada y 33 de las revisiones:
 
-- 20 en el PDF: anchos, tabla, `/Count`, `/Length`, escapes, octal, sustituciones, NFC, enlaces http y sin
-  comprobar, líneas que se pasan, títulos huérfanos, margen, pie, WinAnsi, numeración y título;
-- 7 en los lectores;
-- 13 en la guía;
-- 5 en la extensión;
+- 25 en el PDF;
+- 18 en los lectores;
+- 26 en la guía;
+- 7 en la extensión;
 - 2 en el panel;
-- 2 en la seguridad;
+- 4 en el tapado y la seguridad;
 - 2 en los raíles.
 
-Una sobrevivió a la primera pasada: la fuente escrita como un punto de la lista salía como paso, y nada lo
-miraba. Se cerró con su prueba.
+En la primera pasada sobrevivió una: la fuente escrita como un punto de la lista salía como paso, y nada lo
+miraba. Se cerró con su prueba. La revisión de corrección encontró siete más que pasaban (abajo). Ya no pasa
+ninguna.
+
+**Lo que encontró la revisión de seguridad**, arreglado y con su prueba:
+
+- **Una clave salía entera en el PDF si en medio llevaba algo que no se ve**: un espacio de ancho cero, un
+  dibujo o un acento suelto. Pasaba igual en letras de ancho completo. El PDF los quita o los cambia
+  *después* de tapar. Ahora se tapa también el texto tal y como se va a escribir. Eso vale para todo: el
+  nombre (que va en el título, en los datos del documento y en el nombre del fichero) y los enlaces. Además,
+  lo invisible, los acentos sueltos y la «?» parten una clave también en el mensaje del informático.
+- **Un README con una línea de espacios colgaba cada repintado**: con 40.000, 10 s. La expresión de los
+  puntos de una lista ya estaba así, y la de la 159 la copiaba. Ahora se pone un tope por línea antes de la
+  expresión, y los párrafos se juntan sin expresión.
+- **Lo que se le pide al asistente sin pasos** llevaba la primera línea del README tal cual. Ahora pasa por
+  `limpio.etiqueta`, como los demás encargos (los recordatorios ordenados), y se tapa. Lo mismo con la
+  carpeta. Solo se arma cuando no hay pasos.
+- **El nombre del fichero**: sin caracteres invisibles (uno daba la vuelta al nombre) y con 40 letras como
+  mucho. Con 60 emojis pasaba de los 255 bytes que admite un nombre.
+
+**Lo que encontró la revisión de corrección**, arreglado y con su prueba:
+
+- **Sin claves, la guía decía dos cosas que no casan**: «no pide ninguna clave» y, dos secciones después,
+  «pega cada dato en su casilla». Ahora, sin nada que pegar, lo dice. Y si está a medio hacer, dice que el
+  asistente no la ha terminado.
+- **El aviso que se queda tapaba la pregunta de la clave que puede escribir** (punto 7 de la 142). Ahora la
+  pregunta va por delante, también al repintar.
+- **La fecha de otra dirección**: con dos direcciones en la línea, salía la fecha de la segunda. Y la de
+  dentro de una dirección con paréntesis también. Una de la Wikipedia, `…/API_(informática)`, se cortaba en
+  el paréntesis. Ahora la dirección admite paréntesis, y el de cierre que sobra es de la frase. La fecha se
+  lee sin ninguna dirección, y primero la de detrás de «comprobado».
+- **«Cómo conectarla» sin pasos** dejaba la guía vacía aunque otra sección los trajera. Ahora, si no da
+  pasos, se usan los de la otra, como antes.
+- **Usuario y contraseña con un solo dato** decía «escribe el usuario y la contraseña», y la pantalla pinta
+  una casilla normal. Ahora va como en la pantalla: con dos o más, y sin nada más.
+- **Si no se podía abrir**, no se decía nada. Ahora: «He guardado la guía, pero no he podido abrirla. La
+  tienes en Resultados (out)…».
+- **En el PDF**: el guion blando se veía, un punto de una lista hecho solo de dibujos se saltaba un número,
+  y una lista vacía al principio lo rompía.
+- **Siete mutantes que pasaban**:
+  - el ancho de una letra, en cada tabla (ahora se comprueban las dos tablas enteras);
+  - los años de una fecha;
+  - entrar con tu cuenta y además un secreto;
+  - un fichero sin claves que se prueba solo;
+  - el tope de la línea de la fuente;
+  - CREDENTIALS.md y `.env.example` por un enlace.
+
+Lo que se dejó como está: «Se prueba sola» con varias claves, que se prueba cuando están todas; la fuente,
+que se busca en todo el README y no solo en «Cómo conectarla», porque `connect-tool` puede escribirla en
+otra sección; las fechas que el raíl no promete (`2026/10/15`, con hora); y el tope de 256 KB del README.
 
 **Comprobado fuera de la barra**, solo leyendo el PDF que hacen las pruebas en una carpeta temporal, con lo
 que ya había en este Mac y sin red:

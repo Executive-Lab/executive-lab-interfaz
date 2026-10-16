@@ -68,6 +68,8 @@ const ESPACIOS = /[\p{Zs}\t\n\r\v\f\u2028\u2029]/u;
 // Una letra en la tabla, o la cadena de bytes que la sustituye.
 function unaLetra(letra) {
   const codigo = letra.codePointAt(0);
+  // El guion blando no se ve, pero hay lectores que lo pintan (revisión de corrección de la 159).
+  if (codigo === 0xad) return '';
   if (A_WINANSI.has(codigo)) return String.fromCharCode(A_WINANSI.get(codigo));
   if (PARECIDOS.has(letra)) return [...PARECIDOS.get(letra)].map(unaLetra).join('');
   // Los saltos, los tabuladores y los espacios raros, un espacio.
@@ -304,10 +306,12 @@ function enLineas(bloques) {
     const estilo = ESTILOS[tipo];
     if (!estilo) continue;
     if (tipo === 'lista') {
-      (bloque.elementos || []).forEach((elemento, i) => {
+      const sangria = bloque.numerada ? SANGRIA_NUMERO : SANGRIA_PUNTO;
+      // Un elemento que se queda en nada (solo dibujos) no sale, ni se salta su número.
+      const conAlgo = (bloque.elementos || []).map((e) => partir(e, ANCHO_UTIL - sangria, estilo.tamano)).filter((p) => p.length);
+      if (!conAlgo.length) continue;
+      conAlgo.forEach((partidas, i) => {
         const marca = bloque.numerada ? `${i + 1}.` : '•';
-        const sangria = bloque.numerada ? SANGRIA_NUMERO : SANGRIA_PUNTO;
-        const partidas = partir(elemento, ANCHO_UTIL - sangria, estilo.tamano);
         partidas.forEach((trozos, j) => lineas.push({
           estilo,
           sangria,
@@ -318,7 +322,7 @@ function enLineas(bloques) {
         }));
       });
       // Un poco de aire al acabar la lista.
-      if (lineas.length) lineas[lineas.length - 1].despues += 3;
+      lineas[lineas.length - 1].despues += 3;
       continue;
     }
     const trozos = bloque.trozos || [{ texto: bloque.texto, negrita: estilo.negrita }];
