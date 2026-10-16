@@ -25,7 +25,12 @@ const conHorario = () => acciones.acciones().filter((b) => b.cuando);
 
 // La fila de Recordatorios sale si hay algo que recordar o algo a lo que
 // ponérselo: una habilidad con botón, o un recordatorio (solo sale lo que se tiene).
-const hayAlgo = () => disponibles().length > 0 || conHorario().length > 0;
+//
+// Los botones que pone la barra no cuentan (decisión 164, Jose): con ellos la
+// fila salía desde el primer día en todas las carpetas. Sale con una habilidad
+// de la persona o con un recordatorio puesto. Una vez dentro, se le puede poner
+// a cualquiera, también a los de la barra.
+const hayAlgo = () => disponibles().some((b) => !acciones.esDeLaBarra(b.nombre, b.fichero)) || conHorario().length > 0;
 
 // Si el fichero de un botón está de verdad en esta carpeta: con los enlaces
 // seguidos. Una habilidad compartida con otra carpeta se lee aquí, pero su

@@ -14,6 +14,10 @@
 // de seguridad y no un aprobado. Y que la principal sencilla, plegada, no pasa
 // de cinco cosas a la vista (el plan de simplificar la barra).
 //
+// Al final, una cuarta: una carpeta vacía montada de verdad, con el montaje de la
+// barra y el arnés de la clase, que tiene que acabar en la principal y no en la
+// lista de lo que falta (decisión 164).
+//
 //   node prueba/empresas-distintas.js <raíz del repositorio>
 
 const path = require('node:path');
@@ -294,5 +298,91 @@ for (const [nombre, montar] of TODAS) {
   }
 }
 
-console.log(mal ? `\n${mal} pantallas rotas` : '\nlas tres empresas, enteras');
-process.exit(mal ? 1 : 0);
+// ---- y una recién montada de verdad, que acaba en la principal -------------
+//
+// Decisión 164. Al terminar de preparar una carpeta salía «Qué falta por montar»,
+// una lista técnica de catorce filas, porque sin conexiones, sin conocimiento y
+// sin copia fuera —como queda toda carpeta recién montada— contaba como «falta».
+// Aquí se monta una carpeta vacía con el montaje de la barra y el arnés de la
+// clase, como en clase, y se mira lo que se ve al terminar: la principal, con
+// una tarjeta —la de la cuenta— y cinco cosas a la vista como mucho.
+async function laRecienMontada() {
+  const ext = path.join(RAIZ, 'extension');
+  if (!fs.existsSync(path.join(ext, 'media', 'harness', 'node_modules', '@ericrisco', 'rsc', 'scripts', 'rsc.js'))) {
+    console.log('· recién montada de verdad: SALTADA, sin el arnés de dentro');
+    return [];
+  }
+  const temporal = (nombre) => fs.mkdtempSync(path.join(os.tmpdir(), nombre));
+  // Ni los ajustes de Claude ni los de Codex ni el git de quien corre esto.
+  const antes = { claude: process.env.CLAUDE_CONFIG_DIR, codex: process.env.CODEX_HOME, git: process.env.GIT_CONFIG_GLOBAL };
+  process.env.CLAUDE_CONFIG_DIR = temporal('claude-de-mentira-');
+  process.env.CODEX_HOME = temporal('codex-de-mentira-');
+  const casa = temporal('git-de-mentira-');
+  fs.writeFileSync(path.join(casa, '.gitconfig'), '');
+  process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
+  const rotas = [];
+  try {
+    const vacia = temporal('recien-de-verdad-');
+    vscode.guion.raiz = vacia;
+    vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+    vscode.guion.respuestas = ['Llevar el día a día', 'La empresa entera', 'De 2 a 10', 'Poner orden en mis facturas', 'Lo justo', 'Ferretería Soler', ''];
+    cargar('rsc').saberDondeEstamos(ext);
+    cargar('terreno').saberDondeEstamos(ext);
+    const memoria = new Map();
+    const contexto = { extensionPath: ext, workspaceState: { get: (k) => memoria.get(k), update: async (k, v) => memoria.set(k, v) } };
+    const hecho = await cargar('arrancar').arrancar(contexto, { appendLine() {} });
+    vscode.guion.respuestas = null;
+    if (!hecho.ok) return [`recién montada: no se ha montado (${hecho.mensaje || 'cancelado'})`];
+
+    // Lo que decide si se enseña la lista o la principal (`siFaltaAlgoDecirlo`).
+    const revision = await cargar('terreno').radiografia();
+    const faltan = revision.piezas.filter((p) => p.estado === 'no' || p.estado === 'aMedias');
+    if (revision.algoRoto) rotas.push(`recién montada: se enseña la lista por ${faltan.filter((p) => !p.porHacer).map((p) => p.nombre).join(', ')}`);
+    if (!faltan.length) rotas.push('recién montada: no falta nada, y la prueba no mira nada');
+
+    // La principal, como la pinta la barra al terminar.
+    const estado = await cargar('brujula').estado({ fresco: true });
+    if (!estado.primerPaso) rotas.push('recién montada: no sale la tarjeta de la cuenta');
+    const visto = cargar('ideas').queSeVe({ carpetaDeLaExtension: ext });
+    if (!visto.idea || visto.idea.id !== 'capacidad-invoicing') rotas.push(`recién montada: la idea del primer día no es Facturación (${visto.idea && visto.idea.id})`);
+    const pintada = montarPanel().mandar({
+      tipo: 'estado',
+      estado: { ...estado, habilidades: cargar('rsc').habilidadesPuestas().length },
+      hayRecordatorios: cargar('recordatorios').hayAlgo(),
+      barraCompleta: false,
+      piezas: JSON.parse(fs.readFileSync(path.join(ext, 'media', 'piezas.json'), 'utf8')),
+      seAdapta: { parece: visto.parece, idea: visto.idea },
+      hayVersionNueva: '9.9.9',
+      copias: { hace: 'hace un momento', sinGuardar: false, subir: false },
+      versionDeLaBarra: '0.0.0',
+      modo: 'sencillo',
+      pulso: [],
+    });
+    const aLaVista = cosasALaVista(pintada);
+    if (aLaVista > 5) rotas.push(`recién montada: ${aLaVista} cosas a la vista`);
+    if (!/Abre Claude y entra con tu cuenta/.test(pintada)) rotas.push('recién montada: la tarjeta que toca no es la de la cuenta');
+    const otras = (pintada.match(/<div class="(consejo|aviso)/g) || []).length;
+    if (otras) rotas.push(`recién montada: ${otras + 1} tarjetas a la vez`);
+    if (pintada.includes('verRecordatorios')) rotas.push('recién montada: sale la fila de Recordatorios por los botones de la barra');
+    console.log(`✓ recién montada de verdad — a la principal · ${aLaVista} cosas a la vista · falta lo del primer día: ${faltan.map((p) => p.nombre).join(', ')}`);
+  } catch (e) {
+    rotas.push(`recién montada: ${e.message}`);
+  } finally {
+    vscode.guion.respuestas = null;
+    for (const [clave, valor] of [['CLAUDE_CONFIG_DIR', antes.claude], ['CODEX_HOME', antes.codex], ['GIT_CONFIG_GLOBAL', antes.git]]) {
+      if (valor === undefined) delete process.env[clave];
+      else process.env[clave] = valor;
+    }
+  }
+  return rotas;
+}
+
+(async () => {
+  const deLaRecien = await laRecienMontada();
+  if (deLaRecien.length) {
+    mal += deLaRecien.length;
+    console.log(`✗ recién montada de verdad\n    ${deLaRecien.join('\n    ')}`);
+  }
+  console.log(mal ? `\n${mal} pantallas rotas` : '\nlas tres empresas y la recién montada, enteras');
+  process.exit(mal ? 1 : 0);
+})();

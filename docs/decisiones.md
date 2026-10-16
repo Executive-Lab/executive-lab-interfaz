@@ -6767,3 +6767,168 @@ el diccionario y `revisar-powershell.js`, en verde.
 Con la revisión: `humo.js` 437 comprobaciones con `--con-arnes`, 429 sin él, cuatro más. 15 mutaciones más
 a mano, las 15 tumbadas. `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y
 `revisar-powershell.js`, en verde.
+
+## 164. El primer día, sin listas técnicas
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `el-primer-dia`
+
+Una revisión de producto pintó cada momento del primer día con el VS Code de mentira, y montó la carpeta con
+RSC 3.0.22 de verdad. Lo que veía alguien recién llegado no era lo que pide la propuesta de simplificar la
+barra: una tarjeta con lo que toca, cinco cosas a la vista y nada que dé miedo. Siete cosas, cada una con su
+prueba.
+
+**1. Al terminar de preparar la carpeta, la principal.** Tras las preguntas salía «Qué falta por montar», una
+lista técnica de catorce filas. `siFaltaAlgoDecirlo` la enseñaba si alguna pieza no estaba en «sí», y en una
+carpeta recién montada siempre faltan tres: «Conexiones: Ninguna todavía», «Conocimiento» y «Copias fuera».
+Medido con un montaje de verdad: esas tres, y ninguna más.
+
+- Las piezas que llegan con el trabajo llevan `porHacer` en `terreno.js`: conexiones, claves que ya tenía,
+  conocimiento, habilidades con botón, copias fuera, lo que ya había y el asistente no ha mirado, lo que el
+  arnés aplazó y, si eligió seguir sin ellas, las copias. Siguen en la lista, con su marca y su botón.
+- La radiografía dice `algoRoto`: una pieza que falta o está a medias y no es `porHacer`. Solo eso enseña la
+  lista al terminar; si no, se va a la principal. Los innegociables por escribir siguen enseñándola, porque el
+  aviso de montar promete «Al terminar te enseño lo que falta».
+- Al final del montaje se acaba en la principal, salvo si se fue a preparar la cuenta de GitHub, que se queda
+  allí. Antes, una lista que salía la tapaba.
+
+**2. La tarjeta de la cuenta, el primer día.** «Abre Claude y entra con tu cuenta · Hace falta una cuenta de
+pago» no salía nunca después de montar. `sinEmpezar` pedía cero copias, y la barra acaba de guardar el punto
+de partida. Ahora esa copia no cuenta (`guardar.esElPuntoDePartida`, por su asunto «Punto de partida — …»).
+La tarjeta sale la primera, delante de una versión nueva o de una idea, y se va con la primera conversación,
+el primer concepto, la primera conexión o la primera copia que no sea esa. Con el guardado solo de abajo, eso
+es como mucho una hora después de cambiar algo.
+
+**3. Una sugerencia desde el primer día.** El emparejamiento de `consejos.js` pide dos palabras distintas, y
+los objetivos del montaje son frases cortas. De los dieciséis que se ofrecen, quince no daban ninguna
+habilidad, y el otro daba `connect-tool`, que ya viene puesta. «Poner orden en mis facturas» no daba nada, y
+Ayuda › Sugerencias decía «Por aquí no veo nada».
+
+- Una tabla fija en el disco (P5), junto al catálogo: `media/objetivos.json`, objetivo → una o dos
+  habilidades, en orden. Se ofrece la primera que no esté puesta.
+- Alimenta la idea de siempre: «Para «Poner orden en mis facturas», te vendría bien la habilidad (skill)
+  Facturación. Presupuesto, factura y cobro, sin perder ninguna por el camino.», con **Añadirla**. Va delante
+  de lo que encaje por palabras, y una habilidad no sale dos veces.
+- Se compara sin mayúsculas, sin tildes y sin el punto final. «Otra cosa», que escribe la persona, sigue por
+  palabras. «Seguir con lo que ya hay» no tiene fila: ahí las ideas salen de lo que hay en la carpeta.
+- Una prueba exige que cada objetivo de `arrancar.js` tenga su fila, que no haya filas de objetivos que ya no
+  se ofrecen, y que cada habilidad esté en `capacidades.json` y en el catálogo de la versión de la clase.
+
+**4. GitHub y las copias, en Sugerencias.** «Más tarde» a GitHub y «Seguir sin copias» mandaban a
+«Histórico», que en la barra sencilla no existe.
+
+- Lo aplazado está en Ayuda › Sugerencias, con su botón, mientras siga sin hacerse (`ideas.loAplazado`): sin
+  copias, «Esta carpeta no tiene copias de seguridad, porque lo elegiste…» con **Ponerlas ahora**; con copias
+  y sin dónde subirlas, «Tu trabajo solo está en este ordenador…» con **Subir a GitHub**. No va en la
+  tarjeta: lo decidió la persona, y no tapa lo que toca.
+- Los textos lo dicen: «Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.» y
+  «Sigo sin copias. Puedes ponerlas cuando quieras desde Ayuda › Sugerencias.».
+- **«Seguir sin copias» se paraba.** El montaje se cortaba, y la principal sin git solo ofrecía ponerlo: lo
+  que había elegido no llevaba a ningún sitio. Ahora sigue a las preguntas de siempre y monta sin copias.
+  Al terminar no pregunta por GitHub, que no tendría qué subir.
+- Sin git, si eligió seguir sin copias, la carpeta sin preparar ofrece prepararla. Y en la principal, la
+  tarjeta de git no tapa la que toca: ponerlo está en Sugerencias. Quien no lo eligió sigue viendo git arriba.
+
+**5. Las copias, solas y cada hora.** `executiveLab.guardarSolo` pasa de 0 a 1 de fábrica. Lo pedía la
+propuesta aprobada («Nada se pierde»), y lo que lo frenaba, que lo pesado entrara en el historial, lo resolvió
+la 147. Sin ajuste, o con uno que no es de la lista, la barra también usa una hora (`ajustes.DE_FABRICA`, el
+mismo valor que el `package.json`).
+
+Encendido para todos, había que mirar las guardias de verdad, y una no aguantaba. `historialAjeno` da por
+bueno lo que no tiene `.git`, para el punto de partida, que va justo después de crearlo. Pero en una carpeta
+sin historial propio dentro de otro proyecto, `git status` y `git add` suben al de arriba: el guardado solo
+habría guardado en el historial de otra persona. Ahora el reloj pasa por `guardar.guardarSiToca`, que solo
+guarda en un `.git` de esta carpeta y nuestro (`terreno.podemosGuardarSolo`), y lo mira antes de contar los
+cambios. Probado con git de verdad: la nuestra guarda; la de otra persona, la de dentro de otro proyecto y la
+que no tiene copias, no.
+
+**La revisión de la PR #59 encontró dos huecos más, y están cerrados con su prueba** (media-alta). Para el
+punto de partida, `historialAjeno` da por nuestro un historial sin commits, y uno cuyo primer commit es «Punto
+de partida — …». Para la copia sola, eso dejaba pasar dos cosas:
+
+- un `git init` de la persona, sin commits todavía: la copia sola habría hecho commit en él cada hora, y habría
+  corrido su `pre-commit` (reproducido con `historial.guardar()`);
+- un clon de una carpeta de la barra, que es de quien lo clonó.
+
+Ahora la copia sola pide la marca local que pone la barra al crear el historial (`executivelab.historial =
+nuestro`, en `git config --local`, que no viaja en un clon), en un `.git` de esta carpeta: desde una
+subcarpeta, git leería la marca del de arriba. Sin la marca no guarda solo; guardar a mano sigue como estaba.
+`historialAjeno` no se toca: lo está cambiando otra rama, y el punto de partida sigue con él. Y si en la
+carpeta eligió seguir sin copias, el reloj se lo pasa a `guardarSiToca`, que no guarda. Una carpeta de una
+barra de antes de la marca no guarda sola: se queda en guardar a mano.
+
+La prueba, con git de verdad: un `git init` suyo con un `pre-commit` que deja rastro (ni commit ni rastro), un
+clon de la nuestra (no cambia su historial), la de dentro de un proyecto que sí es nuestro, y la nuestra
+habiendo elegido seguir sin copias. Cinco mutaciones más, las cinco tumbadas: volver a `historialAjeno`, dar
+por buena cualquier marca, no mirar el `.git` propio, no mirar si eligió seguir sin copias y que el reloj no
+se lo pase.
+
+**6. En Habilidades, lo de la barra no es «Tuyo».** Los raíles (`executive-lab` y los botones `ayuda`,
+`empezar`, `guardar` y `seguir`) salían como «Tuya: escrita para esta carpeta», porque van en `ownSkills` para
+que RSC no los tome por basura. Con Codex, los botones salían «fuera del catálogo». «Executive lab» era un
+botón que mandaba `/executive-lab` y no hacía nada, y dos repetían lo que ya está en Ayuda.
+
+- `acciones.esDeLaBarra`: una con ese nombre es de la barra si su `description` es la nuestra, la misma regla
+  con la que los raíles no pisan una suya que se llame igual. La de `executive-lab` vale también por su
+  `origin`, que no cambia de una versión a otra.
+- Van plegadas con Las del arnés, con su nombre: No sé qué hacer ahora, Empezar algo nuevo, Guardar en git,
+  Seguir donde lo dejé y Executive Lab. Esta última, sin botón y con lo que dice su cabecera. El plegable dice
+  entonces «Las montan el arnés y la barra para funcionar».
+- **Recordatorios no sale por ellos** (decidido por Jose): la fila sale con una habilidad de la persona o con
+  un recordatorio puesto. Dentro se le puede poner a cualquiera, también a los de la barra.
+
+**7. Los textos.**
+
+- «Lo último» encabezaba una carpeta vacía. Sale solo si ya había algo: trabajo suyo o un montaje a medias.
+- `nombres.enEspanol` tomaba por español la descripción de `unslop` por la «Y» de «`not just X but Y`», y la
+  de `clarify` por el «de» de «de-risked». La «y» ya no cuenta: una frase en español siempre lleva otra de la
+  lista. Y lo pegado con un guion no es una palabra suelta. Siguen pasando «Guardar en git», «Seguir donde lo
+  dejé», «No sé qué hacer ahora» y «Empezar algo nuevo en mi empresa». Ninguna descripción del arnés de la
+  clase pasa ya por español: lo mira una prueba, una por una.
+- `unslop` se llama «Repasar un texto antes de mandarlo» en `nombres.json` y en `capacidades.json`, como dice
+  el diccionario (P2). Se llamaba «Repaso de marcas de IA».
+
+**Las pruebas.** En `humo.js`, seis comprobaciones nuevas y ocho puestas al día. Pasa de 421 a 427.
+
+- *Al terminar de preparar la carpeta, la principal*: una carpeta como la deja el montaje, medida contra uno
+  de verdad, pieza por pieza; a la principal; con los raíles quitados, a la lista; el montaje entero con «Más
+  tarde», con «Sí, ahora» y sin copias.
+- *La tarjeta de la cuenta*: sale recién montada, delante de una versión nueva y de la idea, y se va con una
+  copia de verdad.
+- *Cada objetivo, su habilidad*: la tabla entera contra el montaje, el catálogo y el arnés; la primera que no
+  esté puesta; y la idea el primer día.
+- *Lo aplazado, en Sugerencias*: puras, en la pantalla, con y sin dónde subir, y sin git habiéndolo elegido.
+- *Lo de la barra, en Habilidades y en Recordatorios*: plegadas y con su nombre, la que está siempre activa
+  sin botón, una suya que se llama igual, una de una versión anterior, y la fila de Recordatorios.
+- *«Lo último»*, solo encima de algo.
+- Puestas al día: el guardado solo, ahora con git de verdad y no leyendo el código; «Seguir sin copias», que
+  ahora sigue a las preguntas y monta, en dos; los raíles con Claude, con Codex y con sus botones; el orden del
+  montaje; `unslop`; y `enEspanol`, con el arnés de la clase entero.
+
+En `empresas-distintas.js`, una cuarta carpeta: vacía y montada de verdad, con el montaje de la barra y el
+arnés de la clase. Acaba en la principal, con la tarjeta de la cuenta, la idea de Facturación, sin la fila de
+Recordatorios y con cinco cosas a la vista.
+
+**Mutaciones a mano: 81, las 81 tumbadas**, y cinco más de la revisión (en el punto 5): 86.
+Cada una cambia una cosa del código o de una tabla, corre las
+comprobaciones que le tocan y se deshace. Diez se corrieron también contra `empresas-distintas.js`, y la tumba
+también.
+
+- 14 en la principal al terminar (`porHacer` pieza a pieza, `algoRoto`, el final del montaje, «Más tarde»);
+- 4 en la tarjeta de la cuenta;
+- 11 en la tabla de los objetivos y la idea;
+- 18 en lo aplazado y «Seguir sin copias»;
+- 12 en el guardado solo;
+- 15 en Habilidades y Recordatorios;
+- 7 en los textos.
+
+En la primera pasada sobrevivieron cuatro, y se cerraron con su prueba: el punto de partida reconocido sin
+su raya; la tabla comparada sin quitar las tildes de lo que dijo; «Seguir sin copias» montando como si
+hubiera git, que daba el montaje por bueno sin montar el arnés; y un «de» pegado con un guion por delante.
+
+**Lo que queda:**
+
+- Verlo en un VS Code de verdad: montar una carpeta vacía y mirar que acaba en la principal con la tarjeta de
+  la cuenta, y que Sugerencias no está vacía.
+- Quien ya tiene la barra recibe el guardado solo al ponerse al día, en las carpetas que no lo apagaron. Hay
+  que contarlo en el «Qué trae» de la versión.
+- La barra completa sigue como estaba: allí Histórico existe.

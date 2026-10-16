@@ -3596,7 +3596,7 @@
     },
     {
       "id": "unslop",
-      "nombre": "Repaso de marcas de IA",
+      "nombre": "Repasar un texto antes de mandarlo",
       "frase": "Busca las marcas de que lo ha escrito una máquina, y las quita.",
       "palabras": [
         "revisar",
