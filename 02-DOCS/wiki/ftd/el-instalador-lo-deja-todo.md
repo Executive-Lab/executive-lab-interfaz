@@ -96,6 +96,26 @@ Lo que no corre en este Mac:
 - **SUSTITUIDA** — `desinstalar.ps1` no se ha ejecutado: lo miran `revisar-powershell.js` y una expresión de
   `humo.js` sobre su texto. No ven un fallo al correrlo.
 
+### La revisión adversaria (16-10-2026)
+
+Cinco arreglos, cada uno con su prueba en `humo.js` («los ajustes del editor: se insertan dentro del
+objeto…», que suma una comprobación, con main traído y la 160, 161, 162, 164 y 166: 454):
+
+- las claves se insertan en el cierre del objeto de verdad, no tras un `}` de un comentario o de una cadena
+  (medio);
+- lo que se escribe se lee antes con `leerJsonc`, y si no se lee no se escribe ni se apunta (medio);
+- sin constancia, las cinco claves de la instalación de antes, con su valor, se cuentan como nuestras (medio);
+- `extensions.confirmedUriHandlerExtensionIds` se queda, razonado en la decisión 163 (bajo);
+- desinstalar solo quita claves que de verdad ponemos, aunque la constancia diga otra cosa (bajo);
+- los ajustes se escriben enteros (temporal y `rename`), con los permisos que tenían y sin seguir enlaces
+  (bajo).
+
+Mutaciones: 6 (el cierre a ojo, la validación, lo de antes, el filtro de la constancia, el `rename` y los
+permisos), las 6 tumbadas por la prueba nueva. Un caso de la prueba anterior cambió a propósito: una clave
+nuestra solo comentada ahora se pone (una comentada no está), y queda apuntada. Batería entera tras traer
+main: `humo.js` 454, `mapeos-codex.js`, `contrato.js` 15, `empresas-distintas.js`, diccionario y
+`revisar-powershell.js`, en verde.
+
 ## Next
 
 - Medir en un VS Code de verdad el aviso del enlace de Claude la primera vez, y que con el ajuste no sale.

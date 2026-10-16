@@ -16706,8 +16706,8 @@ exec git "$@"
 
     // Lo que ya tenía decidido no se pisa, comentarios incluidos.
     const suya = nueva();
-    // Con una clave nuestra comentada: al insertar como texto se salta, y no se
-    // puede apuntar como puesta lo que no se ha escrito.
+    // Con una clave nuestra comentada: una comentada no está, así que se pone
+    // (y queda apuntada, porque está de verdad en el fichero).
     const SUYO = '{\n  // lo mío\n  // "update.showReleaseNotes": true,\n  "security.workspace.trust.enabled": true,\n  "claudeCode.focusView": false,\n  "editor.fontSize": 15, // grande\n}\n';
     fs.writeFileSync(fichero(suya), SUYO);
     hecho = await poner(suya, ['claude']);
@@ -16720,7 +16720,9 @@ exec git "$@"
     assert.equal(conLoSuyo['update.mode'], 'none', 'lo que falta no se pone porque tenga comentarios');
     assert.ok(texto(suya).includes('// lo mío') && texto(suya).includes('// grande'), 'se pierden sus comentarios');
     assert.deepEqual(apuntado(suya).respetadas.sort(), ['claudeCode.focusView', 'security.workspace.trust.enabled'], 'lo suyo no queda apuntado como suyo');
-    assert.ok(!('update.showReleaseNotes' in conLoSuyo) && !('update.showReleaseNotes' in apuntado(suya).puestas), 'se apunta como puesto lo que no se ha escrito');
+    assert.equal(conLoSuyo['update.showReleaseNotes'], false, 'una clave comentada se toma por puesta y no se pone');
+    assert.equal(apuntado(suya).puestas['update.showReleaseNotes'], false, 'lo puesto junto a su comentario no queda apuntado');
+    assert.ok(texto(suya).includes('// "update.showReleaseNotes": true,'), 'se pierde la línea comentada');
     // Y si después lo borra, no se pone el nuestro: ya se miró.
     fs.writeFileSync(fichero(suya), texto(suya).replace('  "claudeCode.focusView": false,\n', ''));
     await poner(suya, ['claude']);
