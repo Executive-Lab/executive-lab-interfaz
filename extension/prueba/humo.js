@@ -15209,6 +15209,94 @@ exec git "$@"
     }
   });
 
+  await comprobar('El panel completo, en Documentos junto a la foto: solo si está, sin seguir enlaces, y si se va, se repinta sin él', async () => {
+    // Arreglos sueltos de la tanda. RSC deja `02-DOCS/wiki/dashboard.html` al repasar la wiki, fuera de git:
+    // muchas veces no está. Solo salía en Conocimiento, que en la sencilla está apagado.
+    const proveedor = vscode.registrado.proveedor;
+    const otra = montar();
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    const ultimo = () => enviados[enviados.length - 1];
+    const suPanel = path.join(otra, '02-DOCS', 'wiki', 'dashboard.html');
+    const abiertos = () => vscode.registrado.abiertos.length;
+    try {
+      // Sin él, no sale: solo sale lo que se tiene.
+      fs.rmSync(suPanel, { recursive: true, force: true });
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      assert.equal(ultimo().hayPanel, false, 'sin el panel, se dice que está');
+      let html = montarPanel().mandar(ultimo());
+      assert.doesNotMatch(html, /panel completo/, 'sin el panel, sale su fila');
+      assert.ok(!accionesDe(html).some((a) => a.tipo === 'abrirPanelCompleto'), 'sin el panel, se ofrece abrirlo');
+
+      // Con él, junto a la foto y con el nombre del diccionario.
+      fs.writeFileSync(suPanel, '<!doctype html><title>Panel</title>');
+      await proveedor.manejar({ tipo: 'verDocumentos' });
+      assert.equal(ultimo().hayPanel, true, 'con el panel, no se dice');
+      html = montarPanel().mandar(ultimo());
+      assert.match(html, /La foto del cerebro<\/span>\s*<\/button>\s*<button[^>]*>\s*<span class="icono"[^>]*>🗂️<\/span>\s*<span class="texto">El panel completo<\/span>\s*<\/button>/, 'el panel no sale junto a la foto, o con otro nombre');
+      assert.deepEqual(accionesDe(html).filter((a) => a.tipo === 'abrirPanelCompleto'), [{ tipo: 'abrirPanelCompleto', desde: 'documentos' }]);
+      // Al pulsarlo se abre ese fichero, y nada más.
+      let antesDeAbrir = abiertos();
+      const cuantos = enviados.length;
+      await proveedor.manejar({ tipo: 'abrirPanelCompleto', desde: 'documentos' });
+      assert.deepEqual(vscode.registrado.abiertos.slice(antesDeAbrir), [suPanel], 'no se abre el panel');
+      assert.equal(enviados.length, cuantos, 'al abrirlo, se repinta como si no estuviera');
+
+      // Si se va entre pintarlo y pulsarlo, no se abre nada y se repinta donde estaba, sin él.
+      fs.rmSync(suPanel);
+      antesDeAbrir = abiertos();
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'abrirPanelCompleto', desde: 'documentos' });
+      assert.equal(abiertos(), antesDeAbrir, 'se abre un panel que no está');
+      assert.deepEqual([ultimo() && ultimo().tipo, ultimo() && ultimo().hayPanel], ['documentos', false], 'sin el panel, no se repinta Documentos');
+      // Desde Conocimiento, como antes: se vuelve a Conocimiento.
+      await proveedor.manejar({ tipo: 'abrirPanelCompleto' });
+      assert.equal(ultimo().tipo, 'cerebro', 'desde Conocimiento, se va a otra pantalla');
+
+      // Una carpeta que se llama así no es el panel.
+      fs.mkdirSync(suPanel);
+      assert.equal(cerebro.hayPanel(), false, 'una carpeta sale como el panel');
+      fs.rmSync(suPanel, { recursive: true });
+
+      // Sin seguir enlaces: ni un dashboard.html que lleva a otro sitio, ni una wiki enlazada fuera.
+      if (process.platform !== 'win32') {
+        const fuera = fs.mkdtempSync(path.join(os.tmpdir(), 'panel-de-fuera-'));
+        fs.writeFileSync(path.join(fuera, 'otro.html'), 'lo de fuera');
+        fs.symlinkSync(path.join(fuera, 'otro.html'), suPanel);
+        await proveedor.manejar({ tipo: 'verDocumentos' });
+        assert.equal(ultimo().hayPanel, false, 'un enlace a otro sitio sale como el panel');
+        antesDeAbrir = abiertos();
+        await proveedor.manejar({ tipo: 'abrirPanelCompleto', desde: 'documentos' });
+        assert.equal(abiertos(), antesDeAbrir, 'se abre lo que hay al otro lado del enlace');
+        fs.rmSync(suPanel);
+        // Tampoco uno que lleva a otro fichero de la carpeta: podría ser el .env de una conexión.
+        fs.writeFileSync(path.join(otra, 'otro-de-dentro.html'), 'de la carpeta');
+        fs.symlinkSync(path.join(otra, 'otro-de-dentro.html'), suPanel);
+        assert.equal(cerebro.hayPanel(), false, 'un enlace a otro fichero de la carpeta sale como el panel');
+        fs.rmSync(suPanel);
+
+        const conLaWikiFuera = fs.mkdtempSync(path.join(os.tmpdir(), 'wiki-enlazada-'));
+        fs.writeFileSync(path.join(conLaWikiFuera, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+        fs.mkdirSync(path.join(conLaWikiFuera, '02-DOCS'));
+        fs.mkdirSync(path.join(fuera, 'wiki'));
+        fs.writeFileSync(path.join(fuera, 'wiki', 'dashboard.html'), 'lo de fuera');
+        fs.symlinkSync(path.join(fuera, 'wiki'), path.join(conLaWikiFuera, '02-DOCS', 'wiki'));
+        vscode.guion.raiz = conLaWikiFuera;
+        assert.equal(cerebro.hayPanel(), false, 'con la wiki enlazada fuera, sale el panel de allí');
+        antesDeAbrir = abiertos();
+        assert.equal(cerebro.abrirPanel(), false);
+        assert.equal(abiertos(), antesDeAbrir, 'con la wiki enlazada fuera, se abre el panel de allí');
+      }
+      return 'solo si está · junto a la foto · se abre ese y nada más · sin seguir enlaces';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = empresa;
+      proveedor.donde = { tipo: 'principal' };
+    }
+  });
+
   await comprobar('la foto del cerebro: se ve, se pulsa un punto y se lee, y se guarda en Resultados diciendo dónde', async () => {
     const proveedor = vscode.registrado.proveedor;
     const { montarPanelConClics } = require('./panel-con-clics');
@@ -18145,6 +18233,90 @@ exec git "$@"
         assert.ok(leidoDelRail.fuente && /^https:\/\//.test(leidoDelRail.fuente.url) && leidoDelRail.fuente.fecha === '2026-10-15', 'la fuente del ejemplo no se lee');
       }
       return 'en Resultados (out), abierta y dicha · siete secciones en su orden · sin la clave · «(2)» · sin seguir enlaces · cinco clases · sin pasos, al asistente';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.guias = antes.guias;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
+  await comprobar('la guía de un paso cada vez tapa las claves como el PDF: en cada paso, al verlos todos y en lo que «No lo encuentro» le pasa al asistente', async () => {
+    // Arreglos sueltos de la tanda: lo que quedaba de la 159. El PDF y el mensaje para el informático ya las
+    // tapaban; la pantalla enseñaba los pasos tal cual, y el panel arma «No lo encuentro» con el paso.
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'guia-tapada-'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    const suya = path.join(carpeta, '01-TOOLS', 'Facturas');
+    fs.mkdirSync(suya, { recursive: true });
+    // Claves de mentira, armadas al correr: la puesta en la barra, un PIN corto, la de una dirección con
+    // usuario y clave, y una con forma de clave que no está en ninguna carpeta.
+    const falsa = deMentira('fk', '_live_', 'Zx9/', 'Q7w+', 'E2r=', 'T5y', 'U8i');
+    const corta = deMentira('7K', 'q2');
+    const deLaDireccion = deMentira('pw', 'Lq', '93x');
+    const conForma = deMentira('sk', '_live_', '51H8x9FAKESTRIPEKEYFORTEST0000');
+    const mitad = Math.floor(falsa.length / 2);
+    const conAlgoQueNoSeVe = `${falsa.slice(0, mitad)}​${falsa.slice(mitad)}`;
+    // La tercera falta: la guía solo se enseña mientras falte alguna.
+    fs.writeFileSync(path.join(suya, '.env.example'), 'FACTURAS_API_KEY=\nFACTURAS_PIN=\nFACTURAS_API_SECRET=\n');
+    fs.writeFileSync(path.join(suya, '.env'), `FACTURAS_API_KEY=${falsa}\nFACTURAS_PIN=${corta}\n`);
+    fs.writeFileSync(path.join(suya, 'CREDENTIALS.md'), `# Credenciales\n\n- URL: https://facturas.test/ajustes/api\n\n| Variable | Tipo | Dónde se saca | Rotación |\n|---|---|---|---|\n| \`FACTURAS_API_KEY\` | secreta | Configuración → API (la mía es ${falsa}) | — |\n`);
+    const enBase64 = Buffer.from(`ana:${falsa}`).toString('base64');
+    const pasos = [
+      `Pega ${falsa} en la casilla de la barra.`,
+      `Si te la dan en una dirección, es la de https://facturas.test/conectar?clave=${encodeURIComponent(falsa)} y nada más.`,
+      `En la cabecera va Basic ${enBase64}, tal cual.`,
+      `Escríbela por partes si no cabe: ${falsa.match(/.{1,4}/g).join(' ')}.`,
+      `Con algo que no se ve en medio, ${conAlgoQueNoSeVe} también vale.`,
+      `El PIN es ${corta}, y lo pide al entrar.`,
+      `La dirección de la API es https://ana:${deLaDireccion}@facturas.test/api y no cambia.`,
+      `Si ves ${conForma} en la ayuda, no es la tuya: no la copies.`,
+    ];
+    fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas ${conAlgoQueNoSeVe}\n\n## Cómo conectarla\n\n${pasos.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n`);
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, guias: proveedor.guias };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const panel = require('./panel-falso').montarPanel();
+    // Ninguna forma de ninguna: tal cual, en una dirección, en base64, partida o con algo en medio, la corta como
+    // palabra, la de la dirección y la que tiene forma de clave.
+    const compacta = (t) => t.replace(/[^A-Za-z0-9]/g, '');
+    const sinNinguna = (donde, texto) => {
+      for (const [cual, forma] of [['tal cual', falsa], ['en una dirección', encodeURIComponent(falsa)], ['en base64', enBase64.slice(8, 28)],
+        ['de la dirección', `${deLaDireccion}@`], ['con forma de clave', conForma]]) {
+        assert.ok(!texto.includes(forma), `${donde} lleva la clave ${cual}`);
+      }
+      assert.ok(!compacta(texto).includes(compacta(falsa)), `${donde} lleva la clave partida`);
+      assert.ok(!new RegExp(`(?<![A-Za-z0-9])${corta}(?![A-Za-z0-9])`).test(texto), `${donde} lleva la clave corta`);
+    };
+    vscode.guion.raiz = carpeta;
+    try {
+      await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Facturas' });
+      for (let n = 0; n < pasos.length; n += 1) {
+        await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: n });
+        const datos = ultimo('conexion');
+        assert.equal(datos.paso, n, `no va por el paso ${n + 1}`);
+        const html = panel.mandar(datos);
+        assert.match(html, new RegExp(`Paso ${n + 1} de ${pasos.length}`), `el paso ${n + 1} no sale`);
+        const pedido = accionesDe(html).find((a) => a.tipo === 'pedir' && /me he atascado/.test(a.prompt));
+        assert.ok(pedido, `en el paso ${n + 1}, sin «No lo encuentro»`);
+        sinNinguna(`lo que se manda al panel en el paso ${n + 1}`, JSON.stringify(datos));
+        sinNinguna(`la pantalla del paso ${n + 1}`, html);
+        sinNinguna(`«No lo encuentro» en el paso ${n + 1}`, pedido.prompt);
+        if (n === 0) {
+          // Tapada, y lo demás del paso, entero: el paso se sigue entendiendo.
+          assert.ok(html.includes('Pega [clave quitada] en la casilla de la barra.'), 'el primer paso no sale tapado');
+          assert.ok(pedido.prompt.startsWith('Estoy conectando Facturas [clave quitada] y me he atascado en el paso 1 de 8: «Pega [clave quitada] en la casilla de la barra.»'), '«No lo encuentro» no le pasa el paso, tapado');
+          assert.ok(html.includes('Configuración → API (la mía es [clave quitada])'), 'de dónde se saca no sale tapado');
+        }
+        if (n === 5) assert.ok(pedido.prompt.includes('«El PIN es [clave quitada], y lo pide al entrar.»'), 'la corta no se tapa como palabra');
+        if (n === 6) assert.ok(html.includes('https://ana:[clave quitada]@facturas.test/api'), 'la de la dirección no se tapa');
+      }
+      // Y la lista entera, con «Ver todos los pasos».
+      await proveedor.manejar({ tipo: 'pasoDeLaGuia', proveedor: 'Facturas', paso: 0, todos: true });
+      const todos = panel.mandar(ultimo('conexion'));
+      assert.equal((todos.match(/<li>/g) || []).length, pasos.length, '«Ver todos los pasos» no los enseña todos');
+      sinNinguna('la lista entera', todos);
+      return `${pasos.length} pasos, la lista y «No lo encuentro», sin ninguna clave`;
     } finally {
       proveedor.enviar = antes.enviar;
       proveedor.guias = antes.guias;

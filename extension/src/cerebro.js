@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
+const { quedaDentro } = require('./foto');
 
 const WIKI = ['02-DOCS', 'wiki'];
 const INBOX = ['02-DOCS', 'inbox'];
@@ -366,12 +367,27 @@ function loQueAunNoSabe(cuantos = 5) {
 }
 
 // El panel humano que RSC regenera solo en cada pasada de mantenimiento.
+// Lo escribe el asistente al repasar la wiki y queda fuera de git, así que
+// muchas veces no está: sin él, no se ofrece. Y sin seguir enlaces, como la foto
+// (decisión 151): un fichero de verdad, dentro de la carpeta de trabajo. Un
+// `dashboard.html` que es un enlace, o una wiki enlazada a otro sitio, abría en
+// el navegador lo que hubiera al otro lado.
 function hayPanel() {
   const ruta = proyecto.ruta(...WIKI, 'dashboard.html');
-  return Boolean(ruta && fs.existsSync(ruta));
+  try {
+    return Boolean(ruta) && fs.lstatSync(ruta).isFile() && quedaDentro(proyecto.raiz(), ruta);
+  } catch {
+    return false;
+  }
 }
 
-const abrirPanel = () => vscode.env.openExternal(vscode.Uri.file(proyecto.ruta(...WIKI, 'dashboard.html')));
+// Se mira otra vez al pulsar: entre pintar el botón y pulsarlo pudo cambiar.
+// Dice si lo ha abierto.
+function abrirPanel() {
+  if (!hayPanel()) return false;
+  Promise.resolve(vscode.env.openExternal(vscode.Uri.file(proyecto.ruta(...WIKI, 'dashboard.html')))).catch(() => {});
+  return true;
+}
 
 // -------------------------------------------------- darle documentos
 
