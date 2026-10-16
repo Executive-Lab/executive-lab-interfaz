@@ -559,7 +559,7 @@ ${cabecera}
     const llave = `${proyecto.raiz()}:${clave}`;
     if (this.ofrecidos.has(llave)) return;
     this.ofrecidos.add(llave);
-    Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
+    return Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
   }
 
   // El ajuste del asistente, cambiado con la barra abierta (decisión 158): se nota
@@ -637,7 +637,7 @@ ${cabecera}
     if (!oferta.ofrecer) return oferta;
     const si = 'Avisarme cuando Codex termine';
     const no = 'No, gracias';
-    this.unaVez('avisoDeCodex', async () => {
+    this.ofertaDeCodex = this.unaVez('avisoDeCodex', async () => {
       const quiere = await vscode.window.showInformationMessage(
         'Si quieres, te aviso cuando Codex termine, aunque estés en otra ventana. Saldrá un aviso al acabar cada respuesta, solo en tus carpetas de Executive Lab. Cambia la configuración de Codex de tu ordenador, y puedes quitarlo cuando quieras.',
         si, no,

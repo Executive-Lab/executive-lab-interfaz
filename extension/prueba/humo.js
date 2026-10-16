@@ -12731,20 +12731,29 @@ exec git "$@"
     const arriba = (t) => { const l = retiradosM.leerElToml(t); return Boolean(l) && l.clavesDeArriba.has('notify'); };
 
     // Un node de verdad: absoluto, fichero, llamado node, que diga su versión. El del editor, no.
-    const falso = path.join(casa(), 'node');
-    fs.writeFileSync(falso, '#!/bin/sh\necho v22.1.0\n', { mode: 0o755 });
-    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), falso);
-    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: falso }), null, 'el del editor');
-    assert.equal(ac.nodeDeVerdad({ propio: 'node', entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'node a secas');
-    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: '/Electron', comprobar: () => false }), null, 'uno que no dice su versión');
-    const otro = path.join(casa(), 'code'); // se llama de otra forma: Electron
-    fs.writeFileSync(otro, '#!/bin/sh\necho v22.1.0\n', { mode: 0o755 });
-    assert.equal(ac.nodeDeVerdad({ propio: otro, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'uno que no se llama node');
-    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: path.dirname(falso) }, ademas: [], execPath: '/Electron' }), falso, 'el del PATH');
-    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'ninguno');
+    // En Windows un guion sin extensión no se ejecuta, y el comprobador exige un `node.exe`: ahí el de mentira
+    // es una copia del Node que corre la prueba (≥18). En los demás, un guion que contesta su versión.
+    const aqui = process.platform === 'win32';
+    const nodeDeMentira = (dir, nombre, version) => {
+      const f = path.join(dir, aqui ? `${nombre}.exe` : nombre);
+      if (aqui) fs.copyFileSync(process.execPath, f);
+      else fs.writeFileSync(f, `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+      return f;
+    };
+    // Margen amplio solo en la prueba: con el Mac cargado, `--version` puede tardar más de lo que da el código.
+    const MARGEN = 120000;
+    const falso = nodeDeMentira(casa(), 'node', 'v22.1.0');
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron' }), falso);
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: falso }), null, 'el del editor');
+    assert.equal(ac.nodeDeVerdad({ propio: 'node', entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron' }), null, 'node a secas');
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron', comprobar: () => false }), null, 'uno que no dice su versión');
+    const otro = nodeDeMentira(casa(), 'code', 'v22.1.0'); // se llama de otra forma: Electron
+    assert.equal(ac.nodeDeVerdad({ propio: otro, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron' }), null, 'uno que no se llama node');
+    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: path.dirname(falso) }, ademas: [], espera: MARGEN, execPath: '/Electron' }), falso, 'el del PATH');
+    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron' }), null, 'ninguno');
     // El de verdad, tal cual lo corre el comprobador (`--version`).
-    assert.equal(ac.nodeDeVerdad({ propio: NODE, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), NODE);
-    assert.equal(ac.nodeDeVerdad({ propio: 'C:\\x\\node.exe', entorno: { PATH: '' }, ademas: [], esWindows: true, execPath: '/Electron' }), null, 'ruta de Windows que no existe aquí');
+    assert.equal(ac.nodeDeVerdad({ propio: NODE, entorno: { PATH: '' }, ademas: [], espera: MARGEN, execPath: '/Electron' }), NODE);
+    assert.equal(ac.nodeDeVerdad({ propio: 'C:\\x\\node.exe', entorno: { PATH: '' }, ademas: [], espera: MARGEN, esWindows: true, execPath: '/Electron' }), null, 'ruta de Windows que no existe aquí');
 
     // Sin config.toml: se crea con la clave y el guion en su sitio fijo, y se dice qué se hizo.
     const vacia = casa();
@@ -12768,7 +12777,7 @@ exec git "$@"
     assert.ok(despues.indexOf('notify =') < despues.indexOf('[projects'), 'va después de la primera tabla');
     assert.deepEqual(tablasDe(despues), tablasDe(ANTES));
     assert.equal(despues.replace(`${linea(conTablas)}\n`, ''), ANTES, 'se ha tocado algo más que esa línea');
-    assert.equal(fs.statSync(config(conTablas)).mode & 0o777, 0o640, 'pierde sus permisos');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(config(conTablas)).mode & 0o777, 0o640, 'pierde sus permisos');
     assert.ok(fs.readdirSync(conTablas).some((f) => f.startsWith('config.toml.copia-executive-lab-')), 'sin copia al lado');
     // Un `notify` dentro de una tabla no es el de arriba, y no cuenta: se pone el de arriba.
     const enTabla = casa();
@@ -12845,15 +12854,19 @@ exec git "$@"
     assert.equal(fs.existsSync(path.join(aMedias, 'executive-lab')), false, 'queda lo que escribió el intento');
     assert.ok(!fs.existsSync(path.join(aMedias, 'executive-lab', 'constancia.json')), 'queda una constancia de un intento que falló');
     // Un node viejo no es un node de verdad: el guion pide el Node 18.
-    const conVersion = (v) => { const f = path.join(casa(), 'node'); fs.writeFileSync(f, `#!/bin/sh\necho ${v}\n`, { mode: 0o755 }); return f; };
-    const opciones = (propio) => ({ propio, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' });
-    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v16.20.2'))), null, 'un Node 16 vale');
-    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v17.9.1'))), null);
-    const v18 = conVersion('v18.0.0');
-    assert.equal(ac.nodeDeVerdad(opciones(v18)), v18);
-    const v24 = conVersion('v24.1.0');
-    assert.equal(ac.nodeDeVerdad(opciones(v24)), v24);
-    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v8'))), null, 'una versión rara');
+    // Lo que contesta `--version`, sin lanzar nada: no depende del sistema ni de lo que tarde.
+    for (const [salida, vale] of [['v16.20.2\n', false], ['v17.9.1\n', false], ['v18.0.0\n', true], ['v24.1.0', true], ['v8\n', false], ['', false], ['v22.1.0 y más\n', false], ['Visual Studio Code 1.9\n', false]]) {
+      assert.equal(ac.esVersionValida(salida), vale, JSON.stringify(salida));
+    }
+    // Y lanzado de verdad, con guiones que contestan una versión (donde un guion se puede ejecutar).
+    if (!aqui) {
+      const opciones = (propio) => ({ propio, entorno: { PATH: '' }, ademas: [], execPath: '/Electron', espera: MARGEN });
+      assert.equal(ac.nodeDeVerdad(opciones(nodeDeMentira(casa(), 'node', 'v16.20.2'))), null, 'un Node 16 vale');
+      assert.equal(ac.nodeDeVerdad(opciones(nodeDeMentira(casa(), 'node', 'v17.9.1'))), null);
+      const v18 = nodeDeMentira(casa(), 'node', 'v18.0.0');
+      assert.equal(ac.nodeDeVerdad(opciones(v18)), v18);
+      assert.equal(ac.nodeDeVerdad(opciones(nodeDeMentira(casa(), 'node', 'v8'))), null, 'una versión rara');
+    }
     // Sin guion de origen, o con un enlace como origen: nada.
     assert.equal(ac.queSeOfrece({ codex: casa(), fuente: path.join(casa(), 'no-esta.mjs'), node: NODE }).motivo, 'sinGuion');
 
@@ -12948,9 +12961,14 @@ exec git "$@"
     const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'aviso-bin-'));
     const dicho = path.join(bin, 'dicho.txt');
     for (const programa of ['osascript', 'notify-send']) fs.writeFileSync(path.join(bin, programa), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dicho}"\n`, { mode: 0o755 });
-    const correr = (...args) => cp.spawnSync(process.execPath, [viaja, ...args], { encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: os.tmpdir() }, input: '', timeout: 15000 });
-    let r = correr(JSON.stringify(CODEX(mia)));
-    assert.equal(r.status, 0);
+    const correr = (...args) => cp.spawnSync(process.execPath, [viaja, ...args], { encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: os.tmpdir() }, input: '', timeout: 90000 });
+    // El guion se corta a sí mismo a los 6 s (su tope de todo). Con el equipo muy cargado puede cortarse antes de
+    // avisar, y eso no es lo que se prueba: se vuelve a lanzar hasta tres veces. Si de verdad no avisa, no avisa en ninguna.
+    let r;
+    for (let intento = 0; intento < 3 && !fs.existsSync(dicho); intento += 1) {
+      r = correr(JSON.stringify(CODEX(mia)));
+      assert.equal(r.status, 0);
+    }
     const salio = fs.readFileSync(dicho, 'utf8');
     assert.ok(salio.includes(`Codex ha terminado en «${nombre}».`) && salio.includes('Executive Lab'), salio);
     assert.ok(!/1234|IBAN/.test(salio), 'el aviso lleva lo que se dijo');
@@ -12981,7 +12999,8 @@ exec git "$@"
     };
     const BOTON = 'Avisarme cuando Codex termine';
     const ofertas = () => vscode.registrado.mensajes.filter((m) => /^INFO Si quieres, te aviso cuando Codex termine/.test(m));
-    const esperar = () => new Promise((r) => setTimeout(r, 60));
+    // La oferta termina cuando termina su promesa, no a las tantas milésimas.
+    const esperar = () => Promise.resolve(proveedor.ofertaDeCodex);
     const enviados = [];
     try {
       limpiar();

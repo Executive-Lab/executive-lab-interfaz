@@ -59,15 +59,21 @@ const NODE_MINIMO = 18;
 
 const sePareceANode = (ruta, esWindows) => path.basename(ruta).toLowerCase() === (esWindows ? 'node.exe' : 'node');
 
-function dice(ruta) {
+// Lo que contesta `node --version`: una versión que el guion sabe leer.
+function esVersionValida(salida) {
+  const version = String(salida).match(/^v(\d+)\.\d+\.\d+\s*$/);
+  return Boolean(version) && Number(version[1]) >= NODE_MINIMO;
+}
+
+// `espera`, en milisegundos: lo que se le da a `--version` (las pruebas dan margen).
+function dice(ruta, espera = 5000) {
   try {
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
     const salida = execFileSync(ruta, ['--version'], {
-      encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], env,
+      encoding: 'utf8', timeout: espera, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], env,
     });
-    const version = salida.match(/^v(\d+)\.\d+\.\d+\s*$/);
-    return Boolean(version) && Number(version[1]) >= NODE_MINIMO;
+    return esVersionValida(salida);
   } catch {
     return false;
   }
@@ -79,7 +85,7 @@ function dice(ruta) {
 // y decir su versión como un Node, no como Electron.
 function nodeDeVerdad({
   propio = null, entorno = process.env, esWindows = process.platform === 'win32', execPath = process.execPath,
-  comprobar = dice, ademas = null,
+  espera = 5000, comprobar = (c) => dice(c, espera), ademas = null,
 } = {}) {
   const sitios = ademas || (esWindows ? [] : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']);
   const delPath = String(entorno.PATH || entorno.Path || '').split(path.delimiter).filter(Boolean);
@@ -315,7 +321,7 @@ const FRASE = 'He dejado a Codex avisándote cuando termine, aunque estés en ot
 
 module.exports = {
   CARPETA, GUION, CONSTANCIA, FRASE,
-  nodeDeVerdad, queSeOfrece, ponerlo, noGracias, quitarlo, laConstancia, laLinea, rutas,
+  nodeDeVerdad, esVersionValida, queSeOfrece, ponerlo, noGracias, quitarlo, laConstancia, laLinea, rutas,
 };
 
 // Suelto: `--quitar [carpeta de Codex]`.

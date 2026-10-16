@@ -68,3 +68,10 @@ ninguna de las dos cosas: el aviso estaba «propuesto», y su `AGENTS.md` solo m
   `empresas-distintas.js`, diccionario y `revisar-powershell.js` en verde. Mutaciones de la revisión: 6, 5
   tumbadas y una equivalente (borrar el guion en el `catch`, que ya no se alcanza con uno ajeno).
 
+## Pruebas que fallaban en falso
+
+Un `node` de mentira ejecutable en Windows (copia del que corre la prueba), versiones probadas sobre lo que
+contesta `--version`, y ninguna prueba depende de lo que tarde un proceso (margen amplio solo en la prueba, la
+oferta espera su promesa, el guion se relanza hasta tres veces). Batería: `humo.js` 482, con `--con-arnes` 490,
+`mapeos-codex.js` 30, `contrato.js` 15, el resto en verde.
+

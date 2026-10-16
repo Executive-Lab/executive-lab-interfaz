@@ -8045,3 +8045,19 @@ temporal fijo, el temporal viejo contado como ajeno, la copia ajena borrada y el
 guion en el `catch` aunque no lo escribiera esta pasada, no cae: con la carpeta ajena ya cerrada, ahí no hay
 forma de llegar con un guion que no sea nuestro, salvo una carrera con otro proceso. Se deja la guarda.
 
+**Pruebas que fallaban en falso** (en la máquina Windows de GitHub y con el Mac cargado). El código no cambia de
+comportamiento, y en Windows ya buscaba `node.exe`: lo que fallaba eran las pruebas.
+
+- El `node` de mentira era un guion sin extensión, que Windows no ejecuta. Ahora, en Windows, es una copia del
+  Node que corre la prueba (con nombre `node.exe`); en los demás, un guion que contesta su versión. Las
+  versiones (16, 17, 18, 24, «v8», texto raro) se prueban sobre lo que contesta `--version`
+  (`esVersionValida`, ahora exportada), sin lanzar nada.
+- Ninguna prueba depende de lo que tarde un proceso: `--version` lleva un margen de dos minutos solo en la
+  prueba (`espera`, que en el código sigue siendo de 5 s); la oferta de la barra se espera por su promesa y no
+  por 60 ms; y el guion corrido de verdad, que se corta solo a los 6 s, se vuelve a lanzar hasta tres veces si
+  el equipo está tan cargado que se cortó antes de avisar. Si de verdad no avisa, no avisa en ninguna.
+- El modo `0o640` del `config.toml` no se mira en Windows, que no lo tiene.
+
+Una prueba que no es de esta rama falló una vez en Windows («lo que pide el asistente», «no son los tres
+primeros»): una vuelta que se adelanta a otra. No se ha tocado.
+
