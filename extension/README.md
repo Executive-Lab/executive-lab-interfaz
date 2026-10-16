@@ -37,8 +37,8 @@ pasa a ser *Añadir el asistente a esto*, y nunca escribe nada en un historial q
 ## Qué necesitas
 
 - **VS Code 1.98 o más nuevo** y **Claude Code** o **Codex**, con una cuenta de pago del que uses.
-- **git**. Hace falta de verdad: el arnés lo usa por su cuenta. Si no está, el panel lo instala con
-  un botón, usando el instalador oficial de tu sistema.
+- **git**. Hace falta de verdad: el arnés lo usa por su cuenta. Si no está, se pone al pulsar «Preparar
+  esta carpeta», con el instalador oficial de tu sistema, y mientras tanto te hace las preguntas.
 
 No hace falta instalar Node: la barra usa el que lleva VS Code, también para lo que el arnés hace solo, y
 el arnés viaja en la propia extensión.

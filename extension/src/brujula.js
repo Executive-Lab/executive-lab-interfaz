@@ -25,6 +25,30 @@ const cerebro = require('./cerebro');
 const asistentes = require('./asistentes');
 const porDondeIbas = require('./por-donde-ibas');
 
+// Git, para la pantalla sin arnés (decisión 165): si falta; si se puede poner al
+// pulsar Preparar, la línea que lo dice; si se está poniendo, y si sigue el
+// montaje cuando acabe o ya no; y si hay respuestas guardadas esperándolo.
+async function loDeGit() {
+  const falta = !(await guardar.hayGit());
+  const poniendo = falta && git.seEstaPoniendo();
+  return {
+    faltaGit: falta,
+    comoSeInstalaGit: git.comoSeInstala(),
+    gitAlPreparar: falta && git.sePuedeInstalarSolo() ? git.AL_PREPARAR : null,
+    poniendoGit: poniendo ? (require('./arrancar').estaEnMarcha() ? 'conLasRespuestas' : 'solo') : null,
+    esperandoAGit: Boolean(require('./respuestas').leer()),
+  };
+}
+
+// Con las respuestas guardadas no se promete preguntar: ya se preguntó.
+const YA_CONTESTADO = {
+  conGit: 'Ya me has contestado lo que hacía falta. Al pulsar la termino de preparar.',
+  sinGit: 'Ya me has contestado lo que hacía falta. Al pulsar pongo git y la termino de preparar.',
+};
+const conLoContestado = (estado) => (estado.esperandoAGit
+  ? { ...estado, donde: 'Tu espacio está a medio preparar', aviso: estado.faltaGit ? YA_CONTESTADO.sinGit : YA_CONTESTADO.conGit }
+  : estado);
+
 // Nombres del diccionario para las dos carpetas del arnés.
 const ZONAS = { '02-DOCS': 'Conocimiento', '01-TOOLS': 'Conexiones' };
 
@@ -159,36 +183,34 @@ async function calcular() {
     // Un montaje nuestro a medias, sin su `.rsc.json` (B8): se ofrece
     // terminarlo, como cuando falta el suelo.
     if (hay.tipo === 'aMedias') {
-      return {
+      return conLoContestado({
         listo: false,
         sinArnes: true,
         aMedioPreparar: true,
         donde: 'Tu espacio está a medio preparar',
         hiciste: null,
         aviso: 'Se quedó algo sin montar, seguramente porque se cerró antes de tiempo. Se termina en un momento y no se pierde nada de lo que ya haya.',
-        faltaGit: !(await guardar.hayGit()),
-        comoSeInstalaGit: git.comoSeInstala(),
-      };
+        ...(await loDeGit()),
+      });
     }
 
     const comun = {
       listo: false,
       sinArnes: true,
       hiciste: null,
-      faltaGit: !(await guardar.hayGit()),
-      comoSeInstalaGit: git.comoSeInstala(),
+      ...(await loDeGit()),
     };
 
     if (hay.tipo !== 'empezada') {
-      return {
+      return conLoContestado({
         ...comun,
         donde: 'Aquí todavía no hay nada',
         // Cuántas se preguntan de verdad, contadas por `rumbo` (A8): prometía una.
         aviso: (({ min, max }) => `Puedo preparar esta carpeta. Tarda unos minutos, y antes te hago entre ${min} y ${max} preguntas, de una en una.`)(rumbo.cuantasPreguntas({ recibo: null, railes: null, carpeta: { delicada }, dentroDeOtro: terreno.queHayEncima(proyecto.raiz()) })),
-      };
+      });
     }
 
-    return {
+    return conLoContestado({
       ...comun,
       donde: 'Aquí ya hay trabajo tuyo',
       yaEmpezada: {
@@ -199,7 +221,7 @@ async function calcular() {
         claves: hay.claves ? hay.claves.claves : 0,
       },
       aviso: 'Puedo añadir el asistente a lo que ya tienes, sin tocar nada de lo que hay.',
-    };
+    });
   }
 
   // ── A medio preparar: se manda a terminarlo, no a "Algo va mal" ────────
@@ -218,16 +240,15 @@ async function calcular() {
   // Lo que sí lo restaura es volver a pasar el montaje, que es lo que hace
   // «Preparar esta carpeta» — comprobado: vuelve a dejar el suelo entero.
   if (!proyecto.arnesCompleto()) {
-    return {
+    return conLoContestado({
       listo: false,
       sinArnes: true,
       aMedioPreparar: true,
       donde: 'Tu espacio está a medio preparar',
       hiciste: null,
       aviso: 'Se quedó algo sin montar, seguramente porque se cerró antes de tiempo. Se termina en un momento y no se pierde nada de lo que ya haya.',
-      faltaGit: !(await guardar.hayGit()),
-      comoSeInstalaGit: git.comoSeInstala(),
-    };
+      ...(await loDeGit()),
+    });
   }
 
   const [continuacion, copias] = await Promise.all([rsc.retomar(), guardar.copias(1)]);

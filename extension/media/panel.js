@@ -1720,10 +1720,13 @@ function pararElReloj() {
 // Con salida. Esperar sin poder volver es un callejón: si lo de detrás tarda
 // más de la cuenta —o se cuelga, que ya ha pasado— quedarse mirando no es una
 // opción que nadie elija. Volver no cancela lo de detrás; solo te deja salir.
-function pantallaEsperando(que = 'Un momento…') {
+// Y con otra salida, si la espera la trae: mientras se pone git con las respuestas
+// ya dadas, seguir sin copias (decisión 165).
+function pantallaEsperando(que = 'Un momento…', otra = null) {
   return `
     ${nada(que)}
     <p class="cargando cuanto" data-cuanto></p>
+    ${otra && otra.etiqueta && otra.accion ? boton({ etiqueta: otra.etiqueta, icono: '↷', discreto: true, accion: otra.accion }) : ''}
     ${boton({ etiqueta: 'Volver', icono: '←', discreto: true, accion: { tipo: 'volver' } })}
   `;
 }
@@ -1800,29 +1803,63 @@ function pantallaNoSePrepara() {
   `;
 }
 
-// Carpeta sin arnés: no está rota, es que aún no se ha montado. Si falta git no
-// se ofrece prepararla: sin él la preparación aborta a mitad, y enseñar un
-// botón que no puede funcionar es peor que no enseñarlo.
+// Falta git y la barra lo puede poner sola (decisión 165). Se ofrece preparar la
+// carpeta igual, y debajo, en una línea, que pulsar también lo pone: ese clic es
+// el sí de instalarlo (P9), y mientras se pone se hacen las preguntas. Antes
+// salía «Ponerla ahora» en su lugar, y luego había que pulsar Preparar.
+// Mientras se está poniendo no hay botón que pulsar: lo dice y ya.
+const PONIENDO_GIT = {
+  conLasRespuestas: 'Estoy poniendo git. En cuanto esté, preparo la carpeta con tus respuestas.',
+  solo: 'Estoy poniendo git. En cuanto esté, puedes preparar la carpeta.',
+};
+
+function lineaDeGit() {
+  // Con las respuestas guardadas no queda nada que preguntar: lo dice el aviso.
+  if (!estado.faltaGit || !estado.gitAlPreparar || estado.esperandoAGit) return '';
+  return `<p class="detalle">${texto(estado.gitAlPreparar)}</p>`;
+}
+
+// Lo que ya se contestó y esperaba a git (decisión 165): no se vuelve a
+// preguntar, y se dice. Sin git, además, se puede seguir sin copias: es la
+// salida de quien no puede ponerlo (P1).
+function loYaContestado() {
+  if (!estado.esperandoAGit) return '';
+  return `<p class="detalle">Tus respuestas están guardadas: no te las vuelvo a preguntar.</p>
+    ${estado.faltaGit ? boton({ etiqueta: 'Seguir sin copias', icono: '↷', discreto: true, accion: { tipo: 'seguirSinCopias' } }) : ''}`;
+}
+
+// Carpeta sin arnés: no está rota, es que aún no se ha montado. Si falta git y
+// la barra no puede ponerlo sola, no se ofrece prepararla: sin él la
+// preparación aborta a mitad, y enseñar un botón que no puede funcionar es peor
+// que no enseñarlo.
 function pantallaSinArnes() {
   if (estado.noSePrepara) return pantallaNoSePrepara();
   // Una carpeta a medio montar no se «prepara», se termina: decirle otra cosa
-  // le haría pensar que va a empezar de cero y a perder lo que ya hay.
-  const ofrecer = estado.yaEmpezada
+  // le haría pensar que va a empezar de cero y a perder lo que ya hay. Tampoco
+  // una con las respuestas guardadas (decisión 165).
+  const terminar = estado.aMedioPreparar || estado.esperandoAGit;
+  const ofrecer = estado.yaEmpezada && !estado.esperandoAGit
     ? bloqueYaEmpezada()
     : boton({
-      etiqueta: estado.aMedioPreparar ? 'Terminar de prepararla' : 'Preparar esta carpeta',
+      etiqueta: terminar ? 'Terminar de prepararla' : 'Preparar esta carpeta',
       icono: '✳',
       principal: true,
       accion: { tipo: 'arrancar' },
     });
+  let loQueToca = `${ofrecer}${lineaDeGit()}${loYaContestado()}`;
+  if (estado.faltaGit && estado.poniendoGit) {
+    // Esperando con lo contestado, también aquí se puede dejar de esperar.
+    loQueToca = `<p class="detalle">${texto(PONIENDO_GIT[estado.poniendoGit] || PONIENDO_GIT.solo)}</p>
+      ${estado.poniendoGit === 'conLasRespuestas' && estado.esperandoAGit ? boton({ etiqueta: 'Seguir sin copias', icono: '↷', discreto: true, accion: { tipo: 'seguirSinCopias' } }) : ''}`;
+  } else if (estado.faltaGit && !estado.sigueSinCopias && !estado.gitAlPreparar) {
+    // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias
+    // (decisión 164): entonces se prepara sin ellas.
+    loQueToca = bloqueFaltaGit();
+  }
 
   // «Lo último» encabezaba también una carpeta vacía, donde no hay nada que
   // contar (decisión 164): solo sale si ya había algo.
   const hayAlgo = Boolean(estado.yaEmpezada || estado.aMedioPreparar);
-  // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias, que
-  // entonces se prepara sin ellas y ponerlas queda en Sugerencias (decisión 164).
-  const primeroGit = estado.faltaGit && !estado.sigueSinCopias;
-
   return `
     ${bloqueAviso()}
     ${lineaDeVarias()}
@@ -1831,7 +1868,7 @@ function pantallaSinArnes() {
       <p class="donde">${texto(estado.donde)}</p>
       <p class="hiciste">${texto(estado.aviso)}</p>
     </div>
-    ${primeroGit ? bloqueFaltaGit() : ofrecer}
+    ${loQueToca}
     ${/* La lista de piezas solo se alcanzaba desde pantallas que exigen tener
           el arnés montado — o sea, nunca cuando hace falta. Aquí es donde
           alguien se pregunta qué pasa. */''}
@@ -3512,7 +3549,7 @@ function atender(data) {
   switch (data.tipo) {
     case 'cargando': return pintar(pantallaEsperando());
     case 'esperando':
-      pintar(pantallaEsperando(data.que));
+      pintar(pantallaEsperando(data.que, data.boton));
       return arrancarElReloj();
     case 'estado':
       // Lo que la extensión manda al lado del estado y esta pantalla lee
@@ -3588,7 +3625,9 @@ function atender(data) {
     case 'contar': return pintar(pantallaContar(data));
     case 'elAviso': return pintar(pantallaElAviso(data));
     case 'aviso':
-      aviso = { texto: data.texto, malo: data.malo, boton: data.boton };
+      // Con varios botones si es una pregunta o tiene más de una salida: git que no
+      // se ha puesto se puede volver a intentar o seguir sin copias (decisión 165).
+      aviso = { texto: data.texto, malo: data.malo, boton: data.boton, ...(Array.isArray(data.botones) && data.botones.length ? { botones: data.botones } : {}) };
       return pintar(pantallaPrincipal());
     default:
       // Un mensaje que no conocemos no puede dejar la pantalla congelada: eso

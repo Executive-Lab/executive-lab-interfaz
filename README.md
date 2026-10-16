@@ -72,9 +72,11 @@ porque no es un ejecutable.
 
 Requisitos: **VS Code 1.98 o más nuevo**, y **Claude Code o Codex** con cuenta de pago del que uses.
 
-**git hace falta sí o sí**, y si no está, el panel lo instala con un botón: en Windows descarga y
-lanza el instalador oficial de Git; en macOS lanza el de Apple. No lo repartimos nosotros. El porqué
-está en la decisión 26: el arnés usa git por su cuenta, y sin él funciona a medias y sin decirlo.
+**git hace falta sí o sí**, y si no está, se pone con el mismo clic de «Preparar esta carpeta»,
+mientras el panel hace las preguntas (decisión 165): en Windows descarga y lanza el instalador oficial de
+Git, que con una cuenta de administrador pide permiso; en macOS lanza el de Apple. No lo repartimos
+nosotros. El porqué está en la decisión 26: el arnés usa git por su cuenta, y sin él funciona a medias y
+sin decirlo.
 
 ### 2. El instalador de escritorio — para el portátil virgen
 
