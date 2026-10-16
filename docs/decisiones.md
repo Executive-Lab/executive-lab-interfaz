@@ -6638,7 +6638,7 @@ que se quedaba pendiente de antes se olvida.
 
 ### Las pruebas
 
-Tres comprobaciones nuevas en `humo.js`, que pasa de 419 a 422 (antes de traer main):
+Tres comprobaciones nuevas en `humo.js`, que pasa de 419 a 422, y a 424 con main traído (los arreglos sueltos de la tanda):
 
 - *El instalador lo deja todo puesto*, con carpetas de mentira:
   - con Claude, con Codex y con los dos, lo que toca y nada más;

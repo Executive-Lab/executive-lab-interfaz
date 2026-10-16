@@ -65,7 +65,7 @@ en la carpeta y es de programa.
 
 ## Evidence
 
-- `humo.js`, tres comprobaciones nuevas (419 → 422 antes de traer main): «el instalador lo deja todo
+- `humo.js`, tres comprobaciones nuevas (419 → 422; 424 con main traído): «el instalador lo deja todo
   puesto…», «la barra pone lo del asistente al arrancar si falta…» y «la vista sencilla solo lleva lo que
   cabe en una carpeta…».
 - `probar.sh` contra una casa de mentira en este Mac, y los pasos de los ajustes de `desinstalar.command`
@@ -80,6 +80,8 @@ en la carpeta y es de programa.
 Una pasada entera después del último cambio: `humo.js` 422 y 0 caídas, `contrato.js` 15, `empresas-distintas.js`
 las tres, `mapeos-codex.js` 29 de 29, el diccionario y `revisar-powershell.js`, en verde. Los siete puntos de
 la lista tienen su prueba; las comprobaciones nuevas se vieron caer (45 mutaciones) y pasar (sin mutar).
+
+Con main traído (`8a8c27b`), otra pasada entera: `humo.js` 424 y 0 caídas, y lo demás, igual.
 
 Lo que no corre en este Mac:
 - **SUSTITUIDA** — `probar-en-vscode` (el VS Code de verdad) baja un editor fuera de la carpeta: corre en la
