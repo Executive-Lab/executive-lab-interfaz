@@ -97,6 +97,7 @@ const deAlguien = require('./de-alguien');
 const procesos = require('./procesos');
 const retirados = require('./retirados');
 const avisoDeCodex = require('./aviso-de-codex');
+const enganchesDeCodex = require('./enganches-de-codex');
 const loDelEditor = require('./lo-del-editor');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
@@ -673,6 +674,41 @@ ${cabecera}
       : { tipo: 'aviso', texto: 'No he podido quitarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
   }
 
+  // Codex no corre lo que el arnés le monta en la carpeta hasta que la persona confía
+  // (decisión 178). La barra solo lee el `config.toml` de Codex para saber si falta, y
+  // lo dice una vez por carpeta, con Codex en uso y enganches suyos montados aquí. Ni
+  // confía por la persona ni escribe en esa configuración (P9).
+  laTarjetaDeLosEnganchesDeCodex() {
+    try {
+      const codex = asistentes.porId('codex');
+      if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return null;
+      if (!asistentes.estaInstalado(codex) && !asistentes.losDelArnes().includes(codex)) return null;
+      if (this.almacen().get(enganchesDeCodex.CLAVE)) return null;
+      const info = enganchesDeCodex.queSabe({ raiz: proyecto.raiz() });
+      if (info.hay) this.salida.appendLine(`[codex] confianza en lo del arnés: ${info.estado}${info.motivo ? ` (${info.motivo})` : ''}`); // diccionario: interno
+      return enganchesDeCodex.laTarjeta(info);
+    } catch (error) {
+      this.salida.appendLine(`[codex] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // Codex no deja pasarle texto desde fuera (`asistentes.js`): se copia `/hooks` al
+  // portapapeles, se abre Codex y se dice que se pega. Solo copia y abre.
+  async dejarListoLoDeCodex() {
+    const codex = asistentes.porId('codex');
+    await vscode.env.clipboard.writeText(enganchesDeCodex.PASO);
+    const abierto = await puente.abrirEste(codex);
+    this.salida.appendLine(`[codex] /hooks copiado${abierto ? ' y Codex abierto' : ''}`); // diccionario: interno
+    const pegar = process.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V';
+    return vscode.window.showInformationMessage(`Te he copiado ${enganchesDeCodex.PASO} y he abierto Codex. Pégalo con ${pegar} en su caja, dale a enviar y confía en lo de esta carpeta.`); // diccionario: interno
+  }
+
+  async entendidoLoDeCodex() {
+    await this.almacen().update(enganchesDeCodex.CLAVE, Date.now());
+    return this.refrescar(true);
+  }
+
   // Lo del asistente que deja el instalador en los ajustes de usuario, si falta
   // (decisión 163): para quien solo instaló la barra. Es de esta persona y no de
   // la carpeta, así que no espera a la confianza, como el control remoto. Una
@@ -746,6 +782,8 @@ ${cabecera}
       costumbrePuesta: await this.ponerLasCostumbres(),
       // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
       datosDeClientes: this.laTarjetaDeLosDatos(),
+      // Codex pide confiar una vez en lo que el arnés le monta (decisión 178).
+      enganchesDeCodex: this.laTarjetaDeLosEnganchesDeCodex(),
       // Las claves de una aplicación dentro de las copias, y las que están fuera
       // de sitio: en la tarjeta, con su botón (decisión 167).
       ...this.lasClavesQueTocan(),
@@ -1417,6 +1455,8 @@ ${cabecera}
       verEstaBarra: () => this.verEstaBarra(),
       verDatosDeClientes: () => this.verDatosDeClientes(),
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
+      dejarListoLoDeCodex: () => this.dejarListoLoDeCodex(),
+      entendidoLoDeCodex: () => this.entendidoLoDeCodex(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       cambiarInterruptor: () => this.cambiarInterruptor(mensaje.cual),
