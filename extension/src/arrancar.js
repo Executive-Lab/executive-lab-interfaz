@@ -558,7 +558,8 @@ async function ponerLosRailes(contexto, { ajena = false, ponerFreno = false, pon
 }
 
 // Lo de esta persona en los ajustes de Claude de esta carpeta (decisión 157): que
-// le hable en español y que le pregunte antes de subir a GitHub. Al montar y, en
+// le hable en español, que le pregunte antes de subir a GitHub y, desde la 162, que
+// le avise cuando termina o le necesita. Al montar y, en
 // las carpetas que ya estaban montadas, al abrir. Solo en una carpeta cuyo
 // historial creó la barra, como la rama principal abierta (P4), y que se montó en
 // este ordenador (`terreno.montadaAqui`): en la de alguien, o en un clon, sus
@@ -580,11 +581,11 @@ async function ponerLoDeClaude() {
 }
 
 // «Quitarlo», desde el aviso que lo cuenta: es local y se deshace. Lo quitado no
-// vuelve a ponerse al abrir.
-async function quitarLoDeClaude() {
+// vuelve a ponerse al abrir. `que`: lo que cuenta ese aviso, o todo (decisión 162).
+async function quitarLoDeClaude(que = null) {
   const raiz = proyecto.raiz();
   if (!raiz) return { hecho: 'sinCarpeta' };
-  return ajustesLocales.quitarLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra });
+  return ajustesLocales.quitarLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra, que });
 }
 
 // Si lo que toca ficheros de esta persona tiene que esperar a su sí (C-4): el

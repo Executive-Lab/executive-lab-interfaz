@@ -97,8 +97,11 @@ const retirados = require('./retirados');
 // Cada rama hizo una cosa distinta y decir «ya está listo» en las cuatro sería
 // no decir nada.
 // El botón que va con lo que la barra dejó en los ajustes de Claude (decisión 157):
-// es local y se deshace, y lo quitado no vuelve.
+// es local y se deshace, y lo quitado no vuelve. Al montar se quita todo, que se
+// puso a la vez; al abrir, lo que cuenta ese aviso y nada más (decisión 162): el
+// de los avisos del sistema no se lleva el español que se puso otro día.
 const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } };
+const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que } });
 
 const LO_QUE_SE_HIZO = {
   traer: 'Ya tienes aquí lo que este proyecto traía puesto.',
@@ -565,13 +568,14 @@ ${cabecera}
     // Se deja, y sale una sola vez al final de lo que se hace al abrir, junto con
     // lo demás: soltarla ya hacía que la siguiente frase la tapara (revisión de
     // corrección de la 157, B5).
-    this.dejarElAviso(ajustesLocales.laFrase(hecho), QUITAR_LO_DE_CLAUDE);
+    this.dejarElAviso(ajustesLocales.laFrase(hecho), quitarSoloEsto(ajustesLocales.loQueSePuso(hecho)));
     return hecho;
   }
 
   // «Quitarlo» (decisión 157): solo lo que puso la barra, y no vuelve a ponerse.
-  async quitarLoDeClaude() {
-    const hecho = await arrancar.quitarLoDeClaude();
+  // `que`, lo que trae el botón: sin nada, todo.
+  async quitarLoDeClaude(que = null) {
+    const hecho = await arrancar.quitarLoDeClaude(que);
     this.salida.appendLine(`[claude] quitar lo de esta carpeta: ${hecho.hecho}`); // diccionario: interno
     const bien = ['quitado', 'yaNoEstaba'].includes(hecho.hecho);
     return this.enviar(bien
@@ -1197,7 +1201,7 @@ ${cabecera}
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
-      quitarLoDeClaude: () => this.quitarLoDeClaude(),
+      quitarLoDeClaude: () => this.quitarLoDeClaude(mensaje.que),
       verAsistente: () => this.verAsistente(),
       verComoTrabaja: () => this.verComoTrabaja(),
       verFijadas: () => this.verFijadas(),
