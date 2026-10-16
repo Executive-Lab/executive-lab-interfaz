@@ -72,6 +72,16 @@ alguien era decidir por su equipo (P4). Decisión 161.
   `.rsc.json` sin `knowledge-sync`, `trunk-guard` ni `auto-update`.
 - `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), `comprobar-diccionario.js` y
   `revisar-powershell.js`, en verde.
+- Revisión de la PR #54: `humo.js --con-arnes` 437, 429 sin él. Cuatro pruebas más: «a mano y sin banderas…»,
+  «la barra y los raíles dicen lo mismo…» (diez historiales), «cada camino que pone los raíles…» (seis caminos)
+  y «“Revisar y arreglar” pone los raíles detrás…». Mutaciones: 15, las 15 tumbadas.
+  - En `aplicar.js`: no mirar su historial; no usar el git que le dan.
+  - En `historial-ajeno.js`: el error de `rev-list` como nuestro; sin mirar HEAD; sin mirar las referencias;
+    recién creado como ajeno; sin la marca.
+  - En `arrancar.js`: sin refuerzo con el sí al bloque; ídem con el freno; sin el git de la barra.
+  - En `extension.js`: el botón y el arreglo solo, sin raíles detrás; detrás aunque no estuvieran; aunque el
+    arreglo falle; detrás, lo suyo sin esperar.
+  - El resto de la batería, en verde.
 
 ## Next
 

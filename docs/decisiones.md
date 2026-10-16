@@ -6610,4 +6610,6 @@ el diccionario y `revisar-powershell.js`, en verde.
   reponer no es decidir, y si el arreglo no sale, no. Que no salgan no tumba el arreglo: se apunta para «Algo
   va mal».
 
-PENDIENTE_DE_LOS_NUMEROS
+Con la revisión: `humo.js` 437 comprobaciones con `--con-arnes`, 429 sin él, cuatro más. 15 mutaciones más
+a mano, las 15 tumbadas. `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y
+`revisar-powershell.js`, en verde.
