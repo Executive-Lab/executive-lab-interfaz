@@ -1202,7 +1202,9 @@ ${cabecera}
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
-      quitarLoDeClaude: () => this.quitarLoDeClaude(mensaje.que),
+      // Sin `que`, todo lo de la barra; con una lista, solo eso; con otra cosa, nada.
+      quitarLoDeClaude: () => mensaje.que === undefined ? this.quitarLoDeClaude()
+        : Array.isArray(mensaje.que) ? this.quitarLoDeClaude(mensaje.que.filter((q) => typeof q === 'string')) : undefined,
       verAsistente: () => this.verAsistente(),
       verComoTrabaja: () => this.verComoTrabaja(),
       verFijadas: () => this.verFijadas(),

@@ -11320,7 +11320,9 @@ exec git "$@"
     assert.match(guion, /Dispose\(\)/, 'la burbuja se queda en la bandeja');
     // Y PowerShell 5.1 lo lee: solo ASCII, sin comas colgando (herramientas/revisar-powershell.js).
     assert.deepEqual(require(path.join(RAIZ, '..', 'herramientas', 'revisar-powershell.js')).revisar(guion), [], 'el guion de Windows tiene algo que PowerShell 5.1 lee mal');
-    assert.deepEqual(av.laOrden('linux', av.TITULO, texto), { programa: 'notify-send', args: ['--', av.TITULO, texto] });
+    // notify-send lee marcado: el texto va escapado, para que un nombre no salga como enlace.
+    assert.deepEqual(av.laOrden('linux', av.TITULO, texto), { programa: 'notify-send', args: ['--', av.TITULO, texto.replace(/&/g, '&amp;')] });
+    assert.equal(av.laOrden('linux', av.TITULO, '«<a href="http://e">x</a> & y»').args[2], '«&lt;a href="http://e"&gt;x&lt;/a&gt; &amp; y»');
     assert.equal(av.laOrden('freebsd', av.TITULO, texto), null);
 
     // `avisar`, con el sistema fingido: lanza lo de su sistema, y nada si no toca.

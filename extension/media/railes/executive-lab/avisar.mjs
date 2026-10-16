@@ -107,7 +107,9 @@ export function laOrden(plataforma, titulo, texto) {
       suelto: true,
     };
   }
-  if (plataforma === 'linux') return { programa: 'notify-send', args: ['--', titulo, texto] };
+  // notify-send lee marcado en el texto: un nombre con < o & saldría como enlace o roto.
+  const sinMarcado = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (plataforma === 'linux') return { programa: 'notify-send', args: ['--', titulo, sinMarcado(texto)] };
   return null;
 }
 

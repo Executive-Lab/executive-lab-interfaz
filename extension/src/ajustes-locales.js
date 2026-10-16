@@ -231,7 +231,9 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   // El guion, de verdad un fichero de la carpeta: sin él, cada aviso fallaría.
   const guion = path.join(raiz, ...AVISAR);
   let conGuion = false;
-  try { conGuion = fs.lstatSync(guion).isFile(); } catch { /* todavía no está */ }
+  // Y ningún tramo del camino es un enlace: uno en `skills/` daría por bueno un guion de fuera.
+  const tramos = AVISAR.slice(1, -1).map((_, i) => path.join(raiz, ...AVISAR.slice(0, i + 2)));
+  try { conGuion = !tramos.some(esEnlace) && fs.lstatSync(guion).isFile(); } catch { /* todavía no está */ }
   const sinQuitar = loQueFalta({
     local, deLaCarpeta: leer(path.join(carpeta, 'settings.json')), suyos: leer(path.join(claude, 'settings.json')), conGuion,
   });
