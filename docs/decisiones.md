@@ -6768,6 +6768,138 @@ Con la revisión: `humo.js` 437 comprobaciones con `--con-arnes`, 429 sin él, c
 a mano, las 15 tumbadas. `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y
 `revisar-powershell.js`, en verde.
 
+## 162. Te aviso cuando el asistente termina o te necesita
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código (Claude); propuesto (Codex) · **Vía rápida**
+`los-avisos-del-sistema`
+
+Un alumno pide algo largo y se va a otra ventana. Claude se queda esperando a que le diga sí a algo, o
+termina, y no se entera nadie. Era lo siguiente de la tabla de la 157.
+
+**Lo que dice hoy la documentación** (16-10-2026):
+
+- **Claude** (code.claude.com/docs/en/hooks y hooks-guide): el enganche `Notification`, filtrado por el tipo
+  de aviso.
+  - `permission_prompt`: pide permiso y lleva unos seis segundos esperando. En el editor sale a los seis
+    segundos de preguntar, aunque escribas, y desde la 2.1.233; antes, ahí no salía.
+  - `idle_prompt`: terminó hace un minuto y no se ha escrito nada desde entonces.
+  - Recibe `notification_type`, `message`, `title` y `cwd`. No puede parar nada: su salida y su código no
+    cuentan. Su `terminalSequence` no sirve aquí, porque en el editor Claude no lo escribe.
+- **Codex** (learn.chatgpt.com/docs/notifications y config-advanced): `notify` en el `config.toml` de usuario,
+  una lista con el programa y sus argumentos. Solo hay un evento, `agent-turn-complete`. El `.codex/` de la
+  carpeta lo ignora. La extensión del editor no trae avisos propios.
+
+**Claude, en las carpetas de la barra** (`ajustes-locales.js`). Un tercer ajuste en
+`.claude/settings.local.json`, con el cuidado y la constancia de la 157: nada más del fichero, entero o nada,
+sin enlaces, nada si está en git, y solo en lo nuestro (al montar y al abrir).
+
+```json
+{ "matcher": "permission_prompt|idle_prompt",
+  "hooks": [{ "type": "command", "timeout": 10,
+    "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/executive-lab/avisar.mjs\" \"${CLAUDE_PROJECT_DIR}\"" }] }
+```
+
+- **Como el freno.** `node` a secas, que encuentra el relevo aunque no haya ninguno, y la forma con shell. La
+  documentación recomienda la forma sin shell (`args`) para las rutas, pero en Windows pide un `node.exe` de
+  verdad, y el relevo no lo es. `enganches.js` la reconoce como nuestra: si alguien le pone una ruta, vuelve
+  a `node`.
+- **En el local, no en `settings.json`.** Es de esta persona, y no viaja.
+- **No se pone:**
+  - si ya hay algún enganche `Notification` aquí, en los de la carpeta o en los suyos de usuario: ya se
+    avisa a su manera, y saldrían dos;
+  - si alguno lleva `disableAllHooks`, o no se entiende, o trae los enganches con otra forma;
+  - si el guion no está todavía en la carpeta, o es un enlace: cada aviso llamaría a un fichero que no hay.
+    Llega con los raíles, que al abrir se ponen al día solos; justo después se engancha.
+- **Constancia**: `avisos: true` en `.rsc/executive-lab-ajustes-locales.json`. Entra en la huella solo si
+  está, así que las constancias de la 157 siguen casando.
+- **Se dice una vez**: «He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra
+  ventana.» Al montar va con las otras dos: «He dejado a Claude hablándote en español, preguntándote antes de
+  subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.»
+
+**El interruptor: «Quitarlo» quita lo que cuenta su aviso.** Hasta ahora quitaba todo lo de la 157. Al abrir
+una carpeta que ya tenía el español, el aviso de hoy solo habla de los avisos, y su botón se llevaba también
+el español. Ahora la acción lleva qué quitar (`que`), y la construye quien tiene los datos (P6). Al montar
+sigue quitando todo, porque todo se puso a la vez. Lo quitado no vuelve, como en la 157. Solo se quita el
+enganche tal y como lo dejó la barra: si alguien lo ha cambiado, es suyo. Suelto:
+`node extension/src/ajustes-locales.js --quitar --solo=avisos <carpeta>`.
+
+**El guion** (`avisar.mjs`, en las dos copias de los raíles, idénticas):
+
+- Dice «Claude te está preguntando algo en «Contabilidad».» o «Claude ha terminado en «Contabilidad».», con
+  el título «Executive Lab». Con otro tipo de aviso, o con una entrada que no entiende, no dice nada.
+- **Sin instalar nada:**
+  - Mac: `osascript` con `display notification`;
+  - Windows: PowerShell con la burbuja de `System.Windows.Forms.NotifyIcon`, que Windows 10 y 11 enseñan
+    como sus avisos. El guion es solo ASCII, por PowerShell 5.1, y va en `-EncodedCommand`;
+  - Linux: `notify-send`, si está.
+- **El nombre de la carpeta lo elige la persona, y puede traer comillas.** Nunca va dentro de un guion: a
+  `osascript` le llega como argumento (`on run argv`) y a PowerShell en una variable de entorno. Nada pasa
+  por un shell. Antes se limpia: sin saltos ni caracteres de control, sin los que dan la vuelta al texto, y
+  con 60 letras como mucho.
+- **Nunca bloquea ni falla.** Sale siempre con 0. Espera la entrada 1,5 s, el programa 4 s y todo 6 s; el
+  enganche corta a los 10. En Windows la burbuja tiene que vivir unos segundos, así que PowerShell va suelto
+  y el asistente no espera por ella.
+
+**Codex: se propone, no se hace.** Tocar su `config.toml` de usuario para esto no compensa hoy:
+
+1. Vale para todas sus conversaciones de Codex, también las de fuera de la barra. Y el de la carpeta lo
+   ignora, así que no hay forma de ponerlo solo en lo nuestro.
+2. Solo hay `agent-turn-complete`: no hay «te necesita», y no espera a que te hayas ido. Avisaría al final
+   de cada respuesta, también mientras la estás leyendo. Un aviso en cada respuesta enseña a no mirarlos.
+3. Pide la ruta entera de un guion que no cambie. La de la barra cambia con cada versión, así que habría que
+   dejar otro fichero en su carpeta de usuario. Y se lanza sin shell: en Windows, sin un `node.exe` de
+   verdad, `node` no se encuentra, y el relevo no sirve.
+4. Es una sola clave: con un `notify` suyo no se toca (P4), y entonces no hay nada que hacer.
+
+Si se quiere, la forma sería un botón en «Tu asistente», porque cambia su configuración de usuario. Llevaría
+un guion fijo en la carpeta de la barra de su ordenador, que solo avise en las carpetas de la barra (el aviso
+trae `cwd`), con la copia al lado y el cuidado de `retirados.js`. Antes, Jose tiene que decidir si un aviso
+en cada respuesta merece la pena.
+
+**Las pruebas.**
+
+- `humo.js`: tres comprobaciones nuevas, y dos de la 157 al día con la frase y el botón nuevos. Con main traído (la
+  161), 432.
+  - *El enganche*: su forma, la del freno; con y sin el guion, y con el guion como enlace; lo suyo intacto;
+    los seis casos en que no se pone; «Quitarlo» de los avisos y del idioma por separado; el enganche
+    cambiado, que no se quita; las constancias de la 157 y las plantadas; git, y `--solo=avisos`.
+  - *El guion*: los textos; el nombre limpio; la orden de cada sistema, con un nombre hecho para inyectar
+    (`Ana" & (do shell script "x") & "'; rm -rf ~; $(x)`). Corrido como lo corre el enganche, con
+    `osascript` y `notify-send` fingidos y nada más en el camino: lo que no avisa, sin programa, un programa
+    que se atasca, uno que no se deja cortar, uno que falla y una entrada que no se cierra. Siempre 0, y a
+    tiempo. Ningún aviso de verdad.
+  - *Al abrir una carpeta de la 157*: se ponen solos, se dicen con su botón, y el botón quita los avisos y
+    deja el español.
+- `windows.js`, en la máquina Windows de GitHub, sin lanzar ningún aviso: el enganche corre en Git Bash con
+  el relevo y sale con 0, y PowerShell 5.1 lee el guion sin errores.
+
+**Mutaciones a mano: 40, las 40 tumbadas.** Cada una cambia una cosa y corre `humo.js` entero:
+
+- 22 en el enganche, su constancia y el botón (`ajustes-locales.js`, `extension.js` y `arrancar.js`);
+- 17 en el guion;
+- 1 en las dos copias de los raíles.
+
+Una sobrevivió al principio: la huella con `avisos: false` dentro, que rompía las constancias de la 157. La
+prueba hacía la constancia «de la 157» con la función de hoy, así que no lo veía. Ahora la huella de la 157
+se escribe a mano en la prueba. Y tres de los topes (el del programa, el de todo y el de la entrada) caían
+solo por el reloj, que con el Mac cargado falla en falso. Ahora no dependen de él: el programa atascado
+apunta que le han cortado, el que no se deja cortar pasa del tope de la prueba, y la entrada abierta se
+compara con el tope de todo.
+
+**Lo que no se ha comprobado:**
+
+- **En Mac, el Editor de Scripts.** `osascript` avisa a través de él. Si no tiene permiso para avisar, no sale
+  nada, y macOS no lo pregunta (lo dice la guía de Claude). Falta ver en un Mac nuevo si sale a la primera.
+  Si no sale, la barra tendría que decirlo con su botón: abrir Ajustes > Notificaciones.
+- **El `idle_prompt` en el editor.** La documentación cuenta cuándo sale en la terminal, y cuándo sale el
+  `permission_prompt` en el editor, pero no el `idle_prompt` en el editor. Si no llega, el «ha terminado»
+  tendría que ir por `Stop`, que sale al acabar cada respuesta.
+- **La burbuja en un Windows 10 y 11 de verdad.** El modo de concentración la calla.
+- **Ningún aviso se ha lanzado de verdad**: los programas son de mentira, en Mac, en Windows y en Linux.
+
+`contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y `revisar-powershell.js`, en
+verde. `windows.js` corre en la máquina Windows de GitHub.
+
 ## 164. El primer día, sin listas técnicas
 
 **Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `el-primer-dia`

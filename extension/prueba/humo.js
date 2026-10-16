@@ -11252,7 +11252,8 @@ exec git "$@"
       const juntos = enviados.filter((m) => m.tipo === 'aviso');
       assert.equal(juntos.length, 1, 'salen por separado');
       assert.equal(juntos[0].texto, 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub. Al abrir la carpeta he arreglado solo «Lo que debería estar puesto».');
-      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } }, 'sin «Quitarlo»');
+      // Y quita lo que cuenta ese aviso, nada más (decisión 162).
+      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar'] } }, 'sin «Quitarlo»');
       // «Quitarlo» quita lo de la barra, lo dice, y no vuelve al abrir.
       enviados.length = 0;
       await proveedor.manejar({ tipo: 'quitarLoDeClaude' });
@@ -11281,7 +11282,9 @@ exec git "$@"
       vscode.guion.raiz = montadaOtra;
       const hechoDelMontaje = await arrancarM.hacerLosPasos({ rama: 'adoptar', pasos: [{ id: 'ponerLosRailes', escribe: true, etiqueta: 'poniendo los raíles' }] },
         null, {}, contexto, vscode.window.createOutputChannel());
-      assert.deepEqual(hechoDelMontaje.dichos, ['He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.'], 'el montaje no junta lo que se dijo');
+      // Los raíles traen el guion de los avisos, así que al montar van los tres (decisión 162).
+      const LAS_TRES = 'He dejado a Claude hablándote en español, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.';
+      assert.deepEqual(hechoDelMontaje.dichos, [LAS_TRES], 'el montaje no junta lo que se dijo');
       // …y la barra lo enseña.
       const elMontaje = arrancarM.arrancar;
       arrancarM.arrancar = async () => ({ ok: true, rama: 'traer', mensaje: 'x', pegas: [], encargos: [], dichos: hechoDelMontaje.dichos });
@@ -11299,7 +11302,7 @@ exec git "$@"
         proveedor.siFaltaAlgoDecirlo = siFalta;
       }
       const alMontar = enviados.filter((m) => m.tipo === 'aviso');
-      assert.ok(alMontar.some((m) => m.texto === 'Ya tienes aquí lo que este proyecto traía puesto. He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.'
+      assert.ok(alMontar.some((m) => m.texto === `Ya tienes aquí lo que este proyecto traía puesto. ${LAS_TRES}`
         && m.boton && m.boton.accion.tipo === 'quitarLoDeClaude'), `al montar no se dice: ${JSON.stringify(alMontar)}`);
 
       // Si poner lo de Claude falla, los raíles siguen bien.
@@ -11311,6 +11314,353 @@ exec git "$@"
       assert.match(pasoConFallo.detalle, /fallo \(se rompe a propósito\)/);
       assert.ok(!pasoConFallo.dicho, 'se dice lo que no se puso');
       return 'al montar y al abrir, en lo nuestro, dicho una vez; y fuera de las copias';
+    } finally {
+      terrenoM.montadaAqui = antes.aqui;
+      vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('los avisos del sistema: el enganche en los ajustes de Claude, sin pisar a nadie, y se quita solo él', async () => {
+    // Decisión 162. Un enganche `Notification` en `.claude/settings.local.json`, con
+    // el cuidado y la constancia de la 157 (`ajustes-locales.js`).
+    const al = cargar('ajustes-locales');
+    const cp = require('node:child_process');
+    const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
+    const nueva = ({ conGuion = true } = {}) => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-local-'));
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      fs.mkdirSync(path.join(r, '.claude', 'skills', 'executive-lab'), { recursive: true });
+      fs.mkdirSync(path.join(r, '.rsc'));
+      if (conGuion) fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(r, ...al.AVISAR));
+      return r;
+    };
+    const claude = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-claude-'));
+    const fuera = () => false;
+    const poner = (r, extra = {}) => al.ponerLosDeLaBarra({ raiz: r, claude, estaEnGit: fuera, ...extra });
+    const quitar = (r, que = null) => al.quitarLosDeLaBarra({ raiz: r, estaEnGit: fuera, que });
+    const ajustes = (r) => path.join(r, '.claude', 'settings.local.json');
+    const local = (r) => JSON.parse(fs.readFileSync(ajustes(r), 'utf8'));
+    const EL_NUESTRO = { matcher: 'permission_prompt|idle_prompt', hooks: [{ type: 'command', command: al.ORDEN_DE_AVISAR, timeout: 10 }] };
+
+    // La forma del enganche: como el freno, `node` a secas y la carpeta entre comillas,
+    // y el relevo de la barra la reconoce como nuestra (enganches.js).
+    assert.equal(al.ORDEN_DE_AVISAR, 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/executive-lab/avisar.mjs" "${CLAUDE_PROJECT_DIR}"');
+    const conRuta = nueva();
+    const RUTA = '"/Users/ana/otro node/bin/node"';
+    fs.writeFileSync(path.join(conRuta, '.claude', 'settings.local.json'), JSON.stringify({ hooks: { Notification: [{ ...EL_NUESTRO, hooks: [{ ...EL_NUESTRO.hooks[0], command: `${RUTA}${al.ORDEN_DE_AVISAR.slice('node'.length)}` }] }] } }));
+    require(path.join(RAIZ, '..', 'instalador', 'comun', 'enganches.js')).devolverElNodeASecas(conRuta);
+    assert.equal(local(conRuta).hooks.Notification[0].hooks[0].command, al.ORDEN_DE_AVISAR, 'la barra no la ve como nuestra: una ruta a node se queda');
+    // Dos nombres exactos: solo letras, `_` y `|` (code.claude.com/docs/en/hooks, «Matcher patterns»).
+    assert.match(al.CUANDO_AVISAR, /^[a-z_|]+$/);
+    assert.deepEqual(al.CUANDO_AVISAR.split('|').sort(), ['idle_prompt', 'permission_prompt']);
+
+    // Con el guion en la carpeta: las tres cosas, y la frase con las tres.
+    const vacia = nueva();
+    const hecho = await poner(vacia);
+    assert.equal(hecho.hecho, 'puesto');
+    assert.equal(hecho.avisos, true);
+    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR }, hooks: { Notification: [EL_NUESTRO] } });
+    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+    assert.equal(al.laFrase({ avisos: true }), 'He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+    assert.deepEqual(al.loQueSePuso(hecho), ['idioma', 'preguntar', 'avisos']);
+    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
+    assert.equal(local(vacia).hooks.Notification.length, 1, 'el enganche sale dos veces');
+    // El tope del enganche deja acabar al guion, que se corta antes él solo.
+    const { TOPE } = await import(require('node:url').pathToFileURL(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs')).href);
+    assert.ok(EL_NUESTRO.hooks[0].timeout * 1000 > TOPE.todo, 'el enganche corta al guion antes de que acabe');
+
+    // Sin el guion todavía en la carpeta, no se engancha: llamaría a un fichero que no hay.
+    const sinGuion = nueva({ conGuion: false });
+    const sinEl = await poner(sinGuion);
+    assert.equal(sinEl.avisos, false);
+    assert.equal(local(sinGuion).hooks, undefined, 'se engancha un guion que no está');
+    // Y cuando llega con los raíles, se pone: no contaba como quitado.
+    fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(sinGuion, ...al.AVISAR));
+    const luego = await poner(sinGuion);
+    assert.deepEqual([luego.hecho, luego.idioma, luego.preguntar, luego.avisos], ['puesto', false, [], true]);
+    assert.equal(al.laFrase(luego), 'He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+    // Un guion que es un enlace no cuenta.
+    const conEnlace = nueva({ conGuion: false });
+    fs.symlinkSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(conEnlace, ...al.AVISAR));
+    await poner(conEnlace);
+    assert.equal(local(conEnlace).hooks, undefined, 'se engancha un guion que es un enlace');
+
+    // Con lo suyo: intacto, y el nuestro al lado.
+    const suya = nueva();
+    const SUYOS = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'node .rsc/session-memory-adapter.mjs claude start' }] }] } };
+    fs.writeFileSync(ajustes(suya), JSON.stringify(SUYOS));
+    await poner(suya);
+    assert.deepEqual(local(suya).hooks, { ...SUYOS.hooks, Notification: [EL_NUESTRO] }, 'se pisa un enganche suyo');
+
+    // Quien ya se avisa a su manera, o lo tiene todo apagado, o no se entiende: no se pone.
+    const SU_AVISO = { hooks: { Notification: [{ matcher: '', hooks: [{ type: 'command', command: 'say listo' }] }] } };
+    for (const [donde, preparar] of [
+      ['aquí', (r) => fs.writeFileSync(ajustes(r), JSON.stringify(SU_AVISO))],
+      ['en los de la carpeta', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify(SU_AVISO))],
+      ['en los de la carpeta, que no se entienden', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), '{ "hooks": {}, }')],
+      ['en los de la carpeta, con todo apagado', (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ disableAllHooks: true }))],
+      ['aquí, con unos enganches que no se entienden', (r) => fs.writeFileSync(ajustes(r), JSON.stringify({ hooks: [] }))],
+      ['aquí, con su aviso de otra forma', (r) => fs.writeFileSync(ajustes(r), JSON.stringify({ hooks: { Notification: { matcher: '' } } }))],
+    ]) {
+      const r = nueva();
+      preparar(r);
+      const antes = fs.existsSync(ajustes(r)) ? local(r).hooks : undefined;
+      const h = await poner(r);
+      assert.equal(h.avisos || false, false, `${donde}: se ponen los avisos`);
+      const despues = fs.existsSync(ajustes(r)) ? local(r).hooks : undefined;
+      assert.deepEqual(despues, antes, `${donde}: se tocan sus enganches`);
+    }
+    for (const [que, suyos] of [['con su aviso', JSON.stringify(SU_AVISO)], ['con todo apagado', JSON.stringify({ disableAllHooks: true })], ['que no se entienden', '{ "hooks": {}, }']]) {
+      const arriba = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-claude-'));
+      fs.writeFileSync(path.join(arriba, 'settings.json'), suyos);
+      const r = nueva();
+      await al.ponerLosDeLaBarra({ raiz: r, claude: arriba, estaEnGit: fuera });
+      assert.equal((local(r).hooks || {}).Notification, undefined, `sus ajustes de usuario ${que}: se ponen los avisos`);
+    }
+
+    // «Quitarlo» de los avisos: solo el enganche, y no vuelve. Lo demás se queda.
+    const aQuitar = nueva();
+    await poner(aQuitar);
+    assert.equal((await quitar(aQuitar, ['avisos'])).hecho, 'quitado');
+    assert.deepEqual(local(aQuitar), { language: 'español', permissions: { ask: PREGUNTAR } }, 'quitar los avisos se lleva otra cosa');
+    assert.equal((await poner(aQuitar)).hecho, 'yaEstaba', 'los avisos quitados vuelven');
+    assert.equal((await quitar(aQuitar, ['avisos'])).hecho, 'yaNoEstaba');
+    // Y al revés: quitar el idioma no se lleva los avisos.
+    const alReves = nueva();
+    await poner(alReves);
+    await quitar(alReves, ['idioma']);
+    assert.deepEqual(local(alReves), { permissions: { ask: PREGUNTAR }, hooks: { Notification: [EL_NUESTRO] } }, 'quitar el idioma se lleva los avisos');
+    // Lo que no es de la lista no quita nada.
+    assert.equal((await quitar(alReves, ['todo', 'hooks'])).hecho, 'yaNoEstaba', 'se quita algo que no se ha pedido');
+    // Sin decir qué, todo, y el enganche con lo suyo al lado se queda.
+    fs.writeFileSync(ajustes(alReves), JSON.stringify({ ...local(alReves), hooks: { Notification: [SU_AVISO.hooks.Notification[0], EL_NUESTRO] } }));
+    assert.equal((await quitar(alReves)).hecho, 'quitado');
+    assert.deepEqual(local(alReves), { hooks: { Notification: [SU_AVISO.hooks.Notification[0]] } }, 'quitar se lleva su aviso');
+    // Un enganche nuestro que alguien ha cambiado ya es suyo: no se quita.
+    const cambiado = nueva();
+    await poner(cambiado);
+    const SU_VERSION = { ...EL_NUESTRO, matcher: 'permission_prompt' };
+    fs.writeFileSync(ajustes(cambiado), JSON.stringify({ hooks: { Notification: [SU_VERSION] } }));
+    assert.equal((await quitar(cambiado, ['avisos'])).hecho, 'yaNoEstaba');
+    assert.deepEqual(local(cambiado).hooks.Notification, [SU_VERSION], 'quitar se lleva el que cambió');
+    for (const otro of [{ ...EL_NUESTRO, hooks: [{ ...EL_NUESTRO.hooks[0], timeout: 30 }] }, { ...EL_NUESTRO, hooks: [{ ...EL_NUESTRO.hooks[0], async: true }] }, { ...EL_NUESTRO, de: 'mí' }]) {
+      assert.equal(al.esElDeAvisar(otro), false, `se da por nuestro: ${JSON.stringify(otro)}`);
+    }
+    assert.equal(al.esElDeAvisar(JSON.parse(JSON.stringify(EL_NUESTRO))), true);
+
+    // La constancia de la 157, sin avisos, sigue casando; una con avisos de otra forma, no.
+    // Su huella, escrita como la escribía la 157, sin pasar por la de hoy.
+    const de157 = nueva();
+    const huellaDe157 = require('node:crypto').createHash('sha256')
+      .update(JSON.stringify({ donde: fs.realpathSync(de157), language: 'español', ask: [...PREGUNTAR].sort() })).digest('hex');
+    assert.equal(al.laHuella(de157, { language: 'español', ask: PREGUNTAR }), huellaDe157, 'la huella sin avisos ya no es la de la 157');
+    fs.writeFileSync(ajustes(de157), JSON.stringify({ language: 'español', permissions: { ask: PREGUNTAR } }));
+    fs.writeFileSync(path.join(de157, ...al.CONSTANCIA), JSON.stringify({ language: 'español', ask: PREGUNTAR, huella: huellaDe157 }));
+    const encima = await poner(de157);
+    assert.deepEqual([encima.idioma, encima.preguntar, encima.avisos], [false, [], true], 'con la constancia de la 157 se repite lo de antes');
+    assert.equal((await quitar(de157)).hecho, 'quitado');
+    assert.deepEqual(local(de157), {}, 'la constancia de la 157 deja de casar');
+    for (const [que, plantar] of [
+      ['con avisos que no son true', (r) => ({ ask: [], avisos: 'si', huella: al.laHuella(r, { ask: [] }) })],
+      ['con avisos y la huella de sin ellos', (r) => ({ ask: [], avisos: true, huella: al.laHuella(r, { ask: [] }) })],
+    ]) {
+      const r = nueva();
+      fs.writeFileSync(ajustes(r), JSON.stringify({ hooks: { Notification: [EL_NUESTRO] } }));
+      fs.writeFileSync(path.join(r, ...al.CONSTANCIA), JSON.stringify(plantar(r)));
+      assert.equal((await quitar(r)).hecho, 'noCasa', `${que}: se cree`);
+    }
+
+    // En git, no; y suelto, también solo los avisos.
+    const enGit = nueva();
+    assert.equal((await poner(enGit, { estaEnGit: () => true })).hecho, 'enGit');
+    assert.ok(!fs.existsSync(ajustes(enGit)));
+    const suelta = nueva();
+    await poner(suelta);
+    const correr = (...args) => cp.spawnSync(process.execPath, [path.join(RAIZ, 'src', 'ajustes-locales.js'), ...args], { encoding: 'utf8' }).stdout.trim();
+    assert.equal(correr('--quitar', '--solo=avisos', suelta), 'ajustes de Claude de esta carpeta: quitado');
+    assert.deepEqual(local(suelta), { language: 'español', permissions: { ask: PREGUNTAR } }, 'suelto, se quita otra cosa');
+    return 'puesto con el guion, sin pisar avisos de nadie; y «Quitarlo» quita solo lo que cuenta';
+  });
+
+  await comprobar('el guion de los avisos: qué dice, cómo se lanza en cada sistema, sin inyección y sin bloquear nunca', async () => {
+    // Decisión 162. Las dos copias de los raíles, iguales.
+    const fuente = path.join(RAIZ, '..', 'skills', 'executive-lab', 'avisar.mjs');
+    const viaja = path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    assert.equal(fs.readFileSync(viaja, 'utf8'), fs.readFileSync(fuente, 'utf8'), 'las dos copias del guion no son la misma');
+    const av = await import(require('node:url').pathToFileURL(viaja).href);
+    const cp = require('node:child_process');
+
+    // Qué dice: los dos tipos, con la carpeta o sin ella; lo demás, nada.
+    const DONDE = path.join(os.tmpdir(), 'Contabilidad');
+    assert.equal(av.elTexto({ notification_type: 'permission_prompt' }, DONDE), 'Claude te está preguntando algo en «Contabilidad».');
+    assert.equal(av.elTexto({ notification_type: 'idle_prompt' }, DONDE), 'Claude ha terminado en «Contabilidad».');
+    // Lo ve el alumno: ninguna palabra que el diccionario prohíbe.
+    const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
+    for (const tipo of ['permission_prompt', 'idle_prompt']) {
+      for (const donde of [DONDE, '']) assert.equal(tieneUnaProhibida(`${av.TITULO} ${av.elTexto({ notification_type: tipo }, donde)}`), null);
+    }
+    for (const entrada of [{ notification_type: 'auth_success' }, { notification_type: 'toString' }, { notification_type: '__proto__' }, {}, null, 'idle_prompt', []]) {
+      assert.equal(av.elTexto(entrada, DONDE), null, `avisa de ${JSON.stringify(entrada)}`);
+    }
+    // El nombre, limpio: sin saltos ni lo que da la vuelta al texto, corto, y sin la variable sin poner.
+    assert.equal(av.elNombre('/x/Ventas\n2026\u202e'), 'Ventas 2026');
+    assert.equal(av.elNombre('/x/Ventas/'), 'Ventas');
+    assert.equal(av.elNombre('${CLAUDE_PROJECT_DIR}', '/x/Contabilidad'), 'Contabilidad');
+    assert.equal(av.elNombre('a'.repeat(200)).length, 60);
+    assert.equal(av.elNombre('', null, undefined), '');
+
+    // Cada sistema, sin instalar nada. Lo que elige la persona nunca va dentro de un guion.
+    const MALO = 'Ana" & (do shell script "x") & "\'; rm -rf ~; $(x) `y`';
+    const texto = `Claude ha terminado en «${MALO}».`;
+    const mac = av.laOrden('darwin', av.TITULO, texto);
+    assert.equal(mac.programa, 'osascript');
+    assert.deepEqual(mac.args.slice(0, 6), ['-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv)', '-e', 'end run'], 'el guion de Mac cambia con lo que se dice');
+    assert.deepEqual(mac.args.slice(6), [av.TITULO, texto], 'en Mac, el texto no va como argumento entero');
+    const win = av.laOrden('win32', av.TITULO, texto);
+    assert.equal(win.programa, 'powershell.exe');
+    assert.equal(win.suelto, true, 'en Windows el asistente espera a la burbuja');
+    assert.deepEqual(win.env, { EXECUTIVE_LAB_AVISO_TITULO: av.TITULO, EXECUTIVE_LAB_AVISO_TEXTO: texto }, 'en Windows, el texto no va en su variable');
+    const guion = Buffer.from(win.args[win.args.indexOf('-EncodedCommand') + 1], 'base64').toString('utf16le');
+    assert.equal(guion, av.GUION_DE_WINDOWS);
+    assert.deepEqual(win.args, av.laOrden('win32', av.TITULO, 'Claude ha terminado.').args, 'el guion de Windows cambia con lo que se dice');
+    assert.ok(!guion.includes('Ana') && !win.args.some((a) => a.includes('Ana')), 'el nombre de la carpeta va dentro del guion de Windows');
+    assert.match(guion, /System\.Windows\.Forms\.NotifyIcon/);
+    assert.match(guion, /\$env:EXECUTIVE_LAB_AVISO_TEXTO/);
+    assert.match(guion, /Dispose\(\)/, 'la burbuja se queda en la bandeja');
+    // Y PowerShell 5.1 lo lee: solo ASCII, sin comas colgando (herramientas/revisar-powershell.js).
+    assert.deepEqual(require(path.join(RAIZ, '..', 'herramientas', 'revisar-powershell.js')).revisar(guion), [], 'el guion de Windows tiene algo que PowerShell 5.1 lee mal');
+    // notify-send lee marcado: el texto va escapado, para que un nombre no salga como enlace.
+    assert.deepEqual(av.laOrden('linux', av.TITULO, texto), { programa: 'notify-send', args: ['--', av.TITULO, texto.replace(/&/g, '&amp;')] });
+    assert.equal(av.laOrden('linux', av.TITULO, '«<a href="http://e">x</a> & y»').args[2], '«&lt;a href="http://e"&gt;x&lt;/a&gt; &amp; y»');
+    assert.equal(av.laOrden('freebsd', av.TITULO, texto), null);
+
+    // `avisar`, con el sistema fingido: lanza lo de su sistema, y nada si no toca.
+    const lanzadas = [];
+    const fingir = async (orden) => { lanzadas.push(orden); };
+    await av.avisar({ entrada: { notification_type: 'permission_prompt' }, carpeta: DONDE, plataforma: 'linux', lanzar: fingir });
+    assert.deepEqual(lanzadas.map((o) => o.args[2]), ['Claude te está preguntando algo en «Contabilidad».']);
+    await av.avisar({ entrada: { notification_type: 'auth_success' }, carpeta: DONDE, plataforma: 'linux', lanzar: fingir });
+    await av.avisar({ entrada: { notification_type: 'idle_prompt' }, carpeta: DONDE, plataforma: 'aix', lanzar: fingir });
+    assert.equal(lanzadas.length, 1, 'avisa de lo que no toca');
+
+    // De verdad, como lo corre el enganche, con los programas fingidos delante y
+    // nada más en el camino: ni un aviso de verdad. En Windows, los fingidos de
+    // `sh` no se pueden lanzar: eso lo mira `windows.js`, sin lanzar nada.
+    if (process.platform === 'win32') return 'lo de dentro, en los tres sistemas (en Windows, sin lanzarlo)';
+    const fingidos = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-fingidos-'));
+    const llamada = path.join(fingidos, 'llamada');
+    const ponerFingidos = (cuerpo) => {
+      for (const nombre of ['osascript', 'notify-send']) {
+        fs.writeFileSync(path.join(fingidos, nombre), `#!/bin/sh\n${cuerpo}\n`);
+        fs.chmodSync(path.join(fingidos, nombre), 0o755);
+      }
+    };
+    const APUNTAR = `printf '%s\\0' "$@" > "${llamada}"`;
+    const entorno = { PATH: fingidos };
+    const correr = (entrada, carpeta = path.join(os.tmpdir(), MALO)) => {
+      fs.rmSync(llamada, { force: true });
+      const desde = Date.now();
+      const hecho = cp.spawnSync(process.execPath, [viaja, carpeta], { input: entrada, env: entorno, encoding: 'utf8', timeout: 20000 });
+      return { codigo: hecho.status, tarda: Date.now() - desde, args: fs.existsSync(llamada) ? fs.readFileSync(llamada, 'utf8').split('\0').slice(0, -1) : null };
+    };
+    ponerFingidos(APUNTAR);
+    const bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
+    assert.equal(bien.codigo, 0);
+    assert.ok(bien.args, 'no se lanza el aviso');
+    assert.equal(av.elNombre(MALO), MALO, 'el nombre de prueba no llega entero');
+    assert.equal(bien.args[bien.args.length - 1], `Claude te está preguntando algo en «${MALO}».`, 'las comillas no llegan tal cual');
+    assert.equal(bien.args[bien.args.length - 2], av.TITULO);
+    // Lo que no es de los dos tipos, o no se entiende, no avisa, y sale con 0.
+    for (const entrada of [JSON.stringify({ notification_type: 'auth_success' }), '{ esto no es', '']) {
+      const h = correr(entrada);
+      assert.deepEqual([h.codigo, h.args], [0, null], `con ${JSON.stringify(entrada)} se avisa o falla`);
+    }
+    // Sin el programa en el camino: 0, y nada.
+    const vacio = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-sin-nada-'));
+    const sinPrograma = cp.spawnSync(process.execPath, [viaja, vacio], { input: JSON.stringify({ notification_type: 'idle_prompt' }), env: { PATH: vacio }, timeout: 20000 });
+    assert.equal(sinPrograma.status, 0, 'sin el programa, falla');
+    // Un programa que no acaba nunca: se le corta a su tope (lo apunta al recibir el
+    // corte), y sale con 0.
+    const cortado = path.join(fingidos, 'cortado');
+    ponerFingidos(`trap 'echo si > "${cortado}"; kill $! 2>/dev/null; exit 0' TERM\n/bin/sleep 30 &\nwait`);
+    const atascado = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
+    assert.equal(atascado.codigo, 0, 'atascado, falla');
+    assert.ok(fs.existsSync(cortado), 'al programa atascado no se le corta');
+    assert.ok(atascado.tarda < av.TOPE.todo + 3000, `atascado, tarda ${atascado.tarda} ms`);
+    // Y uno que no se deja cortar: el tope de todo, y sale con 0. Luego se le quita de en medio.
+    const suPid = path.join(fingidos, 'pid');
+    ponerFingidos(`echo $$ > "${suPid}"\ntrap '' TERM\nexec /bin/sleep 30`);
+    const terco = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
+    try { process.kill(Number(fs.readFileSync(suPid, 'utf8')), 'SIGKILL'); } catch { /* ya no está */ }
+    assert.equal(terco.codigo, 0, 'con un programa que no se deja cortar, falla');
+    assert.ok(terco.tarda < av.TOPE.todo + 5000, `con un programa que no se deja cortar, tarda ${terco.tarda} ms`);
+    // Un programa que falla: 0.
+    ponerFingidos('exit 3');
+    assert.equal(correr(JSON.stringify({ notification_type: 'idle_prompt' })).codigo, 0, 'con el programa fallando, falla');
+    // Una entrada que no se cierra nunca: no espera más de su tope, y no avisa.
+    ponerFingidos(APUNTAR);
+    fs.rmSync(llamada, { force: true });
+    const desde = Date.now();
+    const abierto = cp.spawn(process.execPath, [viaja, vacio], { env: entorno, stdio: ['pipe', 'ignore', 'ignore'] });
+    abierto.stdin.write('{"notification_type": "idle_pro');
+    const [codigo] = await Promise.race([
+      new Promise((listo) => abierto.on('exit', (c) => listo([c]))),
+      new Promise((listo) => setTimeout(() => { abierto.kill('SIGKILL'); listo(['colgado']); }, 15000)),
+    ]);
+    abierto.stdin.destroy();
+    assert.equal(codigo, 0, 'con la entrada abierta, se cuelga o falla');
+    // Sin su tope esperaría al de todo; con él, sale mucho antes.
+    assert.ok(Date.now() - desde < av.TOPE.todo - 500, `con la entrada abierta, tarda ${Date.now() - desde} ms`);
+    assert.ok(!fs.existsSync(llamada), 'avisa con media entrada');
+    return 'los dos textos; Mac, Windows y Linux; las comillas como texto; y siempre 0 y a tiempo';
+  });
+
+  await comprobar('los avisos del sistema al abrir una carpeta de la 157: se ponen solos, se dicen, y «Quitarlo» quita solo eso', async () => {
+    // Decisión 162. Una carpeta que ya tenía lo de la 157 recibe el guion con los
+    // raíles al día, y al abrir se engancha. El botón del aviso quita los avisos y
+    // deja el español.
+    const al = cargar('ajustes-locales');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
+    const r = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-abierta-'));
+    fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: cargar('rsc').VERSION_DE_RESPALDO }));
+    fs.mkdirSync(path.join(r, '.claude', 'skills', 'executive-lab'), { recursive: true });
+    fs.mkdirSync(path.join(r, '.rsc'));
+    fs.writeFileSync(path.join(r, '.claude', 'settings.local.json'), JSON.stringify({ language: 'español', permissions: { ask: PREGUNTAR } }));
+    fs.writeFileSync(path.join(r, ...al.CONSTANCIA), JSON.stringify({ language: 'español', ask: PREGUNTAR, huella: al.laHuella(r, { language: 'español', ask: PREGUNTAR }) }));
+    fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(r, ...al.AVISAR));
+    const local = () => JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.local.json'), 'utf8'));
+    const antes = {
+      aqui: terrenoM.montadaAqui, confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+      vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente,
+    };
+    const enviados = [];
+    try {
+      terrenoM.montadaAqui = async () => true;
+      vscode.guion.raiz = r;
+      vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      proveedor.donde = { tipo: 'principal' };
+      proveedor.avisoPendiente = null;
+      const hecho = await proveedor.ponerLoDeClaudeAlAbrir();
+      assert.deepEqual([hecho.hecho, hecho.idioma, hecho.preguntar, hecho.avisos], ['puesto', false, [], true]);
+      assert.equal(local().hooks.Notification.length, 1, 'al abrir no se enganchan los avisos');
+      proveedor.soltarElAviso();
+      const dicho = enviados.find((m) => m.tipo === 'aviso');
+      assert.equal(dicho && dicho.texto, 'He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['avisos'] } }, 'el botón quita más de lo que cuenta');
+      // El botón, tal cual viene (P6).
+      enviados.length = 0;
+      await proveedor.manejar(dicho.boton.accion);
+      assert.deepEqual(local(), { language: 'español', permissions: { ask: PREGUNTAR } }, '«Quitarlo» de los avisos se lleva el español');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.texto === 'Quitado. No lo vuelvo a poner.'));
+      assert.equal((await proveedor.ponerLoDeClaudeAlAbrir()).hecho, 'yaEstaba', 'los avisos quitados vuelven al abrir');
+      return 'enganchados al abrir, dichos con su botón, y quitados sin tocar lo demás';
     } finally {
       terrenoM.montadaAqui = antes.aqui;
       vscode.guion.confianza = antes.confianza;
