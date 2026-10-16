@@ -5514,6 +5514,8 @@ exec git "$@"
     const poner = (targets, antes = {}) => {
       const carpeta = fs2.mkdtempSync(path.join(os.tmpdir(), 'railes-'));
       fs2.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets }));
+      // Montada: `.rsc/` la construye RSC, y los raíles van detrás (decisión 161).
+      fs2.mkdirSync(path.join(carpeta, '.rsc'));
       for (const [fichero, texto] of Object.entries(antes)) fs2.writeFileSync(path.join(carpeta, fichero), texto);
       const { status } = cp.spawnSync(process.execPath, [aplicar, carpeta], { encoding: 'utf8' });
       return { carpeta, status, hay: (...p) => fs2.existsSync(path.join(carpeta, ...p)) };
@@ -5607,6 +5609,7 @@ exec git "$@"
     const cp = require('node:child_process');
     const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'sin-gitmoji-'));
     fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: [] }));
+    fs.mkdirSync(path.join(carpeta, '.rsc'));
     const hecho = cp.spawnSync(process.execPath, [path.join(RAIZ, 'media', 'railes', 'aplicar.js'), carpeta], { encoding: 'utf8' });
     assert.equal(hecho.status, 0, hecho.stderr);
 
@@ -5641,6 +5644,8 @@ exec git "$@"
     const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), prefijo));
     fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: [] }));
     fs.mkdirSync(path.join(carpeta, '.claude'), { recursive: true });
+    // Con sus enganches puestos, RSC ya ha construido `.rsc/`: los raíles no la crean (decisión 161).
+    fs.mkdirSync(path.join(carpeta, '.rsc'));
     const hooks = { SessionStart: [{ hooks: [{ type: 'command', command: ORDEN_DEL_ARRANQUE }] }] };
     if (previos.length) hooks.PreToolUse = previos.map((command) => ({ matcher: 'Bash', hooks: [{ type: 'command', command }] }));
     fs.writeFileSync(path.join(carpeta, '.claude', 'settings.json'), `${JSON.stringify({ hooks }, null, 2)}\n`);
@@ -5794,6 +5799,335 @@ exec git "$@"
     } finally {
       proveedor.enviar = antes.enviar;
       proveedor.refrescar = antes.refrescar;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  // ── Los raíles solo apagan en lo nuestro (decisión 161) ─────────────────
+  //
+  // Los raíles ponían `.no-audit`, `.no-worktree-cleanup` y `.no-gitmoji` en todas
+  // las carpetas, y RSC los apunta en su `.rsc.json` como `optOuts`, que viaja en
+  // git: en una carpeta de alguien era decidir por su equipo (P4).
+  const DEL_PAQUETE_161 = path.join(RAIZ, 'media', 'harness', 'node_modules', '@ericrisco', 'rsc');
+  const ponerLosRailes161 = (carpeta, ...banderas) => {
+    const hecho = require('node:child_process').spawnSync(process.execPath, [path.join(RAIZ, 'media', 'railes', 'aplicar.js'), carpeta, ...banderas], { encoding: 'utf8' });
+    assert.equal(hecho.status, 0, hecho.stderr);
+    return hecho.stdout;
+  };
+  const lasMarcas161 = (carpeta) => fs.readdirSync(path.join(carpeta, '.rsc')).filter((n) => n.startsWith('.no-')).sort();
+  const optOutsDe161 = (carpeta) => JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8')).optOuts || [];
+  // Una carpeta montada con RSC: su `.rsc.json` y su `.rsc/`, con git.
+  const montada161 = (prefijo, extra = {}, { conRsc = true } = {}) => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), prefijo));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), `${JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], ownSkills: [], catalogVersion: LA_DE_LA_CLASE, ...extra }, null, 2)}\n`);
+    if (conRsc) fs.mkdirSync(path.join(carpeta, '.rsc'));
+    require('node:child_process').execFileSync('git', ['init', '-q'], { cwd: carpeta });
+    return carpeta;
+  };
+  // El `sync` del paquete, de verdad: es quien apunta las marcas en `.rsc.json`. Con
+  // una casa de mentira, para no escribir nada fuera de la carpeta.
+  const casa161 = fs.mkdtempSync(path.join(os.tmpdir(), 'railes-casa-'));
+  const sincronizar161 = (carpeta) => {
+    const hecho = require('node:child_process').spawnSync(process.execPath, [path.join(DEL_PAQUETE_161, 'scripts', 'rsc.js'), 'sync', '--target', 'claude'], {
+      cwd: carpeta, encoding: 'utf8', env: { ...process.env, HOME: casa161, USERPROFILE: casa161, RSC_NO_UPDATE_CHECK: '1' },
+    });
+    assert.equal(hecho.status, 0, `${hecho.stdout}${hecho.stderr}`);
+  };
+
+  await comprobar('los raíles apagan lo del equipo solo en lo nuestro, y lo de esta máquina en todas', async () => {
+    const { pathToFileURL } = require('node:url');
+    const { projectOptOuts, MACHINE_OPT_OUTS } = await import(pathToFileURL(path.join(DEL_PAQUETE_161, 'targets', 'opt-outs.js')).href);
+
+    const nuestra = montada161('railes-nuestra-');
+    ponerLosRailes161(nuestra);
+    const enLoNuestro = lasMarcas161(nuestra);
+    assert.deepEqual(enLoNuestro, ['.no-audit', '.no-gitmoji', '.no-scope-check', '.no-worktree-cleanup'], `en lo nuestro, no se callan los cuatro: ${enLoNuestro.join(' · ')}`);
+
+    // En la de alguien, solo lo que RSC tiene por de esta máquina: lo que no apunta en
+    // `.rsc.json`. Con `--historial-ajeno` (montar encima con su sí) y con `--ajena`.
+    const deEstaMaquina = enLoNuestro.filter((m) => !projectOptOuts([m.slice(4)]).length);
+    assert.ok(deEstaMaquina.length && deEstaMaquina.length < enLoNuestro.length, 'la prueba no distingue lo del equipo de lo de esta máquina');
+    for (const bandera of ['--historial-ajeno', '--ajena']) {
+      const suya = montada161('railes-suya-');
+      ponerLosRailes161(suya, bandera);
+      assert.deepEqual(lasMarcas161(suya), deEstaMaquina, `con ${bandera}, los raíles deciden por su equipo: ${lasMarcas161(suya).join(' · ')}`);
+      assert.ok(lasMarcas161(suya).every((m) => MACHINE_OPT_OUTS.includes(m.slice(4))), 'pone algo que RSC no sabe de quién es');
+    }
+
+    // Y lo que hace RSC después, de verdad: en lo nuestro las apunta; en lo suyo, nada nuestro.
+    sincronizar161(nuestra);
+    assert.deepEqual(['audit', 'gitmoji', 'worktree-cleanup'].filter((id) => !optOutsDe161(nuestra).includes(id)), [], `RSC no las apunta: la prueba no mira nada (${optOutsDe161(nuestra)})`);
+    const suya = montada161('railes-suya-sync-');
+    ponerLosRailes161(suya, '--historial-ajeno');
+    sincronizar161(suya);
+    assert.deepEqual(optOutsDe161(suya), [], 'en su .rsc.json acaba algo que decidió la barra');
+    return `en lo nuestro ${enLoNuestro.length}; en lo suyo, ${deEstaMaquina.join(', ')}; y RSC no apunta nada nuestro en su .rsc.json`;
+  });
+
+  await comprobar('en una carpeta de alguien, lo que su .rsc.json declara y lo que puso una barra de antes se queda', () => {
+    // Lo que decidió su equipo se respeta, y lo que una barra de antes dejó en su
+    // carpeta no se quita: RSC ya lo apuntó, y quitarlo volvería a encender el
+    // guardián de gitmoji de un día para otro (decisión 161).
+    const DE_ANTES = { '.no-audit': 'de una barra de antes\n', '.no-gitmoji': 'de una barra de antes\n', '.no-worktree-cleanup': 'de una barra de antes\n' };
+    const suya = montada161('railes-de-antes-', { optOuts: ['audit', 'gitmoji', 'worktree-cleanup'] });
+    for (const [marca, texto] of Object.entries(DE_ANTES)) fs.writeFileSync(path.join(suya, '.rsc', marca), texto);
+    ponerLosRailes161(suya, '--historial-ajeno');
+    for (const [marca, texto] of Object.entries(DE_ANTES)) {
+      assert.equal(fs.existsSync(path.join(suya, '.rsc', marca)) && fs.readFileSync(path.join(suya, '.rsc', marca), 'utf8'), texto, `${marca} se ha quitado o cambiado`);
+    }
+    assert.deepEqual(optOutsDe161(suya), ['audit', 'gitmoji', 'worktree-cleanup'], 'se ha tocado lo que declara su .rsc.json');
+    sincronizar161(suya);
+    assert.deepEqual(optOutsDe161(suya), ['audit', 'gitmoji', 'worktree-cleanup'], 'después de los raíles, RSC pierde lo que declaraba');
+    return '3 marcas de antes, iguales; su .rsc.json, igual';
+  });
+
+  await comprobar('los raíles no crean .rsc/: la construye RSC con lo que declara la carpeta, y no pierde nada', () => {
+    // RSC rehace lo que declara `.rsc.json` solo si `.rsc/` no está (`fromScratch`,
+    // `install-apply.js`). Los raíles la creaban con sus cuatro marcas, y en un clon
+    // RSC perdía lo demás: la wiki compartida y la actualización sola se encendían.
+    const DECLARADAS = ['auto-update', 'knowledge-sync', 'trunk-guard', 'worktree-isolation'];
+    const clon = montada161('railes-clon-', { optOuts: DECLARADAS }, { conRsc: false });
+    ponerLosRailes161(clon);
+    assert.ok(fs.existsSync(path.join(clon, '.claude', 'skills', 'executive-lab', 'SKILL.md')), 'sin .rsc/ no se ponen los raíles');
+    assert.equal(fs.existsSync(path.join(clon, '.rsc')), false, 'los raíles crean .rsc/ antes que RSC');
+    sincronizar161(clon);
+    assert.deepEqual(DECLARADAS.filter((id) => !optOutsDe161(clon).includes(id)), [], `RSC pierde lo que el equipo declaró: ${optOutsDe161(clon)}`);
+    assert.ok(fs.existsSync(path.join(clon, '.rsc', '.no-knowledge-sync')), 'la wiki compartida, encendida');
+    // Y con `.rsc/` construida, los raíles se ponen como siempre.
+    ponerLosRailes161(clon);
+    for (const marca of ['.no-audit', '.no-gitmoji', '.no-scope-check', '.no-worktree-cleanup']) assert.ok(lasMarcas161(clon).includes(marca), `después, falta ${marca}`);
+    return `${DECLARADAS.length} declaradas, todas en su sitio; y luego, las de los raíles`;
+  });
+
+  await comprobar('al montar encima de lo de alguien, con su sí, los raíles no deciden por su equipo', async () => {
+    // En el montaje, el sí a montar encima hace que `ajena` llegue a falso (B4), y
+    // los raíles ponían lo que toca sus ficheros —bien— y también lo de su equipo.
+    // `ponerLosRailes` mira el historial aparte (decisión 161).
+    const cp = require('node:child_process');
+    const carpeta = conEnganchesDeRsc('railes-montar-encima-');
+    const git = (...args) => cp.execFileSync('git', args, { cwd: carpeta, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    git('init', '-q');
+    git('-c', 'user.name=Ana', '-c', 'user.email=ana@example.com', 'commit', '-q', '--allow-empty', '-m', 'Lo mío');
+    vscode.guion.raiz = carpeta;
+    try {
+      assert.equal(await cargar('arrancar').ponerLosRailes({ extensionPath: RAIZ }, { ajena: false }), true, 'los raíles no se ponen');
+      assert.ok(elFrenoNuestro(carpeta), 'con su sí, lo que toca sus ficheros también se queda esperando');
+      assert.deepEqual(lasMarcas161(carpeta), ['.no-scope-check'], `con su sí, se decide por su equipo: ${lasMarcas161(carpeta).join(' · ')}`);
+      // Y en una cuyo historial creó la barra, como siempre.
+      git('config', '--local', 'executivelab.historial', 'nuestro');
+      assert.equal(await cargar('arrancar').ponerLosRailes({ extensionPath: RAIZ }, { ajena: false }), true);
+      assert.deepEqual(lasMarcas161(carpeta), ['.no-audit', '.no-gitmoji', '.no-scope-check', '.no-worktree-cleanup'], 'en una de la barra, no se callan');
+      return 'de alguien: solo lo de esta máquina · de la barra: los cuatro';
+    } finally {
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  // ── Lo que encontró la revisión de la 161 ─────────────────────────────
+
+  const CUATRO_161 = ['.no-audit', '.no-gitmoji', '.no-scope-check', '.no-worktree-cleanup'];
+  const DE_ESTA_MAQUINA_161 = ['.no-scope-check'];
+  const git161 = (carpeta, ...args) => require('node:child_process').execFileSync('git', args, { cwd: carpeta, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const commit161 = (carpeta, asunto) => git161(carpeta, '-c', 'user.name=Ana', '-c', 'user.email=ana@example.com', 'commit', '-q', '--allow-empty', '-m', asunto);
+  // Una carpeta montada, con su primer commit y, si se pide, la marca de la barra.
+  const conHistorial161 = (prefijo, primerAsunto, { marca = false } = {}) => {
+    const carpeta = montada161(prefijo);
+    commit161(carpeta, primerAsunto);
+    if (marca) git161(carpeta, 'config', '--local', 'executivelab.historial', 'nuestro');
+    return carpeta;
+  };
+
+  await comprobar('a mano y sin banderas, los raíles miran solos de quién es el historial, y las banderas solo añaden', () => {
+    // Revisión de la 161, 1. La protección vivía en quien llama: `node aplicar.js
+    // <carpeta>`, como dicen los README, ponía las tres en la carpeta de Ana, y un
+    // `sync` las apuntaba en su `.rsc.json`.
+    const deAna = conHistorial161('railes-a-mano-ana-', 'Lo mío');
+    ponerLosRailes161(deAna);
+    assert.deepEqual(lasMarcas161(deAna), DE_ESTA_MAQUINA_161, `a mano, en la de Ana, se decide por su equipo: ${lasMarcas161(deAna).join(' · ')}`);
+    sincronizar161(deAna);
+    assert.deepEqual(optOutsDe161(deAna), [], 'a mano, en su .rsc.json acaba algo que decidió la barra');
+    for (const [como, carpeta] of [
+      ['por su raíz', conHistorial161('railes-a-mano-raiz-', 'Punto de partida — Contratos')],
+      ['por su marca', conHistorial161('railes-a-mano-marca-', 'Lo mío', { marca: true })],
+    ]) {
+      ponerLosRailes161(carpeta);
+      assert.deepEqual(lasMarcas161(carpeta), CUATRO_161, `en una de la barra (${como}), no se callan`);
+    }
+    // Lo que no se puede leer es de alguien: con un git que no está.
+    const sinGit = conHistorial161('railes-sin-git-', 'Punto de partida — Contratos');
+    ponerLosRailes161(sinGit, '--git', path.join(os.tmpdir(), 'railes-no-hay-git-aqui'));
+    assert.deepEqual(lasMarcas161(sinGit), DE_ESTA_MAQUINA_161, 'sin poder leer su historial, se decide por su equipo');
+    // Y las banderas solo añaden: en una de la barra, con ellas, es de alguien.
+    for (const bandera of ['--historial-ajeno', '--ajena']) {
+      const forzada = conHistorial161('railes-forzada-', 'Punto de partida — Contratos');
+      ponerLosRailes161(forzada, bandera);
+      assert.deepEqual(lasMarcas161(forzada), DE_ESTA_MAQUINA_161, `con ${bandera}, en una de la barra, se decide por su equipo`);
+    }
+    return 'de Ana: solo lo de esta máquina · de la barra, por raíz o por marca: las cuatro · sin git y con bandera: de alguien';
+  });
+
+  await comprobar('la barra y los raíles dicen lo mismo de quién es un historial, y lo que no se puede leer es de alguien', async () => {
+    // Revisión de la 161, 2. `rev-list` sale con error igual en un historial recién
+    // creado que en una rama huérfana de uno con commits, y las dos se tomaban por
+    // nuestras. Lo usan también la rama principal abierta (145) y lo de la 157.
+    const CASOS = [
+      ['sin git', false, (c) => fs.rmSync(path.join(c, '.git'), { recursive: true, force: true })],
+      ['recién creado, sin commits', false, () => {}],
+      ['recién creado por la barra, con su marca', false, (c) => git161(c, 'config', '--local', 'executivelab.historial', 'nuestro')],
+      ['nacido en la barra', false, (c) => commit161(c, 'Punto de partida — Contratos')],
+      ['de alguien, con la marca de la barra', false, (c) => { commit161(c, 'Lo mío'); git161(c, 'config', '--local', 'executivelab.historial', 'nuestro'); }],
+      ['de alguien', true, (c) => commit161(c, 'Lo mío')],
+      ['dos historias juntadas', true, (c) => {
+        commit161(c, 'Punto de partida — Contratos');
+        const rama = git161(c, 'symbolic-ref', '--short', 'HEAD').trim();
+        git161(c, 'checkout', '-q', '--orphan', 'otra');
+        commit161(c, 'Lo mío');
+        git161(c, 'checkout', '-q', rama);
+        git161(c, '-c', 'user.name=Ana', '-c', 'user.email=ana@example.com', 'merge', '-q', '--allow-unrelated-histories', '-m', 'Juntas', 'otra');
+      }],
+      ['una rama huérfana de un historial con commits', true, (c) => { commit161(c, 'Lo mío'); git161(c, 'checkout', '-q', '--orphan', 'huerfana'); }],
+      ['HEAD en un commit que no está', true, (c) => fs.writeFileSync(path.join(c, '.git', 'HEAD'), `${'0123456789'.repeat(4)}\n`)],
+      ['un git que no deja leerlo', true, (c) => { commit161(c, 'Punto de partida — Contratos'); fs.writeFileSync(path.join(c, '.git', 'HEAD'), 'esto no es una cabeza\n'); }],
+    ];
+    const terrenoM = cargar('terreno');
+    const mal = [];
+    try {
+      for (const [como, esperado, preparar] of CASOS) {
+        const carpeta = montada161('railes-de-quien-');
+        preparar(carpeta);
+        vscode.guion.raiz = carpeta;
+        const dice = !(await terrenoM.podemosGuardarElPuntoDePartida());
+        ponerLosRailes161(carpeta);
+        const dicen = lasMarcas161(carpeta).join(' ') === DE_ESTA_MAQUINA_161.join(' ');
+        if (dice !== esperado || dicen !== esperado) mal.push(`${como}: la barra dice ${dice ? 'de alguien' : 'nuestra'}, los raíles ${dicen ? 'de alguien' : 'nuestra'}`);
+      }
+    } finally {
+      vscode.guion.raiz = empresa;
+    }
+    assert.deepEqual(mal, [], mal.join(' · '));
+    return `${CASOS.length} historiales, los dos dicen lo mismo`;
+  });
+
+  await comprobar('cada camino que pone los raíles, también con su sí, les dice que el historial es de alguien', async () => {
+    // Revisión de la 161, 3. `aplicar.js` lo mira solo; esto es el refuerzo, y nada
+    // lo probaba con un sí: `historialAjeno && !ponerBloque` sobrevivía.
+    const proveedor = vscode.registrado.proveedor;
+    const procesosM = cargar('procesos');
+    const arrancarM = cargar('arrancar');
+    const carpeta = conHistorial161('railes-caminos-', 'Lo mío');
+    ponerLosRailes161(carpeta);
+    const antes = { node: procesosM.node, informar: vscode.window.showInformationMessage, enviar: proveedor.enviar, refrescar: proveedor.refrescar };
+    const llamadas = [];
+    procesosM.node = async (args) => {
+      if (String(args[0]).endsWith('aplicar.js')) llamadas.push(args.slice(2));
+      return { codigo: 0, salida: '', error: '' };
+    };
+    vscode.window.showInformationMessage = async (_m, ...resto) => resto.find((b) => b === 'Ajustarlo ahora');
+    proveedor.enviar = () => {};
+    proveedor.refrescar = async () => {};
+    // [cómo, si lo suyo espera a su sí en una de alguien, y en una de la barra]
+    const CAMINOS = [
+      ['el freno, con su botón', [true, true], () => proveedor.ponerElFreno()],
+      ['lo de siempre, con su botón', [true, false], () => proveedor.ponerElBloque()],
+      ['al día, al abrir', [true, false], () => proveedor.ponerLosRailesAlDia(true)],
+      ['detrás de «Revisar y arreglar»', [true, false], () => proveedor.arreglar()],
+      ['preparar también para otro asistente', [true, false], () => arrancarM.prepararTambienPara('codex', { extensionPath: RAIZ })],
+      ['el paso del montaje, con su sí a montar encima', [false, false], () => arrancarM.COMO_SE_HACE.ponerLosRailes({ contexto: { extensionPath: RAIZ }, parte: { estado: 'empezada' } })],
+    ];
+    const mal = [];
+    const recorrer = async (deAlguien) => {
+      for (const [como, ajena, hacer] of CAMINOS) {
+        llamadas.length = 0;
+        await hacer();
+        if (!llamadas.length) { mal.push(`${como}: no pone los raíles`); continue; }
+        const con = (b) => llamadas.every((l) => l.includes(b));
+        if (con('--historial-ajeno') !== deAlguien) mal.push(`${como}: ${deAlguien ? 'no les dice que es de alguien' : 'les dice que es de alguien en una de la barra'}`);
+        if (!con('--git')) mal.push(`${como}: sin el git de la barra`);
+        if (con('--ajena') !== ajena[deAlguien ? 0 : 1]) mal.push(`${como}: lo suyo ${ajena[deAlguien ? 0 : 1] ? 'no espera' : 'espera'} a su sí`);
+      }
+    };
+    vscode.guion.raiz = carpeta;
+    try {
+      await recorrer(true);
+      git161(carpeta, 'config', '--local', 'executivelab.historial', 'nuestro');
+      await recorrer(false);
+    } finally {
+      procesosM.node = antes.node;
+      vscode.window.showInformationMessage = antes.informar;
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      vscode.guion.raiz = empresa;
+    }
+    assert.deepEqual(mal, [], mal.join(' · '));
+    return `${CAMINOS.length} caminos, en una de alguien y en una de la barra`;
+  });
+
+  await comprobar('«Revisar y arreglar» pone los raíles detrás, con el botón y solo, y solo donde ya estaban', async () => {
+    // Revisión de la 161, 4. En una carpeta de la barra traída a otro ordenador,
+    // `.rsc/` es nueva: `repair` rehace lo del arnés y no lo nuestro, y salía el
+    // aviso que manda a correr `npx @ericrisco/rsc@latest`.
+    const proveedor = vscode.registrado.proveedor;
+    const soporteM = cargar('soporte');
+    const terrenoM = cargar('terreno');
+    const proyectoM = cargar('proyecto');
+    const traida = () => {
+      const carpeta = conHistorial161('railes-arreglar-', 'Punto de partida — Contratos');
+      ponerLosRailes161(carpeta);
+      fs.rmSync(path.join(carpeta, '.rsc'), { recursive: true, force: true });
+      fs.mkdirSync(path.join(carpeta, '.rsc'));
+      return carpeta;
+    };
+    const antes = {
+      arreglar: soporteM.arreglar, enviar: proveedor.enviar, refrescar: proveedor.refrescar, vista: proveedor.vista, donde: proveedor.donde,
+      reconocer: terrenoM.reconocer, radiografia: terrenoM.radiografia, version: proyectoM.versionDelCatalogo,
+      confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+    };
+    let sale = true;
+    soporteM.arreglar = async () => (sale ? { ok: true, mensaje: 'Arreglado. Vuelve a probar lo que estabas haciendo.' } : { ok: false, mensaje: 'No he podido arreglarlo yo solo.' });
+    proveedor.enviar = () => {};
+    proveedor.refrescar = async () => {};
+    try {
+      // Con el botón: si el arreglo no sale, nada; si sale, los raíles detrás.
+      const conBoton = traida();
+      vscode.guion.raiz = conBoton;
+      sale = false;
+      await proveedor.arreglar();
+      assert.deepEqual(lasMarcas161(conBoton), [], 'con el arreglo fallido, se ponen los raíles');
+      sale = true;
+      await proveedor.arreglar();
+      assert.deepEqual(lasMarcas161(conBoton), CUATRO_161, `detrás del botón, faltan marcas: ${lasMarcas161(conBoton).join(' · ')}`);
+
+      // Solo, al abrir (P9).
+      const sola = traida();
+      vscode.guion.raiz = sola;
+      vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      proyectoM.versionDelCatalogo = () => cargar('rsc').VERSION_DE_RESPALDO;
+      terrenoM.reconocer = async () => ({ arnes: null });
+      terrenoM.radiografia = async () => ({ piezas: [{ nombre: 'Lo que debería estar puesto', estado: 'no', arreglo: { como: 'solo', accion: { tipo: 'arreglar' }, alAbrir: true } }] });
+      proveedor.vista = { visible: true, webview: { postMessage: () => {} } };
+      proveedor.donde = { tipo: 'quieto' };
+      await proveedor.hacerSoloLoQueSePuede();
+      assert.deepEqual(lasMarcas161(sola), CUATRO_161, `detrás del arreglo solo, faltan marcas: ${lasMarcas161(sola).join(' · ')}`);
+
+      // Donde no estaban, no: reponer no es decidir.
+      const sinRailes = montada161('railes-arreglar-sin-');
+      vscode.guion.raiz = sinRailes;
+      await proveedor.arreglar();
+      assert.ok(!fs.existsSync(path.join(sinRailes, '.claude', 'skills', 'executive-lab')), 'arreglar pone los raíles donde no estaban');
+      assert.deepEqual(lasMarcas161(sinRailes), [], 'arreglar calla avisos donde no hay raíles');
+      return 'con el botón y solo, detrás; fallido o sin raíles, nada';
+    } finally {
+      soporteM.arreglar = antes.arreglar;
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      proveedor.vista = antes.vista;
+      proveedor.donde = antes.donde;
+      terrenoM.reconocer = antes.reconocer;
+      terrenoM.radiografia = antes.radiografia;
+      proyectoM.versionDelCatalogo = antes.version;
+      vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
       vscode.guion.raiz = empresa;
     }
   });
@@ -10612,7 +10946,7 @@ exec git "$@"
     // y en un clon se rehacen. La marca del aviso es de esta máquina y no viaja.
     const { projectOptOuts } = await import(pathToFileURL(path.join(DEL_PAQUETE, 'targets', 'opt-outs.js')).href);
     assert.deepEqual(projectOptOuts(['worktree-isolation', 'audit', 'team-safe-3']), ['audit', 'worktree-isolation']);
-    // Y la revisión periódica ya la apagan los raíles, en todas las carpetas: no se repite.
+    // Y la revisión periódica ya la apagan los raíles en estas mismas carpetas (decisión 161): no se repite.
     assert.match(fs.readFileSync(path.join(RAIZ, '..', 'skills', 'aplicar.js'), 'utf8'), /\['no-audit', /, 'los raíles ya no apagan la revisión periódica: hay que ponerla en decidir.js');
     assert.ok(!decidirM.MARCAS_DE_LA_BARRA.includes('.no-audit'), 'la revisión periódica se apaga en dos sitios');
     return 'en lo nuestro, puestas antes de escribir y quitadas si no sale; y el arnés las respeta';
@@ -19432,6 +19766,8 @@ exec git "$@"
       // Y como se dijo en clase: la rama principal abierta y nada que salga solo, y
       // que viaje con la carpeta (decisión 145).
       for (const marca of ['.no-trunk-guard', '.no-knowledge-sync', '.no-auto-update', '.no-worktree-isolation', '.team-safe-3']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `falta ${marca}`);
+      // Y los raíles callan sus avisos: el historial lo creó la barra (decisión 161).
+      for (const marca of ['.no-audit', '.no-gitmoji', '.no-worktree-cleanup', '.no-scope-check']) assert.ok(fs.existsSync(path.join(vacia, '.rsc', marca)), `los raíles no ponen ${marca}`);
       // Y en los ajustes de Claude de esta persona, en español y preguntando antes de subir (decisión 157).
       const deClaude = JSON.parse(fs.readFileSync(path.join(vacia, '.claude', 'settings.local.json'), 'utf8'));
       assert.equal(deClaude.language, 'español', 'al montar, Claude no queda en español');
@@ -19652,6 +19988,12 @@ exec git "$@"
         assert.equal(fs.readFileSync(path.join(suya, '.claude', 'skills', 'review-propia', 'SKILL.md'), 'utf8'),
           SU_REVIEW.replace('name: review', 'name: review-propia'), 'la suya no está intacta');
         assert.ok(fs.lstatSync(path.join(suya, '.claude', 'skills', 'review')).isSymbolicLink(), 'en su sitio no está la del arnés');
+        // Con su sí a montar encima, los raíles no apagan lo de su equipo: solo lo de
+        // esta máquina (decisión 161). Y en su `.rsc.json` no queda nada de eso.
+        for (const marca of ['.no-audit', '.no-gitmoji', '.no-worktree-cleanup']) assert.ok(!fs.existsSync(path.join(suya, '.rsc', marca)), `los raíles deciden por su equipo: ${marca}`);
+        assert.ok(fs.existsSync(path.join(suya, '.rsc', '.no-scope-check')), 'lo de esta máquina no se calla');
+        const suyos = JSON.parse(fs.readFileSync(path.join(suya, '.rsc.json'), 'utf8')).optOuts || [];
+        assert.deepEqual(suyos.filter((id) => ['audit', 'gitmoji', 'worktree-cleanup'].includes(id)), [], `en su .rsc.json: ${suyos}`);
         return `${SUYOS.length} ficheros suyos iguales, ${cuantosAntes} commit suyo y ninguno nuestro`;
       } finally {
         if (antes === undefined) delete process.env.GIT_CONFIG_GLOBAL;

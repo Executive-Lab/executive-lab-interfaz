@@ -36,38 +36,21 @@ function loQueHayDentro(raiz) {
 }
 
 // ¿Este historial es nuestro o de alguien? Nuestro quiere decir que nació en
-// la barra, y eso no lo cambia que luego guarde en él quien trabaja aquí, ni
-// que sea un clon en otro ordenador (B6).
+// la barra (B6).
 //
 // Se decidía por los autores de los 20 últimos commits, y fallaba de dos
 // maneras: el `git init` de la barra no ponía identidad, así que con la de la
 // persona puesta en el ordenador el propio punto de partida salía con su nombre;
 // y una copia suya encima ya lo volvía «ajeno». El guardado solo no corría.
 //
-// Ahora, dos pruebas, de más fuerte a menos:
-//   1. la marca que deja la barra al crearlo (`git config --local`), que no
-//      viaja en un clon;
-//   2. su raíz, el primer commit: si es uno de los que escribe la barra —el
-//      punto de partida o una copia—, nació aquí. Esa sí viaja.
-// Sin commits todavía no hay nada que proteger.
-const MARCA_DEL_HISTORIAL = 'executivelab.historial';
-const ASUNTOS_DE_LA_BARRA = /^(Punto de partida|Copia automática|Copia de seguridad) — /;
+// Cómo se decide ahora vive en `media/railes/historial-ajeno.js`: los raíles lo
+// preguntan también, porque se ponen a mano (decisión 161). Y lo que git no deja
+// leer, o una rama huérfana de un repositorio con commits, es de alguien.
+const historialDeLaCarpeta = require('../media/railes/historial-ajeno');
 
-async function historialAjeno(raiz) {
-  if (!fs.existsSync(path.join(raiz, '.git'))) return false;
+const { MARCA_DEL_HISTORIAL } = historialDeLaCarpeta;
 
-  const marca = await procesos.git('config', '--local', '--get', MARCA_DEL_HISTORIAL);
-  if (marca.codigo === 0 && marca.salida.trim() === 'nuestro') return false;
-
-  const raices = await procesos.git('rev-list', '--max-parents=0', 'HEAD');
-  if (raices.codigo !== 0) return false; // recién creado, sin commits
-  const [primera, ...otras] = raices.salida.split('\n').map((l) => l.trim()).filter(Boolean);
-  // Dos raíces son dos historias juntadas, y una de ellas no es nuestra.
-  if (!primera || otras.length) return true;
-
-  const asunto = await procesos.git('log', '-1', '--format=%s', primera);
-  return !(asunto.codigo === 0 && ASUNTOS_DE_LA_BARRA.test(asunto.salida.trim()));
-}
+const historialAjeno = (raiz) => historialDeLaCarpeta.esAjeno(raiz, (args) => procesos.git(...args));
 
 // Para lo que la barra hace sola en una carpeta por ser suya (decisión 157: sus
 // marcas de la 3, los ajustes de Claude y el `model` de Codex de la carpeta), no

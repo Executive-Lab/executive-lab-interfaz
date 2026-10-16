@@ -549,10 +549,18 @@ const loQueSeRenombro = (renombrados = []) => renombrados
 // `ajena`: el historial de esta carpeta no lo creó la barra, y lo que toca
 // ficheros suyos se queda pendiente (C-4). `ponerFreno` y `ponerBloque`: el
 // sí a cada una de esas piezas.
+//
+// Y, con sí o sin él, si su historial no lo creó la barra (decisión 161): los
+// raíles no apagan lo que RSC apunta en `.rsc.json` como decisión de su equipo.
+// El sí a montar encima es a tocar sus ficheros, no a decidir por su equipo, y
+// con él `ajena` llega a falso. `aplicar.js` lo mira también, con el mismo
+// código (`historial-ajeno.js`) y el git de la barra; esto es el refuerzo, y que no
+// se lo salte ningún camino que pone los raíles.
 async function ponerLosRailes(contexto, { ajena = false, ponerFreno = false, ponerBloque = false } = {}) {
   const aplicar = path.join(contexto.extensionPath, 'media', 'railes', 'aplicar.js');
   if (!fs.existsSync(aplicar)) return false;
-  const banderas = [...(ajena ? ['--ajena'] : []), ...(ponerFreno ? ['--poner-freno'] : []), ...(ponerBloque ? ['--poner-bloque'] : [])];
+  const historialAjeno = !(await terreno.podemosGuardarElPuntoDePartida());
+  const banderas = [...(ajena ? ['--ajena'] : []), ...(historialAjeno ? ['--historial-ajeno'] : []), ...(ponerFreno ? ['--poner-freno'] : []), ...(ponerBloque ? ['--poner-bloque'] : []), '--git', entorno.git()];
   const { codigo } = await procesos.node([aplicar, proyecto.raiz(), ...banderas], { tiempoMaximo: 60000 });
   return codigo === 0;
 }
