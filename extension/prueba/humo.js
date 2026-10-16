@@ -4246,6 +4246,8 @@ exec git "$@"
     assert.equal(saberes.comoSePide('unslop'), '/unslop');
     const queSabe = saberes.queSabe(RAIZ);
     for (const c of [...queSabe.suyas, ...queSabe.sabe, ...queSabe.otras, ...queSabe.deSerie]) {
+      // `executive-lab` está siempre activa: pedirla no hace nada, y no lleva botón (decisión 164).
+      if (c.siempre) { assert.equal(c.prompt, null, `${c.id} no se pide: está siempre activa`); continue; }
       assert.equal(c.prompt, `/${c.id}`, `${c.id} se pide por su nombre`);
     }
     for (const c of queSabe.puedeAprender) assert.equal(c.prompt, `/${c.id}`);
@@ -4264,10 +4266,11 @@ exec git "$@"
 
     // Y las fijadas arriba mandan lo mismo que su pantalla, no otra frase.
     const fijadas = cargar('fijadas');
-    const fijada = fijadas.candidatos(RAIZ).flatMap((g) => g.cosas).find((c) => c.id === 'habilidad:executive-lab');
-    assert.ok(fijada, 'una habilidad propia se puede fijar');
-    assert.equal(fijada.accion.prompt, '/executive-lab');
-    return `/${queSabe.suyas[0].id} · Codex con palabras`;
+    // `executive-lab` la ponen los raíles: está siempre activa, no se pide y no se fija (decisión 164).
+    const fijables = fijadas.candidatos(RAIZ).flatMap((g) => g.cosas).filter((c) => c.id.startsWith('habilidad:'));
+    for (const f of fijables) assert.equal(f.accion.prompt, `/${f.id.slice('habilidad:'.length)}`, `${f.id} manda lo mismo que su pantalla`);
+    assert.ok(!fijables.some((f) => f.id === 'habilidad:executive-lab'), 'la que está siempre activa no se fija');
+    return `${fijables.length} fijables · Codex con palabras`;
   });
 
   await comprobar('todo lo que RSC 2.0.5 puede montar tiene nombre en español', () => {
