@@ -216,6 +216,30 @@
           "default": false,
           "scope": "application",
           "description": "Enseña la barra completa de antes, con todo lo que la sencilla deja apagado. Para quien necesite verlo todo."
+        },
+        "executiveLab.asistente": {
+          "type": "string",
+          "default": "automatico",
+          "enum": [
+            "automatico",
+            "claude",
+            "codex",
+            "losDos"
+          ],
+          "enumItemLabels": [
+            "Automático",
+            "Claude",
+            "Codex",
+            "Los dos"
+          ],
+          "enumDescriptions": [
+            "Si tienes uno puesto en este ordenador, preparo cada carpeta para ese. Si tienes los dos, te pregunto al preparar cada una.",
+            "Preparo cada carpeta para Claude sin preguntarte, y si no lo tienes puesto, te ofrezco ponerlo. En una carpeta preparada para los dos, los botones le hablan a Claude.",
+            "Preparo cada carpeta para Codex sin preguntarte, y si no lo tienes puesto, te ofrezco ponerlo. En una carpeta preparada para los dos, los botones le hablan a Codex.",
+            "Preparo cada carpeta para Claude y para Codex. Una que ya estaba preparada para uno, la preparo sola también para el otro."
+          ],
+          "scope": "application",
+          "description": "Con qué asistente trabajas en esta barra. Lo que elijas en «Tu asistente» para una carpeta manda en esa carpeta."
         }
       }
     }

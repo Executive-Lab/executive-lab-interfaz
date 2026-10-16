@@ -1058,7 +1058,15 @@ function pantallaComoTrabaja({
 
 // ---------------------------------------------------------- tu asistente
 
-function pantallaAsistente({ ahora, montada = false, cuales = [], aviso: avisoLocal }) {
+// Lo que dice el ajuste de todo el editor, en una línea (decisión 158).
+const DEL_AJUSTE = {
+  automatico: 'En los ajustes: Automático. Al preparar una carpeta uso el que tengas puesto, y si tienes los dos, te pregunto.',
+  claude: 'En los ajustes: Claude. Preparo cada carpeta para Claude sin preguntarte.',
+  codex: 'En los ajustes: Codex. Preparo cada carpeta para Codex sin preguntarte.',
+  losDos: 'En los ajustes: Los dos. Preparo cada carpeta para Claude y para Codex.',
+};
+
+function pantallaAsistente({ ahora, ajuste = 'automatico', montada = false, cuales = [], aviso: avisoLocal }) {
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Tu asistente' }])}
     ${bloqueAviso(avisoLocal)}
@@ -1087,6 +1095,9 @@ function pantallaAsistente({ ahora, montada = false, cuales = [], aviso: avisoLo
           ? `<p class="pista">Esta carpeta no se montó para él.</p>${boton({ etiqueta: `Prepararla también para ${a.nombre}`, icono: '▸', pequeno: true, accion: { tipo: 'elegirAsistente', cual: a.id } })}`
           : ''}
       </div>`).join('')}
+
+    <p class="detalle">${texto(DEL_AJUSTE[ajuste] || DEL_AJUSTE.automatico)} Lo que elijas aquí manda en esta carpeta.</p>
+    ${boton({ etiqueta: 'Cambiar el ajuste', icono: '▸', pequeno: true, discreto: true, accion: { tipo: 'abrirElAjuste' } })}
 
     <hr class="separador">
     ${boton({
