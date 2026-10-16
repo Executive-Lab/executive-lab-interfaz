@@ -15846,6 +15846,12 @@ exec git "$@"
     fs.writeFileSync(path.join(mala, ade.CONSTANCIA), 'no es nada');
     assert.equal((await poner(mala, ['claude'])).hecho, 'ilegible');
     assert.ok(!fs.existsSync(fichero(mala)), 'con la constancia rota, se ponen cosas sin poder apuntarlas');
+    // Guardado con el Bloc de notas, con la marca delante: se entiende igual.
+    const conMarca = nueva();
+    fs.writeFileSync(fichero(conMarca), '\uFEFF{\n  "editor.fontSize": 15\n}\n');
+    assert.equal((await poner(conMarca, ['claude'])).hecho, 'puesto', 'unos ajustes guardados con el Bloc de notas no se entienden');
+    assert.equal(leer(conMarca)['editor.fontSize'], 15);
+    assert.equal(leer(conMarca)['claudeCode.focusView'], true);
     // Un fichero vacío es como no tenerlo.
     const enBlanco = nueva();
     fs.writeFileSync(fichero(enBlanco), '\n');

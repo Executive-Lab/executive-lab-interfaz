@@ -70,7 +70,7 @@ en la carpeta y es de programa.
   cabe en una carpeta…».
 - `probar.sh` contra una casa de mentira en este Mac, y los pasos de los ajustes de `desinstalar.command`
   tal cual: con constancia quita lo nuestro y deja lo suyo; sin ella, limpia como antes.
-- Mutaciones a mano: 48, 47 tumbadas. La viva es a propósito: la guarda de la barra la tapa, y sin la guarda
+- Mutaciones a mano: 49, 48 tumbadas. La viva es a propósito: la guarda de la barra la tapa, y sin la guarda
   cae.
 - `mapeos-codex.js`, `contrato.js`, `empresas-distintas.js`, el diccionario y `revisar-powershell.js`, en
   verde.
@@ -79,9 +79,13 @@ en la carpeta y es de programa.
 
 Una pasada entera después del último cambio: `humo.js` 422 y 0 caídas, `contrato.js` 15, `empresas-distintas.js`
 las tres, `mapeos-codex.js` 29 de 29, el diccionario y `revisar-powershell.js`, en verde. Los siete puntos de
-la lista tienen su prueba; las comprobaciones nuevas se vieron caer (45 mutaciones) y pasar (sin mutar).
+la lista tienen su prueba; las comprobaciones nuevas se vieron caer (46 mutaciones) y pasar (sin mutar).
 
 Con main traído (`8a8c27b`), otra pasada entera: `humo.js` 424 y 0 caídas, y lo demás, igual.
+
+Las máquinas de GitHub, con esa subida (`6479501`), en verde las cuatro: `el-exe` 15 bien con la comprobación
+nueva, `el-dmg` 14 bien, `vscode-de-verdad` «22 en la carpeta · 5 solo para todo el editor» y `windows` con
+`humo.js` 424. Lo de abajo se sustituyó aquí y corrió allí.
 
 Lo que no corre en este Mac:
 - **SUSTITUIDA** — `probar-en-vscode` (el VS Code de verdad) baja un editor fuera de la carpeta: corre en la

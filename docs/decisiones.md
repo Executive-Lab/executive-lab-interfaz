@@ -6556,7 +6556,8 @@ Con el cuidado del control remoto (decisión 143):
 - **Lo que ya tenía decidido, sí o no, no se pisa** (P4). Antes sí se pisaba: con un `settings.json` sin
   comentarios, `escribirAjustes` mezclaba lo nuestro por encima. Ahora solo recibe lo que falta.
 - **Cada clave se mira una vez por ordenador.** Si después la quita, no vuelve.
-- **Se lee con comentarios y con comas al final**, como los escribe el editor. Si no se entiende, no se toca.
+- **Se lee con comentarios y con comas al final**, como los escribe el editor, y con la marca que deja el Bloc
+  de notas de Windows delante (BOM). Si no se entiende, no se toca.
 - **Queda constancia al lado de sus ajustes**, en `.executive-lab-ajustes.json`: lo que pusimos, con su
   valor, y lo que era suyo. Desinstalar quita solo lo que dice la constancia y solo si sigue con el valor
   que dejamos. Lo hacen el `[UninstallRun]` de Inno, `desinstalar.ps1` y `desinstalar.command`, con
@@ -6645,7 +6646,8 @@ Tres comprobaciones nuevas en `humo.js`, que pasa de 419 a 422, y a 424 con main
   - lo decidido no se pisa, con comentarios y sin ellos, y queda apuntado como suyo;
   - una clave nuestra comentada no se puede insertar, y no se apunta como puesta;
   - una vez por ordenador: lo que quitó no vuelve, ni lo suyo que borró después;
-  - lo que no se entiende no se toca, ni sus ajustes ni la constancia, y un fichero vacío cuenta como nuevo;
+  - lo que no se entiende no se toca, ni sus ajustes ni la constancia; un fichero vacío cuenta como nuevo, y
+    uno guardado con el Bloc de notas se entiende igual;
   - desinstalar quita lo nuestro que sigue igual y nada más, con comentarios también, y deja su enlace como
     enlace; la orden suelta, como la llaman los desinstaladores;
   - `preparar.js` cargado, con Codex y con los dos, y el control remoto con los dos;
@@ -6666,9 +6668,13 @@ constancia, y `probar-en-vscode` mira en un VS Code de verdad que cada ajuste de
 una carpeta y que los de todo el editor no. `probar.sh` se pasó en este Mac contra una casa de mentira, y los
 dos pasos de los ajustes de `desinstalar.command`, tal cual, también.
 
-**Mutaciones a mano: 48, y 47 tumbadas.** Cada una, en una copia del árbol, con `humo.js` entero:
+Las cuatro máquinas de GitHub, en verde con la primera subida: el `.exe` instalado de verdad, 15 bien; el
+`.dmg` en una casa de mentira, 14 bien y 1 que no viene a cuento; el VS Code de verdad, «22 en la carpeta · 5
+solo para todo el editor», que confirma los ámbitos leídos en el código; y `humo.js` en Windows, 424.
 
-- 22 en el módulo común y `escribirAjustes`;
+**Mutaciones a mano: 49, y 48 tumbadas.** Cada una, en una copia del árbol, con `humo.js` entero:
+
+- 23 en el módulo común y `escribirAjustes`;
 - 3 en `preparar.js`, 1 en el instalador del Mac y 6 en las cargas, el `.iss`, los desinstaladores y lo que
   lleva la barra;
 - 9 en la barra;

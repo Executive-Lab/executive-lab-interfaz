@@ -107,8 +107,11 @@ const DEL_INSTALADOR = Object.keys({ ...DEL_EDITOR, ...DEL_EDITOR_CON_CLAUDE });
 // El settings.json del editor admite comentarios y comas al final, y mucha gente
 // los tiene. Para saber qué claves tiene se quitan las dos cosas, fuera de las
 // cadenas, y se lee. Si ni así se entiende, devuelve null: no se toca.
-function leerJsonc(texto) {
-  if (!String(texto).trim()) return {};
+function leerJsonc(crudo) {
+  // El Bloc de notas de Windows guarda con una marca delante (BOM) que el
+  // editor no tiene en cuenta y `JSON.parse` no traga.
+  const texto = String(crudo).replace(/^\uFEFF/, '');
+  if (!texto.trim()) return {};
   let sin = '';
   let dentro = false;
   for (let i = 0; i < texto.length; i += 1) {
