@@ -8061,3 +8061,26 @@ comportamiento, y en Windows ya buscaba `node.exe`: lo que fallaba eran las prue
 Una prueba que no es de esta rama falló una vez en Windows («lo que pide el asistente», «no son los tres
 primeros»): una vuelta que se adelanta a otra. No se ha tocado.
 
+
+## 174. Las pruebas no fallan en falso
+
+Dos pruebas de `humo.js` fallaban a veces sin que el código estuviera mal. Las dos dependían de lo que tarda
+la máquina, no de lo que hace el código.
+
+- **«lo que pide el asistente: la barra la añade sola…»** (en Windows de GitHub: «no son los tres primeros»).
+  Un pedido que llega mientras se atiende otro hace que la vuelta de `atenderLosPedidos` se repita al terminar;
+  la prueba esperaba a esa vuelta con un tope de 100 tics de 10 ms, o sea un segundo. En una máquina lenta la
+  vuelta pasaba de un segundo, la prueba la daba por acabada, seguía con el paso de «tres por vez» y su
+  `atenderLosPedidos()` volvía de inmediato (ya había una en marcha): la vuelta vieja se comía los pedidos del
+  paso nuevo. El código no tiene carrera (`atendiendo` y `otraVuelta` serializan las vueltas); era la espera
+  de la prueba. Ahora el tope es de 60 s, solo para no colgarse, y se sale en cuanto la barra termina.
+- **«el guion de los avisos…»** (con el Mac cargado: «no se lanza el aviso»). El guion corrido de verdad se
+  corta solo a los 6 s (su tope de todo); con la máquina cargada, node tardaba en arrancar y se cortaba antes
+  de lanzar nada. La prueba lo vuelve a lanzar hasta cinco veces si salió sin avisar; un guion que de verdad
+  no avisa falla las cinco. Los márgenes de «atascado» y «no se deja cortar» (`TOPE.todo` más 3 y 5 s) pasan a
+  más 12 s: miden que no se cuelga, no que arranque rápido.
+- De paso, cuatro esperas fijas a algo asíncrono pasan a esperar a la cosa: el botón nuevo tras el vigía
+  (900 ms), la pregunta de lo arreglado y la puesta sola de la versión nueva (topes de 200 y 500 ms), y el
+  repintado por el vigía (800 ms).
+
+Comprobado con ocho procesos de carga dando vueltas: seis pasadas seguidas de estas pruebas sin un fallo.
