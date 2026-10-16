@@ -76,10 +76,10 @@ Lo elegido en «Tu asistente» para una carpeta manda en ella.
 Primera vuelta, 15-10-2026, después de traer la 152: `humo.js` 404, `mapeos-codex.js` 15 de 15,
 `contrato.js` 15, y 45 mutaciones tumbadas.
 
-Después de la revisión, 16-10-2026, en la rama `el-ajuste-del-asistente`, con la 156, la 157 y los
-recordatorios ordenados (#48) traídos de `origin/main`:
+Después de la revisión, 16-10-2026, en la rama `el-ajuste-del-asistente`, con la 156, la 157, los
+recordatorios ordenados (#48) y los encargos limpios (#49) traídos de `origin/main`:
 
-- `humo.js`: 416 comprobaciones pasadas. Las siete nuevas:
+- `humo.js`: 417 comprobaciones pasadas. Las siete nuevas:
   «el ajuste del asistente: cuatro valores, automático de fábrica y para todo el editor» ·
   «al montar, el ajuste dice para cuál, sin preguntar» ·
   «al montar, sin el que pide el ajuste se ofrece ponerlo, o seguir con el que hay» ·
