@@ -1656,6 +1656,9 @@ function pantallaRadiografia(datos) {
         </div>
         ${pieza.arreglo ? boton({
     etiqueta: pieza.arreglo.etiqueta, icono: '→', pequeno: true, accion: pieza.arreglo.accion,
+  }) : ''}
+        ${pieza.arreglo && pieza.ahoraNo ? boton({
+    etiqueta: pieza.ahoraNo.etiqueta, pequeno: true, discreto: true, accion: pieza.ahoraNo.accion,
   }) : ''}`).join('')}
     </div>
 

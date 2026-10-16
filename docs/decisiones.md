@@ -8398,3 +8398,97 @@ de verdad: `memory off` deja `memory: false` en `.rsc.json` y quita el enganche,
 `humo.js` 483, con `--con-arnes` 491. Once mutaciones a mano (las dos órdenes, el estado, Claude/Codex/otro, la
 memoria apagada sin pieza, el «llega», `memory` en las órdenes que escriben, `resume` como escritura, el texto y la
 puerta del botón): las once tumbadas.
+
+
+## 177. En una carpeta de alguien, lo que no se hace solo se ofrece con su botón
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho · **Vía rápida** `carpetas-de-alguien-con-boton`
+
+Eran dos «Next» apuntados: la 157 pone sola, en las carpetas de la barra, el español y el `ask` de Claude y
+arregla el modelo retirado de Codex, y en una carpeta de alguien no hace nada (P4); y la 161 dejó sin botón lo
+que una barra de antes ya había apagado en carpetas de alguien. Ahí la persona no sabía que existía ni podía
+pedirlo. Ahora se le ofrece, con su botón, y un clic suyo es su sí (P9).
+
+**Qué es «una carpeta de alguien».** La que la barra no montó en este ordenador: `terreno.montadaAqui` falso
+(sin la marca `executivelab.historial=nuestro` del historial, o sin la del editor si no hay git). Es lo
+mismo que ya cerraba la 157, así que un clon de una carpeta de la barra cuenta como de alguien.
+
+**Tres ofertas**, cada una como una pieza de «Qué falta por montar» con su botón y su «Ahora no». Son
+`porHacer`, no «algo roto»: no hacen que la pantalla de después de montar enseñe la lista.
+
+- **Volver a encenderlo** («Lo que apagó una versión anterior de la barra»). No hay una orden oficial de RSC
+  para esto: para `audit`, `gitmoji` y `worktree-cleanup` RSC dice «borra ese fichero» (`worktree-reaper.mjs`) y,
+  cuando reescribe su manifiesto, rehace `optOuts` con las marcas que hay (`localDecisions`,
+  `install-apply.js`: borrar la última es como se vuelve a armar un guardián). Se borra el fichero.
+  - **Cuáles puso la barra** se sabe por lo que dice el fichero: `CALLAR` (`aplicar.js`) escribe un texto que
+    solo escribe ella, y la barra lo compara entero, palabra por palabra. Una marca vacía, o con el texto de
+    RSC (`Declared in .rsc.json by this project…`), o con otro, o un enlace, la puso la persona o su equipo y no
+    se toca. No hay constancia aparte: nunca hubo. Una prueba exige que los tres textos de `de-alguien.js` sean
+    los de `aplicar.js`.
+  - Es lo que adelantaba la 161: solo vale en el ordenador donde la barra la dejó. En un clon, RSC rehízo la
+    marca con su texto y ya no se reconoce, que es lo correcto: ahí la rehízo su `.rsc.json`.
+  - Solo las tres del equipo. `.no-scope-check` es de esta máquina, la barra la deja en todas y no se ofrece.
+  - Solo se ofrece lo que sale apagado en «Lo que tiene apagado» (por su nombre de siempre).
+  - Lo que se enciende es lo que el equipo ya tenía antes de la barra: el guardián de gitmoji vuelve a denegar
+    un `git commit -m` sin gitmoji, y la revisión periódica y los avisos de la recogida vuelven a salir.
+  - **Lo que no hace:** no toca su `.rsc.json`. RSC lo rehace la próxima vez que escribe (`add`, `onboard`…;
+    `sync` sin cambios no lo reescribe, comprobado con el paquete), y hasta entonces «Lo que tiene apagado»
+    sigue nombrando lo declarado.
+- **Claude, a tu manera** («Que Claude me hable en español y pregunte antes de subir»). Llama a
+  `ponerLosDeLaBarra` de la 157 con `conSuSi: true`, y no hay otra lógica: mismas guardas (nada más del
+  fichero, entero o nada, sin enlaces, nada si está en git o no se entiende, nada si ya dice un idioma o ya
+  pregunta o prohíbe), la constancia con su huella y «Quitarlo». Con el sí solo entran el español y las dos
+  reglas: los avisos del sistema (162) no son parte de lo que cuenta el botón y no se ponen. Si solo falta una
+  de las dos cosas, el botón dice solo esa.
+  - Antes de escribir mira, sin tocar nada (`soloMirar`), si hay algo que poner; si no, no se ofrece.
+  - El fichero no tiene que acabar en una copia por descuido: se deja fuera en `.git/info/exclude`, que es de
+    este ordenador, no viaja y no toca ningún fichero suyo (el bloque del `.gitignore` sí lo toca, y no se
+    pone sin su sí). Si git ya lo ignora, no se escribe nada.
+- **La versión de Codex** («Arreglar el modelo de Codex»). Llama a `retirados.arreglar` con
+  `soloLaCarpeta: true`: el `.codex/config.toml` de la carpeta, con copia al lado, y sus mismas guardas (clave
+  de la API, otro proveedor, algo que no se entiende, un enlace). Su `config.toml` de usuario no se toca: ese
+  ya lo arregla la 157 al abrir, porque es de su ordenador. Solo si usa Codex. Si el fichero está en git, el
+  cambio se verá en su `git diff`: es de su equipo y lo hizo con su clic.
+
+**«Ahora no».** Lo rechazado no vuelve a ofrecerse en esa carpeta: se recuerda en el estado del editor para
+ella (`executiveLab.deAlguienRechazado`, por carpeta; no viaja, no entra en git). Si no se puede leer, no se
+insiste. Lo que se puso y se quitó con «Quitarlo» tampoco vuelve: lo dice la constancia de la 157. En una
+carpeta de la barra no se ofrece nada: ahí se hace solo, como antes.
+
+**Sin clic, nada.** Abrir la carpeta, repintar la pantalla y reponer los raíles no escriben nada en una
+carpeta de alguien; la oferta solo mira.
+
+**Lo que se propone y no se construye:**
+- Que «Lo que tiene apagado» deje de nombrar lo que se acaba de encender sin esperar a que RSC reescriba su
+  `.rsc.json`: hoy mira lo declarado además de las marcas, para que un clon siga contándolo.
+- Ofrecer también el aviso del sistema (162) en una carpeta de alguien: el botón de hoy cuenta dos cosas.
+
+`humo.js`: tres pruebas nuevas, junto a las de la 157 y la 161 (carpetas de mentira, con y sin la marca de este
+ordenador, con git de mentira sin las exclusiones de quien corre la prueba). Diez mutaciones a mano, las diez
+tumbadas: quitar la guarda de «montada aquí» de lo que se pone al abrir; aceptar cualquier contenido en una
+marca; seguir un enlace en una marca; que lo rechazado vuelva; que rechazar no guarde; ofrecer en lo nuestro;
+que lo de Codex toque el de usuario; que lo de Claude meta los avisos; que no se deje fuera de git; que
+mirar escriba.
+
+**La revisión** (seguridad de la PR #74), arreglado, cada cosa con su prueba y su mutación:
+
+- **Grave: la 177 creaba `.rsc/`.** En un clon, con `.rsc.json` y `optOuts` del equipo y sin `.rsc/`, el botón de
+  Claude escribía la constancia y con ella creaba `.rsc/`. RSC solo rehidrata las marcas del equipo si no
+  encuentra `.rsc/` (`fromScratch`), así que daba por buenas unas marcas que no había y reescribía `optOuts: []`
+  en el `.rsc.json` rastreado. Es lo mismo que `aplicar.js` evita. Ahora, con su sí, `ponerLosDeLaBarra` no escribe
+  nada si `.rsc/` no existe como carpeta de verdad (`sinRsc`), y por tanto tampoco se ofrece. Nunca se crea
+  `.rsc/` desde la 177. Mutación: dejarla crear.
+- **El botón vuelve a mirar antes de actuar** (`desdeSuBoton`): la oferta se calcula otra vez (`laOfertaDeAlguien`,
+  la misma de la pantalla), y si ya no se ofrece —la carpeta pasó a ser de la barra, ya está hecho, se rechazó—
+  no toca nada y lo dice. Vale para los tres botones. Mutación: no volver a mirar.
+- **Una subcarpeta de otro repositorio** (sin `.git` propio, con uno más arriba según `git rev-parse
+  --show-toplevel`): lo de Claude no se ofrece ni se escribe, porque su `settings.local.json` puede estar
+  rastreado por el padre. Si no se sabe, se trata como que sí. Mutación: darla por suelta.
+- **La copia de Codex** lleva el fichero entero: si la carpeta es la raíz de su git, se añade al
+  `.git/info/exclude` con las mismas guardas que lo de Claude; si no se puede, el aviso dice dónde queda («He
+  dejado una copia del fichero en …»). Mutaciones: no dejarla fuera; no decirlo.
+- **«Ahora no» sin poder apuntarlo** ya no dice «no te lo vuelvo a proponer»: dice que no ha podido apuntarlo y
+  que se volverá a proponer. Mutación: decir lo de antes.
+
+Seis mutaciones más, las seis tumbadas.
+

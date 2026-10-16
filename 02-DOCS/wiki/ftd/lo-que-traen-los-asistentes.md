@@ -74,7 +74,7 @@ RSC 3.0.22, y se mete lo que es local, se deshace y no decide nada por nadie (P9
 
 - Probar con una persona que Claude, con el `ask`, pregunta antes de subir también en modo auto, y que
   `language` se nota sin abrir otra conversación.
-- En una carpeta de alguien: ofrecer los ajustes de Claude y el arreglo de Codex con su botón (C-4).
+- En una carpeta de alguien: ofrecer los ajustes de Claude y el arreglo de Codex con su botón (C-4). Hecho en la 177.
 - Las carpetas sin git que se montaron antes de esta versión no tienen la marca de este ordenador: lo de
   la 157 no les llega hasta que se pongan copias o se vuelvan a montar.
 - `.team-safe-3` cuando una carpeta de la barra ya en la 3 se trae a otro ordenador.

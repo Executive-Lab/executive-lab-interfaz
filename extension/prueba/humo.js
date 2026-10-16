@@ -13094,6 +13094,392 @@ exec git "$@"
     }
   });
 
+  // ------------------------------------- en una carpeta de alguien, con su botón (decisión 177)
+  await comprobar('177: en una carpeta de alguien, lo que apagó una barra de antes se enciende con su botón, y solo lo de la barra', async () => {
+    const da = cargar('de-alguien');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    // Una sola verdad: los textos son los que escribe `aplicar.js`, y la de esta máquina no está.
+    const fuente = fs.readFileSync(path.join(RAIZ, 'media', 'railes', 'aplicar.js'), 'utf8');
+    const delEquipo = Object.fromEntries([...fuente.matchAll(/\['(no-[\w-]+)', '([^']+)', DEL_EQUIPO\]/g)].map((m) => [`.${m[1]}`, `${m[2]}\n`]));
+    assert.deepEqual(da.MARCAS_DE_LA_BARRA, delEquipo, 'los textos de las marcas ya no son los de aplicar.js');
+
+    const SUYAS = { '.no-audit': da.MARCAS_DE_LA_BARRA['.no-audit'], '.no-worktree-cleanup': da.MARCAS_DE_LA_BARRA['.no-worktree-cleanup'], '.no-gitmoji': da.MARCAS_DE_LA_BARRA['.no-gitmoji'] };
+    const con = (marcas) => {
+      const r = montar();
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(r, '.rsc.json'), 'utf8')), optOuts: ['audit', 'gitmoji', 'worktree-cleanup'] }));
+      fs.mkdirSync(path.join(r, '.rsc'), { recursive: true });
+      for (const [n, t] of Object.entries(marcas)) fs.writeFileSync(path.join(r, '.rsc', n), t);
+      return r;
+    };
+    const lasMarcas = (r) => fs.readdirSync(path.join(r, '.rsc')).filter((n) => n.startsWith('.no-')).sort();
+
+    // Lo de la persona o de su equipo no se toca: vacío, con el texto de RSC, o con otro; ni un enlace.
+    const mezclada = con({
+      '.no-audit': SUYAS['.no-audit'],
+      '.no-gitmoji': '',
+      '.no-worktree-cleanup': 'Declared in .rsc.json by this project; rebuilt here by rsc 3.0.22.\n',
+      '.no-scope-check': 'hablar de "scopes" a quien lleva las facturas no significa nada\n',
+      '.no-ship-guard': SUYAS['.no-audit'],
+    });
+    assert.deepEqual(da.marcasDeLaBarra(mezclada), ['.no-audit'], 'se da por de la barra lo que no lo es');
+    const quitado = da.volverAEncender(mezclada);
+    assert.deepEqual(quitado, { hecho: 'encendido', quitadas: ['.no-audit'] });
+    assert.deepEqual(lasMarcas(mezclada), ['.no-gitmoji', '.no-scope-check', '.no-ship-guard', '.no-worktree-cleanup'], 'se quita una marca que no es de la barra');
+    assert.equal(da.volverAEncender(mezclada).hecho, 'nadaQueQuitar');
+    // Un texto casi igual, o un enlace al texto, tampoco.
+    const casi = con({ '.no-audit': SUYAS['.no-audit'].trim(), '.no-gitmoji': `${SUYAS['.no-gitmoji']}y algo más\n` });
+    const fuera = path.join(casi, 'fuera.txt');
+    fs.writeFileSync(fuera, SUYAS['.no-worktree-cleanup']);
+    fs.symlinkSync(fuera, path.join(casi, '.rsc', '.no-worktree-cleanup'));
+    assert.deepEqual(da.marcasDeLaBarra(casi), [], 'un texto casi igual o un enlace valen');
+    assert.equal(da.volverAEncender(casi).hecho, 'nadaQueQuitar');
+    assert.equal(fs.readFileSync(fuera, 'utf8'), SUYAS['.no-worktree-cleanup']);
+    // Una carpeta `.rsc` que es un enlace, nada.
+    const enlace = con({});
+    const otra = con(SUYAS);
+    fs.rmSync(path.join(enlace, '.rsc'), { recursive: true });
+    fs.symlinkSync(path.join(otra, '.rsc'), path.join(enlace, '.rsc'));
+    assert.deepEqual(da.marcasDeLaBarra(enlace), []);
+    assert.equal(lasMarcas(otra).length, 3);
+
+    // En la pantalla: ofrecido en una carpeta de alguien, con su «Ahora no»; en una de la barra, nada.
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza, vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente };
+    const enviados = [];
+    try {
+      vscode.guion.confianza = true;
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      const piezaDe = async (r) => {
+        vscode.guion.raiz = r;
+        return (await terrenoM.radiografia()).piezas.find((p) => p.nombre === 'Lo que apagó una versión anterior de la barra');
+      };
+      const r = con(SUYAS);
+      const pieza = await piezaDe(r);
+      assert.ok(pieza, 'en una carpeta de alguien no se ofrece volver a encenderlo');
+      assert.deepEqual(pieza.arreglo, { como: 'solo', etiqueta: 'Volver a encenderlo', accion: { tipo: 'volverAEncender' }, retiene: 'loDecide' });
+      assert.deepEqual(pieza.ahoraNo, { etiqueta: 'Ahora no', accion: { tipo: 'noOfrecerMas', cual: 'marcas' } });
+      assert.equal(pieza.porHacer, true);
+      assert.match(pieza.detalle, /gitmoji|commits|guardi|revisi/i, 'no dice qué se apagó');
+      // Sin el clic, nada: abrir la carpeta, repintar, ponerle los raíles al día no quita ninguna.
+      await proveedor.ponerLoDeClaudeAlAbrir();
+      await terrenoM.radiografia();
+      assert.equal(lasMarcas(r).length, 3, 'se quita una marca sin el clic de la persona');
+      // Con el clic, se quitan las de la barra y se dice.
+      await proveedor.manejar(pieza.arreglo.accion);
+      assert.deepEqual(lasMarcas(r), [], 'el botón no las quita');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /vuelve a funcionar/.test(m.texto)), 'no lo dice');
+      assert.ok(!(await piezaDe(r)), 'sigue ofreciéndolo cuando ya no hay nada');
+      // Con la marca de la persona al lado, el clic no la toca.
+      const mixta = con({ '.no-audit': SUYAS['.no-audit'], '.no-ftd-nudge': '' });
+      await piezaDe(mixta);
+      await proveedor.manejar({ tipo: 'volverAEncender' });
+      assert.deepEqual(lasMarcas(mixta), ['.no-ftd-nudge'], 'el botón se lleva una marca de la persona');
+      // Un botón viejo, con la carpeta ya de la barra: no quita nada.
+      const vieja = con(SUYAS);
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      await proveedor.manejar({ tipo: 'volverAEncender' });
+      assert.equal(lasMarcas(vieja).length, 3, 'un mensaje viejo quita marcas de una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      // «Ahora no»: no vuelve, ni en otra pantalla ni al abrir otra vez.
+      const rechazada = con(SUYAS);
+      assert.ok(await piezaDe(rechazada));
+      await proveedor.manejar({ tipo: 'noOfrecerMas', cual: 'marcas' });
+      assert.ok(!(await piezaDe(rechazada)), 'lo rechazado vuelve');
+      assert.equal(lasMarcas(rechazada).length, 3, 'rechazarlo quita las marcas');
+      assert.ok(await piezaDe(con(SUYAS)), 'rechazarlo en una carpeta lo quita en todas');
+      // Una carpeta que montó la barra en este ordenador: se queda como la dejó, sin ofrecer.
+      const nuestra = con(SUYAS);
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, nuestra);
+      assert.ok(!(await piezaDe(nuestra)), 'se ofrece en una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      return 'textos de aplicar.js; solo las de la barra; sin clic, nada; «Ahora no» no vuelve; en lo nuestro, no se ofrece';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      await contexto.workspaceState.update(da.CLAVE_RECHAZADO, undefined);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+    }
+  });
+
+  await comprobar('177: en una carpeta de alguien, lo de Claude se ofrece con su botón, con las guardas de la 157, y se quita', async () => {
+    const da = cargar('de-alguien');
+    const al = cargar('ajustes-locales');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const cp = require('node:child_process');
+    const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
+    const nueva = (ajustes) => {
+      const r = montar();
+      fs.mkdirSync(path.join(r, ...al.AVISAR.slice(0, -1)), { recursive: true });
+      fs.mkdirSync(path.join(r, '.rsc'), { recursive: true }); // la crea RSC, nunca la barra con su sí
+      // Con el guion de los avisos puesto, que es lo que haría que la 162 los enganchara: aquí no son parte de la oferta.
+      fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(r, ...al.AVISAR));
+      if (ajustes !== undefined) fs.writeFileSync(path.join(r, '.claude', 'settings.local.json'), typeof ajustes === 'string' ? ajustes : JSON.stringify(ajustes));
+      return r;
+    };
+    const local = (r) => JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.local.json'), 'utf8'));
+    const hayLocal = (r) => fs.existsSync(path.join(r, '.claude', 'settings.local.json'));
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza, claude: process.env.CLAUDE_CONFIG_DIR, vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente, gitGlobal: process.env.GIT_CONFIG_GLOBAL, xdg: process.env.XDG_CONFIG_HOME };
+    const enviados = [];
+    try {
+      // Un git sin las exclusiones globales de quien corre esto: si no, `.claude/settings.local.json` ya sale ignorado.
+      const casaGit = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-git-'));
+      process.env.GIT_CONFIG_GLOBAL = path.join(casaGit, '.gitconfig');
+      process.env.XDG_CONFIG_HOME = casaGit;
+      vscode.guion.confianza = true;
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      const piezaDe = async (r) => {
+        vscode.guion.raiz = r;
+        return (await terrenoM.radiografia()).piezas.find((p) => p.nombre === 'Claude, a tu manera');
+      };
+      // De alguien, sin clic: ni al abrir, ni al repintar, ni con los raíles.
+      const r = nueva();
+      const pieza = await piezaDe(r);
+      assert.ok(pieza, 'no se ofrece');
+      assert.deepEqual(pieza.arreglo, { como: 'solo', etiqueta: 'Que Claude me hable en español y pregunte antes de subir', accion: { tipo: 'ponerLoDeClaudeAqui' }, retiene: 'loDecide' });
+      assert.deepEqual(pieza.ahoraNo, { etiqueta: 'Ahora no', accion: { tipo: 'noOfrecerMas', cual: 'claude' } });
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      assert.deepEqual([(await proveedor.ponerLoDeClaudeAlAbrir()).hecho, hayLocal(r)], ['noSeMontoAqui', false], 'al abrir se pone sin el clic');
+      assert.ok(!hayLocal(r), 'repintar la pantalla escribe');
+      // Con el clic: el español y el `ask`, sin los avisos del sistema, con constancia y fuera de git.
+      cp.execFileSync('git', ['init', '-q', r]);
+      await proveedor.manejar(pieza.arreglo.accion);
+      assert.deepEqual(local(r), { language: 'español', permissions: { ask: PREGUNTAR } }, 'no deja lo que dice el botón, o deja más');
+      assert.ok(fs.existsSync(path.join(r, ...al.CONSTANCIA)), 'sin constancia');
+      assert.match(JSON.parse(fs.readFileSync(path.join(r, ...al.CONSTANCIA), 'utf8')).porQue, /177/);
+      const vacio = path.join(r, '.rsc', 'sin-exclusiones');
+      fs.writeFileSync(vacio, '');
+      const ignorado = (rel) => cp.spawnSync('git', ['-C', r, '-c', `core.excludesFile=${vacio}`, 'check-ignore', '-q', rel]).status === 0;
+      assert.ok(ignorado('.claude/settings.local.json'), 'el fichero de esta persona entra en una copia');
+      assert.ok(ignorado('.rsc/executive-lab-ajustes-locales.json'), 'la constancia entra en una copia');
+      assert.ok(!fs.existsSync(path.join(r, '.gitignore')), 'se toca un fichero suyo');
+      const aviso = enviados.filter((m) => m.tipo === 'aviso').pop();
+      assert.equal(aviso.texto, 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.');
+      assert.deepEqual(aviso.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar'] } });
+      assert.ok(!(await piezaDe(r)), 'ya puesto, se sigue ofreciendo');
+      // «Quitarlo» quita eso y lo quitado no se vuelve a ofrecer.
+      await proveedor.manejar(aviso.boton.accion);
+      assert.ok(!(await piezaDe(r)), 'lo que quitó vuelve a ofrecerse');
+      assert.equal(JSON.stringify(local(r)), '{}');
+
+      // Lo suyo, intacto, y lo que ya dice no se ofrece.
+      const conSuyo = nueva({ model: 'opus', permissions: { allow: ['Bash(ls *)'], ask: ['Bash(git push *)'] } });
+      const p2 = await piezaDe(conSuyo);
+      assert.equal(p2.arreglo.etiqueta, 'Que Claude me hable en español y pregunte antes de subir');
+      await proveedor.manejar(p2.arreglo.accion);
+      assert.deepEqual(local(conSuyo), { model: 'opus', language: 'español', permissions: { allow: ['Bash(ls *)'], ask: ['Bash(git push *)', 'Bash(gh pr create *)'] } }, 'se pisa lo suyo');
+      const conIdioma = nueva({ language: 'catalán', permissions: { deny: ['Bash(git push *)', 'Bash(gh pr create *)'] } });
+      assert.ok(!(await piezaDe(conIdioma)), 'se ofrece pisar un idioma suyo o una regla que ya prohíbe');
+      // Guardas de la 157, tal cual: ilegible, en git, enlace.
+      assert.ok(!(await piezaDe(nueva('{ "language": '))), 'se ofrece sobre un fichero que no se entiende');
+      const enGit = nueva();
+      cp.execFileSync('git', ['init', '-q', enGit]);
+      fs.writeFileSync(path.join(enGit, '.claude', 'settings.local.json'), '{}\n');
+      cp.execFileSync('git', ['-C', enGit, 'add', '-f', '.claude/settings.local.json']);
+      assert.ok(!(await piezaDe(enGit)), 'se ofrece en un fichero que está en git');
+      const conEnlace = nueva();
+      const dFuera = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-fuera-'));
+      fs.rmSync(path.join(conEnlace, '.claude'), { recursive: true });
+      fs.symlinkSync(dFuera, path.join(conEnlace, '.claude'));
+      assert.ok(!(await piezaDe(conEnlace)));
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.deepEqual(fs.readdirSync(dFuera), [], 'se escribe a través de un enlace');
+      // Sin confianza en la carpeta, aunque pulse: nada.
+      const sinConfianza = nueva();
+      vscode.guion.raiz = sinConfianza;
+      vscode.guion.confianza = false;
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      vscode.guion.confianza = true;
+      assert.ok(!hayLocal(sinConfianza), 'se escribe en una carpeta sin confianza');
+      // Un clon, con `.rsc.json` del equipo y sin `.rsc/`: no se ofrece, y a mano tampoco se crea `.rsc/`
+      // (RSC la rehidrataría con las marcas del equipo solo si no la encuentra; con ella ya puesta reescribe `optOuts`).
+      const clon = nueva();
+      fs.rmSync(path.join(clon, '.rsc'), { recursive: true, force: true });
+      const declarado = fs.readFileSync(path.join(clon, '.rsc.json'), 'utf8');
+      assert.ok(!(await piezaDe(clon)), 'se ofrece en un clon sin .rsc/');
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.ok(!fs.existsSync(path.join(clon, '.rsc')), 'se crea .rsc/ en un clon');
+      assert.ok(!hayLocal(clon), 'se escribe en un clon sin .rsc/');
+      assert.equal(fs.readFileSync(path.join(clon, '.rsc.json'), 'utf8'), declarado);
+      assert.equal((await al.ponerLosDeLaBarra({ raiz: clon, conSuSi: true, estaEnGit: async () => false })).hecho, 'sinRsc');
+      assert.ok(!fs.existsSync(path.join(clon, '.rsc')), 'el módulo crea .rsc/ con su sí');
+      // Un botón viejo, tras pasar la carpeta a ser de la barra: no hace nada y lo dice.
+      const vieja = nueva();
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.ok(!hayLocal(vieja), 'un mensaje viejo escribe en una carpeta de la barra');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /No he tocado nada/.test(m.texto)), 'no lo dice');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      // Una subcarpeta de otro repositorio (sin `.git` propio, con uno más arriba): no se ofrece ni se pisa lo que rastrea el padre.
+      const padre = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-padre-'));
+      cp.execFileSync('git', ['init', '-q', padre]);
+      const hija = montar(path.join(padre, 'hija'));
+      fs.mkdirSync(path.join(hija, '.claude'), { recursive: true });
+      fs.mkdirSync(path.join(hija, '.rsc'), { recursive: true });
+      fs.writeFileSync(path.join(hija, '.claude', 'settings.local.json'), '{"model":"opus"}\n');
+      cp.execFileSync('git', ['-C', padre, 'add', '-f', 'hija/.claude/settings.local.json']);
+      assert.ok(!(await piezaDe(hija)), 'se ofrece en una subcarpeta de otro repositorio');
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.equal(fs.readFileSync(path.join(hija, '.claude', 'settings.local.json'), 'utf8'), '{"model":"opus"}\n', 'se pisa lo que rastrea el padre');
+      assert.equal((await da.ponerLoDeClaude({ raiz: hija, estaEnGit: async () => false, git: undefined })).hecho, 'dentroDeOtro', 'sin saber de git, se pisa');
+      // Rechazar sin poder apuntarlo no dice que no vuelve.
+      const sinMemoria = nueva();
+      assert.ok(await piezaDe(sinMemoria));
+      const updateReal = contexto.workspaceState.update;
+      contexto.workspaceState.update = async (clave, ...resto) => { if (clave === da.CLAVE_RECHAZADO) throw new Error('no se guarda'); return updateReal.call(contexto.workspaceState, clave, ...resto); };
+      enviados.length = 0;
+      try { await proveedor.manejar({ tipo: 'noOfrecerMas', cual: 'claude' }); } finally { contexto.workspaceState.update = updateReal; }
+      const dicho = enviados.filter((m) => m.tipo === 'aviso').pop();
+      assert.ok(dicho && dicho.malo && !/no te lo vuelvo a proponer/.test(dicho.texto) && /volveré a proponer/.test(dicho.texto), 'dice que no vuelve sin haberlo apuntado');
+      assert.ok(await piezaDe(sinMemoria), 'sin apuntarlo, deja de ofrecerse');
+      // «Ahora no»: no vuelve.
+      const no = nueva();
+      assert.ok(await piezaDe(no));
+      await proveedor.manejar({ tipo: 'noOfrecerMas', cual: 'claude' });
+      assert.ok(!(await piezaDe(no)) && !hayLocal(no), 'lo rechazado vuelve, o rechazar escribe');
+      // Una de la barra, montada aquí: se pone sola como siempre y no se ofrece.
+      const nuestra = nueva();
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, nuestra);
+      assert.ok(!(await piezaDe(nuestra)), 'se ofrece en una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      return 'sin clic, nada; con el clic, español y ask sin avisos, fuera de git, y «Quitarlo»; las guardas de la 157 y «Ahora no» valen';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = antes.confianza;
+      process.env.CLAUDE_CONFIG_DIR = antes.claude;
+      for (const [clave, valor] of [['GIT_CONFIG_GLOBAL', antes.gitGlobal], ['XDG_CONFIG_HOME', antes.xdg]]) {
+        if (valor === undefined) delete process.env[clave]; else process.env[clave] = valor;
+      }
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      await contexto.workspaceState.update(da.CLAVE_RECHAZADO, undefined);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+    }
+  });
+
+  await comprobar('177: en una carpeta de alguien, el modelo retirado de Codex se arregla con su botón, solo el de la carpeta y con copia', async () => {
+    const da = cargar('de-alguien');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const nueva = (toml) => {
+      const r = montar();
+      fs.mkdirSync(path.join(r, '.codex'), { recursive: true });
+      if (toml !== undefined) fs.writeFileSync(path.join(r, '.codex', 'config.toml'), toml);
+      return r;
+    };
+    const CON = 'model = "gpt-5.5"\napproval_policy = "on-request"\n';
+    const config = (r) => path.join(r, '.codex', 'config.toml');
+    const copias = (r) => fs.readdirSync(path.join(r, '.codex')).filter((n) => n.includes('.copia-executive-lab-'));
+    const suyo = path.join(CODEX_DE_MENTIRA, 'config.toml');
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza, ext: vscode.guion.extensionesInstaladas, vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente };
+    const enviados = [];
+    try {
+      vscode.guion.confianza = true;
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      const piezaDe = async (r) => {
+        vscode.guion.raiz = r;
+        return (await terrenoM.radiografia()).piezas.find((p) => p.nombre === 'La versión de Codex');
+      };
+      const r = nueva(CON);
+      const pieza = await piezaDe(r);
+      assert.ok(pieza, 'no se ofrece');
+      assert.deepEqual(pieza.arreglo, { como: 'solo', etiqueta: 'Arreglar el modelo de Codex', accion: { tipo: 'arreglarCodexAqui' }, retiene: 'loDecide' });
+      assert.deepEqual(pieza.ahoraNo, { etiqueta: 'Ahora no', accion: { tipo: 'noOfrecerMas', cual: 'codex' } });
+      assert.match(pieza.detalle, /GPT-5\.5/);
+      // Sin clic, nada: arreglarCodex (al abrir) no toca la carpeta de alguien.
+      await proveedor.arreglarCodex();
+      assert.equal(fs.readFileSync(config(r), 'utf8'), CON, 'al abrir se arregla sin el clic');
+      assert.deepEqual(copias(r), []);
+      // Con el clic: solo el de la carpeta; el suyo de usuario, no (aquí se pone después de lo de abrir, que sí lo arregla).
+      fs.writeFileSync(suyo, CON);
+      await proveedor.manejar(pieza.arreglo.accion);
+      assert.equal(fs.readFileSync(config(r), 'utf8'), 'approval_policy = "on-request"\n', 'no quita la línea, o toca algo más');
+      assert.equal(copias(r).length, 1, 'sin copia');
+      assert.equal(fs.readFileSync(path.join(r, '.codex', copias(r)[0]), 'utf8'), CON, 'la copia no es lo de antes');
+      assert.equal(fs.readFileSync(suyo, 'utf8'), CON, 'toca el config de usuario');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /He arreglado Codex.*GPT-5\.5/.test(m.texto)));
+      assert.ok(!(await piezaDe(r)), 'ya arreglado, se sigue ofreciendo');
+      // Las guardas de la 157: otro proveedor, con clave de la API, enlace, algo que no se entiende.
+      assert.ok(!(await piezaDe(nueva('model_provider = "azure"\nmodel = "gpt-5.5"\n'))), 'con otro proveedor');
+      assert.ok(!(await piezaDe(nueva('model = """x\ny"""\n'))), 'con un texto raro');
+      assert.ok(!(await piezaDe(nueva('model = "gpt-5.5-propio"\n'))), 'con un modelo que no está retirado');
+      assert.ok(!(await piezaDe(nueva())), 'sin config');
+      const conEnlace = nueva();
+      const dFuera = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-codex-'));
+      fs.writeFileSync(path.join(dFuera, 'config.toml'), CON);
+      fs.rmSync(path.join(conEnlace, '.codex'), { recursive: true });
+      fs.symlinkSync(dFuera, path.join(conEnlace, '.codex'));
+      assert.ok(!(await piezaDe(conEnlace)));
+      await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+      assert.equal(fs.readFileSync(path.join(dFuera, 'config.toml'), 'utf8'), CON, 'se arregla a través de un enlace');
+      fs.writeFileSync(path.join(CODEX_DE_MENTIRA, 'auth.json'), JSON.stringify({ OPENAI_API_KEY: 'sk-de-mentira' }));
+      assert.ok(!(await piezaDe(nueva(CON))), 'con una clave de la API se ofrece');
+      fs.rmSync(path.join(CODEX_DE_MENTIRA, 'auth.json'));
+      // Sin Codex en el ordenador, no se ofrece.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      assert.ok(!(await piezaDe(nueva(CON))), 'se ofrece sin Codex');
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      // La copia lleva el fichero entero: en un repositorio de alguien, si la carpeta es su raíz, queda fuera de git.
+      const cp2 = require('node:child_process');
+      const conGit = nueva(CON);
+      cp2.execFileSync('git', ['init', '-q', conGit]);
+      const casaGit = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-codex-git-'));
+      const antesGit = { g: process.env.GIT_CONFIG_GLOBAL, x: process.env.XDG_CONFIG_HOME };
+      process.env.GIT_CONFIG_GLOBAL = path.join(casaGit, '.gitconfig');
+      process.env.XDG_CONFIG_HOME = casaGit;
+      try {
+        assert.ok(await piezaDe(conGit));
+        enviados.length = 0;
+        await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+        const copia = copias(conGit)[0];
+        assert.ok(copia, 'sin copia');
+        const vacioE = path.join(conGit, 'sin-exclusiones');
+        fs.writeFileSync(vacioE, '');
+        assert.equal(cp2.spawnSync('git', ['-C', conGit, '-c', `core.excludesFile=${vacioE}`, 'check-ignore', '-q', `.codex/${copia}`]).status, 0, 'la copia de Codex entra en git');
+        assert.ok(!enviados.some((m) => /He dejado una copia/.test(m.texto || '')), 'dice que deja una copia a la vista cuando está fuera');
+        // Si no se puede dejar fuera (sin `.git` propio), se dice dónde queda.
+        const sinGitPropio = nueva(CON);
+        assert.ok(await piezaDe(sinGitPropio));
+        enviados.length = 0;
+        await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+        assert.ok(enviados.some((m) => m.tipo === 'aviso' && /He dejado una copia del fichero en \.codex\/config\.toml\.copia-executive-lab-/.test(m.texto)), 'no dice dónde queda la copia');
+      } finally {
+        for (const [c, v] of [['GIT_CONFIG_GLOBAL', antesGit.g], ['XDG_CONFIG_HOME', antesGit.x]]) { if (v === undefined) delete process.env[c]; else process.env[c] = v; }
+      }
+      // Un botón viejo, tras pasar a ser de la barra: no hace nada.
+      const vieja = nueva(CON);
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+      assert.equal(fs.readFileSync(config(vieja), 'utf8'), CON, 'un mensaje viejo arregla una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      // «Ahora no»: no vuelve, y no se toca.
+      const no = nueva(CON);
+      assert.ok(await piezaDe(no));
+      await proveedor.manejar({ tipo: 'noOfrecerMas', cual: 'codex' });
+      assert.ok(!(await piezaDe(no)));
+      assert.equal(fs.readFileSync(config(no), 'utf8'), CON, 'rechazar toca el fichero');
+      // En una carpeta de la barra, montada aquí: no se ofrece (se arregla sola, como en la 157).
+      const nuestra = nueva(CON);
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, nuestra);
+      assert.ok(!(await piezaDe(nuestra)), 'se ofrece en una carpeta de la barra');
+      return 'sin clic, nada; con el clic, solo el de la carpeta y con copia; las guardas de la 157 y «Ahora no» valen; en lo nuestro, no se ofrece';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.extensionesInstaladas = antes.ext;
+      fs.rmSync(suyo, { force: true });
+      fs.rmSync(path.join(CODEX_DE_MENTIRA, 'auth.json'), { force: true });
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      await contexto.workspaceState.update(da.CLAVE_RECHAZADO, undefined);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+    }
+  });
+
   await comprobar('el aviso de Codex: el notify arriba del config.toml, con su guion fijo, sin pisar el suyo, y se quita solo él', async () => {
     // Decisión 171. Casa de mentira: nada de lo real.
     const ac = cargar('aviso-de-codex');
