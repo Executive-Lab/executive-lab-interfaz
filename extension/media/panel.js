@@ -1941,6 +1941,8 @@ function pantallaPrincipalSencilla() {
     // Las claves, después de lo urgente y antes que todo lo demás (decisión 167).
     t.lasClavesEnLasCopias, t.lasClavesFueraDeSitio,
     t.losDatos,
+    // Lo de Codex, junto a lo demás que pide un gesto una vez (decisión 178).
+    t.losEnganchesDeCodex,
     t.loNuevo, t.laCostumbre, t.loQueParece,
     // Lo de la última vez, al empezar el día (decisión 160): detrás de lo que impide
     // trabajar, de lo que toca a esta hora, de los datos de clientes y de lo que
@@ -2100,7 +2102,7 @@ function pantallaPrincipalCompleta() {
 
   const {
     versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos,
-    elRecordatorio, laCostumbre, losDatos,
+    elRecordatorio, laCostumbre, losDatos, losEnganchesDeCodex,
   } = lasTarjetas();
 
   return `
@@ -2119,6 +2121,7 @@ function pantallaPrincipalCompleta() {
     ${primerPaso}
     ${elRecordatorio}
     ${losDatos}
+    ${losEnganchesDeCodex}
     ${loNuevo}
     ${laCostumbre}
     ${elConsejo}
@@ -2340,6 +2343,17 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
+  // Codex pide confiar una vez en lo que el arnés le monta (decisión 178). Su botón deja
+  // el paso listo; no confía por la persona. «Entendido» no la deja volver en esta carpeta.
+  const delArnes = estado.enganchesDeCodex;
+  const losEnganchesDeCodex = !delArnes ? '' : `
+    <div class="consejo">
+      <p class="que">${texto(delArnes.texto)}</p>
+      ${delArnes.detalle ? `<p class="detalle">${texto(delArnes.detalle)}</p>` : ''}
+      ${boton({ etiqueta: 'Dejarlo listo en Codex', icono: '🔑', principal: true, accion: { tipo: 'dejarListoLoDeCodex' } })}
+      ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeCodex' } })}
+    </div>`;
+
   // Las claves, en la tarjeta (decisión 167): las filas 3 y 4 de «La tarjeta que
   // toca». Van antes que lo nuevo y las ideas porque es lo único que puede costar
   // dinero si se deja: una clave dentro de las copias sube a GitHub con ellas.
@@ -2374,7 +2388,7 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: u.ahoraNo })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez, lasClavesEnLasCopias, lasClavesFueraDeSitio };
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, losEnganchesDeCodex, laUltimaVez, lasClavesEnLasCopias, lasClavesFueraDeSitio };
 }
 
 function accionesRapidas(descubiertos) {
@@ -3622,7 +3636,7 @@ function atender(data) {
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
-          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
+          'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes', 'enganchesDeCodex',
           'seAdapta', 'sigueSinCopias', 'laUltimaVez', 'clavesEnLasCopias', 'clavesFueraDeSitio']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }

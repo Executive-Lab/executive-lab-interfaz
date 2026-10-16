@@ -22012,6 +22012,197 @@ exec git "$@"
     }
   });
 
+  await comprobar('Codex pide confiar una vez en lo que el arnés le monta: la barra lo lee, lo dice una vez y no confía por la persona', async () => {
+    // Decisión 178. RSC deja para Codex enganches en `.codex/hooks.json` y Codex no los
+    // corre hasta que la persona confía (`/hooks`). La confianza queda en el `config.toml`
+    // de Codex (`hooks.state`): la barra lo lee, nunca lo escribe (P9).
+    const modulo = cargar('enganches-de-codex');
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const enviados = [];
+    const antes = {
+      raiz: vscode.guion.raiz, enviar: proveedor.enviar, dicho: almacen.get(modulo.CLAVE), confianza: vscode.guion.confianza,
+      completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'], extensiones: [...vscode.guion.extensionesInstaladas], codex: process.env.CODEX_HOME, portapapeles: vscode.registrado.portapapeles,
+    };
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const desescapar = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const botones = (html) => [...html.matchAll(/<button[^>]*data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)]
+      .map(([, accion, dentro]) => [dentro.replace(/<span class="icono"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), JSON.parse(desescapar(accion))]);
+    const lleva = (html, etiqueta) => (botones(html).find(([e]) => e === etiqueta) || [])[1];
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'confia-codex-'));
+    const codex = path.join(casa, 'codex-de-mentira');
+    fs.mkdirSync(codex);
+    process.env.CODEX_HOME = codex;
+    const config = path.join(codex, 'config.toml');
+    // Un hooks.json como el que monta RSC para Codex (`targets/memory.js`): siete puntos, dos en PostToolUse.
+    const montar = (carpeta, { propio = false } = {}) => {
+      fs.mkdirSync(path.join(carpeta, '.codex'), { recursive: true });
+      const orden = (op) => `node .rsc/session-memory-adapter.mjs codex ${op}`;
+      const hooks = {};
+      for (const [e, op, m] of [['SessionStart', 'start', 'startup|resume'], ['UserPromptSubmit', 'request'], ['PostToolUse', 'edit', 'apply_patch'], ['PostToolUse', 'boundary', 'Bash'], ['Stop', 'turn']]) {
+        (hooks[e] ||= []).push({ ...(m ? { matcher: m } : {}), hooks: [{ type: 'command', command: orden(op) }] });
+      }
+      if (propio) hooks.Stop.unshift({ hooks: [{ type: 'command', command: 'echo de la persona' }] });
+      fs.writeFileSync(path.join(carpeta, '.codex', 'hooks.json'), JSON.stringify({ hooks }, null, 2));
+      return path.join(carpeta, '.codex', 'hooks.json');
+    };
+    const entrada = (fuente, evento, g, h, huella = 'abc123') => `[hooks.state."${fuente.replace(/\\/g, '\\\\')}:${evento}:${g}:${h}"]\ntrusted_hash = "${huella}"\n`;
+    // Las cinco con su sitio, como las nombra Codex (eventos en minúscula con guion bajo, de ejemplo).
+    const todas = (fuente, nombres = (e) => e) => [['SessionStart', 0], ['UserPromptSubmit', 0], ['PostToolUse', 0], ['PostToolUse', 1], ['Stop', 0]]
+      .map(([e, g]) => entrada(fuente, nombres(e), g, 0)).join('\n');
+    let puestoEnLaDeLaPrueba = null;
+    try {
+      // ── Lo que lee de `hooks.json`: solo los del arnés, con su sitio.
+      const carpeta = path.join(casa, 'trabajo');
+      fs.mkdirSync(carpeta, { recursive: true });
+      const declarar = (targets) => fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets }));
+      declarar(['codex']);
+      const fichero = montar(carpeta, { propio: true });
+      const suyos = modulo.losDelArnes(carpeta).enganches;
+      assert.equal(suyos.length, 5, 'no cuenta los cinco del arnés');
+      assert.deepEqual(suyos.filter((s) => s.evento === 'Stop'), [{ evento: 'Stop', grupo: 1, manejador: 0 }], 'cuenta el enganche de la persona, o pierde el sitio del suyo');
+      montar(carpeta);
+
+      // ── Sin enganches, o sin la carpeta: nada que decir.
+      assert.deepEqual(modulo.queSabe({ raiz: null, codex }), { hay: false });
+      assert.deepEqual(modulo.queSabe({ raiz: path.join(casa, 'vacia'), codex }), { hay: false });
+      const sinNuestros = path.join(casa, 'suyos');
+      fs.mkdirSync(path.join(sinNuestros, '.codex'), { recursive: true });
+      fs.writeFileSync(path.join(sinNuestros, '.codex', 'hooks.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo suyo' }] }] } }));
+      assert.deepEqual(modulo.queSabe({ raiz: sinNuestros, codex }), { hay: false }, 'se mete con los enganches de la persona');
+
+      // ── Sin config.toml, o sin entradas: falta.
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'falta', 'sin config.toml no dice que falta');
+      fs.writeFileSync(config, 'model = "gpt-5.5"\n\n[projects."/otra"]\ntrust_level = "trusted"\n');
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'falta', 'que el proyecto sea de confianza no basta: hay que confiar en los enganches');
+      // ── Con todas, confía; con una menos o de otra carpeta, falta.
+      const completo = `model = "gpt-5.5"\n\n${todas(fichero)}`;
+      fs.writeFileSync(config, completo);
+      assert.deepEqual(modulo.queSabe({ raiz: carpeta, codex }), { hay: true, estado: 'confia' }, 'con todos confiados dice que falta');
+      fs.writeFileSync(config, `${todas(fichero, (e) => e.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase())}`);
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'confia', 'no entiende los eventos en minúscula con guion bajo');
+      fs.writeFileSync(config, completo.replace(entrada(fichero, 'Stop', 0, 0), ''));
+      const medio = modulo.queSabe({ raiz: carpeta, codex });
+      assert.deepEqual([medio.estado, medio.faltan], ['falta', 1], 'con un enganche sin confiar dice que confía');
+      fs.writeFileSync(config, todas(fichero.replace('trabajo', 'otro-sitio')));
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'falta', 'toma por suyo lo confiado en otra carpeta');
+      fs.writeFileSync(config, completo.replace(/trusted_hash = "abc123"/g, 'trusted_hash = ""'));
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'falta', 'una entrada sin huella cuenta como confiada');
+      // Ruta de Windows, escapada como la escribe TOML.
+      fs.writeFileSync(config, todas('C:\\Users\\Ana\\trabajo\\.codex\\hooks.json'));
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).estado, 'falta', 'una ruta de otra máquina no es de aquí');
+      assert.equal(modulo.partirClave('C:/Users/Ana/.codex/hooks.json:PostToolUse:1:0').fuente, 'C:/Users/Ana/.codex/hooks.json', 'la `:` de la unidad de Windows parte la ruta');
+      assert.deepEqual(modulo.lasEntradas(entrada('C:\\x\\hooks.json', 'Stop', 0, 0)).map((e) => e.clave), ['C:\\x\\hooks.json:Stop:0:0'], 'no desescapa la ruta');
+      // ── Lo que no se entiende: se dice que no se sabe, no que falta ni que confía.
+      for (const [que, texto] of [['clave con puntos', 'hooks.state."x:Stop:0:0".trusted_hash = "a"\n'], ['tabla suelta', '[hooks]\nstate = {}\n'], ['entrada en línea', '[hooks.state]\n"x:Stop:0:0" = { trusted_hash = "a" }\n']]) {
+        fs.writeFileSync(config, texto);
+        assert.deepEqual([modulo.queSabe({ raiz: carpeta, codex }).estado, modulo.queSabe({ raiz: carpeta, codex }).motivo], ['noSe', 'formaRara'], `${que}: no dice que no sabe`);
+      }
+      fs.writeFileSync(config, 'x'.repeat(300 * 1024));
+      assert.equal(modulo.queSabe({ raiz: carpeta, codex }).motivo, 'enorme', 'lee un config.toml enorme');
+      fs.rmSync(config);
+      fs.symlinkSync(path.join(casa, 'otro.toml'), config);
+      fs.writeFileSync(path.join(casa, 'otro.toml'), completo);
+      assert.deepEqual([modulo.queSabe({ raiz: carpeta, codex }).estado, modulo.queSabe({ raiz: carpeta, codex }).motivo], ['noSe', 'enlace'], 'sigue un enlace');
+      fs.rmSync(config);
+      const enlazada = path.join(casa, 'enlazada');
+      fs.mkdirSync(enlazada);
+      fs.symlinkSync(path.join(carpeta, '.codex'), path.join(enlazada, '.codex'));
+      assert.equal(modulo.queSabe({ raiz: enlazada, codex }).motivo, 'enlace', 'sigue un .codex enlazado');
+
+      // ── La tarjeta: con Codex en uso y la carpeta de confianza del editor.
+      // La carpeta de arriba no está montada del todo (el panel la tomaría por a medias), así
+      // que lo del panel se mira en la de la prueba, montada, con su `hooks.json` de mentira
+      // puesto un rato; lo demás, en la de arriba.
+      assert.ok(!fs.existsSync(path.join(antes.raiz, '.codex')), 'la carpeta de la prueba ya traía un .codex');
+      puestoEnLaDeLaPrueba = path.join(antes.raiz, '.codex');
+      montar(antes.raiz);
+      vscode.guion.raiz = carpeta;
+      vscode.guion.confianza = true;
+      vscode.guion.extensionesInstaladas = [...new Set([...antes.extensiones, 'openai.chatgpt'])];
+      await almacen.update(modulo.CLAVE, undefined);
+      assert.deepEqual(proveedor.laTarjetaDeLosEnganchesDeCodex(), modulo.laTarjeta({ hay: true, estado: 'falta' }), 'falta y no sale la tarjeta');
+      const t = proveedor.laTarjetaDeLosEnganchesDeCodex();
+      assert.match(t.texto, /Codex aún no usa lo que el arnés le deja en esta carpeta, como acordarse de lo último que hicisteis\. Falta que confíes en ello una vez\./);
+      assert.match(t.detalle, /Escribe \/hooks en Codex y confía en lo de esta carpeta\./);
+      vscode.guion.raiz = antes.raiz;
+      await almacen.update(modulo.CLAVE, undefined);
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+      await proveedor.refrescar(true);
+      const m = ultimo('estado');
+      assert.equal(m.enganchesDeCodex && m.enganchesDeCodex.texto, t.texto, 'la extensión no la manda');
+      for (const completa of [false, true]) {
+        const html = pintar({ ...m, barraCompleta: completa });
+        assert.ok(html.includes('Codex aún no usa lo que el arnés le deja'), `no sale en la ${completa ? 'completa' : 'sencilla'}`);
+        assert.equal(lleva(html, 'Dejarlo listo en Codex').tipo, 'dejarListoLoDeCodex');
+        assert.equal(lleva(html, 'Entendido').tipo, 'entendidoLoDeCodex');
+      }
+      vscode.guion.raiz = carpeta;
+      // Con la confianza hecha, no sale; sin poder leer, sí (la persona no sabe más que la barra).
+      fs.writeFileSync(config, completo);
+      assert.equal(proveedor.laTarjetaDeLosEnganchesDeCodex(), null, 'sale con todo confiado');
+      fs.writeFileSync(config, 'hooks.state."x:Stop:0:0".trusted_hash = "a"\n');
+      assert.ok(proveedor.laTarjetaDeLosEnganchesDeCodex(), 'no sale cuando no se puede leer');
+      fs.rmSync(config);
+      // Sin Codex en uso, sin confianza del editor o sin enganches suyos, no sale.
+      // Sin Codex en uso (ni instalado ni montado para él), no sale.
+      vscode.guion.extensionesInstaladas = antes.extensiones.filter((x) => x !== 'openai.chatgpt');
+      declarar(['claude']);
+      assert.equal(proveedor.laTarjetaDeLosEnganchesDeCodex(), null, 'sale sin Codex');
+      declarar(['codex']);
+      vscode.guion.extensionesInstaladas = [...new Set([...antes.extensiones, 'openai.chatgpt'])];
+      vscode.guion.confianza = false;
+      assert.equal(proveedor.laTarjetaDeLosEnganchesDeCodex(), null, 'sale en una carpeta sin confianza del editor');
+      vscode.guion.confianza = true;
+      vscode.guion.raiz = sinNuestros;
+      assert.equal(proveedor.laTarjetaDeLosEnganchesDeCodex(), null, 'sale sin enganches del arnés');
+      vscode.guion.raiz = carpeta;
+
+      // ── El botón: copia `/hooks`, abre Codex, lo dice, y no toca la configuración de Codex.
+      // Hablando con Claude y con Codex montado: el botón abre Codex, no el de ahora.
+      declarar(['claude', 'codex']);
+      fs.writeFileSync(config, 'model = "gpt-5.5"\n');
+      const ficheroAntes = fs.readFileSync(config, 'utf8');
+      const hooksAntes = fs.readFileSync(fichero, 'utf8');
+      vscode.registrado.ejecutados.length = 0;
+      const desde = vscode.registrado.mensajes.length;
+      await proveedor.manejar({ tipo: 'dejarListoLoDeCodex' });
+      assert.equal(vscode.registrado.portapapeles, '/hooks', 'no deja /hooks en el portapapeles');
+      assert.ok(vscode.registrado.ejecutados.some((e) => e.id === 'chatgpt.openSidebar'), 'no abre Codex');
+      assert.ok(!vscode.registrado.ejecutados.some((e) => /claude/.test(e.id)), 'abre otro asistente');
+      const dicho = vscode.registrado.mensajes.slice(desde).join('\n');
+      assert.match(dicho, /Te he copiado \/hooks y he abierto Codex\. Pégalo con (Cmd|Ctrl)\+V en su caja, dale a enviar y confía en lo de esta carpeta\./);
+      assert.equal(fs.readFileSync(config, 'utf8'), ficheroAntes, 'toca el config.toml de Codex: confía por la persona (P9)');
+      assert.equal(fs.readFileSync(fichero, 'utf8'), hooksAntes, 'toca el hooks.json');
+      assert.deepEqual(fs.readdirSync(codex), ['config.toml'], 'deja cosas en la carpeta de Codex');
+      // «Entendido»: no vuelve en esta carpeta, y se repinta sin ella.
+      assert.ok(proveedor.laTarjetaDeLosEnganchesDeCodex(), 'la tarjeta se va al pulsar el botón, sin confiar');
+      const n = enviados.length;
+      await proveedor.manejar({ tipo: 'entendidoLoDeCodex' });
+      assert.ok(almacen.get(modulo.CLAVE), '«Entendido» no lo apunta');
+      assert.equal(proveedor.laTarjetaDeLosEnganchesDeCodex(), null, 'vuelve después de «Entendido»');
+      const repintado = enviados.slice(n).find((x) => x.tipo === 'estado');
+      assert.ok(repintado && repintado.enganchesDeCodex === null, '«Entendido» no repinta sin la tarjeta');
+      assert.ok(!pintar(repintado).includes('Codex aún no usa lo que el arnés le deja'), 'tras «Entendido» sigue en pantalla');
+      assert.equal(proveedor.contexto.globalState.get(modulo.CLAVE), undefined, 'se da por dicho en todas las carpetas');
+      // El real no se ha tocado.
+      assert.ok(process.env.CODEX_HOME === codex);
+      return 'lee hooks.state del config.toml de Codex · falta, confía o no se sabe · una tarjeta por carpeta con «Dejarlo listo en Codex» (copia /hooks y abre Codex) y «Entendido» · no escribe nada en Codex';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      if (puestoEnLaDeLaPrueba) fs.rmSync(puestoEnLaDeLaPrueba, { recursive: true, force: true });
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      vscode.registrado.portapapeles = antes.portapapeles;
+      process.env.CODEX_HOME = antes.codex;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      await almacen.update(modulo.CLAVE, antes.dicho);
+    }
+  });
+
   await comprobar('abrir una página: solo https, y lo que no es nuestro se pregunta con el sitio a la vista', async () => {
     // Revisión de seguridad de la 153. La dirección llega del panel, y la página de
     // una conexión sale de su CREDENTIALS.md: la ruta `abrir` abría cualquier cosa.

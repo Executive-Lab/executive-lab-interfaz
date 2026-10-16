@@ -8346,3 +8346,97 @@ Batería entera, una vez, tras traer `origin/main` (173 y 174 ya estaban; la 175
 `comprobar-diccionario.js` y `revisar-powershell.js` en verde. `--con-arnes` falló una vez con un error de
 resolución de módulos sin ninguna comprobación en rojo, al correr justo después de `humo.js`, y no se repitió
 (pasó la segunda); ajena.
+
+## 178. Codex: confiar una vez en los enganches del arnés
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · FTD `codex-confia-en-los-enganches`
+
+RSC 3.0.22 monta para Codex enganches en `.codex/hooks.json` de la carpeta (la memoria entre conversaciones y
+el repaso del conocimiento) y lo declara a su manera: `wireMemory` devuelve `reason: 'hook-trust-required'` y
+`inspectMemoryWiring` pone `trustRequired: true` (`targets/memory.js`). Codex no corre esos enganches hasta que la
+persona confía en ellos. La barra no lo comprobaba ni lo decía (la decisión 176 lo apuntó), así que con Codex la
+memoria y lo demás podían no estar funcionando sin que nadie lo supiera.
+
+### Qué dice la documentación oficial
+
+- **developers.openai.com/codex/hooks** (hoy sale a learn.chatgpt.com/docs/hooks; el redirect no se siguió porque
+  el encargo limitaba la consulta a developers.openai.com y github.com/openai/codex, así que esta parte está
+  tomada del resumen que da la búsqueda de esa página): antes de que corra un enganche que no es de
+  administración, Codex pide revisar y confiar en **su definición exacta**, en `/hooks` dentro de Codex; un enganche
+  nuevo o cambiado se salta hasta que se revisa. Los enganches del `.codex/` de un proyecto solo se cargan si el
+  proyecto es de confianza; los de usuario y sistema cargan también en uno que no lo es.
+  `--dangerously-bypass-hook-trust` corre los activados sin confianza guardada, solo en esa ejecución.
+- **github.com/openai/codex/blob/main/docs/config.md**: solo habla de `allow_managed_hooks_only` en
+  `requirements.toml`. No documenta cómo ni dónde queda guardada la confianza.
+
+### Dónde queda guardada (NO está documentado)
+
+En el `config.toml` de usuario de Codex (`$CODEX_HOME`, por defecto `~/.codex`), una tabla por enganche:
+
+```toml
+[hooks.state."<ruta del hooks.json>:<evento>:<grupo>:<manejador>"]
+trusted_hash = "…"
+```
+
+Sale de las incidencias de openai/codex (#21615, #27133, #46210, #47283), no de la documentación: la clave es
+`<origen>:<evento>:<índice de grupo>:<índice de manejador>`; `trusted_hash` es un SHA-256 de una forma normalizada
+del enganche (hasta el `timeout` cuenta); la escribe el TUI de Codex al confiar en `/hooks`, nada de `codex exec` ni
+del CLI; y quien integra desde fuera lo escribe a mano «con detalles privados» (#21615 pide una forma oficial,
+sin respuesta que hayamos visto). Puede cambiar entre versiones de Codex.
+
+### Qué sabe la barra y qué no
+
+**Puede leer** si cada enganche del arnés de esta carpeta tiene su entrada con huella en `hooks.state`. **No puede**
+comprobar que la huella siga valiendo (no se recalcula de fuera): un enganche cambiado después de confiar se vería
+como confiado. Tampoco `[projects."<ruta>"] trust_level = "trusted"` sirve de señal: que el proyecto sea de
+confianza es necesario, no suficiente. Tres respuestas: `confia` (todas las entradas), `falta` (alguna no está) y
+`noSe` (enlace, fichero de más de 256 KB, o `hooks.state` escrito de una forma que el lector no entiende: clave con
+puntos, tabla en línea). La tarjeta sale en `falta` y en `noSe`: la persona no puede saber más que la barra.
+
+### Lo que hace la barra
+
+- `extension/src/enganches-de-codex.js`, nuevo, solo lee. De `hooks.json` cuenta los enganches que llaman a algo de
+  `.rsc/` (los de la persona son suyos) con su sitio (evento, grupo, manejador); del `config.toml`, las entradas
+  `[hooks.state."…"]` con huella. Casa la ruta del `hooks.json` (con `/` y sin mayúsculas en Mac y Windows; también
+  su ruta real) y el evento sin mayúsculas ni guiones bajos, porque cómo nombra Codex el evento en la clave no se
+  confirmó. Sin seguir enlaces (ni `.codex`, ni `hooks.json`, ni `config.toml`).
+- Una tarjeta en la principal, **una por carpeta**, con Codex en uso (instalado o montado para él), la carpeta de
+  confianza del editor y enganches del arnés para Codex montados aquí; mientras no se lea que ya confía. La frase
+  va en `docs/diccionario.md`; nunca se dice «enganche» ni *hooks*, salvo la orden que se escribe, `/hooks`.
+- **«Dejarlo listo en Codex»**: la extensión de Codex no tiene ningún comando que acepte texto (`asistentes.js`), así
+  que copia `/hooks` al portapapeles, abre **Codex** (aunque se hable con otro asistente: `puente.abrirEste`) y lo
+  dice en un aviso del editor con el atajo de pegar. Nada más.
+- **«Entendido»** la apunta en el estado de la carpeta (`executiveLab.enganchesDeCodexDicho`) y no vuelve. Pulsar el
+  primer botón no la quita: solo se va al leerse que confía, o con «Entendido».
+
+### P9
+
+La barra **no confía por la persona** y **no escribe nunca** en la configuración de Codex (ni `hooks.state`, ni
+`trust_level`, ni `--dangerously-bypass-hook-trust`). La confianza es la revisión humana que Codex pide a propósito:
+saltársela, aunque fuera con la huella bien calculada, sería decidir por la persona algo que Codex quiere que decida
+ella. La prueba comprueba que `config.toml` y `hooks.json` salen del botón byte a byte iguales, y que en la carpeta
+de Codex no queda nada nuevo.
+
+### Límites
+
+1. El formato de `hooks.state` no es oficial: si cambia, la barra pasaría a decir `falta` o `noSe` de más (sale una
+   tarjeta que sobra, con «Entendido»), no a decir `confia` de menos.
+2. Un enganche cambiado después de confiar se ve como confiado (la huella no se recalcula).
+3. En un `git worktree`, Codex descubre el `hooks.json` en otro sitio (#27133): no se contempla.
+
+### Pruebas
+
+Una comprobación nueva en `humo.js` (la 492 de 492 y la 501 con `--con-arnes`): lee `hooks.json` (solo los del arnés,
+con el sitio de cada uno), los cuatro estados, la ruta de Windows con su `:` y su escapado, las tres formas raras,
+el tope, los enlaces, la tarjeta en la sencilla y en la completa, el botón (portapapeles `/hooks`, Codex abierto
+aunque se hable con Claude, el aviso con su atajo de pegar), que `config.toml` y `hooks.json` quedan byte a byte
+iguales y la carpeta de Codex sin nada nuevo, y «Entendido». Todo con un `CODEX_HOME` de mentira.
+
+Ocho mutaciones, sobre copias de la carpeta (no se tocó el original), ocho tumbadas: dar por confiado con una sola
+entrada, no mirar de qué carpeta es la entrada, contar una entrada sin huella, que el botón escriba en el
+`config.toml` de Codex (P9), ignorar «Entendido», sacar la tarjeta con todo confiado, quitarla de la sencilla y abrir
+el asistente de ahora en vez de Codex. La última se coló la primera vez (en la prueba, el asistente de ahora ya era
+Codex) y se arregló la prueba: ahora se habla con Claude y con Codex montado.
+
+Batería entera, una vez, desde la raíz del worktree: `humo.js` 492, `humo.js --con-arnes` 501, `mapeos-codex.js` 30,
+`contrato.js` 15, `empresas-distintas.js`, `comprobar-diccionario.js` y `revisar-powershell.js` en verde.
