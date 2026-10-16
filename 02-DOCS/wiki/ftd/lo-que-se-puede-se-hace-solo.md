@@ -4,7 +4,7 @@ title: Lo que se puede hacer solo, se hace solo
 date: 2026-10-14
 author: Jose Sanchis
 branch: se-hace-solo
-status: in-progress
+status: hecho
 ---
 
 # Lo que se puede hacer solo, se hace solo
@@ -295,8 +295,7 @@ Del 1 al 12, hechos.
 
 Además, de la revisión:
 - ~~Contarle a Eric el fallo del borrado.~~ Comprobado versión a versión: solo pasa en la 2.0.x (la
-  2.0.15 y la 2.0.20 borran; desde la 2.1.0 se para). Como la barra pasa a la 3, Jose decidió no
-  contarlo (14-10).
+  2.0.15 y la 2.0.20 borran; desde la 2.1.0 se para). Se le contó por su canal privado, con el sí de Jose.
 - **Lo que la barra lanza con git, sin los ganchos de la carpeta.** El `core.fsmonitor`, ya apagado (decisión
   147). Quedan los ganchos: «Guardar en git» en una carpeta traída con su `.git` corre su `pre-commit`. Es
   poco probable y ya pasaba antes; apagarlos en un repositorio de alguien también le quita los suyos.

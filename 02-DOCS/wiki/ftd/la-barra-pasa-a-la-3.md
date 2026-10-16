@@ -4,7 +4,7 @@ title: La barra pasa a la 3
 date: 2026-10-14
 author: Jose Sanchis
 branch: a-la-3
-status: in-progress
+status: hecho
 ---
 
 # La barra pasa a la 3
@@ -127,4 +127,6 @@ Y por P9, en las carpetas de la barra:
   `npm install --prefix extension/media/harness` y luego el `sync` del de dentro.
 - Los nombres del arnés y de la empresa viven en el perfil, que con la 3 es de cada uno y no viaja en
   git. Si hiciera falta que un clon no los pregunte, tendrían que ir en un fichero del equipo.
-- Quitar el rodeo del freno, que con la 3 sobra en casi todas las carpetas.
+- ~~Quitar el rodeo del freno.~~ Se queda, decidido el 15-10: no frena dos veces (se aparta solo cuando el de
+  RSC está enganchado de verdad antes de Bash) y es el único freno en una carpeta clonada antes del `sync` o
+  en una que RSC no engancha. Quitarlo no ahorra nada y deja esas carpetas sin freno.
