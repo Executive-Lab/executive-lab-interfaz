@@ -50,22 +50,84 @@ const ULTIMO_DE_WINDOWS = 'https://api.github.com/repos/git-for-windows/git/rele
 // fuera: son copias que se descomprimen, y una copia es justo lo que no sirve.
 const ES_EL_INSTALADOR = /^Git-[\d.]+-64-bit\.exe$/;
 
-// Sin ruido y sin preguntas. Al no elevar, Inno instala para este usuario y no
-// pide administrador. PENDIENTE de confirmar en un Windows limpio con una
-// cuenta sin permisos: es el único paso de todo esto que no se puede probar
-// desde un Mac.
+// Sin ruido y sin preguntas: así sale, sin ninguna ventana suya. Pero Windows sí
+// puede preguntar (decisión 165). Aquí ponía que, «al no elevar», se instalaba
+// para este usuario sin pedir administrador, y no es así:
+//
+//   · su `install.iss` lleva `PrivilegesRequired=none` y ningún
+//     `PrivilegesRequiredOverridesAllowed`, así que `/CURRENTUSER` no hace nada;
+//   · con una cuenta del grupo de administradores, que es la de casi cualquier
+//     portátil de casa o de una pyme, pide elevarse: sale el aviso de Windows
+//     («¿Quieres permitir que esta aplicación haga cambios?»). Si se le dice que
+//     no, sale con el código 2 (winget-pkgs #369735, mayo de 2026);
+//   · instalar solo para el usuario aunque sea administrador lo pidieron en
+//     git-for-windows/git #4758, y se cerró sin hacerlo en diciembre de 2025.
+//
+// Con una cuenta sin permisos no pide nada, y su carpeta de siempre, la de
+// Program Files, no se puede escribir. A mano, su propio instalador cambia
+// entonces a `{userpf}\Git` (`%LOCALAPPDATA%\Programs\Git`). En silencio no hay
+// esa página, así que se le dice con `/DIR`.
 const EN_SILENCIO = ['/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-', '/SUPPRESSMSGBOXES'];
+
+// Inno sale con 2 cuando se cancela antes de empezar, y eso es lo que pasa al
+// decirle que no al aviso de Windows.
+const LE_DIJO_QUE_NO = 2;
+
+// El grupo de administradores, por su SID, que no cambia con el idioma.
+const ADMINISTRADORES = 'S-1-5-32-544';
+
+// Dónde deja git su instalador en Windows: para todos, o solo para este
+// usuario si no es administrador. `cmd\` es lo que pone en el PATH, pero el
+// PATH de un programa que ya estaba abierto —el editor, la barra— es el de
+// cuando arrancó: un git recién puesto no se ve por su nombre hasta reiniciar.
+// Por eso se busca aquí, por su sitio.
+function gitsDeWindows(entorno = process.env) {
+  const local = entorno.LOCALAPPDATA || path.win32.join(entorno.USERPROFILE || os.homedir(), 'AppData', 'Local');
+  return [
+    path.win32.join(entorno.ProgramFiles || 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+    path.win32.join(local, 'Programs', 'Git', 'cmd', 'git.exe'),
+  ];
+}
+
+// Lo que se le pasa a su instalador: en silencio, y, sin administrador, la
+// carpeta de este usuario.
+function comoSeLanza({ administrador = true, entorno = process.env } = {}) {
+  if (administrador) return [...EN_SILENCIO];
+  const local = entorno.LOCALAPPDATA || path.win32.join(entorno.USERPROFILE || os.homedir(), 'AppData', 'Local');
+  return [...EN_SILENCIO, `/DIR=${path.win32.join(local, 'Programs', 'Git')}`];
+}
 
 const CADA = 5000;
 const ESPERA_MAC = 45 * 60 * 1000;
 const ESPERA_WINDOWS = 20 * 60 * 1000;
 
+// El código de salida va aparte: el de su instalador dice si se le dijo que no.
 function correr(programa, args, tiempoMaximo = 20000) {
   return new Promise((resolver) => {
     const proceso = execFile(programa, args, { encoding: 'utf8', timeout: tiempoMaximo, windowsHide: true },
-      (error, salida) => resolver({ ok: !error, salida: (salida || '').trim() }));
-    proceso.on('error', () => resolver({ ok: false, salida: '' }));
+      (error, salida) => resolver({
+        ok: !error,
+        salida: (salida || '').trim(),
+        codigo: !error ? 0 : (typeof error.code === 'number' ? error.code : null),
+      }));
+    proceso.on('error', () => resolver({ ok: false, salida: '', codigo: null }));
   });
+}
+
+// Lo que dice `whoami /groups`. Sin poder saberlo, como si lo fuera: es lo que
+// se hacía hasta ahora, y su instalador elige solo.
+const esDelGrupoDeAdministradores = (grupos) => !grupos || !grupos.ok || String(grupos.salida || '').includes(ADMINISTRADORES);
+
+async function esAdministrador() {
+  return esDelGrupoDeAdministradores(await correr('whoami', ['/groups', '/fo', 'csv', '/nh']));
+}
+
+// Qué hacer cuando su instalador termina: si git ya se ve, listo; si se le dijo
+// que no al aviso de Windows, decirlo; si no, esperar un poco a que se vea.
+function trasElInstalador(lanzado, yaSeVe) {
+  if (yaSeVe) return 'listo';
+  if (lanzado && lanzado.codigo === LE_DIJO_QUE_NO) return 'sinPermiso';
+  return 'esperar';
 }
 
 // ------------------------------------------------------------ comprobar
@@ -79,8 +141,11 @@ async function hayEnMac(opciones = {}) {
 }
 
 // En Windows y en Linux preguntar es gratis: no hay ningún señuelo que disparar.
+// En Windows, además, se mira dónde lo deja su instalador: recién puesto, por su
+// nombre no se ve (`gitsDeWindows`).
 async function hayEnElResto(opciones = {}) {
-  const cual = opciones.git || (ES_WINDOWS ? 'git.exe' : 'git');
+  const porSuSitio = ES_WINDOWS ? gitsDeWindows().find((donde) => fs.existsSync(donde)) : null;
+  const cual = opciones.git || porSuSitio || (ES_WINDOWS ? 'git.exe' : 'git');
   return (await correr(cual, ['--version'])).ok;
 }
 
@@ -88,8 +153,11 @@ const hay = (opciones) => (ES_MAC ? hayEnMac(opciones) : hayEnElResto(opciones))
 
 // ------------------------------------------------------------- instalar
 
-const NO_SE_PUDO = 'No he podido descargarla. Mira que haya conexión y vuelve a intentarlo.';
+// Cómo acabó, además de en palabras, en una marca: la barra lo cuenta a su
+// manera al preparar una carpeta (decisión 165), y el instalador, con estas.
+const NO_SE_PUDO = 'No he podido descargar git. Mira que haya conexión y vuelve a intentarlo.';
 const TARDA_DEMASIADO = 'Se está haciendo muy largo. Déjalo terminar y vuelve a abrir esto dentro de un rato.';
+const SIN_SU_PERMISO = 'No se ha puesto git: Windows necesitaba tu permiso. Vuelve a intentarlo y dile que sí.';
 
 async function esperarA(cuanto, opciones, avisar) {
   const hasta = Date.now() + cuanto;
@@ -98,14 +166,14 @@ async function esperarA(cuanto, opciones, avisar) {
     if (await hay(opciones)) return { ok: true };
   }
   avisar(TARDA_DEMASIADO);
-  return { ok: false, mensaje: TARDA_DEMASIADO };
+  return { ok: false, mensaje: TARDA_DEMASIADO, tarda: true };
 }
 
 // macOS. `xcode-select --install` vuelve enseguida: el diálogo es de Apple y va
 // por su cuenta, así que lo único que se puede hacer es esperar a que aparezca
 // el git. Devuelve error cuando ya estaba, caso que aquí no puede darse.
 async function instalarEnMac(opciones, avisar) {
-  avisar('Tu ordenador te va a pedir permiso para instalarla. Dile que sí y espera: puede tardar un buen rato.');
+  avisar('Tu ordenador te va a pedir permiso para instalar git. Dile que sí y espera: puede tardar un buen rato.');
   await correr('/usr/bin/xcode-select', ['--install'], 30000);
   return esperarA(ESPERA_MAC, opciones, avisar);
 }
@@ -126,7 +194,7 @@ async function bajarElInstalador() {
 }
 
 async function instalarEnWindows(opciones, avisar) {
-  avisar('Descargando la pieza que falta…');
+  avisar('Descargando git…');
 
   let instalador = null;
   try {
@@ -135,15 +203,22 @@ async function instalarEnWindows(opciones, avisar) {
 
   if (!instalador) {
     avisar(NO_SE_PUDO);
-    return { ok: false, mensaje: NO_SE_PUDO };
+    return { ok: false, mensaje: NO_SE_PUDO, sinDescargar: true };
   }
 
-  avisar('Instalándola. Esto tarda un par de minutos.');
-  await correr(instalador, EN_SILENCIO, ESPERA_WINDOWS);
+  avisar('Instalando git. Si Windows te pide permiso, dile que sí.');
+  const lanzado = await correr(instalador, comoSeLanza({ administrador: await esAdministrador() }), ESPERA_WINDOWS);
 
-  // No se mira el código de salida del instalador: lo que importa es si el git
-  // aparece, y en Windows tarda un momento en quedar visible.
-  if (await hay(opciones)) return { ok: true };
+  // Lo que importa es si el git aparece, y en Windows tarda un momento en quedar
+  // visible. Solo si se le dijo que no al aviso de Windows no se espera: no va a
+  // aparecer, y esperar un minuto para acabar en «se está haciendo muy largo»
+  // no dice qué ha pasado.
+  const ahora = trasElInstalador(lanzado, await hay(opciones));
+  if (ahora === 'listo') return { ok: true };
+  if (ahora === 'sinPermiso') {
+    avisar(SIN_SU_PERMISO);
+    return { ok: false, mensaje: SIN_SU_PERMISO, sinPermiso: true };
+  }
   return esperarA(60000, opciones, avisar);
 }
 
@@ -160,11 +235,17 @@ async function instalar(opciones = {}, avisar = () => {}) {
 // Lo que se enseña antes de pulsar. Cambia con el sistema porque lo que va a
 // pasar al pulsar también cambia.
 function comoSeInstala() {
-  if (ES_WINDOWS) return 'La descargo y la instalo yo. Tarda un par de minutos y no te va a pedir nada.';
+  // Prometía que no iba a pedir nada, y con una cuenta de administrador Windows
+  // pregunta (ver EN_SILENCIO; decisión 165).
+  if (ES_WINDOWS) return 'La descargo y la instalo yo. Tarda un par de minutos, y si Windows te pide permiso, dile que sí.';
   if (ES_MAC) return 'Tu ordenador te la instala. Te pedirá permiso y tarda un buen rato la primera vez.';
   return 'Pídesela a tu tutor: se llama git.';
 }
 
 const sePuedeInstalarSolo = () => ES_WINDOWS || ES_MAC;
 
-module.exports = { hay, instalar, comoSeInstala, sePuedeInstalarSolo, GITS_DE_MAC };
+module.exports = {
+  hay, instalar, comoSeInstala, sePuedeInstalarSolo, GITS_DE_MAC,
+  // Lo de Windows, también para las pruebas, que corren en un Mac (decisión 165).
+  gitsDeWindows, comoSeLanza, esDelGrupoDeAdministradores, trasElInstalador, correr, EN_SILENCIO, LE_DIJO_QUE_NO, ADMINISTRADORES,
+};

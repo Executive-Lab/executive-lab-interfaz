@@ -6493,3 +6493,146 @@ que ya había en este Mac y sin red:
   un documento, y el diccionario lo dice.
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
+
+## 165. Git, con un solo sí
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `git-sin-dos-sies`
+
+De la revisión de producto. Casi ningún alumno no técnico tiene git. Sin él, la carpeta enseñaba «Ponerla
+ahora» en vez de «Preparar esta carpeta». Si pulsaba Preparar, el aviso «Ponerlo primero» solo le devolvía
+a la misma pantalla. Al terminar salía «Ya está. Puedes preparar la carpeta.», y había que volver a pulsar.
+Decía que sí dos veces a lo mismo y esperaba parado: en un Mac, hasta 45 minutos.
+
+### Qué se hace
+
+- **Pulsar «Preparar esta carpeta» es el sí de poner git (P9).** Instalar un programa pide un sí, y ese
+  clic lo es. Se dice justo debajo del botón, en una línea: «Al pulsar pongo también git, para tus copias.
+  Mientras se pone, te hago las preguntas.». Solo donde la barra lo puede poner sola, Mac y Windows. En el
+  resto se pregunta como en la 87.
+- **Mientras se pone, las preguntas.** Son las de la carpeta tal y como quedará con git. Antes, lo de
+  siempre antes de tocar nada: Documentos entera y otro proyecto encima. Montar sobre otro montaje se
+  pregunta antes de poner git, y no se vuelve a preguntar después.
+- **En cuanto git está, se monta solo**, con las respuestas y sin otro clic. Si contesta antes de que git
+  acabe, la barra lo dice y cuenta el tiempo: «Estoy poniendo git. En cuanto esté, preparo la carpeta con
+  tus respuestas.». Y debajo, «Seguir sin copias»: deja de esperar y monta ya, con lo contestado. En un
+  Mac al que se le dijo que no al diálogo de Apple, git no va a llegar, y esperar los 45 minutos sería
+  esperar parado.
+- **Si git falla o tarda**, una frase con su salida (P1), y dos botones:
+  - sin red: «No he podido descargar git: mira que haya conexión y pulsa «Volver a intentarlo».»;
+  - si a Windows se le dijo que no: «No se ha puesto git porque Windows necesitaba tu permiso: pulsa
+    «Volver a intentarlo» y dile que sí.»;
+  - si tarda: «Poner git está tardando mucho: cuando acabe, pulsa «Terminar de prepararla» y sigo con tus
+    respuestas.»;
+  - cualquier otra cosa: «No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.».
+  Los botones: «Volver a intentarlo» (o «Terminar de prepararla») y «Seguir sin copias».
+- **Lo contestado no se vuelve a preguntar.** Se guarda en el estado del editor para esta carpeta
+  (`respuestas.js`), con la carpeta a la que pertenece. Un repositorio no lo puede traer escrito. La
+  pantalla pasa a «Terminar de prepararla», con «Tus respuestas están guardadas: no te las vuelvo a
+  preguntar.» debajo. Se olvida al montar, o si dice que no a montar encima de lo suyo.
+- **«Seguir sin copias»**, con las respuestas guardadas y sin git, es la salida de quien no puede
+  instalarlo: un portátil de empresa que no deja. Sin ella se quedaría pulsando «Volver a intentarlo».
+  Se apunta como la elección de la B3 y se monta con lo contestado.
+- **Si deja las preguntas a medias**, git sigue poniéndose: ese sí ya lo dio. La pantalla dice «Estoy
+  poniendo git. En cuanto esté, puedes preparar la carpeta.», sin botón, y se pone al día cuando acaba.
+- **Si se recarga la ventana a mitad**, al abrir se mira. Si git ya está y lo contestado basta, se termina
+  solo (P9) con las guardas de lo que se hace solo: confianza y una carpeta que este ordenador conoce
+  (pulsar Preparar ya la da por conocida). Y además:
+  - no queda nada por preguntar;
+  - la carpeta sigue como cuando contestó (la misma rama);
+  - no es de alguien, ni Documentos entera, ni está dentro de otro proyecto.
+
+  En una carpeta vacía, también el historial y el punto de partida, que en el montaje sin nadie no se
+  hacen nunca. Lo único que guardan es lo que acaba de poner la barra, y eligió tener copias al pulsar. Es
+  lo mismo que ya hace sola «Copias de seguridad aquí» al abrir (decisión 147). En las demás, sin
+  historial, como siempre. Si no se puede solo, «Terminar de prepararla» con un clic y sin preguntas. Es lo último que hace la barra al abrir, porque al terminar pregunta lo de siempre (la vista
+  sencilla y GitHub), y mientras monta tiene el arnés por ocupado.
+- **«Ponerla ahora»** sigue en la principal y en «Algo va mal», para una carpeta ya montada. Si hay
+  respuestas guardadas, al acabar termina de prepararla. Con la carpeta montada dice «Ya está puesto
+  git.»: decía que se podía preparar.
+- **Una sola instalación a la vez** (`git.instalar`): mientras se pone, «Ponerla ahora» o volver a pulsar
+  esperan a la que ya está. Si revienta por dentro, se cuenta como un fallo con su motivo (P3).
+
+### Windows: lo que pasa sin administrador
+
+La barra prometía «Tarda un par de minutos y no te va a pedir nada», y el código decía que, al no elevar,
+su instalador instalaba para el usuario. Leído en sus fuentes, no es así:
+
+- **El instalador de Git para Windows** (`installer/install.iss`, git-for-windows/build-extra) lleva
+  `PrivilegesRequired=none` y ningún `PrivilegesRequiredOverridesAllowed`. Instala en `{commonpf}\Git`. A
+  mano, si esa carpeta no se puede escribir, cambia a `{userpf}\Git`.
+- **Inno Setup**: `/ALLUSERS` y `/CURRENTUSER` solo valen si `PrivilegesRequiredOverridesAllowed` lo
+  permite (novedades de la 6.0). Así que `/CURRENTUSER` no hace nada aquí.
+- **git-for-windows/git #4758**, «instalar solo para el usuario aunque sea administrador»: se cerró sin
+  hacerlo en diciembre de 2025. Según su mantenedor, `none` está obsoleto, y `lowest` ya no dejaría
+  instalar para todos.
+- **winget-pkgs #369735** (mayo de 2026, abierta): `winget install -e --id Git.Git --scope user` también
+  pide elevarse, y si se le dice que no, sale con el código 2. Según el mantenedor de winget, el instalador
+  no respeta usuario o máquina: si estás en el grupo de administradores, se eleva. Así que winget no lo
+  arregla, y no se usa.
+- **gitforwindows.org** («Silent or Unattended Installation»): las banderas de siempre, y nada de una
+  instalación por usuario.
+
+Lo que sale de ahí:
+
+- **Con una cuenta de administrador**, que es la de casi cualquier portátil de casa o de una pyme, Windows
+  pregunta. No hay forma de evitarlo, así que la promesa dice la verdad: «La descargo y la instalo yo.
+  Tarda un par de minutos, y si Windows te pide permiso, dile que sí.». Al instalar: «Instalando git. Si
+  Windows te pide permiso, dile que sí.». Si se le dice que no (el código 2), se dice eso, en vez de
+  esperar un minuto para acabar en «se está haciendo muy largo».
+- **Con una cuenta sin permisos** no pregunta, y Program Files no se puede escribir. En silencio no está la
+  página donde su instalador cambia de carpeta, así que se le pasa
+  `/DIR=%LOCALAPPDATA%\Programs\Git`, la que él elegiría. Quién es administrador se mira con `whoami
+  /groups`, por el SID del grupo (S-1-5-32-544), que no cambia con el idioma. Si no se puede mirar, se
+  hace lo de antes.
+
+**Encontrado de paso, y arreglado:** un git que se pone con el editor abierto no está en el PATH de la
+barra, que es el de cuando arrancó. En Windows, la barra lo buscaba por su nombre: no lo veía hasta
+reiniciar, y la carpeta no se habría montado sola. Peor: habría acabado en «se está haciendo muy largo»
+con git ya puesto. Ahora `comun/git.js` y `entorno.git()` lo buscan donde lo deja su instalador, y
+`entornoConHerramientas` pone esa carpeta delante para lo que RSC llama por su nombre (`git init`). Lo
+mismo le pasaba a `preparar.js`, el del instalador de Windows.
+
+### Las pruebas
+
+En `humo.js`, de 419 a 428. Las nueve nuevas, con git fingido (`hay` dice lo que diga la prueba e
+`instalar` no lanza nada) y el historial con el git de verdad en una carpeta temporal:
+
+- *sin git, Preparar es el sí*: git empieza antes de la primera pregunta y acaba después; monta en cuanto
+  está; cada pregunta una vez; sin ningún aviso de git; la espera dicha; historial y punto de partida; lo
+  guardado, olvidado;
+- *si falla o tarda*: sin red, tarda, Windows dijo que no, cualquier otro fallo y un git que dice que sí y
+  no aparece. Cada uno con su frase y sus dos salidas, sin volver a preguntar, y al final monta;
+- *encima de otro montaje*: sin su sí, ni git ni preguntas; con él, el permiso una sola vez;
+- *«Seguir sin copias»*: monta sin preguntar ni intentar poner git, también mientras espera, y el botón lo
+  apunta y deja de esperar;
+- *si se recarga a mitad*: cuándo se termina solo y cuándo no (cada respuesta que falta, la web, qué
+  construir, otra rama, Documentos, otro proyecto, otro montaje, lo de alguien, y el historial de una a
+  medias), que sin git y sin nadie no se instala nada, y quién lo hace al abrir: sin confianza, sin
+  conocerla o sin git, nada; y mientras monta, el arnés ocupado;
+- *la pantalla*: Preparar con su línea; «Ponerla ahora» donde no se puede solo; «Terminar de
+  prepararla», lo guardado y «Seguir sin copias»; mientras se pone, sin volver a pulsar; la espera con su
+  salida; el aviso con sus dos salidas; y la brújula;
+- *una sola vez a la vez*, con su motivo si revienta, y «Ponerla ahora» que termina lo que esperaba;
+- *la barra cuenta la espera*, da las dos salidas y, sola, no dice nada;
+- *Windows*: lo que se le pasa al instalador con y sin administrador, dónde se busca git, `whoami`, el
+  código 2, la promesa, y la carpeta de git delante para RSC.
+
+Y una en `windows.js`, que solo corre en la máquina Windows de GitHub: con git fuera del PATH, la barra lo
+encuentra por su sitio y RSC por su nombre. Cambian tres pruebas de antes: «sin git se pregunta qué
+hacer» pasa a ser la de donde no se puede poner solo; y dos que leían el código buscaban `async arrancar()`
+y `return hacerLosPasos(…)`, que han cambiado de forma.
+
+**Mutaciones a mano:** 14 hechas, las 14 tumbadas. Las guardas de retomar tras recargar (confianza, carpeta conocida, nada que preguntar, misma rama, nada de nadie, historial solo en carpeta vacía), lo guardado (de otra carpeta no vale; se guarda; se olvida al montar), una sola instalación a la vez, el código 2 de Windows, `/DIR` sin administrador, git buscado por su sitio y su carpeta delante para RSC. Tres sobrevivieron a la primera y se les puso la prueba que las tumba, en las que ya había: la confianza y la carpeta conocida (la prueba de retomar tenía git sin poner, y el «no» venía de git, no de su guarda), lo guardado de otra carpeta, y `git()` buscando donde deja git su instalador en Windows.
+
+### Lo que no hace, todavía
+
+- **Nada de esto se ha visto en un Windows de alumno.** El aviso de Windows lanzado desde la barra puede
+  salir parpadeando en la barra de tareas en vez de delante. Y la cuenta sin administrador con `/DIR`
+  falta probarla. Es lo de la memoria «Windows en GitHub, y lo que aún pide persona».
+- **En un Mac, si se le dice que no al diálogo de Apple**, no se detecta: se sigue esperando hasta los 45
+  minutos, salvo que pulse «Seguir sin copias». Mirar si su instalador sigue abierto no se ha podido
+  comprobar sin tocar el sistema.
+- **La barra de progreso de git no se puede cancelar.** Se puede volver atrás en la barra o seguir sin
+  copias, y git sigue poniéndose por su cuenta.
+- **El caso de dejar las preguntas a medias** no guarda lo que llevaba contestado: `entrevistar` devuelve
+  todo o nada. Git sigue, y al volver a pulsar se pregunta desde el principio.

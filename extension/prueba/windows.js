@@ -11,7 +11,9 @@
 //   · el freno de los raíles, enganchado como lo deja `aplicar.js` y pasado por
 //     Git Bash, que deniega un `rm -rf` con el relevo como único `node`;
 //   · qué Python elige la barra para los guiones de una herramienta (F4): `py
-//     -3` primero, porque `python` puede ser el atajo que abre la Tienda.
+//     -3` primero, porque `python` puede ser el atajo que abre la Tienda;
+//   · que un git recién puesto se encuentra por su sitio, sin estar en el PATH
+//     de la barra, y que RSC lo encuentra por su nombre (decisión 165).
 
 const assert = require('node:assert');
 const cp = require('node:child_process');
@@ -132,6 +134,22 @@ const mismo = (a, b) => path.resolve(String(a).trim()).toLowerCase() === path.re
     const veces = env[clavePath].split(path.delimiter).filter((d) => d.toLowerCase() === carpeta.toLowerCase()).length;
     assert.equal(veces, 1, `el relevo sale ${veces} veces en el PATH`);
     return `${otraCaja.slice(0, 2)} y ${carpeta.slice(0, 2)}, la misma carpeta`;
+  });
+
+  await comprobar('un git recién puesto se encuentra por su sitio, y RSC lo encuentra por su nombre', async () => {
+    // El PATH de la barra es el de cuando se abrió el editor. Un git que se pone
+    // con la barra abierta no está en él, y la carpeta no se montaría sola. Se
+    // finge quitando del PATH toda carpeta con un git.exe (decisión 165).
+    const donde = entorno.git();
+    assert.ok(path.isAbsolute(donde) && fs.existsSync(donde), `la barra busca git por su nombre: ${donde}`);
+    const sinGit = String(process.env[clavePath] || '').split(path.delimiter).filter((d) => d && !fs.existsSync(path.join(d, 'git.exe')));
+    const r0 = cp.spawnSync('git', ['--version'], { env: { ...process.env, [clavePath]: sinGit.join(path.delimiter) }, encoding: 'utf8' });
+    assert.notEqual(r0.status, 0, 'la prueba no ha quitado git del PATH');
+    const conHerramientas = entorno.entornoConHerramientas({ ...process.env, [clavePath]: sinGit.join(path.delimiter) });
+    const r = cp.spawnSync('git', ['--version'], { env: conHerramientas, encoding: 'utf8' });
+    assert.equal(r.status, 0, `RSC no encontraría git por su nombre: ${r.stderr || (r.error && r.error.message)}`);
+    assert.equal(await cargar('git').hay(), true, 'la barra dice que no hay git');
+    return donde;
   });
 
   await comprobar('para los guiones en Python, la barra elige py -3', async () => {

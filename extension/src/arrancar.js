@@ -27,6 +27,7 @@ const trato = require('./trato');
 const ajena = require('./ajena');
 const encargosDelAsistente = require('./encargos');
 const ajustesLocales = require('./ajustes-locales');
+const lasRespuestas = require('./respuestas');
 
 // Las preguntas que hace RSC, en cristiano. Antes se daban por supuestas tres
 // —siempre operaciones, siempre no técnico, siempre L3— y eso está mal: un
@@ -854,8 +855,34 @@ function loQueYaSeSabe(recibo) {
   };
 }
 
-// Devuelve las respuestas completas, o null si alguien canceló.
-async function entrevistar(plan, parte) {
+// Dónde va cada pregunta en las respuestas, para saber si ya está contestada.
+const DONDE_SE_GUARDA = {
+  asistente: 'asistente', deQueVa: 'kind', alcance: 'alcance', personas: 'personas',
+  queConstruir: 'tamano', objetivo: 'objetivo', nivel: 'nivel', nombres: 'nombres',
+};
+const yaContestada = (que, respuestas) => Boolean(DONDE_SE_GUARDA[que] && respuestas && respuestas[DONDE_SE_GUARDA[que]]);
+
+// La web se pregunta al montar de cero. Si se dejó en blanco queda `null`, que
+// también es una respuesta: por eso se mira si está, no si tiene algo.
+const tocaLaWeb = (plan, parte) => plan.pasos.some((p) => p.id === 'montarElArnes') && !parte.recibo;
+
+// Lo que este plan pregunta y las respuestas guardadas no contestan (decisión
+// 165). El permiso de montar encima de otro montaje no se guarda nunca.
+function faltanPorContestar(plan, parte, respuestas) {
+  const faltan = plan.preguntar.filter((que) => {
+    if (que === 'permiso') return true;
+    const pregunta = rumbo.PREGUNTAS.find((p) => p.id === que);
+    if (pregunta && pregunta.soloSi && respuestas && respuestas.kind && !pregunta.soloSi({ deQueVa: respuestas.kind })) return false;
+    return !yaContestada(que, respuestas);
+  });
+  if (tocaLaWeb(plan, parte) && !(respuestas && 'web' in respuestas)) faltan.push('web');
+  return faltan;
+}
+
+// Devuelve las respuestas completas, o null si alguien canceló. `guardadas` son
+// las de una vez anterior que no llegó a montar (decisión 165): lo que ya
+// contestan no se pregunta otra vez.
+async function entrevistar(plan, parte, guardadas = null) {
   const sabido = loQueYaSeSabe(parte.recibo);
 
   // Lo de hoy manda sobre el recibo, que es lo que se firmó el primer día
@@ -869,11 +896,12 @@ async function entrevistar(plan, parte) {
     if (declarados.length) sabido.asistente = declarados.join(',');
   }
 
-  const respuestas = { ...sabido };
+  const respuestas = { ...sabido, ...(guardadas || {}) };
   const nombres = parte.railes.nombres || null;
 
   for (const que of plan.preguntar) {
     if (que === 'permiso') continue; // se pide aparte, antes de todo
+    if (guardadas && yaContestada(que, guardadas)) continue;
 
     // Lo que solo se pregunta en ciertos casos: qué va a construir, solo si hay
     // algo que construir. Sin recibo no se sabe el tipo hasta que se contesta
@@ -889,7 +917,8 @@ async function entrevistar(plan, parte) {
   }
 
   // La web no se pregunta nunca dos veces ni bloquea: es opcional.
-  const web = plan.pasos.some((p) => p.id === 'montarElArnes') && !parte.recibo ? await preguntarWeb() : null;
+  const yaDicha = guardadas && 'web' in guardadas;
+  const web = !tocaLaWeb(plan, parte) ? null : (yaDicha ? guardadas.web : await preguntarWeb());
 
   // Lo que ya estaba en el perfil vuelve a él: RSC lo reescribe entero en cada
   // plan aceptado, y alcance y personas no se vuelven a preguntar.
@@ -1038,19 +1067,41 @@ let enMarcha = false;
 const RAMAS_SIN_NADIE = ['traer', 'ponerAlDia', 'adoptar', 'completar'];
 // En un objeto, para que la prueba pueda mirar las dos confirmaciones sin
 // montar nada.
-const momento = { nadieDelante: false };
+// `alEsperar` lo pone quien llama: la barra cuenta el tiempo mientras se espera
+// a git con las respuestas ya dadas (decisión 165).
+const momento = { nadieDelante: false, alEsperar: () => {} };
 
 // Y nunca crear el historial: `git init` es poner copias, y poner copias es
 // suyo si eligió no tenerlas, y guardaría la carpeta entera aunque no (revisión
 // de corrección de P9, 1).
 const SIN_NADIE_NO = ['ponerGit', 'puntoDePartida'];
 
-function sePuedeSinNadie(plan, parte) {
+// Retomar lo que se contestó mientras se ponía git (decisión 165). Esa persona
+// ya pulsó «Preparar esta carpeta», con las copias, y contestó: su sí está dado
+// y ya no queda nada que decidir. Así que se termina solo, si la carpeta sigue
+// como estaba (la misma rama) y no es de alguien, que pide su sí dentro del
+// montaje (B4).
+//
+// En una carpeta vacía, también el historial y el punto de partida: lo único
+// que guardan es lo que acaba de poner la barra, y eligió tenerlas al pulsar. Es
+// lo mismo que ya hace sola «Copias de seguridad aquí» al abrir (decisión 147).
+// En las demás, como siempre sin nadie: sin historial.
+const RAMAS_QUE_SE_RETOMAN = ['desdeCero', ...RAMAS_SIN_NADIE];
+
+function sePuedeRetomar(plan, parte, guardadas) {
+  return Boolean(guardadas && guardadas.respuestas)
+    && guardadas.rama === plan.rama
+    && RAMAS_QUE_SE_RETOMAN.includes(plan.rama)
+    && (plan.rama === 'desdeCero' || !(plan.pasos || []).some((p) => SIN_NADIE_NO.includes(p.id)))
+    && !faltanPorContestar(plan, parte, guardadas.respuestas).length;
+}
+
+function sePuedeSinNadie(plan, parte, guardadas = null) {
+  if ((parte.carpeta && parte.carpeta.delicada) || parte.dentroDeOtro) return false;
+  if (sePuedeRetomar(plan, parte, guardadas)) return true;
   return RAMAS_SIN_NADIE.includes(plan.rama)
     && !(plan.pasos || []).some((p) => SIN_NADIE_NO.includes(p.id))
-    && !plan.preguntar.length
-    && !(parte.carpeta && parte.carpeta.delicada)
-    && !parte.dentroDeOtro;
+    && !plan.preguntar.length;
 }
 
 const CLAVE_SIN_GIT = 'executiveLab.sigueSinCopias';
@@ -1061,20 +1112,28 @@ const CLAVE_SIN_GIT = 'executiveLab.sigueSinCopias';
 const loQueDecidio = (contexto) => (contexto && contexto.workspaceState)
   || { get: () => undefined, update: async () => {} };
 
-async function arrancar(contexto, salida, { sinNadieDelante = false } = {}) {
+async function arrancar(contexto, salida, { sinNadieDelante = false, alEsperar = null } = {}) {
   // Ya hay uno en marcha: se dice, en vez de callar (revisión de corrección, 5).
   if (enMarcha) return { ok: false, enMarcha: true };
   enMarcha = true;
   momento.nadieDelante = sinNadieDelante;
+  momento.alEsperar = typeof alEsperar === 'function' ? alEsperar : () => {};
   try {
     return await elCamino(contexto, salida);
   } finally {
     enMarcha = false;
     momento.nadieDelante = false;
+    momento.alEsperar = () => {};
   }
 }
 
-async function elCamino(contexto, salida) {
+const estaEnMarcha = () => enMarcha;
+
+// `yaConfirmado`: se vuelve aquí después de esperar a git mientras se
+// preguntaba (decisión 165), con git puesto o sin copias. Lo que se confirma
+// antes de tocar nada ya se confirmó, y las respuestas están guardadas.
+// `permisoDado`: el de montar encima de otro montaje, si se pidió entonces.
+async function elCamino(contexto, salida, { yaConfirmado = false, permisoDado = false } = {}) {
   const visto = await terreno.reconocer();
   const parte = {
     ...visto,
@@ -1082,8 +1141,15 @@ async function elCamino(contexto, salida) {
   };
   const plan = rumbo.elegirRama(parte);
   salida.appendLine(`[arrancar] ${plan.rama}: ${plan.porQue}`); // diccionario: interno
+  const memoria = loQueDecidio(contexto);
+  let guardadas = lasRespuestas.leer(memoria);
+  // Ya montada por otro camino: lo guardado no espera nada.
+  if (guardadas && plan.rama === 'yaEstaba') {
+    await lasRespuestas.olvidar(memoria);
+    guardadas = null;
+  }
 
-  if (momento.nadieDelante && !sePuedeSinNadie(plan, parte)) {
+  if (momento.nadieDelante && !sePuedeSinNadie(plan, parte, guardadas)) {
     salida.appendLine(`[solo] ${plan.rama}: espera a su botón`); // diccionario: interno
     return { ok: false, esperaASuBoton: true };
   }
@@ -1107,32 +1173,147 @@ async function elCamino(contexto, salida) {
 
   // Documentos, el Escritorio o las Descargas enteras: se pregunta antes de
   // escribir nada, también antes de poner git.
-  if (parte.carpeta && parte.carpeta.delicada && plan.pasos.some((p) => p.escribe)) {
+  if (!yaConfirmado && parte.carpeta && parte.carpeta.delicada && plan.pasos.some((p) => p.escribe)) {
     if ((await confirmarLaCarpeta(parte, salida)) !== 'seguir') return { ok: false, cancelado: true };
   }
 
   // Dentro de otro proyecto: se dice antes de escribir nada (B9).
-  if (parte.dentroDeOtro && plan.pasos.some((p) => p.escribe)) {
+  if (!yaConfirmado && parte.dentroDeOtro && plan.pasos.some((p) => p.escribe)) {
     if ((await confirmarDentroDeOtro(parte)) !== 'seguir') return { ok: false, cancelado: true };
   }
 
-  if (plan.rama === 'sinGit') return decidirSobreGit(contexto, parte);
+  if (plan.rama === 'sinGit') {
+    // Dicho que estaba y sin verlo: no se vuelve a empezar, que sería un bucle.
+    if (yaConfirmado) return noSePusoGit({ mensaje: 'git dice que está, y no lo encuentro' }, salida); // diccionario: interno
+    // Sin poder ponerlo solo, se pregunta como siempre. Si se puede, pulsar era
+    // el sí (decisión 165).
+    if (!parte.git.sePuedeInstalarSolo) return decidirSobreGit(contexto);
+    return prepararMientrasSePoneGit(contexto, parte, salida, guardadas);
+  }
 
   if (plan.rama === 'yaEstaba') {
     return { ok: true, yaEstaba: true, mensaje: 'Esto ya estaba montado y entero.' };
   }
 
-  if (plan.rama === 'otroArnes' && !(await pedirPermiso(parte))) {
+  if (plan.rama === 'otroArnes' && !permisoDado && !(await pedirPermiso(parte))) {
     // Jose: «si el usuario dice que no quiere implementarlo, entonces
     // directamente no se ejecuta la instalación ni de RSC ni de la extensión».
+    await lasRespuestas.olvidar(memoria);
     return { ok: false, cancelado: true, sinPermiso: true };
   }
 
-  const respuestas = await entrevistar(plan, parte);
+  const respuestas = await entrevistar(plan, parte, guardadas && guardadas.respuestas);
   if (!respuestas) return { ok: false, cancelado: true };
 
   await recordarSiSeMontaAqui(plan);
-  return hacerLosPasos(plan, parte, respuestas, contexto, salida);
+  const hecho = await hacerLosPasos(plan, parte, respuestas, contexto, salida);
+  // Montado, o con un no a montar encima de lo suyo: lo guardado ya no sirve.
+  if (guardadas && (hecho.ok || hecho.sinPermiso)) await lasRespuestas.olvidar(memoria);
+  return hecho;
+}
+
+// ── Git, con un solo sí (decisión 165) ──────────────────────────────────
+//
+// Antes, sin git, la carpeta enseñaba «Ponerla ahora» en vez de «Preparar esta
+// carpeta». Pulsar Preparar sacaba «Ponerlo primero», que devolvía a la misma
+// pantalla; al terminar, «Ya está. Puedes preparar la carpeta.», y otra vez a
+// pulsar. Dos síes a lo mismo y una espera parado, que en un Mac podía llegar a
+// 45 minutos. Casi ningún alumno tiene git.
+//
+// Ahora pulsar Preparar es el sí de instalarlo (P9), y la pantalla lo dice
+// debajo del botón. Se pone a instalar y, mientras tanto, se hacen las
+// preguntas, las de la carpeta tal y como quedará con git. Las respuestas se
+// guardan (`respuestas.js`) y, en cuanto git aparece, se monta con ellas sin
+// otro clic. Si git falla o tarda demasiado, se dice en una frase con su salida,
+// y lo contestado no se vuelve a preguntar.
+async function prepararMientrasSePoneGit(contexto, parte, salida, guardadas) {
+  const memoria = loQueDecidio(contexto);
+  const plan = rumbo.elegirRama({ ...parte, git: { ...parte.git, hay: true } });
+  salida.appendLine(`[arrancar] falta git: se pone mientras se pregunta (${plan.rama})`); // diccionario: interno
+
+  // Montar encima de otro montaje se pregunta antes de todo, también de git.
+  if (plan.rama === 'otroArnes' && !(await pedirPermiso(parte))) {
+    await lasRespuestas.olvidar(memoria);
+    return { ok: false, cancelado: true, sinPermiso: true };
+  }
+
+  let puesto = null;
+  const poniendo = ponerGit().then((hecho) => { puesto = hecho; return hecho; });
+
+  // Si deja las preguntas a medias, git se sigue poniendo: ese sí ya lo dio.
+  const respuestas = await entrevistar(plan, parte, guardadas && guardadas.respuestas);
+  if (!respuestas) return { ok: false, cancelado: true };
+  await lasRespuestas.guardar({ respuestas, rama: plan.rama }, memoria);
+
+  // Mientras espera, se puede seguir sin copias: en un Mac, si se le dice que
+  // no al diálogo de Apple, git no aparece, y esperar los 45 minutos sería
+  // esperar parado. Se monta ya, con lo contestado.
+  if (!puesto) momento.alEsperar(ESPERANDO_A_GIT, SEGUIR_SIN_COPIAS);
+  const sinEsperar = new Promise((sigue) => { esperandoAGit.dejar = () => sigue({ ok: false, sinCopias: true }); });
+  let hecho;
+  try {
+    hecho = await Promise.race([poniendo, sinEsperar]);
+  } finally {
+    esperandoAGit.dejar = null;
+  }
+  const despues = { yaConfirmado: true, permisoDado: plan.rama === 'otroArnes' };
+  if (hecho.sinCopias) {
+    salida.appendLine('[arrancar] deja de esperar a git: sigue sin copias'); // diccionario: interno
+    await memoria.update(CLAVE_SIN_GIT, true);
+    momento.alEsperar('Preparando la carpeta con tus respuestas, sin copias…');
+    return elCamino(contexto, salida, despues);
+  }
+  guardar.olvidarSiHayGit();
+  if (!hecho.ok) return noSePusoGit(hecho, salida);
+
+  momento.alEsperar('Ya está puesto git. Preparando la carpeta con tus respuestas…');
+  return elCamino(contexto, salida, despues);
+}
+
+// Quien deja de esperar a git: «Seguir sin copias» mientras se espera. Dice si
+// había algo esperando.
+const esperandoAGit = { dejar: null };
+function dejarDeEsperarAGit() {
+  if (!esperandoAGit.dejar) return false;
+  esperandoAGit.dejar();
+  return true;
+}
+
+const ESPERANDO_A_GIT = 'Estoy poniendo git. En cuanto esté, preparo la carpeta con tus respuestas.';
+
+// El instalador del sistema, con su barra de progreso. Una sola vez a la vez
+// (`git.instalar`). No revienta nunca: un fallo vuelve como un no.
+function ponerGit() {
+  return Promise.resolve()
+    .then(() => vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Poniendo git', cancellable: false },
+      (progreso) => git.instalar((que) => progreso.report({ message: que })),
+    ))
+    .then((hecho) => hecho || { ok: false, mensaje: 'el instalador no ha contestado' }) // diccionario: interno
+    .catch((error) => ({ ok: false, mensaje: error.message }));
+}
+
+// Lo que se dice si git no queda puesto: una frase y su salida (P1). Lo
+// contestado está guardado, y la pantalla lo dice debajo del botón.
+const VOLVER_A_INTENTARLO = { etiqueta: 'Volver a intentarlo', accion: { tipo: 'arrancar' } };
+const SEGUIR_SIN_COPIAS = { etiqueta: 'Seguir sin copias', accion: { tipo: 'seguirSinCopias' } };
+
+function noSePusoGit(hecho, salida) {
+  salida.appendLine(`[arrancar] git no ha quedado puesto: ${hecho.mensaje || '(sin motivo)'}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
+  if (hecho.tarda) {
+    return {
+      ok: false,
+      gitNoSePuso: true,
+      mensaje: 'Poner git está tardando mucho: cuando acabe, pulsa «Terminar de prepararla» y sigo con tus respuestas.',
+      botones: [{ ...VOLVER_A_INTENTARLO, etiqueta: 'Terminar de prepararla' }, SEGUIR_SIN_COPIAS],
+    };
+  }
+  const mensaje = hecho.sinPermiso
+    ? 'No se ha puesto git porque Windows necesitaba tu permiso: pulsa «Volver a intentarlo» y dile que sí.'
+    : (hecho.sinDescargar
+      ? 'No he podido descargar git: mira que haya conexión y pulsa «Volver a intentarlo».'
+      : 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.');
+  return { ok: false, gitNoSePuso: true, mensaje, botones: [VOLVER_A_INTENTARLO, SEGUIR_SIN_COPIAS] };
 }
 
 // Un montaje que empieza aquí, en una carpeta sin historial, se apunta en el
@@ -1147,13 +1328,17 @@ async function recordarSiSeMontaAqui(plan) {
 // Sin git no hay copias de seguridad. Se explica qué se pierde y se deja
 // elegir: Jose lo quiso así, y hasta ahora esto era un callejón — la pantalla
 // se quedaba sin ofrecer nada.
-async function decidirSobreGit(contexto, parte) {
+//
+// Desde la decisión 165, solo donde la barra no puede ponerlo sola (fuera de
+// Mac y de Windows, o sin el módulo de git). Donde puede, pulsar Preparar ya es
+// el sí, y esto le hacía decir que sí dos veces.
+async function decidirSobreGit(contexto) {
   const ponerlo = 'Ponerlo primero';
   const seguir = 'Seguir sin copias';
 
   const elegido = await vscode.window.showWarningMessage(
     'Falta una pieza para poder guardar tu trabajo. Sin ella todo funciona, pero no podrás guardar copias ni volver atrás si algo sale mal.',
-    { modal: true, detail: parte.git.sePuedeInstalarSolo ? 'Tu ordenador puede ponerla solo. Tarda un rato.' : git.comoSeInstala() },
+    { modal: true, detail: git.comoSeInstala() },
     ponerlo,
     seguir,
   );
@@ -1473,7 +1658,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 
 module.exports = {
   ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
-  arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
+  arrancar, estaEnMarcha, dejarDeEsperarAGit, sePuedeSinNadie, sePuedeRetomar, faltanPorContestar, RAMAS_SIN_NADIE, RAMAS_QUE_SE_RETOMAN, momento, ESPERANDO_A_GIT, CLAVE_SIN_GIT, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,

@@ -88,12 +88,25 @@ function GITS_DE_MAC() {
   return gitsDeMac;
 }
 
+// Y dónde lo deja el instalador oficial de Windows (decisión 165). El PATH de la
+// barra es el de cuando se abrió el editor: un git puesto con la barra abierta no
+// se ve por su nombre hasta reiniciar, y la carpeta no se montaría sola.
+function GITS_DE_WINDOWS() {
+  try {
+    const { gitsDeWindows } = require(moduloComun('git'));
+    return typeof gitsDeWindows === 'function' ? gitsDeWindows() : [];
+  } catch {
+    return [];
+  }
+}
+
 function git() {
   const app = carpetaDeLaApp();
   return binarioDelSistema(
     [
       ...(app ? [path.join(app, 'git', 'cmd', 'git.exe'), path.join(app, 'git', 'bin', 'git'), path.join(app, 'git', 'usr', 'bin', 'git')] : []),
       ...(process.platform === 'darwin' ? GITS_DE_MAC() : []),
+      ...(ES_WINDOWS ? GITS_DE_WINDOWS() : []),
     ],
     ES_WINDOWS ? 'git.exe' : 'git',
   );
@@ -108,8 +121,9 @@ function git() {
 // conexión" no funcionaría en Windows.
 //
 // Se mira, por este orden: lo que dejara un instalador nuestro antiguo, la
-// instalación por usuario del Git oficial —que es la que hacemos, sin
-// administrador— y la de todo el sistema, por si esa persona ya lo tenía.
+// instalación por usuario del Git oficial —la que hace sin administrador— y la
+// de todo el sistema, que es la de casi todos: con una cuenta de administrador
+// se instala ahí (decisión 165).
 function dondeViveBash() {
   if (!ES_WINDOWS) return [];
 
@@ -222,16 +236,23 @@ function npxCli() {
 }
 
 // PATH con nuestras carpetas delante, para los scripts de RSC que invocan
-// git o node por nombre.
-function entornoConHerramientas(base = process.env) {
+// git o node por nombre. En Windows, también la del git que se encuentre por su
+// sitio: RSC hace `git init` por su nombre, y uno recién puesto no está en el
+// PATH de la barra (decisión 165). `windows` y `suGit` son para la prueba.
+function entornoConHerramientas(base = process.env, { windows = ES_WINDOWS, suGit = git } = {}) {
   const app = carpetaDeLaApp();
-  if (!app) return { ...base, ...(usaElNodeDeVsCode() ? { ELECTRON_RUN_AS_NODE: '1' } : {}) };
+  const elGit = windows ? suGit() : null;
+  const delGit = elGit && path.isAbsolute(elGit) ? [path.dirname(elGit)] : [];
+  if (!app && !delGit.length) return { ...base, ...(usaElNodeDeVsCode() ? { ELECTRON_RUN_AS_NODE: '1' } : {}) };
   const delante = [
-    path.join(app, 'runtime'),
-    path.join(app, 'runtime', 'bin'),
-    path.join(app, 'git', 'cmd'),
-    path.join(app, 'git', 'usr', 'bin'),
-  ].filter((d) => fs.existsSync(d));
+    ...(app ? [
+      path.join(app, 'runtime'),
+      path.join(app, 'runtime', 'bin'),
+      path.join(app, 'git', 'cmd'),
+      path.join(app, 'git', 'usr', 'bin'),
+    ].filter((d) => fs.existsSync(d)) : []),
+    ...delGit.filter((d) => !(app && d === path.join(app, 'git', 'cmd'))),
+  ];
   const clave = Object.keys(base).find((k) => k.toLowerCase() === 'path') || 'PATH';
   return {
     ...base,
@@ -240,4 +261,4 @@ function entornoConHerramientas(base = process.env) {
   };
 }
 
-module.exports = { ES_WINDOWS, GITS_DE_MAC, dondeViveBash, carpetaDeLaApp, node, git, bash, entradaDelArnes, moduloComun, npxCli, entornoConHerramientas, usaElNodeDeVsCode };
+module.exports = { ES_WINDOWS, GITS_DE_MAC, GITS_DE_WINDOWS, dondeViveBash, carpetaDeLaApp, node, git, bash, entradaDelArnes, moduloComun, npxCli, entornoConHerramientas, usaElNodeDeVsCode };

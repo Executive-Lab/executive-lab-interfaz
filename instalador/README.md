@@ -76,13 +76,18 @@ hacer doble clic y grabar la pantalla.
 
 Dónde espero que falle primero:
 
-- **El instalador de Git, lanzado sin elevar.** Debería instalar para el usuario y no pedir
-  administrador, pero es justo lo que no se puede comprobar desde un Mac. Si pidiera UAC, se acabó el
-  «sin administrador» (decisión 26).
+- **El instalador de Git sin administrador.** Leída su documentación (decisión 165): con una cuenta del
+  grupo de administradores, que es la de casi todos, pide elevarse y sale el aviso de Windows; no hay
+  forma de pedirle que instale solo para el usuario (`/CURRENTUSER` no hace nada). La barra ya no
+  promete que no pregunte. Con una cuenta sin permisos no pide nada, y se le pasa
+  `/DIR=%LOCALAPPDATA%\Programs\Git`, la carpeta que él mismo elige a mano en ese caso. Esto último
+  falta verlo en una cuenta así.
 - **bash en Windows.** Los `test_connection.sh` de RSC piden bash. Antes lo traía MinGit; ahora lo
   trae el Git para Windows de verdad, en `usr\bin\bash.exe`. Hay que confirmarlo.
 - **El PATH recién escrito.** Inno lo pone en el registro y avisa al sistema, pero un VS Code que ya
-  estuviera abierto no lo ve hasta reiniciarse. En una máquina limpia no hay ninguno abierto.
+  estuviera abierto no lo ve hasta reiniciarse. En una máquina limpia no hay ninguno abierto. Para git,
+  la barra y `comun/git.js` ya no dependen de él: lo buscan donde lo deja su instalador, y la barra
+  pone esa carpeta delante para lo que RSC llama por su nombre (decisión 165).
 - **`rsc onboard` en Windows**, que ahora corre desde el panel y no desde el instalador. Usa symlinks
   y cae a copias reales cuando el sistema no los admite.
 
