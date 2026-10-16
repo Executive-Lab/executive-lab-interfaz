@@ -12528,6 +12528,360 @@ exec git "$@"
     }
   });
 
+  await comprobar('el aviso de Codex: el notify arriba del config.toml, con su guion fijo, sin pisar el suyo, y se quita solo él', async () => {
+    // Decisión 171. Casa de mentira: nada de lo real.
+    const ac = cargar('aviso-de-codex');
+    const retiradosM = cargar('retirados');
+    const fuente = path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    const NODE = process.execPath;
+    const casa = () => fs.mkdtempSync(path.join(os.tmpdir(), 'aviso-codex-'));
+    const config = (c) => path.join(c, 'config.toml');
+    const leerC = (c) => fs.readFileSync(config(c), 'utf8');
+    const linea = (c) => ac.laLinea(NODE, path.join(c, 'executive-lab', 'avisar.mjs'));
+    const poner = (c) => ac.ponerlo({ codex: c, fuente, node: NODE });
+    const tablasDe = (t) => t.split('\n').filter((l) => /^\s*\[/.test(l));
+    // `notify` tiene que quedar entre las claves de arriba: si cae dentro de una tabla, Codex no lo ve.
+    const arriba = (t) => { const l = retiradosM.leerElToml(t); return Boolean(l) && l.clavesDeArriba.has('notify'); };
+
+    // Un node de verdad: absoluto, fichero, llamado node, que diga su versión. El del editor, no.
+    const falso = path.join(casa(), 'node');
+    fs.writeFileSync(falso, '#!/bin/sh\necho v22.1.0\n', { mode: 0o755 });
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), falso);
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: falso }), null, 'el del editor');
+    assert.equal(ac.nodeDeVerdad({ propio: 'node', entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'node a secas');
+    assert.equal(ac.nodeDeVerdad({ propio: falso, entorno: { PATH: '' }, ademas: [], execPath: '/Electron', comprobar: () => false }), null, 'uno que no dice su versión');
+    const otro = path.join(casa(), 'code'); // se llama de otra forma: Electron
+    fs.writeFileSync(otro, '#!/bin/sh\necho v22.1.0\n', { mode: 0o755 });
+    assert.equal(ac.nodeDeVerdad({ propio: otro, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'uno que no se llama node');
+    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: path.dirname(falso) }, ademas: [], execPath: '/Electron' }), falso, 'el del PATH');
+    assert.equal(ac.nodeDeVerdad({ propio: null, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), null, 'ninguno');
+    // El de verdad, tal cual lo corre el comprobador (`--version`).
+    assert.equal(ac.nodeDeVerdad({ propio: NODE, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' }), NODE);
+    assert.equal(ac.nodeDeVerdad({ propio: 'C:\\x\\node.exe', entorno: { PATH: '' }, ademas: [], esWindows: true, execPath: '/Electron' }), null, 'ruta de Windows que no existe aquí');
+
+    // Sin config.toml: se crea con la clave y el guion en su sitio fijo, y se dice qué se hizo.
+    const vacia = casa();
+    assert.deepEqual(ac.queSeOfrece({ codex: vacia, fuente, node: NODE }).ofrecer, true);
+    assert.equal(ac.queSeOfrece({ codex: vacia, fuente, node: null }).motivo, 'sinNode');
+    const hecho = poner(vacia);
+    assert.equal(hecho.hecho, 'puesto');
+    assert.equal(leerC(vacia), `${linea(vacia)}\n`);
+    assert.ok(arriba(leerC(vacia)));
+    assert.equal(fs.readFileSync(path.join(vacia, 'executive-lab', 'avisar.mjs', ''), 'utf8'), fs.readFileSync(fuente, 'utf8'), 'el guion se copia entero');
+    assert.ok(path.isAbsolute(JSON.parse(linea(vacia).slice('notify = '.length))[0]), 'el node no es absoluto');
+    assert.equal(ac.queSeOfrece({ codex: vacia, fuente, node: NODE }).ofrecer, false, 'se ofrece dos veces');
+
+    // Con claves y tablas: arriba, justo después de la última clave de arriba y antes de la primera tabla.
+    const conTablas = casa();
+    const ANTES = '# lo mío\nmodel = "gpt-5.5-mini"\napproval_policy = "on-request"\n\n# los proyectos\n[projects."/Users/ana/Contabilidad"]\ntrust_level = "trusted"\n\n[tui]\nnotifications = true\n';
+    fs.writeFileSync(config(conTablas), ANTES, { mode: 0o640 });
+    assert.equal(poner(conTablas).hecho, 'puesto');
+    const despues = leerC(conTablas);
+    assert.ok(arriba(despues), 'el notify no ha quedado arriba: caería dentro de una tabla');
+    assert.ok(despues.indexOf('notify =') < despues.indexOf('[projects'), 'va después de la primera tabla');
+    assert.deepEqual(tablasDe(despues), tablasDe(ANTES));
+    assert.equal(despues.replace(`${linea(conTablas)}\n`, ''), ANTES, 'se ha tocado algo más que esa línea');
+    assert.equal(fs.statSync(config(conTablas)).mode & 0o777, 0o640, 'pierde sus permisos');
+    assert.ok(fs.readdirSync(conTablas).some((f) => f.startsWith('config.toml.copia-executive-lab-')), 'sin copia al lado');
+    // Un `notify` dentro de una tabla no es el de arriba, y no cuenta: se pone el de arriba.
+    const enTabla = casa();
+    fs.writeFileSync(config(enTabla), '[tui]\nnotify = "no es el de codex"\n');
+    assert.equal(ac.queSeOfrece({ codex: enTabla, fuente, node: NODE }).ofrecer, true, 'un notify de una tabla tapa al de arriba');
+    assert.equal(poner(enTabla).hecho, 'puesto');
+    assert.ok(leerC(enTabla).startsWith(linea(enTabla)), 'sin claves de arriba, va la primera');
+    assert.ok(arriba(leerC(enTabla)));
+    // Solo comentarios arriba, y saltos de línea de Windows.
+    const crlf = casa();
+    fs.writeFileSync(config(crlf), '# nada\r\n\r\n[tui]\r\nx = 1\r\n');
+    assert.equal(poner(crlf).hecho, 'puesto');
+    assert.ok(arriba(leerC(crlf)));
+    assert.ok(!/[^\r]\n/.test(leerC(crlf)), 'mezcla saltos de línea');
+
+    // Lo suyo: un notify de arriba (como lista, como texto, con puntos, entre comillas, en varias líneas) no se toca.
+    for (const suyo of ['notify = ["python3", "/x.py"]\n', 'notify="x"\n', 'model = "a"\nnotify = [\n  "bash",\n  "/y.sh",\n]\n[tui]\na = 1\n', '"notify" = ["z"]\n', 'notify.x = 1\n']) {
+      const c = casa();
+      fs.writeFileSync(config(c), suyo);
+      assert.equal(ac.queSeOfrece({ codex: c, fuente, node: NODE }).motivo, 'yaHayUno', suyo);
+      assert.equal(poner(c).hecho, 'noSeOfrece');
+      assert.equal(leerC(c), suyo, 'se ha tocado el suyo');
+      assert.ok(!fs.existsSync(path.join(c, 'executive-lab')), 'deja el guion aunque no lo use');
+    }
+    // Lo que no se entiende, no se escribe: ni el fichero ni el guion.
+    for (const raro of ['x = """\nnotify = 1\n"""\n', '[a\nb = 1\n', 'a = { b = [\n']) {
+      const c = casa();
+      fs.writeFileSync(config(c), raro);
+      const r = ac.queSeOfrece({ codex: c, fuente, node: NODE });
+      assert.equal(r.ofrecer, false, raro);
+      assert.equal(poner(c).hecho, 'noSeOfrece');
+      assert.equal(leerC(c), raro);
+      assert.ok(!fs.existsSync(path.join(c, 'executive-lab')));
+    }
+    // Un enlace, ni el fichero ni la carpeta del guion.
+    const conEnlace = casa();
+    fs.writeFileSync(path.join(conEnlace, 'real.toml'), 'a = 1\n');
+    fs.symlinkSync(path.join(conEnlace, 'real.toml'), config(conEnlace));
+    assert.equal(ac.queSeOfrece({ codex: conEnlace, fuente, node: NODE }).motivo, 'enlace');
+    const carpetaEnlazada = casa();
+    const destino = casa();
+    fs.symlinkSync(destino, path.join(carpetaEnlazada, 'executive-lab'));
+    assert.equal(ac.queSeOfrece({ codex: carpetaEnlazada, fuente, node: NODE }).motivo, 'enlace');
+    assert.deepEqual(fs.readdirSync(destino), [], 'escribe a través de un enlace');
+    // Sin guion de origen, o con un enlace como origen: nada.
+    assert.equal(ac.queSeOfrece({ codex: casa(), fuente: path.join(casa(), 'no-esta.mjs'), node: NODE }).motivo, 'sinGuion');
+
+    // «Quitarlo»: solo lo que sigue como lo dejó la barra.
+    assert.equal(ac.quitarlo({ codex: conTablas }).hecho, 'quitado');
+    assert.equal(leerC(conTablas), ANTES, 'al quitarlo queda algo más que lo de antes');
+    assert.ok(!fs.existsSync(path.join(conTablas, 'executive-lab', 'avisar.mjs')), 'el guion se queda');
+    assert.equal(ac.queSeOfrece({ codex: conTablas, fuente, node: NODE }).motivo, 'yaDecidido', 'lo quitado se vuelve a ofrecer');
+    assert.equal(ac.quitarlo({ codex: conTablas }).hecho, 'yaNoEstaba');
+    assert.equal(ac.laConstancia(conTablas).estado, 'quitado', 'la constancia sigue diciendo que está puesto');
+    // Cambiado por la persona: es suyo, y no se quita.
+    const cambiada = casa();
+    assert.equal(poner(cambiada).hecho, 'puesto');
+    fs.writeFileSync(config(cambiada), leerC(cambiada).replace('notify = [', 'notify = ["bash", '));
+    const suyoAhora = leerC(cambiada);
+    assert.equal(ac.quitarlo({ codex: cambiada }).hecho, 'yaNoEstaba');
+    assert.equal(leerC(cambiada), suyoAhora, 'quita un notify cambiado');
+    assert.ok(fs.existsSync(path.join(cambiada, 'executive-lab', 'avisar.mjs')), 'quita el guion que su notify sigue llamando');
+    assert.equal(ac.queSeOfrece({ codex: cambiada, fuente, node: NODE }).ofrecer, false);
+    // Quitado a mano: tampoco se vuelve a ofrecer.
+    const amano = casa();
+    assert.equal(poner(amano).hecho, 'puesto');
+    fs.writeFileSync(config(amano), '');
+    assert.equal(ac.queSeOfrece({ codex: amano, fuente, node: NODE }).motivo, 'yaDecidido');
+    // Una constancia plantada (sin huella, o traída de otra carpeta) no cuenta: ni para quitar, ni para no ofrecer.
+    const plantada = casa();
+    fs.mkdirSync(path.join(plantada, 'executive-lab'));
+    fs.writeFileSync(path.join(plantada, 'executive-lab', 'constancia.json'), JSON.stringify({ estado: 'puesto', notify: ['a', 'b'], guion: 'x', linea: 'model = "x"', huella: 'x' }));
+    fs.writeFileSync(config(plantada), 'model = "x"\n');
+    assert.equal(ac.quitarlo({ codex: plantada }).hecho, 'noCasa');
+    assert.equal(leerC(plantada), 'model = "x"\n', 'una constancia plantada borra una línea suya');
+    assert.equal(ac.queSeOfrece({ codex: plantada, fuente, node: NODE }).ofrecer, true);
+    const otraCasa = casa();
+    assert.equal(poner(otraCasa).hecho, 'puesto');
+    const traida = casa();
+    fs.mkdirSync(path.join(traida, 'executive-lab'));
+    fs.copyFileSync(path.join(otraCasa, 'executive-lab', 'constancia.json'), path.join(traida, 'executive-lab', 'constancia.json'));
+    assert.equal(ac.queSeOfrece({ codex: traida, fuente, node: NODE }).ofrecer, true, 'una constancia de otra carpeta cuenta');
+    // «No, gracias»: no se vuelve a ofrecer.
+    const nada = casa();
+    assert.equal(ac.noGracias({ codex: nada }).hecho, 'apuntado');
+    assert.equal(ac.queSeOfrece({ codex: nada, fuente, node: NODE }).motivo, 'yaDecidido');
+    assert.equal(fs.existsSync(config(nada)), false, 'rechazar toca el config');
+    // Suelto, con su casa.
+    const suelta = casa();
+    assert.equal(poner(suelta).hecho, 'puesto');
+    const cp = require('node:child_process');
+    assert.equal(cp.spawnSync(process.execPath, [path.join(RAIZ, 'src', 'aviso-de-codex.js'), '--quitar', suelta], { encoding: 'utf8' }).stdout.trim(), 'aviso de Codex: quitado');
+    // El real no se ha tocado: toda la prueba usa `CODEX_HOME` de mentira.
+    assert.ok(process.env.CODEX_HOME === CODEX_DE_MENTIRA && ac.rutas(retiradosM.carpetaDeCodex()).config.startsWith(CODEX_DE_MENTIRA));
+    return 'notify arriba y entero; sin pisar el suyo ni un fichero raro; constancia, «Quitarlo» y «No, gracias»';
+  });
+
+  await comprobar('el guion con Codex: lo que manda su notify, solo en carpetas de la barra, y sin leer lo que se dijo', async () => {
+    // Decisión 171. Las dos copias, iguales.
+    const fuente = path.join(RAIZ, '..', 'skills', 'executive-lab', 'avisar.mjs');
+    const viaja = path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    assert.equal(fs.readFileSync(viaja, 'utf8'), fs.readFileSync(fuente, 'utf8'), 'las dos copias del guion no son la misma');
+    const av = await import(require('node:url').pathToFileURL(viaja).href);
+    const cp = require('node:child_process');
+    const mia = fs.mkdtempSync(path.join(os.tmpdir(), 'Contabilidad-'));
+    fs.writeFileSync(path.join(mia, '.rsc.json'), '{}');
+    fs.mkdirSync(path.join(mia, 'cuentas', 'mayo'), { recursive: true });
+    const nombre = path.basename(mia);
+    const CODEX = (cwd, extra = {}) => ({ type: 'agent-turn-complete', 'thread-id': 't', 'turn-id': '1', cwd, 'input-messages': ['mi clave es 1234'], 'last-assistant-message': 'Hecho, tu IBAN es ES00', ...extra });
+
+    assert.equal(av.elTexto(CODEX(mia)), `Codex ha terminado en «${nombre}».`);
+    assert.equal(av.elTexto(CODEX(path.join(mia, 'cuentas', 'mayo'))), `Codex ha terminado en «${nombre}».`, 'desde una subcarpeta, el nombre es el de la carpeta de la barra');
+    assert.equal(av.elTexto(CODEX(fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-')))), null, 'avisa fuera de la barra');
+    assert.equal(av.elTexto(CODEX(undefined)), null);
+    assert.equal(av.elTexto(CODEX(42)), null);
+    assert.equal(av.elTexto(CODEX('')), null);
+    assert.equal(av.elTexto({ type: 'otra-cosa', cwd: mia }), null, 'otro evento');
+    assert.equal(av.elTexto({ notification_type: 'agent-turn-complete', cwd: mia }), null, 'Claude diciendo «Codex»');
+    // Con Claude, lo de siempre.
+    assert.equal(av.elTexto({ notification_type: 'idle_prompt' }, mia), `Claude ha terminado en «${nombre}».`);
+    // El texto no lleva nada de lo que se dijo.
+    const texto = av.elTexto(CODEX(mia));
+    assert.ok(!/1234|IBAN/.test(texto));
+    const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
+    assert.ok(!tieneUnaProhibida(texto), `una palabra prohibida: ${texto}`);
+
+    // Lo que llega por los argumentos: el último, y solo si es el JSON de un evento.
+    assert.deepEqual(av.laEntradaDeCodex(['node', 'a.mjs', JSON.stringify(CODEX(mia))]), { type: 'agent-turn-complete', cwd: mia });
+    assert.deepEqual(Object.keys(av.laEntradaDeCodex(['node', 'a.mjs', JSON.stringify(CODEX(mia))])).sort(), ['cwd', 'type'], 'lleva más que el tipo y la carpeta');
+    for (const raro of [['node', 'a.mjs'], ['node', 'a.mjs', '/Users/ana/Contabilidad'], ['node', 'a.mjs', '{no es json'], ['node', 'a.mjs', '[1]'], ['node', 'a.mjs', '{"cwd":"x"}'], ['node', 'a.mjs', 'x'.repeat(300000)]]) {
+      assert.equal(av.laEntradaDeCodex(raro), null, String(raro[2]).slice(0, 30));
+    }
+
+    // Corrido como lo corre Codex, con `osascript` y `notify-send` fingidos: dice lo que dice y sale con 0.
+    if (process.platform === 'win32') return 'el texto, la carpeta y los argumentos (el lanzamiento no, en Windows)';
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'aviso-bin-'));
+    const dicho = path.join(bin, 'dicho.txt');
+    for (const programa of ['osascript', 'notify-send']) fs.writeFileSync(path.join(bin, programa), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${dicho}"\n`, { mode: 0o755 });
+    const correr = (...args) => cp.spawnSync(process.execPath, [viaja, ...args], { encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: os.tmpdir() }, input: '', timeout: 15000 });
+    let r = correr(JSON.stringify(CODEX(mia)));
+    assert.equal(r.status, 0);
+    const salio = fs.readFileSync(dicho, 'utf8');
+    assert.ok(salio.includes(`Codex ha terminado en «${nombre}».`) && salio.includes('Executive Lab'), salio);
+    assert.ok(!/1234|IBAN/.test(salio), 'el aviso lleva lo que se dijo');
+    fs.rmSync(dicho);
+    for (const nada of [JSON.stringify(CODEX(fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-')))), '{no es json', JSON.stringify({ type: 'x', cwd: mia })]) {
+      r = correr(nada);
+      assert.equal(r.status, 0, 'falla');
+      assert.ok(!fs.existsSync(dicho), `avisa de ${nada.slice(0, 30)}`);
+    }
+    return 'Codex ha terminado en «carpeta»; solo en la barra; sin lo que se dijo; siempre 0';
+  });
+
+  await comprobar('el aviso de Codex en la barra: se ofrece una vez con su botón, solo si hay Codex y un node, y «Quitarlo» sale en el aviso', async () => {
+    // Decisión 171. La casa es la de mentira: `CODEX_HOME`.
+    const ac = cargar('aviso-de-codex');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const config = path.join(CODEX_DE_MENTIRA, 'config.toml');
+    const limpiar = () => { for (const f of fs.readdirSync(CODEX_DE_MENTIRA)) fs.rmSync(path.join(CODEX_DE_MENTIRA, f), { recursive: true, force: true }); };
+    const nueva = (targets = ['claude']) => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'aviso-codex-barra-'));
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets }));
+      return r;
+    };
+    const antes = {
+      confianza: vscode.guion.confianza, extensiones: vscode.guion.extensionesInstaladas, eleccion: vscode.guion.eleccion,
+      node: ac.nodeDeVerdad, vista: proveedor.vista, donde: proveedor.donde, aviso: proveedor.avisoPendiente,
+    };
+    const BOTON = 'Avisarme cuando Codex termine';
+    const ofertas = () => vscode.registrado.mensajes.filter((m) => /^INFO Si quieres, te aviso cuando Codex termine/.test(m));
+    const esperar = () => new Promise((r) => setTimeout(r, 60));
+    const enviados = [];
+    try {
+      limpiar();
+      vscode.guion.confianza = true;
+      ac.nodeDeVerdad = () => process.execPath;
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      proveedor.donde = { tipo: 'principal' };
+      proveedor.avisoPendiente = null;
+
+      // Sin Codex en el editor ni en la carpeta: nada.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      vscode.guion.raiz = nueva(['claude']);
+      assert.equal(await proveedor.ofrecerElAvisoDeCodex(), null);
+      await esperar();
+      assert.equal(ofertas().length, 0, 'se ofrece sin Codex');
+      // Con Codex, pero sin confianza: nada.
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      vscode.guion.confianza = false;
+      assert.equal(await proveedor.ofrecerElAvisoDeCodex(), null);
+      vscode.guion.confianza = true;
+      // Sin un node de verdad: nada.
+      ac.nodeDeVerdad = () => null;
+      assert.equal((await proveedor.ofrecerElAvisoDeCodex()).motivo, 'sinNode');
+      await esperar();
+      assert.equal(ofertas().length, 0, 'se ofrece sin node');
+      // Con un notify suyo: nada, y no se toca.
+      ac.nodeDeVerdad = () => process.execPath;
+      fs.writeFileSync(config, 'notify = ["suyo"]\n');
+      assert.equal((await proveedor.ofrecerElAvisoDeCodex()).motivo, 'yaHayUno');
+      await esperar();
+      assert.equal(ofertas().length, 0);
+      assert.equal(fs.readFileSync(config, 'utf8'), 'notify = ["suyo"]\n');
+      limpiar();
+
+      // Con todo: se ofrece una vez, con los dos botones; cerrarla no toca nada ni lo apunta.
+      vscode.guion.raiz = nueva(['claude']);
+      vscode.guion.eleccion = undefined;
+      assert.equal((await proveedor.ofrecerElAvisoDeCodex()).ofrecer, true);
+      await esperar();
+      assert.equal(ofertas().length, 1);
+      assert.ok(/aunque estés en otra ventana/.test(ofertas()[0]) && /al acabar cada respuesta/.test(ofertas()[0]));
+      await proveedor.ofrecerElAvisoDeCodex();
+      await esperar();
+      assert.equal(ofertas().length, 1, 'se ofrece dos veces en la misma sesión');
+      assert.ok(!fs.existsSync(config) && !fs.existsSync(path.join(CODEX_DE_MENTIRA, 'executive-lab')), 'cerrarla toca algo');
+      // «No, gracias»: no vuelve, ni en otra sesión.
+      vscode.guion.raiz = nueva(['claude']);
+      vscode.guion.eleccion = 'No, gracias';
+      await proveedor.ofrecerElAvisoDeCodex();
+      await esperar();
+      assert.equal(ofertas().length, 2);
+      assert.ok(!fs.existsSync(config));
+      vscode.guion.raiz = nueva(['claude']);
+      assert.equal((await proveedor.ofrecerElAvisoDeCodex()).motivo, 'yaDecidido');
+      await esperar();
+      assert.equal(ofertas().length, 2, 'vuelve a ofrecerse tras un no');
+      limpiar();
+
+      // Con su sí: se pone, se dice con «Quitarlo», y el botón lo quita.
+      vscode.guion.raiz = nueva(['codex']);
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      fs.writeFileSync(config, 'model = "gpt-5.5-mini"\n[tui]\nx = 1\n');
+      vscode.guion.eleccion = BOTON;
+      enviados.length = 0;
+      await proveedor.ofrecerElAvisoDeCodex();
+      await esperar();
+      assert.ok(/^model = "gpt-5\.5-mini"\nnotify = \[/.test(fs.readFileSync(config, 'utf8')), fs.readFileSync(config, 'utf8'));
+      assert.ok(fs.existsSync(path.join(CODEX_DE_MENTIRA, 'executive-lab', 'avisar.mjs')));
+      const dicho = enviados.find((m) => m.tipo === 'aviso');
+      assert.equal(dicho && dicho.texto, 'He dejado a Codex avisándote cuando termine, aunque estés en otra ventana.');
+      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarElAvisoDeCodex' } });
+      enviados.length = 0;
+      await proveedor.manejar(dicho.boton.accion);
+      assert.equal(fs.readFileSync(config, 'utf8'), 'model = "gpt-5.5-mini"\n[tui]\nx = 1\n');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.texto === 'Quitado. No lo vuelvo a poner.'));
+      vscode.guion.raiz = nueva(['codex']);
+      assert.equal((await proveedor.ofrecerElAvisoDeCodex()).motivo, 'yaDecidido', 'lo quitado se vuelve a ofrecer');
+      // Y al abrir va después de arreglar Codex y antes de lo demás que se hace solo.
+      const activar = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8').split('function activate(contexto)')[1];
+      const orden = ['panel.arreglarCodex()', 'panel.ofrecerElAvisoDeCodex()', 'panel.hacerSoloLoQueSePuede()'].map((t) => activar.indexOf(t));
+      assert.ok(orden.every((i, n) => i > 0 && (n === 0 || i > orden[n - 1])), `al abrir, fuera de orden: ${orden.join(' · ')}`);
+      return 'ofrecido una vez con su botón; sin Codex, sin node o con un notify suyo, nada; «Quitarlo» y «No, gracias» no vuelven';
+    } finally {
+      limpiar();
+      ac.nodeDeVerdad = antes.node;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+      vscode.guion.eleccion = antes.eleccion;
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('el español con Codex: lo que lee en cada conversación lo dice, y no pisa lo de la persona', async () => {
+    // Decisión 171. Codex lee `AGENTS.md` (el global de `$CODEX_HOME` y el de la carpeta, de
+    // la raíz hacia abajo) al empezar cada sesión, y no tiene ajuste de idioma. Antes el trozo
+    // de los raíles solo le mandaba leer `siempre.md`; ahora lo dice él mismo.
+    const cp = require('node:child_process');
+    const aplicar = path.join(RAIZ, 'media', 'railes', 'aplicar.js');
+    const montar = (agents) => {
+      const c = fs.mkdtempSync(path.join(os.tmpdir(), 'espanol-codex-'));
+      fs.writeFileSync(path.join(c, '.rsc.json'), JSON.stringify({ version: 1, targets: ['codex'], skills: ['unslop'], ownSkills: [], catalogVersion: '1.4.1' }));
+      fs.mkdirSync(path.join(c, '.codex', 'rsc', 'unslop'), { recursive: true });
+      fs.writeFileSync(path.join(c, '.codex', 'rsc', 'unslop', 'SKILL.md'), '---\nname: unslop\ndescription: x\n---\n');
+      if (agents !== null) fs.writeFileSync(path.join(c, 'AGENTS.md'), agents);
+      cp.spawnSync(process.execPath, [aplicar, c], { encoding: 'utf8' });
+      return c;
+    };
+    const SUYO = '# Mis normas\n\n- Nada sale sin que lo lea un abogado.\n';
+    const trozo = (t) => (t.match(/<!-- executive-lab:start -->[\s\S]*?<!-- executive-lab:end -->/) || [''])[0];
+    const sin = montar(null);
+    assert.ok(/Contesta siempre en español/.test(trozo(fs.readFileSync(path.join(sin, 'AGENTS.md'), 'utf8'))), 'el AGENTS.md de Codex no dice que conteste en español');
+    const conSuyo = montar(SUYO);
+    const t = fs.readFileSync(path.join(conSuyo, 'AGENTS.md'), 'utf8');
+    assert.ok(t.startsWith(SUYO), 'se pisa lo de la persona');
+    assert.ok(/Contesta siempre en español/.test(trozo(t)));
+    // Y al poner los raíles al día, el trozo viejo se cambia por el nuevo, sin duplicarse.
+    fs.writeFileSync(path.join(conSuyo, 'AGENTS.md'), SUYO + '\n<!-- executive-lab:start -->\nLéete `.codex/rsc/executive-lab/siempre.md` y `.codex/rsc/executive-lab/SKILL.md` antes de hacer nada y respeta lo que digan: es la habilidad siempre activa de esta carpeta.\n<!-- executive-lab:end -->\n');
+    cp.spawnSync(process.execPath, [aplicar, conSuyo], { encoding: 'utf8' });
+    const t2 = fs.readFileSync(path.join(conSuyo, 'AGENTS.md'), 'utf8');
+    assert.equal((t2.match(/executive-lab:start/g) || []).length, 1);
+    assert.ok(/Contesta siempre en español/.test(t2) && t2.startsWith(SUYO));
+    // La regla de fondo sigue en `siempre.md`, que es lo que el trozo manda leer.
+    assert.ok(/Español siempre/.test(fs.readFileSync(path.join(sin, '.codex', 'rsc', 'executive-lab', 'siempre.md'), 'utf8')));
+    assert.equal(fs.readFileSync(path.join(RAIZ, '..', 'skills', 'aplicar.js'), 'utf8'), fs.readFileSync(path.join(RAIZ, 'media', 'railes', 'aplicar.js'), 'utf8'), 'las dos copias de aplicar.js');
+    return 'el trozo de AGENTS.md dice «Contesta siempre en español», sin pisar lo suyo ni duplicarse';
+  });
+
   await comprobar('lo de la 157 pide una marca de este ordenador: un clon con «Punto de partida» o una carpeta sin git no bastan', async () => {
     // Revisión de seguridad de la 157, B4. `historialAjeno` da por nuestra una carpeta
     // sin `.git` y un clon cuyo primer commit es «Punto de partida — …». Para lo que

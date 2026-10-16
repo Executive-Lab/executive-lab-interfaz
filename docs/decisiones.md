@@ -7728,3 +7728,148 @@ vale», la raíz de una aplicación y los asistentes). Para la prueba de `git`, 
   Windows.
 
 
+
+
+## 171. Codex, como Claude: el aviso al terminar y el español
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida**
+`codex-como-claude`
+
+La 162 dejó a Codex «propuesto» con un recado: «si se quiere, la forma sería un botón en “Tu asistente”».
+Jose lo quiere. Y de paso, que Codex conteste en español como Claude.
+
+**Lo que dice hoy la documentación de Codex** (16-10-2026, learn.chatgpt.com, que es adonde llevan los
+enlaces de developers.openai.com):
+
+- **`notify`** (`config-file/config-advanced`): una clave del `config.toml` de usuario, una lista con el
+  programa y sus argumentos (`notify = ["python3", "/path/to/notify.py"]`). Codex le pasa **un JSON como último
+  argumento**, no por la entrada. Solo se emite `agent-turn-complete`, con `type`, `thread-id`, `turn-id`,
+  `cwd`, `input-messages` y `last-assistant-message`.
+- **`AGENTS.md`** (`agent-configuration/agents-md`): al empezar cada sesión, Codex junta el de `$CODEX_HOME`
+  (o su `AGENTS.override.md`) y, desde la raíz del proyecto hasta donde trabaja, el `AGENTS.override.md` o el
+  `AGENTS.md` de cada carpeta. **No hay ajuste de idioma.**
+
+### 1. El aviso al terminar, con su sí
+
+Vale para todas las conversaciones de Codex y vive en su configuración de usuario, así que no se pone solo
+(P9): se ofrece una vez, con un botón. Módulo nuevo, `extension/src/aviso-de-codex.js`; se ofrece al abrir,
+después de arreglar Codex (157) y antes de lo demás que se hace solo.
+
+**Cuándo se ofrece**, todo a la vez: la persona usa Codex (lo tiene en el editor o la carpeta está montada para
+él, igual que el arreglo de la 157), hay confianza, hay un `node` de verdad, no hay un `notify` de arriba en su
+`config.toml`, el fichero se entiende y no es un enlace, y no hay constancia de que ya se decidiera.
+
+**Lo que se ofrece**, en un aviso del editor: «Si quieres, te aviso cuando Codex termine, aunque estés en otra
+ventana. Saldrá un aviso al acabar cada respuesta, solo en tus carpetas de Executive Lab. Cambia la
+configuración de Codex de tu ordenador, y puedes quitarlo cuando quieras.» Con dos botones: «Avisarme cuando
+Codex termine» y «No, gracias». Cerrarlo es «ahora no»: vuelve a salir al abrir otra vez. «No, gracias» no
+vuelve nunca.
+
+**Con el sí**, entero o nada:
+
+1. **El guion se copia a un sitio fijo**, `<codex>/executive-lab/avisar.mjs` (`$CODEX_HOME`, por defecto
+   `~/.codex`): el de la extensión cambia con cada versión. Sin seguir enlaces (ni la carpeta ni el fichero),
+   escrito al lado y cambiado de golpe.
+2. **La constancia**, `<codex>/executive-lab/constancia.json`, antes de tocar el `config.toml`: la línea tal
+   como se escribió, el `node`, el hash del guion y una huella atada a la carpeta de Codex. Una constancia sin
+   huella o traída de otra carpeta no cuenta.
+3. **`notify = ["<node>", "<guion>"]` en el `config.toml`, arriba.** En TOML una clave de arriba tiene que ir
+   antes de la primera `[tabla]`: añadida al final cae dentro de la última tabla y Codex no la ve. Va justo
+   después de la última clave de arriba (sin tocar comentarios ni nada más), o la primera del fichero si no hay
+   ninguna. Antes de escribir se lee el resultado con el lector de la barra (`retirados.leerElToml`, al que se
+   le han añadido las claves de arriba y dónde está la primera tabla): tiene que entenderse, con `notify`
+   arriba y las mismas tablas. Si no, no se escribe nada. Con los permisos del fichero, los saltos de línea que
+   tuviera y una copia al lado (`config.toml.copia-executive-lab-…`).
+4. Se dice con su botón: «He dejado a Codex avisándote cuando termine, aunque estés en otra ventana.» y
+   «Quitarlo».
+
+**Un `node` de verdad** (`nodeDeVerdad`): ruta absoluta, un fichero, que se llame `node` (`node.exe` en
+Windows), distinto de `process.execPath` (el del editor es Electron) y que conteste `--version` como un Node.
+Primero el de la instalación (`entorno.node()`, que ya mira `EXECUTIVE_LAB_HOME/runtime`), después los del
+PATH y, fuera de Windows, `/opt/homebrew/bin`, `/usr/local/bin` y `/usr/bin`. Sin ninguno, no se ofrece: `notify`
+se lanza sin shell, y `node` a secas no se encuentra en Windows.
+
+**«Quitarlo»** (`quitarlo`): solo si hay constancia que casa, y solo la línea tal como se dejó y sola en las
+claves de arriba; si queda un fichero que se entiende sin `notify`. Si la persona la cambió, es suya y no se
+toca. El guion se borra solo si es el que se copió (mismo hash) y ningún `notify` lo sigue llamando. La
+constancia se queda como `quitado`, y lo quitado no se vuelve a ofrecer, ni lo quitado a mano. Suelto:
+`node extension/src/aviso-de-codex.js --quitar [carpeta de Codex]`.
+
+**El guion** (`avisar.mjs`, las dos copias idénticas) entiende ahora lo de Codex: si el último argumento es un
+JSON con `type`, es de Codex y no espera a la entrada; con `agent-turn-complete` dice «Codex ha terminado en
+«Contabilidad».» con el mismo título y los mismos lanzadores que el de Claude. Dos cuidados:
+
+- **Solo avisa en las carpetas de la barra.** El `notify` es de todas las conversaciones de Codex, y el
+  `.codex/` de la carpeta lo ignora, así que no se puede poner solo en lo nuestro. Lo hace el guion: sube desde
+  `cwd` (hasta ocho niveles) buscando un `.rsc.json`, y si no lo encuentra, no dice nada. El nombre es el de esa
+  carpeta, no el de la subcarpeta donde estaba Codex. Era lo que proponía la 162.
+- **No lee lo que se dijo.** El JSON trae lo que la persona escribió y lo que contestó el asistente: solo se
+  miran `type` y `cwd`, y el resto ni se guarda.
+
+Lo que ya dijo la 162 sigue valiendo: solo hay `agent-turn-complete`, así que avisa al acabar cada respuesta,
+también mientras la lees. No hay «te necesita». Eso se dice en la explicación («al acabar cada respuesta»).
+
+### 2. El español, siempre, también con Codex
+
+**La comprobación.** Los raíles de la barra para Codex ponían, en su `AGENTS.md` y entre marcas
+(`nombrarLaHabilidad`, `aplicar.js`), «Léete `siempre.md` y `SKILL.md` antes de hacer nada y respeta lo que
+digan». El español está en la regla 1 de `siempre.md`, pero el asistente lo tenía que ir a buscar: si no leía el
+fichero, no se enteraba. Con Claude no pasa: el `CLAUDE.md` lo importa con `@` y, además, lleva `"language":
+"español"` (157). Codex no tiene ajuste de idioma, y su `AGENTS.md` es lo único que seguro lee. Así que no
+bastaba: **no lo decía.**
+
+**Lo que se hizo**, por la misma vía de siempre (el trozo entre marcas, que ya se cambia en sitio al poner los
+raíles al día y no toca nada de la persona): el trozo termina ahora con «Contesta siempre en español.» Vale
+para todos los asistentes de la familia `AGENTS.md`, que comparten el trozo. Lo de la persona, ni se mira. No se
+toca el `AGENTS.md` global de `$CODEX_HOME`: es suyo y no es de la carpeta.
+
+### Las pruebas
+
+- `humo.js`: cuatro comprobaciones nuevas, junto a las de la 162.
+  - *El módulo*, con una casa de mentira (`CODEX_HOME` temporal, nada real): el `node` de verdad y sus seis
+    descartes; sin `config.toml`, con claves y tablas (la línea queda arriba, justo detrás de la última clave, y
+    nada más cambia, ni los permisos), con solo comentarios, con saltos de Windows y con un `notify` dentro de
+    una tabla (que no cuenta); un `notify` suyo en cinco formas, que no se toca; tres ficheros que no se
+    entienden, que no se escriben; enlaces; «Quitarlo» (limpio, cambiado por la persona, quitado a mano); una
+    constancia plantada y una traída de otra carpeta; «No, gracias»; y suelto.
+  - *El guion con Codex*: el texto, la subcarpeta, fuera de la barra, los casos que no avisan, que lo de
+    Claude no diga «Codex», sin palabras prohibidas ni lo que se dijo, los argumentos, y corrido de verdad con
+    `osascript` y `notify-send` fingidos.
+  - *En la barra*: sin Codex, sin confianza, sin `node` y con un `notify` suyo, no se ofrece; con todo, una vez;
+    el no y el sí, el botón tal cual viene, y el orden al abrir.
+  - *El español*: el `AGENTS.md` nuevo, con el de la persona delante, y al poner al día un trozo viejo.
+- Batería entera, una vez, al final: `humo.js` 478 (474 de main más las cuatro), `humo.js --con-arnes` 486,
+  `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js`, el diccionario y `revisar-powershell.js`, todo en verde.
+
+**Mutaciones a mano: 24, las 24 tumbadas.** Cada una cambia una cosa y corre las pruebas de los avisos (las de
+la 162 y las cuatro de hoy):
+
+- 12 en el módulo (la clave al final, config raro, pisar un `notify` suyo, quitar cualquier `notify`, la
+  constancia que no pasa a quitado, el `node` del editor, el `node` sin su versión, la huella sin carpeta,
+  enlaces, no copiar el guion, borrar el guion que otro `notify` llama, una constancia plantada);
+- 5 en `extension.js` (el «No, gracias» sin apuntar, sin confianza, sin Codex, el botón de quitar, ofrecer en
+  cada llamada);
+- 1 en `retirados.js` (las claves de una tabla contando como de arriba);
+- 5 en el guion (avisar fuera de la barra, decir «Claude», ignorar los argumentos, aceptar de Claude un evento
+  de Codex, añadir lo que se dijo);
+- 1 en `aplicar.js` (quitar «Contesta siempre en español»).
+
+Una sobrevivió al principio: no apuntar `quitado` tras quitarlo, porque la constancia `puesto` también impedía
+volver a ofrecer. Ahora la prueba mira el estado.
+
+**Lo que no hace:**
+
+- **El guion copiado no se pone al día solo.** Si una versión nueva de la barra cambia `avisar.mjs`, la copia
+  de `~/.codex/executive-lab/` se queda como estaba hasta que se quite y se vuelva a poner. Hoy no hay un cambio
+  que lo pida.
+- **Un `config.toml` con textos de varias líneas, o raro,** no se toca: no se ofrece.
+- **Con Codex en una máquina sin `node` de verdad** (un Mac sin la instalación de la barra y con el PATH
+  mínimo del Dock) no se ofrece, y no se dice por qué.
+
+**Lo que queda por ver con una persona:**
+
+- Que Codex de verdad llame al guion con ese `config.toml` (su extensión de VS Code y su terminal), y que salga
+  el aviso, en Mac y en Windows. Los programas son de mentira en las pruebas.
+- Que un Codex que ya estaba abierto no ve el `config.toml` nuevo hasta que se abre una conversación nueva
+  (lo normal con su configuración, sin comprobar aquí).
+- Que, con el trozo nuevo, Codex contesta en español sin leer `siempre.md`.

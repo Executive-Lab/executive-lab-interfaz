@@ -311,7 +311,7 @@ function nombrarLaHabilidad(quien, suyo) {
   if (yaNombrados.has(suFichero)) return `${suFichero} ya apunta a la de ${yaNombrados.get(suFichero)}, que es la misma`;
 
   const dir = `${comoSeEscribe(suyo.habilidades)}/executive-lab`;
-  const loQueDice = `Léete \`${dir}/siempre.md\` y \`${dir}/SKILL.md\` antes de hacer nada y respeta lo que digan: es la habilidad siempre activa de esta carpeta.`;
+  const loQueDice = `Léete \`${dir}/siempre.md\` y \`${dir}/SKILL.md\` antes de hacer nada y respeta lo que digan: es la habilidad siempre activa de esta carpeta. Contesta siempre en español.`;
 
   // Con Cursor, una habilidad es un fichero suelto —`<id>.mdc`, que es donde RSC
   // busca la propia— y su fichero de siempre lo reescribe RSC entero (E3). La
