@@ -41,6 +41,10 @@ const sha = (datos) => crypto.createHash('sha256').update(datos).digest('hex');
 const esEnlace = (ruta) => { try { return fs.lstatSync(ruta).isSymbolicLink(); } catch { return false; } };
 const esFichero = (ruta) => { try { return fs.statSync(ruta).isFile(); } catch { return false; } };
 
+// Si la carpeta existe y tiene algo dentro.
+// Sin contar un temporal nuestro que quedó de una pasada cortada.
+const hayCosas = (carpeta) => { try { return fs.readdirSync(carpeta).some((f) => !/\.executive-lab-\d+(-[0-9a-f]+)?$/.test(f)); } catch { return false; } };
+
 const rutas = (codex) => ({
   config: path.join(codex, 'config.toml'),
   carpeta: path.join(codex, CARPETA),
@@ -49,6 +53,9 @@ const rutas = (codex) => ({
 });
 
 // ── Un node de verdad ──────────────────────────────────────────────────────
+
+// El guion es un módulo ES con `await` de arriba: pide un Node que lo sepa leer.
+const NODE_MINIMO = 18;
 
 const sePareceANode = (ruta, esWindows) => path.basename(ruta).toLowerCase() === (esWindows ? 'node.exe' : 'node');
 
@@ -59,7 +66,8 @@ function dice(ruta) {
     const salida = execFileSync(ruta, ['--version'], {
       encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], env,
     });
-    return /^v\d+\.\d+\.\d+\s*$/.test(salida);
+    const version = salida.match(/^v(\d+)\.\d+\.\d+\s*$/);
+    return Boolean(version) && Number(version[1]) >= NODE_MINIMO;
   } catch {
     return false;
   }
@@ -113,7 +121,8 @@ function laConstancia(codex) {
 }
 
 function escribirEntero(fichero, contenido, { copiarModo = null } = {}) {
-  const temporal = `${fichero}.executive-lab-${process.pid}`;
+  // Con un aleatorio: uno viejo que quedó de otra pasada no hace fallar a esta.
+  const temporal = `${fichero}.executive-lab-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
   fs.writeFileSync(temporal, contenido, { flag: 'wx' });
   try {
     if (copiarModo !== null) fs.chmodSync(temporal, copiarModo);
@@ -181,6 +190,8 @@ function queSeOfrece({ codex = retirados.carpetaDeCodex(), fuente, node = null }
   const r = rutas(codex);
   if ([r.carpeta, r.guion, r.constancia].some(esEnlace)) return { ofrecer: false, motivo: 'enlace' };
   if (laConstancia(codex)) return { ofrecer: false, motivo: 'yaDecidido' };
+  // Un guion o una carpeta con cosas que no nos constan: de otro, y no se pisa.
+  if (esFichero(r.guion) || hayCosas(r.carpeta)) return { ofrecer: false, motivo: 'carpetaAjena' };
   const config = mirarElConfig(codex);
   if (config.hecho !== 'noHay' && config.hecho !== 'ok') return { ofrecer: false, motivo: config.hecho };
   if (config.leido && config.leido.clavesDeArriba.has('notify')) return { ofrecer: false, motivo: 'yaHayUno' };
@@ -199,17 +210,24 @@ function ponerlo({ codex = retirados.carpetaDeCodex(), fuente, node, ahora = new
   if (texto === null) return { hecho: 'raro' };
 
   let copia = null;
+  // Lo que escribió esta pasada: en un fallo, solo eso se deshace.
+  let guionEscrito = false;
+  let constanciaEscrita = false;
   try {
     const contenido = fs.readFileSync(fuente);
     fs.mkdirSync(r.carpeta, { recursive: true });
     if (esEnlace(r.carpeta)) return { hecho: 'enlace' };
     // El guion antes que la clave: si no se copia, no hay `notify` que llame a nada.
     escribirEntero(r.guion, contenido);
+    guionEscrito = true;
     // Y la constancia antes de tocar el config, que es lo que no se puede dejar a medias.
     apuntar(codex, 'puesto', { notify: [node, r.guion], guion: sha(contenido), linea });
+    constanciaEscrita = true;
     if (config.hecho === 'ok') {
-      copia = `${r.config}.copia-executive-lab-${ahora.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}`;
-      fs.copyFileSync(r.config, copia, fs.constants.COPYFILE_EXCL);
+      const suya = `${r.config}.copia-executive-lab-${ahora.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}`;
+      fs.copyFileSync(r.config, suya, fs.constants.COPYFILE_EXCL);
+      // Hasta que no se copia, no es nuestra: en un fallo no se borra.
+      copia = suya;
       escribirEntero(r.config, texto, { copiarModo: fs.statSync(r.config).mode });
     } else {
       fs.mkdirSync(codex, { recursive: true });
@@ -219,8 +237,9 @@ function ponerlo({ codex = retirados.carpetaDeCodex(), fuente, node, ahora = new
     // Sin el `notify` escrito, lo demás sobra: el guion y la constancia se quitan.
     const sigue = mirarElConfig(codex);
     if (!sigue.leido || !sigue.leido.clavesDeArriba.has('notify')) {
-      fs.rmSync(r.guion, { force: true });
-      fs.rmSync(r.constancia, { force: true });
+      if (guionEscrito) fs.rmSync(r.guion, { force: true });
+      if (constanciaEscrita) fs.rmSync(r.constancia, { force: true });
+      try { fs.rmdirSync(r.carpeta); } catch { /* tiene otras cosas, o no está */ }
       if (copia) fs.rmSync(copia, { force: true });
     }
     return { hecho: 'fallo', error: error.message };

@@ -12626,6 +12626,47 @@ exec git "$@"
     fs.symlinkSync(destino, path.join(carpetaEnlazada, 'executive-lab'));
     assert.equal(ac.queSeOfrece({ codex: carpetaEnlazada, fuente, node: NODE }).motivo, 'enlace');
     assert.deepEqual(fs.readdirSync(destino), [], 'escribe a través de un enlace');
+    // Un guion o una carpeta que no constan como nuestros son de otro: no se ofrece y no se toca.
+    const ajena = casa();
+    fs.mkdirSync(path.join(ajena, 'executive-lab'));
+    fs.writeFileSync(path.join(ajena, 'executive-lab', 'avisar.mjs'), '// de otro\n');
+    assert.equal(ac.queSeOfrece({ codex: ajena, fuente, node: NODE }).motivo, 'carpetaAjena');
+    assert.equal(poner(ajena).hecho, 'noSeOfrece');
+    assert.equal(fs.readFileSync(path.join(ajena, 'executive-lab', 'avisar.mjs'), 'utf8'), '// de otro\n', 'se pisa el guion de otro');
+    assert.deepEqual(fs.readdirSync(path.join(ajena, 'executive-lab')), ['avisar.mjs']);
+    assert.equal(fs.existsSync(config(ajena)), false);
+    const conOtraCosa = casa();
+    fs.mkdirSync(path.join(conOtraCosa, 'executive-lab'));
+    fs.writeFileSync(path.join(conOtraCosa, 'executive-lab', 'notas.txt'), 'mías');
+    assert.equal(ac.queSeOfrece({ codex: conOtraCosa, fuente, node: NODE }).motivo, 'carpetaAjena', 'una carpeta con cosas');
+    // Un temporal viejo nuestro (de una pasada cortada) no la hace ajena ni hace fallar a la de ahora.
+    const conViejo = casa();
+    fs.mkdirSync(path.join(conViejo, 'executive-lab'));
+    for (const viejo of [`avisar.mjs.executive-lab-${process.pid}`, `constancia.json.executive-lab-${process.pid}`, 'config.toml.executive-lab-1-abc123']) fs.writeFileSync(path.join(conViejo, 'executive-lab', viejo), 'a medias');
+    fs.writeFileSync(config(conViejo), `notify_antes = 1\n`);
+    assert.equal(ac.queSeOfrece({ codex: conViejo, fuente, node: NODE }).ofrecer, true);
+    assert.equal(poner(conViejo).hecho, 'puesto', 'un temporal viejo hace fallar');
+    // Un fallo a mitad (la copia del config ya existe): se deshace lo que escribió esta pasada, y el config queda como estaba.
+    const aMedias = casa();
+    const AHORA = new Date('2026-10-16T10:00:00Z');
+    fs.writeFileSync(config(aMedias), 'model = "x"\n');
+    fs.writeFileSync(`${config(aMedias)}.copia-executive-lab-20261016-100000`, 'otra copia');
+    const fallo = ac.ponerlo({ codex: aMedias, fuente, node: NODE, ahora: AHORA });
+    assert.equal(fallo.hecho, 'fallo');
+    assert.equal(leerC(aMedias), 'model = "x"\n');
+    assert.equal(fs.readFileSync(`${config(aMedias)}.copia-executive-lab-20261016-100000`, 'utf8'), 'otra copia', 'se borra la copia de otro');
+    assert.equal(fs.existsSync(path.join(aMedias, 'executive-lab')), false, 'queda lo que escribió el intento');
+    assert.ok(!fs.existsSync(path.join(aMedias, 'executive-lab', 'constancia.json')), 'queda una constancia de un intento que falló');
+    // Un node viejo no es un node de verdad: el guion pide el Node 18.
+    const conVersion = (v) => { const f = path.join(casa(), 'node'); fs.writeFileSync(f, `#!/bin/sh\necho ${v}\n`, { mode: 0o755 }); return f; };
+    const opciones = (propio) => ({ propio, entorno: { PATH: '' }, ademas: [], execPath: '/Electron' });
+    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v16.20.2'))), null, 'un Node 16 vale');
+    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v17.9.1'))), null);
+    const v18 = conVersion('v18.0.0');
+    assert.equal(ac.nodeDeVerdad(opciones(v18)), v18);
+    const v24 = conVersion('v24.1.0');
+    assert.equal(ac.nodeDeVerdad(opciones(v24)), v24);
+    assert.equal(ac.nodeDeVerdad(opciones(conVersion('v8'))), null, 'una versión rara');
     // Sin guion de origen, o con un enlace como origen: nada.
     assert.equal(ac.queSeOfrece({ codex: casa(), fuente: path.join(casa(), 'no-esta.mjs'), node: NODE }).motivo, 'sinGuion');
 
@@ -12657,13 +12698,13 @@ exec git "$@"
     fs.writeFileSync(config(plantada), 'model = "x"\n');
     assert.equal(ac.quitarlo({ codex: plantada }).hecho, 'noCasa');
     assert.equal(leerC(plantada), 'model = "x"\n', 'una constancia plantada borra una línea suya');
-    assert.equal(ac.queSeOfrece({ codex: plantada, fuente, node: NODE }).ofrecer, true);
+    assert.equal(ac.queSeOfrece({ codex: plantada, fuente, node: NODE }).motivo, 'carpetaAjena', 'con una carpeta que no consta como nuestra, se ofrece');
     const otraCasa = casa();
     assert.equal(poner(otraCasa).hecho, 'puesto');
     const traida = casa();
     fs.mkdirSync(path.join(traida, 'executive-lab'));
     fs.copyFileSync(path.join(otraCasa, 'executive-lab', 'constancia.json'), path.join(traida, 'executive-lab', 'constancia.json'));
-    assert.equal(ac.queSeOfrece({ codex: traida, fuente, node: NODE }).ofrecer, true, 'una constancia de otra carpeta cuenta');
+    assert.equal(ac.queSeOfrece({ codex: traida, fuente, node: NODE }).motivo, 'carpetaAjena', 'una constancia de otra carpeta cuenta');
     // «No, gracias»: no se vuelve a ofrecer.
     const nada = casa();
     assert.equal(ac.noGracias({ codex: nada }).hecho, 'apuntado');
