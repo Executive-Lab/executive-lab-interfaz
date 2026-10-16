@@ -7876,3 +7876,71 @@ La revisión de seguridad de la PR #67 encontró tres cosas, arregladas:
 
 Una mutación por retoque (quitar las cotas, quitar las comillas, volver al orden de antes, y contar de nuevo los
 nombres inequívocos): las cuatro tumbadas.
+
+
+## 173. Deshacer con RSC: quitar una habilidad y volver a la copia
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **FTD** `02-DOCS/wiki/ftd/deshacer-con-rsc.md`
+
+Hasta hoy la barra no dejaba quitar una habilidad ni un agente que se había añadido, ni volver a lo que había
+antes de montar. RSC 3.0.22 trae los dos subcomandos; la barra solo los leía (`laCopiaDelMontaje`, `ideas.js`).
+Se leyó qué hacen de verdad (`scripts/rsc.js`, `install-apply.js`, `lib/backups.js`) y se probaron con una
+carpeta montada.
+
+### Lo que hacen los subcomandos
+- **`uninstall <id…> [--dry-run] [--target <a,b>]`** quita una habilidad o un agente del catálogo. Borra los
+  ficheros de la habilidad y los agentes que ya no pide nadie; quita el id de `skills` y `agents` de `.rsc.json` y
+  del estado de cada asistente (`.rsc-state.json`), de modo que `sync` no la vuelve a poner; deja una copia del
+  estado anterior en `.rsc/backups/` (operación `uninstall`). **No pregunta nada y no sincroniza.** Con un id que
+  no conoce sale con 1 y dice «unknown skill or agent». Un agente que una habilidad puesta todavía necesita sale
+  bien, se quita del apunte y **el fichero se queda**. Lo que RSC equipa siempre (`orient`, `suggest`, `unslop`,
+  `ftd`, `connect-tool`) lo vuelve a poner `sync`.
+- **`backups`** lista las copias; **`restore <id|latest> [--dry-run]`** devuelve el contenido de una. Por cada
+  ruta que la copia recogió: si existía, la sustituye por lo guardado; si no existía, la **borra**. **No pregunta, no
+  guarda lo de ahora antes y no sincroniza.** `--dry-run` imprime las rutas, una por línea y con dos espacios delante.
+  Restaurar la copia del montaje (`onboarding-transaction`) deja la carpeta como antes de montar el arnés: vuelve lo
+  suyo que se tocó, y se quita lo que el arnés puso en esos sitios (también `.rsc.json`).
+
+### Lo que se hace
+1. **«Quitarla»** en la (i) de cada habilidad **instalada del catálogo** (Habilidades) y **«Quitarlo»** en la de cada
+   agente que `.rsc.json` apunta como pedido a RSC (Agentes). Con un clic y una pregunta que dice qué se quita:
+   «Voy a quitar «Facturación» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede
+   volver a añadir desde el catálogo.». Se corre `uninstall <id> --target <los asistentes declarados>` (los mismos
+   que usa «Añadir»).
+2. **«Recuperar lo que había»**, en la pantalla de las copias, junto a «Ver la copia» (que solo sale si el arnés
+   guardó algo suyo). Antes de preguntar se corre `restore <copia> --dry-run` para decir cuántos sitios son; la
+   pregunta es: «Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes,
+   lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos N sitios se pierde. Antes guardo
+   una copia de lo de ahora.». Con el sí, **la barra guarda lo de ahora** en `.rsc/antes-de-recuperar/<fecha>/files/`
+   (RSC no lo hace, y su restore no se deshace) y entonces corre `restore <copia>`. Si no puede guardarlo, no
+   restaura nada. La copia usada es la de `laCopiaDelMontaje` (el primer montaje), buscada otra vez en disco.
+3. **Después, repintar y decir lo que ha pasado**: «Facturación ya no está puesta.» / «Hecho: la carpeta está como
+   antes de montar el arnés. Lo de antes de recuperar está en …»; si RSC falla o no ha quitado lo que dijo, «No he
+   podido… El arnés ha dicho: «…»» con su última línea (como la 166), y todo en el registro. Un agente que RSC
+   mantiene lo dice: «Cobros sigue puesto: lo necesita una habilidad que sigue puesta». Lo que cuenta es el disco, no
+   el código de salida.
+
+### Lo que no se ofrece
+Nunca «Quitarla» en: lo suyo (`ownSkills` y lo de fuera del catálogo), lo que ponen los raíles de la barra
+(`acciones.esDeLaBarra`), el suelo de RSC (`orient`, `suggest`, `unslop`, `ftd`, `connect-tool`), la fontanería del
+arnés (`nombres.esFontaneria`) ni nada con un nombre que no sea un nombre. Nunca «Quitarlo» en un agente que la
+persona escribió. El manejador lo vuelve a comprobar con lo que hay en disco: el panel solo dice qué botón se
+pulsó. Las tres acciones van con las del arnés (`LOS_DEL_ARNES`: no se pisan con un arreglo en marcha, dan la
+carpeta por conocida) y esperan si la carpeta va por delante (`ESCRIBEN_CON_EL_ARNES`).
+
+### Dudas que quedan
+- **«Recuperar» es grande**: deshace el montaje entero, no solo lo suyo. Se dice en la pregunta y se guarda lo de
+  ahora, pero tras él la barra ve una carpeta sin arnés (con el botón de montarlo otra vez). RSC no tiene un
+  «recuperar solo lo suyo»; no se inventa.
+- **Un agente quitable puede venir del montaje**, no de un «añadir» de la persona: `.rsc.json` no distingue. Se
+  ofrece igual (es del catálogo de RSC y la pregunta lo dice).
+- **Los agentes sueltos de Codex/otros** no cambian: el subcomando es el mismo.
+
+### Las pruebas
+`humo.js`: tres comprobaciones nuevas con un RSC de mentira (qué se ofrece y en qué pantalla; sin el sí no corre ni
+se quita nada y con él corre el subcomando; recuperar con su copia, y fallos con la salida de RSC) y una con el
+arnés de verdad (`--con-arnes`: `onboard`, `add`, `uninstall` y `restore` reales). 12 mutaciones (sin confirmar en
+las tres acciones, suelo vacío, ofrecer lo suyo / lo de la barra / la fontanería, agente suyo, restaurar sin guardar
+lo de ahora, todo quitable, el manejador sin volver a comprobar, dar por quitada sin mirar el disco): las 12 tumbadas.
+Una cosa que salió de probar con el de verdad: RSC escribe las rutas con los enlaces resueltos (`/private/var/…` en
+un Mac), y comparar con la ruta de la carpeta sin resolver las descartaba todas.

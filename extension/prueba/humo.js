@@ -23421,6 +23421,287 @@ exec git "$@"
     }
   }));
 
+  // ------------------------------------------ deshacer con RSC (decisión 173)
+  //
+  // Quitar una habilidad o un agente que se añadió, y volver a la copia que guardó
+  // el arnés al montar. Las dos cosas borran o sustituyen ficheros: con el clic y la
+  // pregunta de la persona, nunca solas, y solo lo que es del arnés y se añadió.
+  const unaCarpetaConLoAnadido = () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'deshacer-'));
+    const habilidad = (id) => {
+      fs.mkdirSync(path.join(carpeta, '.claude', 'skills', id), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'skills', id, 'SKILL.md'), `---\nname: ${id}\n---\n`);
+    };
+    // `invoicing` del catálogo; `unslop` y `orient` de suelo; `mi-contrato` suya.
+    for (const id of ['invoicing', 'unslop', 'orient', 'mi-contrato']) habilidad(id);
+    fs.mkdirSync(path.join(carpeta, '.claude', 'agents'), { recursive: true });
+    for (const id of ['cobros', 'el-mio']) fs.writeFileSync(path.join(carpeta, '.claude', 'agents', `${id}.md`), `---\nname: ${id}\ndescription: Hace lo suyo cuando se lo piden.\n---\nHaz tu encargo.\n`);
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({
+      version: 1, targets: ['claude'], skills: ['invoicing', 'unslop', 'orient'], ownSkills: ['mi-contrato'], agents: ['cobros'],
+    }));
+    return carpeta;
+  };
+  // Un RSC de mentira: apunta lo que le piden y, para `uninstall`, borra de verdad lo suyo.
+  const conUnRscDeMentira = (carpeta, { falla = false, noQuita = false } = {}) => {
+    const rscM = cargar('rsc');
+    const original = rscM.correr;
+    const pedidas = [];
+    rscM.correr = async (args, opciones) => {
+      if (!['uninstall', 'restore'].includes(args[0])) return original(args, opciones);
+      pedidas.push(args);
+      if (falla) return { codigo: 1, salida: '', error: 'rsc: algo ha ido mal\nrsc: no se puede quitar' };
+      if (args[0] === 'restore' && args.includes('--dry-run')) {
+        return { codigo: 0, salida: `Would restore ${args[1]}\n  ${path.join(carpeta, 'CLAUDE.md')}\n  ${path.join(carpeta, '.claude', 'skills', 'invoicing')}\n  ${path.join(os.tmpdir(), 'fuera-de-la-carpeta')}\n` };
+      }
+      if (args[0] === 'uninstall' && !noQuita) {
+        fs.rmSync(path.join(carpeta, '.claude', 'skills', args[1]), { recursive: true, force: true });
+        fs.rmSync(path.join(carpeta, '.claude', 'agents', `${args[1]}.md`), { force: true });
+      }
+      if (args[0] === 'restore') fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de antes');
+      return { codigo: 0, salida: 'Removed:\n' };
+    };
+    return { pedidas, volver: () => { rscM.correr = original; } };
+  };
+  const conLaBarraPuesta = async (carpeta, haz) => {
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, eleccion: vscode.guion.eleccion, enviar: proveedor.enviar, conocida: proveedor.contexto.workspaceState.get('executiveLab.carpetaConocida') };
+    const enviados = [];
+    proveedor.enviar = (m) => { enviados.push(m); };
+    vscode.guion.raiz = carpeta;
+    try {
+      return await haz({ proveedor, enviados, avisos: () => enviados.filter((m) => m.tipo === 'aviso') });
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.eleccion = antes.eleccion;
+      await proveedor.contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+    }
+  };
+
+  await comprobar('deshacer: «Quitarla» solo en lo del catálogo que se añadió, no en lo suyo, lo de la barra ni lo del arnés', async () => {
+    const saberesM = cargar('saberes');
+    const deshacerM = cargar('deshacer');
+    const agentesM = cargar('agentes');
+    const carpeta = unaCarpetaConLoAnadido();
+    const antes = vscode.guion.raiz;
+    vscode.guion.raiz = carpeta;
+    try {
+      const datos = saberesM.queSabe(RAIZ, '');
+      const quitables = datos.sabe.filter((c) => c.quitable).map((c) => c.id);
+      assert.deepEqual(quitables, ['invoicing'], 'se ofrece quitar otra cosa, o no se ofrece la que se añadió');
+      assert.ok(datos.sabe.find((c) => c.id === 'unslop') && !datos.sabe.find((c) => c.id === 'unslop').quitable, 'se ofrece quitar lo que el arnés pone de suelo');
+      assert.ok(![...datos.suyas, ...datos.otras, ...datos.deSerie].some((c) => c.quitable), 'se ofrece quitar lo suyo, lo de fuera del catálogo o lo del arnés');
+      // La regla, sola: lo suyo, lo de la barra, el suelo y la fontanería no.
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('invoicing'), true);
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('invoicing', { propias: ['invoicing'] }), false, 'una suya con nombre del catálogo');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('guardar', { deLaBarra: true }), false, 'una de la barra');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('executive-lab', { deLaBarra: true }), false, 'la de la barra que está siempre activa');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('review', { esFontaneria: true }), false, 'una que el arnés necesita para funcionar');
+      for (const id of ['orient', 'suggest', 'unslop', 'ftd', 'connect-tool']) assert.equal(deshacerM.sePuedeQuitarLaHabilidad(id), false, `${id} es de suelo`);
+      for (const raro of ['../../Documents', 'a/b', '', 'A', null, 'x'.repeat(80)]) assert.equal(deshacerM.sePuedeQuitarLaHabilidad(raro), false, `un nombre como ${JSON.stringify(raro)}`);
+      // Los agentes: solo el que la declaración apunta como pedido, no el que escribió la persona.
+      const agentes = agentesM.queHay();
+      assert.deepEqual(agentes.filter((a) => a.quitable).map((a) => a.id), ['cobros'], 'se ofrece quitar un agente suyo, o no el que se añadió');
+      assert.equal(deshacerM.sePuedeQuitarElAgente('el-mio', { declarados: ['cobros'] }), false);
+      assert.equal(deshacerM.sePuedeQuitarElAgente('../x', { declarados: ['../x'] }), false);
+
+      // En pantalla: el botón, solo donde toca, con el nombre de lo que se quita.
+      const { montarPanel } = require('./panel-falso');
+      const habilidades = montarPanel().mandar({ tipo: 'saberes', sabe: datos.sabe, suyas: datos.suyas, otras: datos.otras, deSerie: datos.deSerie, puedeAprender: [] });
+      const quitar = accionesDe(habilidades).filter((a) => a.tipo === 'quitarHabilidad');
+      assert.deepEqual(quitar.map((a) => a.habilidad), ['invoicing']);
+      assert.equal(quitar[0].nombre, 'Facturación');
+      assert.match(habilidades, /Quitarla/);
+      const losAgentes = montarPanel().mandar({ tipo: 'agentes', agentes });
+      assert.deepEqual(accionesDe(losAgentes).filter((a) => a.tipo === 'quitarAgente').map((a) => a.fichero), ['cobros.md']);
+      assert.match(losAgentes, /Quitarlo/);
+      return 'una habilidad con botón, un agente con botón, y nada más';
+    } finally {
+      vscode.guion.raiz = antes;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('deshacer: quitar una habilidad o un agente pide el sí, usa el subcomando de RSC y dice lo que ha pasado', async () => {
+    const carpeta = unaCarpetaConLoAnadido();
+    const rscDeMentira = conUnRscDeMentira(carpeta);
+    try {
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        const habilidad = (id) => path.join(carpeta, '.claude', 'skills', id);
+        const agente = (id) => path.join(carpeta, '.claude', 'agents', `${id}.md`);
+        const preguntas = () => vscode.registrado.mensajes.filter((m) => /^WARN Voy a quitar/.test(m));
+        vscode.registrado.mensajes.length = 0;
+
+        // Sin el sí (cierra la pregunta, o dice que no): no se quita nada, ni se corre nada.
+        for (const respuesta of [undefined, 'No', 'Cancelar']) {
+          vscode.guion.eleccion = respuesta;
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'cobros.md', nombre: 'x' });
+        }
+        assert.deepEqual(rscDeMentira.pedidas, [], 'sin confirmar, corre algo');
+        assert.ok(fs.existsSync(habilidad('invoicing')) && fs.existsSync(agente('cobros')), 'sin confirmar, se quita');
+        assert.equal(preguntas().length, 6, 'no pregunta antes de quitar');
+        // La pregunta dice, en una frase, qué se va a quitar.
+        assert.ok(preguntas().includes('WARN Voy a quitar «Facturación» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede volver a añadir desde el catálogo.'));
+        assert.ok(preguntas().some((m) => /^WARN Voy a quitar el agente «Cobros»: se borra su fichero y queda apuntado como no puesto\.$/.test(m.replace(/ de esta carpeta/, ''))), preguntas().join('\n'));
+
+        // Con lo que no se ofrece, ni con el sí: «unslop», «orient», lo suyo y lo que no es una habilidad.
+        vscode.guion.eleccion = 'Sí, quítala';
+        for (const id of ['unslop', 'orient', 'mi-contrato', '../../Documents', 'nada']) {
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: id, nombre: 'x' });
+          assert.equal(avisos().at(-1).texto, 'Esa habilidad no se puede quitar desde aquí.', id);
+        }
+        vscode.guion.eleccion = 'Sí, quítalo';
+        await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'el-mio.md', nombre: 'x' });
+        assert.equal(avisos().at(-1).texto, 'Ese agente no se puede quitar desde aquí.');
+        assert.deepEqual(rscDeMentira.pedidas, [], 'corre RSC con algo que no se ofrece');
+        assert.ok(['unslop', 'orient', 'mi-contrato'].every((id) => fs.existsSync(habilidad(id))) && fs.existsSync(agente('el-mio')));
+
+        // Con el sí: el subcomando oficial, el disco como queda, y lo que ha pasado.
+        vscode.guion.eleccion = 'Sí, quítala';
+        await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+        assert.deepEqual(rscDeMentira.pedidas, [['uninstall', 'invoicing', '--target', 'claude']]);
+        assert.ok(!fs.existsSync(habilidad('invoicing')));
+        assert.deepEqual(avisos().at(-1), { tipo: 'aviso', texto: 'Facturación ya no está puesta.', malo: false });
+        vscode.guion.eleccion = 'Sí, quítalo';
+        await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'cobros.md', nombre: 'x' });
+        assert.deepEqual(rscDeMentira.pedidas.at(-1), ['uninstall', 'cobros', '--target', 'claude']);
+        assert.ok(!fs.existsSync(agente('cobros')));
+        assert.equal(avisos().at(-1).texto, 'Cobros ya no está puesto.');
+        assert.equal(avisos().at(-1).malo, false);
+      });
+      // Si RSC falla, con su salida, y sin decir que se quitó.
+      rscDeMentira.volver();
+      const fallido = conUnRscDeMentira(carpeta, { falla: true });
+      fs.mkdirSync(path.join(carpeta, '.claude', 'skills', 'invoicing'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'skills', 'invoicing', 'SKILL.md'), '---\nname: invoicing\n---\n');
+      fs.writeFileSync(path.join(carpeta, '.claude', 'agents', 'cobros.md'), '---\nname: cobros\ndescription: Hace lo suyo cuando se lo piden.\n---\n');
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, quítala';
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Facturación\. El arnés ha dicho: «rsc: no se puede quitar»\. Pulsa «Algo va mal»/);
+          vscode.guion.eleccion = 'Sí, quítalo';
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'cobros.md', nombre: 'x' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Cobros\. El arnés ha dicho: «rsc: no se puede quitar»/);
+        });
+      } finally {
+        fallido.volver();
+      }
+      // Sale bien y el fichero sigue (RSC mantiene un agente que una habilidad necesita): se dice.
+      const sigue = conUnRscDeMentira(carpeta, { noQuita: true });
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, quítala';
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Facturación\./, 'dice que la quitó con la carpeta todavía puesta');
+          assert.equal(avisos().at(-1).malo, true);
+          vscode.guion.eleccion = 'Sí, quítalo';
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'cobros.md', nombre: 'x' });
+          assert.match(avisos().at(-1).texto, /^Cobros sigue puesto: lo necesita una habilidad/);
+        });
+      } finally {
+        sigue.volver();
+      }
+      return 'sin el sí no se quita nada; con él, el subcomando de RSC; si falla o no quita, se dice';
+    } finally {
+      rscDeMentira.volver();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('deshacer: «Recuperar lo que había» pide el sí, guarda lo de ahora, usa restore de RSC y dice lo que ha pasado', async () => {
+    const carpeta = unaCarpetaConLoAnadido();
+    const id = '20261002-100000-onboarding-transaction-claude';
+    const copia = path.join(carpeta, '.rsc', 'backups', id);
+    fs.mkdirSync(path.join(copia, 'files'), { recursive: true });
+    fs.writeFileSync(path.join(copia, 'manifest.json'), JSON.stringify({
+      schemaVersion: 1, id, createdAt: '2026-10-02T10:00:00Z', operation: 'onboarding-transaction', target: 'claude',
+      entries: [{ path: 'CLAUDE.md', existed: true, kind: 'file' }, { path: '.claude/skills/invoicing', existed: false, kind: 'missing' }],
+    }));
+    fs.writeFileSync(path.join(copia, 'files', 'CLAUDE.md'), 'lo de antes');
+    fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de ahora');
+    const rscDeMentira = conUnRscDeMentira(carpeta);
+    const deshacerM = cargar('deshacer');
+    try {
+      // La salida de `restore --dry-run`: solo cuentan las rutas de dentro de la carpeta.
+      assert.deepEqual(deshacerM.lasRutasDeLaSalida(`Would restore x\n  ${path.join(carpeta, 'a')}\n  ${path.join(carpeta, '..', 'fuera')}\n  relativa\nOtra línea\n`, carpeta), [path.join(carpeta, 'a')]);
+
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        const copias = path.join(carpeta, '.rsc', 'antes-de-recuperar');
+        const pregunta = () => vscode.registrado.mensajes.filter((m) => /^WARN Voy a devolver/.test(m));
+        vscode.registrado.mensajes.length = 0;
+
+        // Sin el sí: se mira qué tocaría, pero no se restaura ni se guarda nada.
+        for (const respuesta of [undefined, 'No']) {
+          vscode.guion.eleccion = respuesta;
+          await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        }
+        assert.deepEqual(rscDeMentira.pedidas.filter((a) => !a.includes('--dry-run')), [], 'restaura sin confirmar');
+        assert.ok(rscDeMentira.pedidas.every((a) => a[0] === 'restore' && a[1] === id && a.includes('--dry-run')));
+        assert.ok(!fs.existsSync(copias), 'guarda algo sin confirmar');
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de ahora');
+        assert.equal(pregunta().length, 2);
+        assert.equal(pregunta()[0], 'WARN Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes, lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos 2 sitios se pierde. Antes guardo una copia de lo de ahora.');
+
+        // Con el sí: lo de ahora guardado, restore con la copia del montaje, y dicho.
+        rscDeMentira.pedidas.length = 0;
+        vscode.guion.eleccion = 'Sí, recupéralo';
+        await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        assert.deepEqual(rscDeMentira.pedidas, [['restore', id, '--dry-run'], ['restore', id]]);
+        const guardadas = fs.readdirSync(copias);
+        assert.equal(guardadas.length, 1);
+        assert.equal(fs.readFileSync(path.join(copias, guardadas[0], 'files', 'CLAUDE.md'), 'utf8'), 'lo de ahora', 'no guarda lo de ahora antes de restaurar');
+        assert.ok(fs.existsSync(path.join(copias, guardadas[0], 'files', '.claude', 'skills', 'invoicing', 'SKILL.md')), 'no guarda la habilidad que va a quitar');
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de antes');
+        assert.equal(avisos().at(-1).malo, false);
+        assert.equal(avisos().at(-1).texto, `Hecho: la carpeta está como antes de montar el arnés. Lo de antes de recuperar está en .rsc/antes-de-recuperar/${guardadas[0]}.`);
+      });
+
+      // Si no se puede guardar lo de ahora, no se restaura: la carpeta se queda como está.
+      fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de ahora');
+      fs.rmSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), { recursive: true, force: true });
+      fs.writeFileSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), 'esto es un fichero');
+      rscDeMentira.pedidas.length = 0;
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        vscode.guion.eleccion = 'Sí, recupéralo';
+        await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        assert.deepEqual(rscDeMentira.pedidas.filter((a) => !a.includes('--dry-run')), [], 'restaura sin haber guardado lo de ahora');
+        assert.equal(avisos().at(-1).texto, 'No he tocado nada: no he podido guardar antes una copia de lo de ahora.');
+        assert.equal(avisos().at(-1).malo, true);
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de ahora');
+      });
+      fs.rmSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), { force: true });
+
+      // Si RSC falla, con su salida, y dónde queda lo de ahora.
+      rscDeMentira.volver();
+      const fallido = conUnRscDeMentira(carpeta, { falla: true });
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, recupéralo';
+          await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido mirar qué cambiaría\. El arnés ha dicho: «rsc: no se puede quitar»\. No he tocado nada\.$/);
+        });
+      } finally {
+        fallido.volver();
+      }
+
+      // Y el botón, en la pantalla de las copias, junto a «Ver la copia».
+      const { montarPanel } = require('./panel-falso');
+      const html = montarPanel().mandar({ tipo: 'copias', copias: [], delMontaje: { texto: 'Antes de cambiar lo tuyo, el arnés guardó una copia.', accion: { tipo: 'verLaCopiaDelMontaje' } } });
+      assert.ok(accionesDe(html).some((a) => a.tipo === 'recuperarLoQueHabia'));
+      assert.match(html, /Recuperar lo que había/);
+      assert.doesNotMatch(montarPanel().mandar({ tipo: 'copias', copias: [], delMontaje: null }), /recuperarLoQueHabia/, 'sin copia, ofrece recuperarla');
+      return 'sin el sí no se toca; con él, copia de lo de ahora y restore de RSC; si falla, con su salida';
+    } finally {
+      rscDeMentira.volver();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   await comprobar('una carpeta vacía no lleva «Lo último» encima', () => {
     const pintar = (estado) => require('./panel-falso').montarPanel().mandar({ tipo: 'estado', estado });
     const base = { sinArnes: true, donde: 'Aquí todavía no hay nada', aviso: 'Puedo preparar esta carpeta.' };
@@ -23435,6 +23716,54 @@ exec git "$@"
   // Monta un arnés entero: tarda minutos y toca la red, así que no va en la
   // pasada normal. `node prueba/humo.js --con-arnes` lo incluye.
   if (process.argv.includes('--con-arnes')) {
+    await comprobar('deshacer, con el arnés de verdad: quitar una habilidad y volver a la copia del montaje', async () => {
+      // Decisión 173. Con el RSC que viaja en la barra: `uninstall` y `restore` hacen lo que la barra cuenta.
+      const rscM = cargar('rsc');
+      const deshacerM = cargar('deshacer');
+      const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'deshacer-de-verdad-'));
+      const antes = vscode.guion.raiz;
+      vscode.guion.raiz = carpeta;
+      try {
+        fs.mkdirSync(path.join(carpeta, '.claude'), { recursive: true });
+        fs.writeFileSync(path.join(carpeta, '.claude', 'settings.json'), '{"lo-mio": "de antes"}\n');
+        const plan = await rscM.correr(['onboard', '--technical-level', 'non-technical', '--project-kind', 'operations', '--goal', 'llevar el día', '--target', 'claude'], { tiempoMaximo: 120000 });
+        const planId = (plan.salida.match(/Plan id: (\w+)/) || [])[1];
+        assert.ok(planId, `sin plan: ${plan.salida} ${plan.error}`);
+        const aceptado = await rscM.correr(['onboard', '--technical-level', 'non-technical', '--project-kind', 'operations', '--goal', 'llevar el día', '--target', 'claude', '--accept-plan', planId], { tiempoMaximo: 180000 });
+        assert.equal(aceptado.codigo, 0, aceptado.salida + aceptado.error);
+        assert.equal((await rscM.anadir('invoicing')).ok, true, 'no se ha podido añadir');
+        const hay = (id) => fs.existsSync(path.join(carpeta, '.claude', 'skills', id));
+        assert.ok(hay('invoicing'));
+
+        // Quitarla: se va de disco y de `.rsc.json`; lo demás sigue.
+        const quitada = await deshacerM.quitar('invoicing');
+        assert.equal(quitada.ok, true, quitada.dijo);
+        assert.ok(!hay('invoicing'), 'sigue en disco');
+        assert.ok(!JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8')).skills.includes('invoicing'), 'sigue en .rsc.json');
+        assert.ok(hay('orient') && hay('unslop'), 'se lleva lo del suelo');
+        // Una que no existe: RSC lo dice y la barra no lo da por hecho.
+        const noHay = await deshacerM.quitar('no-existe-esta');
+        assert.equal(noHay.ok, false);
+        assert.match(noHay.dijo, /unknown skill/);
+
+        // Volver a la copia: lo de antes de montar, y lo de ahora guardado.
+        const copia = deshacerM.loQueTocaria ? await deshacerM.loQueTocaria(fs.readdirSync(path.join(carpeta, '.rsc', 'backups')).find((n) => /onboarding-transaction/.test(n))) : null;
+        assert.equal(copia.ok, true, copia.dijo);
+        assert.ok(copia.rutas.length > 5, 'RSC no lista lo que tocaría');
+        assert.ok(copia.rutas.every((r) => r.startsWith(fs.realpathSync(carpeta))), 'RSC lista algo de fuera de la carpeta');
+        fs.writeFileSync(path.join(carpeta, '.claude', 'settings.json'), '{"lo-de": "ahora"}\n');
+        const hecho = await deshacerM.recuperar(fs.readdirSync(path.join(carpeta, '.rsc', 'backups')).find((n) => /onboarding-transaction/.test(n)), copia.rutas);
+        assert.equal(hecho.ok, true, hecho.dijo);
+        assert.equal(fs.readFileSync(path.join(carpeta, '.claude', 'settings.json'), 'utf8'), '{"lo-mio": "de antes"}\n', 'no vuelve lo de antes');
+        assert.ok(!hay('orient') && !fs.existsSync(path.join(carpeta, '.rsc.json')), 'lo del arnés sigue');
+        assert.equal(fs.readFileSync(path.join(hecho.guardado, 'files', '.claude', 'settings.json'), 'utf8'), '{"lo-de": "ahora"}\n', 'lo de ahora no se guardó');
+        return `quitada sin tocar el suelo; ${copia.rutas.length} sitios a como estaban, y lo de ahora guardado`;
+      } finally {
+        vscode.guion.raiz = antes;
+        fs.rmSync(carpeta, { recursive: true, force: true });
+      }
+    });
+
     await comprobar('el wizard monta una empresa en una carpeta vacía', async () => {
       const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'empresa-nueva-'));
       vscode.guion.raiz = vacia;
