@@ -6307,8 +6307,8 @@ comprobado. «Conectar algo nuevo» también lo pide. Los pasos siguen saliendo 
 haya una sección «Antes de empezar» delante. Esas dos líneas no cuentan como pasos, ni en la barra ni en el
 PDF.
 
-**Las pruebas**: dos comprobaciones nuevas en `humo.js`, que con main traído (la 157 y los recordatorios
-ordenados) pasa de 409 a 411.
+**Las pruebas**: dos comprobaciones nuevas en `humo.js`, que con main traído (la 157, los recordatorios
+ordenados y los encargos limpios) pasa de 410 a 412.
 
 - *El PDF a mano*: la tabla de saltos al byte, `/Size`, `/Count` y `/Length`, las fuentes con WinAnsi, cada
   sustitución de letra, los anchos, partir sin pasarse ni perder nada, setenta pasos en varias páginas sin
