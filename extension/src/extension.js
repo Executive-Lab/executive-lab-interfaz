@@ -376,6 +376,7 @@ ${cabecera}
         arreglar: async () => {
           const { ok, detalle } = await soporte.arreglar();
           if (detalle) this.salida.appendLine(detalle);
+          if (ok) await this.losRailesDetras();
           return ok;
         },
         // Sin git no se instala nada solo: eso abre el instalador del sistema. Y con
@@ -3144,8 +3145,24 @@ ${cabecera}
     this.enviar({ tipo: 'esperando', que: 'Arreglándolo…' });
     const { ok, mensaje, detalle } = await soporte.arreglar();
     if (detalle) this.salida.appendLine(detalle);
+    if (ok) await this.losRailesDetras();
     this.enviar({ tipo: 'aviso', texto: mensaje, malo: !ok });
     await this.refrescar(true);
+  }
+
+  // Detrás de «Revisar y arreglar», como en el montaje (decisión 161). `repair`
+  // rehace lo del arnés y no lo nuestro: en una carpeta traída de otro ordenador,
+  // `.rsc/` es nueva y le faltan las marcas de los raíles, también la que calla el
+  // aviso que manda a correr `npx @ericrisco/rsc@latest`. Se reponen como al
+  // abrir: solo si la carpeta ya los tiene, porque reponer no es decidir; y en una
+  // carpeta de alguien, lo que toca sus ficheros sigue esperando a su sí (C-4). Que
+  // no salga no tumba el arreglo: se apunta para «Algo va mal» (P3).
+  async losRailesDetras() {
+    if (!terreno.comoEstanLosRailes().habilidadPropia) return null;
+    const ajena = !(await terreno.podemosGuardarElPuntoDePartida());
+    const ok = await arrancar.ponerLosRailes(this.contexto, { ajena }).catch(() => false);
+    this.salida.appendLine(`[railes] detrás de arreglar: ${ok}${ajena ? ' (historial de alguien: lo suyo, pendiente)' : ''}`); // diccionario: interno
+    return ok;
   }
 
   // La pieza que falta es git, y sin ella no se monta nada (git.js dice por

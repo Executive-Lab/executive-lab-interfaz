@@ -26,8 +26,9 @@
 //     FTD/SDD y `rsc/knowledge` (`team-safe-start.mjs`, `teamSafeAnnouncement`). El
 //     cuarto aquí es falso, porque compartir está apagado. Puesto antes, no se dice.
 //     No viaja en `.rsc.json`: es de esta máquina.
-// La revisión periódica (`.no-audit`) ya la apagan los raíles en todas las
-// carpetas (`CALLAR` en `aplicar.js`), y RSC la apunta igual: no se repite aquí.
+// La revisión periódica (`.no-audit`) ya la apagan los raíles en estas mismas
+// carpetas, las cuyo historial creó la barra (`CALLAR` en `aplicar.js`, decisión
+// 161), y RSC la apunta igual: no se repite aquí.
 //
 // Todo lo que se pone se devuelve, y si la orden no sale se quita igual.
 // ── Dónde y cuándo ───────────────────────────────────────────────────────
