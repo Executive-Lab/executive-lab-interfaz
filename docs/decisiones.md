@@ -8417,3 +8417,25 @@ tumbadas: quitar la guarda de «montada aquí» de lo que se pone al abrir; acep
 marca; seguir un enlace en una marca; que lo rechazado vuelva; que rechazar no guarde; ofrecer en lo nuestro;
 que lo de Codex toque el de usuario; que lo de Claude meta los avisos; que no se deje fuera de git; que
 mirar escriba.
+
+**La revisión** (seguridad de la PR #74), arreglado, cada cosa con su prueba y su mutación:
+
+- **Grave: la 177 creaba `.rsc/`.** En un clon, con `.rsc.json` y `optOuts` del equipo y sin `.rsc/`, el botón de
+  Claude escribía la constancia y con ella creaba `.rsc/`. RSC solo rehidrata las marcas del equipo si no
+  encuentra `.rsc/` (`fromScratch`), así que daba por buenas unas marcas que no había y reescribía `optOuts: []`
+  en el `.rsc.json` rastreado. Es lo mismo que `aplicar.js` evita. Ahora, con su sí, `ponerLosDeLaBarra` no escribe
+  nada si `.rsc/` no existe como carpeta de verdad (`sinRsc`), y por tanto tampoco se ofrece. Nunca se crea
+  `.rsc/` desde la 177. Mutación: dejarla crear.
+- **El botón vuelve a mirar antes de actuar** (`desdeSuBoton`): la oferta se calcula otra vez (`laOfertaDeAlguien`,
+  la misma de la pantalla), y si ya no se ofrece —la carpeta pasó a ser de la barra, ya está hecho, se rechazó—
+  no toca nada y lo dice. Vale para los tres botones. Mutación: no volver a mirar.
+- **Una subcarpeta de otro repositorio** (sin `.git` propio, con uno más arriba según `git rev-parse
+  --show-toplevel`): lo de Claude no se ofrece ni se escribe, porque su `settings.local.json` puede estar
+  rastreado por el padre. Si no se sabe, se trata como que sí. Mutación: darla por suelta.
+- **La copia de Codex** lleva el fichero entero: si la carpeta es la raíz de su git, se añade al
+  `.git/info/exclude` con las mismas guardas que lo de Claude; si no se puede, el aviso dice dónde queda («He
+  dejado una copia del fichero en …»). Mutaciones: no dejarla fuera; no decirlo.
+- **«Ahora no» sin poder apuntarlo** ya no dice «no te lo vuelvo a proponer»: dice que no ha podido apuntarlo y
+  que se volverá a proponer. Mutación: decir lo de antes.
+
+Seis mutaciones más, las seis tumbadas.

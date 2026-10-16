@@ -3730,6 +3730,15 @@ ${cabecera}
     if (vscode.workspace.isTrusted === false || !proyecto.raiz()) {
       return this.enviar({ tipo: 'aviso', texto: 'Esta carpeta no es de confianza: no he tocado nada.', malo: true });
     }
+    // Un botón viejo no vale: se mira otra vez, justo antes de actuar, si todavía se
+    // ofrece (la carpeta pudo pasar a ser de la barra, o ya estar hecho, o rechazado).
+    let oferta = null;
+    try { oferta = (await terreno.laOfertaDeAlguien())[que]; } catch { /* se trata como que ya no */ }
+    if (!oferta) {
+      this.salida.appendLine(`[deAlguien] ${que}: ya no se ofrece, no se toca nada`); // diccionario: interno
+      await this.verRadiografia();
+      return this.enviar({ tipo: 'aviso', texto: 'Esto ya no hace falta, o ya no se puede hacer aquí. No he tocado nada.' });
+    }
     let hecho;
     try { hecho = await hacer(); } catch (error) { hecho = { ok: false, detalle: error.message }; }
     this.salida.appendLine(`[deAlguien] ${que}: ${hecho.detalle}`); // diccionario: interno
@@ -3758,11 +3767,13 @@ ${cabecera}
 
   async arreglarCodexAqui() {
     return this.desdeSuBoton('codex', async () => {
-      const hechos = deAlguien.arreglarCodex({ raiz: proyecto.raiz() });
+      const { hechos, sinFuera } = await deAlguien.arreglarCodex({ raiz: proyecto.raiz(), git: procesos.git });
       for (const h of hechos) {
         this.salida.appendLine(`[codex] ${h.hecho} ${h.fichero}${h.copia ? ` · copia en ${h.copia}` : ''}${h.error ? ` (${h.error})` : ''}`); // diccionario: interno
       }
-      return { ok: hechos.some((h) => h.hecho === 'arreglado'), detalle: hechos.map((h) => h.hecho).join(','), frase: retirados.laFrase(hechos) };
+      // La copia lleva el fichero entero: si no ha quedado fuera de git, se dice dónde está.
+      const copia = sinFuera.length ? ` He dejado una copia del fichero en ${sinFuera.join(', ')}.` : '';
+      return { ok: hechos.some((h) => h.hecho === 'arreglado'), detalle: hechos.map((h) => h.hecho).join(','), frase: `${retirados.laFrase(hechos)}${copia}` };
     }, {
       dicho: (hecho) => hecho.frase,
       fallo: 'No he podido arreglarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
@@ -3779,12 +3790,14 @@ ${cabecera}
     });
   }
 
-  // «Ahora no»: en esta carpeta no se vuelve a ofrecer.
+  // «Ahora no»: en esta carpeta no se vuelve a ofrecer, si se ha podido apuntar.
   async noOfrecerMas(cual) {
     const hecho = await deAlguien.rechazar(this.almacen(), proyecto.raiz(), cual);
     this.salida.appendLine(`[deAlguien] ahora no, ${cual}: ${hecho}`); // diccionario: interno
     await this.verRadiografia();
-    return this.enviar({ tipo: 'aviso', texto: 'Vale, no te lo vuelvo a proponer en esta carpeta.' });
+    return this.enviar(hecho
+      ? { tipo: 'aviso', texto: 'Vale, no te lo vuelvo a proponer en esta carpeta.' }
+      : { tipo: 'aviso', texto: 'No he podido apuntar que no lo quieres, así que te lo volveré a proponer. No he tocado nada.', malo: true });
   }
 
   // El botón del bloque de `CLAUDE.md` pendiente (C-4). Toca un fichero suyo,

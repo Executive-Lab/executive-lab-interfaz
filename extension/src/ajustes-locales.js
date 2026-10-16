@@ -222,6 +222,15 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   let hayCarpeta = false;
   try { hayCarpeta = fs.lstatSync(carpeta).isDirectory(); } catch { /* no está */ }
   if (!hayCarpeta) return { hecho: 'noEsParaClaude' };
+  // Decisión 177: con su sí, nunca se crea `.rsc/`. Si no está (un clon, por ejemplo), RSC la
+  // construye con lo que declara `.rsc.json` y solo si no la encuentra (`fromScratch`,
+  // `install-apply.js`); creada aquí con la constancia sola, daría por buenas unas marcas que
+  // no hay y reescribiría `optOuts` del equipo. Ver `aplicar.js`, que tampoco la adelanta.
+  if (conSuSi) {
+    let haceFalta = false;
+    try { const dir = fs.lstatSync(path.dirname(constancia)); haceFalta = dir.isDirectory() && !dir.isSymbolicLink(); } catch { /* no está */ }
+    if (!haceFalta) return { hecho: 'sinRsc', fichero };
+  }
 
   const enGit = await estaEnGit(raiz, FICHERO.join('/'));
   if (enGit !== false) return { hecho: enGit ? 'enGit' : 'sinSaber', fichero };

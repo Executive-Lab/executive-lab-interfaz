@@ -13141,6 +13141,13 @@ exec git "$@"
       await piezaDe(mixta);
       await proveedor.manejar({ tipo: 'volverAEncender' });
       assert.deepEqual(lasMarcas(mixta), ['.no-ftd-nudge'], 'el botón se lleva una marca de la persona');
+      // Un botón viejo, con la carpeta ya de la barra: no quita nada.
+      const vieja = con(SUYAS);
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      await proveedor.manejar({ tipo: 'volverAEncender' });
+      assert.equal(lasMarcas(vieja).length, 3, 'un mensaje viejo quita marcas de una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
       // «Ahora no»: no vuelve, ni en otra pantalla ni al abrir otra vez.
       const rechazada = con(SUYAS);
       assert.ok(await piezaDe(rechazada));
@@ -13173,6 +13180,7 @@ exec git "$@"
     const nueva = (ajustes) => {
       const r = montar();
       fs.mkdirSync(path.join(r, ...al.AVISAR.slice(0, -1)), { recursive: true });
+      fs.mkdirSync(path.join(r, '.rsc'), { recursive: true }); // la crea RSC, nunca la barra con su sí
       // Con el guion de los avisos puesto, que es lo que haría que la 162 los enganchara: aquí no son parte de la oferta.
       fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(r, ...al.AVISAR));
       if (ajustes !== undefined) fs.writeFileSync(path.join(r, '.claude', 'settings.local.json'), typeof ajustes === 'string' ? ajustes : JSON.stringify(ajustes));
@@ -13252,6 +13260,49 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
       vscode.guion.confianza = true;
       assert.ok(!hayLocal(sinConfianza), 'se escribe en una carpeta sin confianza');
+      // Un clon, con `.rsc.json` del equipo y sin `.rsc/`: no se ofrece, y a mano tampoco se crea `.rsc/`
+      // (RSC la rehidrataría con las marcas del equipo solo si no la encuentra; con ella ya puesta reescribe `optOuts`).
+      const clon = nueva();
+      fs.rmSync(path.join(clon, '.rsc'), { recursive: true, force: true });
+      const declarado = fs.readFileSync(path.join(clon, '.rsc.json'), 'utf8');
+      assert.ok(!(await piezaDe(clon)), 'se ofrece en un clon sin .rsc/');
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.ok(!fs.existsSync(path.join(clon, '.rsc')), 'se crea .rsc/ en un clon');
+      assert.ok(!hayLocal(clon), 'se escribe en un clon sin .rsc/');
+      assert.equal(fs.readFileSync(path.join(clon, '.rsc.json'), 'utf8'), declarado);
+      assert.equal((await al.ponerLosDeLaBarra({ raiz: clon, conSuSi: true, estaEnGit: async () => false })).hecho, 'sinRsc');
+      assert.ok(!fs.existsSync(path.join(clon, '.rsc')), 'el módulo crea .rsc/ con su sí');
+      // Un botón viejo, tras pasar la carpeta a ser de la barra: no hace nada y lo dice.
+      const vieja = nueva();
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.ok(!hayLocal(vieja), 'un mensaje viejo escribe en una carpeta de la barra');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /No he tocado nada/.test(m.texto)), 'no lo dice');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
+      // Una subcarpeta de otro repositorio (sin `.git` propio, con uno más arriba): no se ofrece ni se pisa lo que rastrea el padre.
+      const padre = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-padre-'));
+      cp.execFileSync('git', ['init', '-q', padre]);
+      const hija = montar(path.join(padre, 'hija'));
+      fs.mkdirSync(path.join(hija, '.claude'), { recursive: true });
+      fs.mkdirSync(path.join(hija, '.rsc'), { recursive: true });
+      fs.writeFileSync(path.join(hija, '.claude', 'settings.local.json'), '{"model":"opus"}\n');
+      cp.execFileSync('git', ['-C', padre, 'add', '-f', 'hija/.claude/settings.local.json']);
+      assert.ok(!(await piezaDe(hija)), 'se ofrece en una subcarpeta de otro repositorio');
+      await proveedor.manejar({ tipo: 'ponerLoDeClaudeAqui' });
+      assert.equal(fs.readFileSync(path.join(hija, '.claude', 'settings.local.json'), 'utf8'), '{"model":"opus"}\n', 'se pisa lo que rastrea el padre');
+      assert.equal((await da.ponerLoDeClaude({ raiz: hija, estaEnGit: async () => false, git: undefined })).hecho, 'dentroDeOtro', 'sin saber de git, se pisa');
+      // Rechazar sin poder apuntarlo no dice que no vuelve.
+      const sinMemoria = nueva();
+      assert.ok(await piezaDe(sinMemoria));
+      const updateReal = contexto.workspaceState.update;
+      contexto.workspaceState.update = async (clave, ...resto) => { if (clave === da.CLAVE_RECHAZADO) throw new Error('no se guarda'); return updateReal.call(contexto.workspaceState, clave, ...resto); };
+      enviados.length = 0;
+      try { await proveedor.manejar({ tipo: 'noOfrecerMas', cual: 'claude' }); } finally { contexto.workspaceState.update = updateReal; }
+      const dicho = enviados.filter((m) => m.tipo === 'aviso').pop();
+      assert.ok(dicho && dicho.malo && !/no te lo vuelvo a proponer/.test(dicho.texto) && /volveré a proponer/.test(dicho.texto), 'dice que no vuelve sin haberlo apuntado');
+      assert.ok(await piezaDe(sinMemoria), 'sin apuntarlo, deja de ofrecerse');
       // «Ahora no»: no vuelve.
       const no = nueva();
       assert.ok(await piezaDe(no));
@@ -13339,6 +13390,40 @@ exec git "$@"
       vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
       assert.ok(!(await piezaDe(nueva(CON))), 'se ofrece sin Codex');
       vscode.guion.extensionesInstaladas = ['anthropic.claude-code', 'openai.chatgpt'];
+      // La copia lleva el fichero entero: en un repositorio de alguien, si la carpeta es su raíz, queda fuera de git.
+      const cp2 = require('node:child_process');
+      const conGit = nueva(CON);
+      cp2.execFileSync('git', ['init', '-q', conGit]);
+      const casaGit = fs.mkdtempSync(path.join(os.tmpdir(), 'de-alguien-codex-git-'));
+      const antesGit = { g: process.env.GIT_CONFIG_GLOBAL, x: process.env.XDG_CONFIG_HOME };
+      process.env.GIT_CONFIG_GLOBAL = path.join(casaGit, '.gitconfig');
+      process.env.XDG_CONFIG_HOME = casaGit;
+      try {
+        assert.ok(await piezaDe(conGit));
+        enviados.length = 0;
+        await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+        const copia = copias(conGit)[0];
+        assert.ok(copia, 'sin copia');
+        const vacioE = path.join(conGit, 'sin-exclusiones');
+        fs.writeFileSync(vacioE, '');
+        assert.equal(cp2.spawnSync('git', ['-C', conGit, '-c', `core.excludesFile=${vacioE}`, 'check-ignore', '-q', `.codex/${copia}`]).status, 0, 'la copia de Codex entra en git');
+        assert.ok(!enviados.some((m) => /He dejado una copia/.test(m.texto || '')), 'dice que deja una copia a la vista cuando está fuera');
+        // Si no se puede dejar fuera (sin `.git` propio), se dice dónde queda.
+        const sinGitPropio = nueva(CON);
+        assert.ok(await piezaDe(sinGitPropio));
+        enviados.length = 0;
+        await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+        assert.ok(enviados.some((m) => m.tipo === 'aviso' && /He dejado una copia del fichero en \.codex\/config\.toml\.copia-executive-lab-/.test(m.texto)), 'no dice dónde queda la copia');
+      } finally {
+        for (const [c, v] of [['GIT_CONFIG_GLOBAL', antesGit.g], ['XDG_CONFIG_HOME', antesGit.x]]) { if (v === undefined) delete process.env[c]; else process.env[c] = v; }
+      }
+      // Un botón viejo, tras pasar a ser de la barra: no hace nada.
+      const vieja = nueva(CON);
+      assert.ok(await piezaDe(vieja));
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, vieja);
+      await proveedor.manejar({ tipo: 'arreglarCodexAqui' });
+      assert.equal(fs.readFileSync(config(vieja), 'utf8'), CON, 'un mensaje viejo arregla una carpeta de la barra');
+      await contexto.workspaceState.update(terrenoM.CLAVE_MONTADA_AQUI, undefined);
       // «Ahora no»: no vuelve, y no se toca.
       const no = nueva(CON);
       assert.ok(await piezaDe(no));

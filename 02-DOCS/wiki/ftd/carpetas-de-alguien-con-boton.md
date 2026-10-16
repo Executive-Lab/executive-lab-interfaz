@@ -61,6 +61,14 @@ y la persona no tenía manera de pedirlo. Decisión 177.
   to sync», y el `.rsc.json` no cambia. Por eso la decisión no promete que «Lo que tiene apagado» se ponga al
   día solo.
 
+## La revisión
+
+Seguridad de la PR #74: lo grave era que la 177 creaba `.rsc/` (en un clon, RSC dejaba de rehidratar las marcas del
+equipo y reescribía su `optOuts`); ahora, con su sí, nunca se crea (`sinRsc`) y no se ofrece. Además: cada botón
+vuelve a mirar si se ofrece antes de actuar; una subcarpeta de otro repo no se ofrece; la copia de Codex se deja
+fuera de git o se dice dónde queda; y «Ahora no» dice la verdad si no se pudo apuntar. Seis mutaciones, las seis
+tumbadas.
+
 ## Next
 
 - Que «Lo que tiene apagado» no nombre lo que se acaba de encender mientras el `.rsc.json` no se reescriba.

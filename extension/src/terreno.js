@@ -1250,21 +1250,28 @@ function loQueFaltaPorPoner() {
 
 const tieneElBloque = () => loQueFaltaPorPoner().length === 0;
 
+// Lo que se ofrece hoy en una carpeta de alguien (decisión 177), mirado ahora: lo
+// usan la pantalla y, otra vez, cada botón antes de actuar.
+async function laOfertaDeAlguien(asistentes = require('./asistentes')) {
+  const deAlguien = require('./de-alguien');
+  const arrancar = require('./arrancar');
+  const codex = asistentes.porId('codex');
+  const conCodex = asistentes.estaInstalado(codex) || asistentes.losDelArnes().includes(codex);
+  return deAlguien.queSeOfrece({
+    raiz: proyecto.raiz(),
+    memoria: estadoDeLaCarpeta,
+    aqui: await montadaAqui(),
+    estaEnGit: arrancar.estaEnGitConLaBarra,
+    git: procesos.git,
+    conCodex,
+  });
+}
+
 // Las piezas de la 177. Nada si la carpeta es de la barra, o no se puede mirar.
 async function piezasDeAlguien(asistentes) {
   try {
-    const deAlguien = require('./de-alguien');
-    const arrancar = require('./arrancar');
     const retirados = require('./retirados');
-    const codex = asistentes.porId('codex');
-    const conCodex = asistentes.estaInstalado(codex) || asistentes.losDelArnes().includes(codex);
-    const oferta = await deAlguien.queSeOfrece({
-      raiz: proyecto.raiz(),
-      memoria: estadoDeLaCarpeta,
-      aqui: await montadaAqui(),
-      estaEnGit: arrancar.estaEnGitConLaBarra,
-      conCodex,
-    });
+    const oferta = await laOfertaDeAlguien(asistentes);
     const ahoraNo = (cual) => ({ etiqueta: 'Ahora no', accion: { tipo: 'noOfrecerMas', cual } });
     const piezas = [];
 
@@ -1404,6 +1411,6 @@ function fechaDelPlan() {
 module.exports = {
   queCarpetaEs, comoEsEstaCarpeta, queHayEncima, MARCA_DEL_HISTORIAL,
   queHay, reconocer, mirarYClasificar, podemosGuardarElPuntoDePartida, podemosGuardarSolo, radiografia, hayAlgoRoto, fechaDelPlan,
-  montadaAqui, recordarQueSeMontoAqui, saberDondeRecordar, CLAVE_MONTADA_AQUI,
+  laOfertaDeAlguien, montadaAqui, recordarQueSeMontoAqui, saberDondeRecordar, CLAVE_MONTADA_AQUI,
   laUltimaRevision, dondeViveLaRevision, comoEstanLosRailes, saberDondeEstamos, comoEstaElFreno, tieneTexto, tieneElBloque, loQueFaltaPorPoner,
 };

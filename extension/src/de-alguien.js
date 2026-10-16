@@ -115,17 +115,17 @@ function volverAEncender(raiz, nombres = null) {
 // la lista de lo que no entra en git (el bloque del `.gitignore`) no se pone en
 // una carpeta de alguien sin su sí. Se deja fuera en `.git/info/exclude`, que es
 // solo de este ordenador y no toca ningún fichero suyo ni viaja.
-async function dejarFuera(raiz, git) {
+async function dejarFuera(raiz, git, lineas = ['/.claude/settings.local.json', '/.rsc/executive-lab-ajustes-locales.json'], ficheros = null) {
   const info = path.join(raiz, '.git', 'info');
   const exclude = path.join(info, 'exclude');
-  const lineas = ['/.claude/settings.local.json', '/.rsc/executive-lab-ajustes-locales.json'];
   try {
     if (!git || esEnlace(path.join(raiz, '.git')) || !fs.lstatSync(path.join(raiz, '.git')).isDirectory()) return 'sinGit';
     if (esEnlace(info) || esEnlace(exclude)) return 'enlace';
     const faltan = [];
-    for (const linea of lineas) {
-      const { codigo } = await git('check-ignore', '-q', '--', linea.slice(1));
+    for (const [n, linea] of lineas.entries()) {
+      const { codigo } = await git('check-ignore', '-q', '--', (ficheros || lineas.map((l) => l.slice(1)))[n]);
       if (codigo === 1) faltan.push(linea);
+      else if (codigo !== 0) return 'fallo';
     }
     if (!faltan.length) return 'yaEstaba';
     fs.mkdirSync(info, { recursive: true });
@@ -137,13 +137,30 @@ async function dejarFuera(raiz, git) {
   }
 }
 
+// Una carpeta sin `.git` propio que git ve dentro de otro repositorio: sus ficheros
+// son del repositorio de arriba, y un `settings.local.json` puede estar rastreado por él.
+// `null`: no se sabe, y se trata como que sí.
+async function dentroDeOtro(raiz, git) {
+  try {
+    const propio = fs.existsSync(path.join(raiz, '.git'));
+    if (propio) return false;
+    if (!git) return null;
+    const { codigo, salida } = await git('rev-parse', '--show-toplevel');
+    if (codigo !== 0) return false; // git no ve ninguno: es de verdad una carpeta suelta
+    const real = (r) => { try { return fs.realpathSync(r.trim()); } catch { return r.trim(); } };
+    return real(salida) !== real(raiz);
+  } catch {
+    return null;
+  }
+}
+
 // ── Qué se ofrece ────────────────────────────────────────────────────────
 
 // { marcas, claude, codex }: cada uno, lo que se ofrecería, o null. Nada si la
 // carpeta es de la barra (ahí se hace solo), o si ya se dijo que no. `aqui`: si
 // la barra montó esta carpeta en este ordenador; `estaEnGit`: el de la barra;
 // `codex`: la carpeta de Codex de esta persona, y `conCodex`: si usa Codex.
-async function queSeOfrece({ raiz, memoria, aqui, estaEnGit, claude, codex, conCodex = false } = {}) {
+async function queSeOfrece({ raiz, memoria, aqui, estaEnGit, git, claude, codex, conCodex = false } = {}) {
   const nada = { marcas: null, claude: null, codex: null };
   if (!raiz || aqui) return nada;
   const no = rechazadas(memoria, raiz);
@@ -152,7 +169,7 @@ async function queSeOfrece({ raiz, memoria, aqui, estaEnGit, claude, codex, conC
     const hay = marcasDeLaBarra(raiz);
     if (hay.length) oferta.marcas = { marcas: hay };
   }
-  if (!no.has('claude')) {
+  if (!no.has('claude') && (await dentroDeOtro(raiz, git)) === false) {
     const mirado = await ajustesLocales.ponerLosDeLaBarra({ raiz, claude, estaEnGit, conSuSi: true, soloMirar: true }).catch(() => null);
     if (mirado && mirado.hecho === 'sePuede') oferta.claude = { idioma: mirado.idioma, preguntar: mirado.preguntar.length > 0 };
   }
@@ -166,17 +183,25 @@ async function queSeOfrece({ raiz, memoria, aqui, estaEnGit, claude, codex, conC
 
 // Lo que hace el botón de Claude: con su sí, lo de la 157, y fuera de git.
 async function ponerLoDeClaude({ raiz, claude, estaEnGit, git } = {}) {
+  if ((await dentroDeOtro(raiz, git)) !== false) return { hecho: 'dentroDeOtro' };
   const hecho = await ajustesLocales.ponerLosDeLaBarra({ raiz, claude, estaEnGit, conSuSi: true });
   if (hecho.hecho === 'puesto') hecho.fuera = await dejarFuera(raiz, git);
   return hecho;
 }
 
-// Lo que hace el botón de Codex: solo el de esta carpeta, con copia.
-function arreglarCodex({ raiz, codex } = {}) {
-  return retirados.arreglar({ codex, raiz, soloLaCarpeta: true });
+// Lo que hace el botón de Codex: solo el de esta carpeta, con copia. La copia, que
+// lleva el fichero entero, se deja fuera de git si se puede (como lo de Claude);
+// si no, `sinFuera` lleva las que quedan a la vista, para decirlo.
+async function arreglarCodex({ raiz, codex, git } = {}) {
+  const hechos = retirados.arreglar({ codex, raiz, soloLaCarpeta: true });
+  const copias = hechos.filter((h) => h.hecho === 'arreglado' && h.copia).map((h) => path.relative(raiz, h.copia).split(path.sep).join('/'));
+  let fuera = 'sinCopia';
+  if (copias.length) fuera = await dejarFuera(raiz, git, copias.map((c) => `/${c}`), copias);
+  const sinFuera = ['puesto', 'yaEstaba', 'sinCopia'].includes(fuera) ? [] : copias;
+  return { hechos, fuera, sinFuera };
 }
 
 module.exports = {
   CLAVE_RECHAZADO, OFERTAS, MARCAS_DE_LA_BARRA,
-  rechazadas, rechazar, marcasDeLaBarra, volverAEncender, dejarFuera, queSeOfrece, ponerLoDeClaude, arreglarCodex,
+  rechazadas, rechazar, marcasDeLaBarra, volverAEncender, dejarFuera, dentroDeOtro, queSeOfrece, ponerLoDeClaude, arreglarCodex,
 };
