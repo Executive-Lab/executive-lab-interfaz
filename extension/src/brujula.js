@@ -241,8 +241,14 @@ async function calcular() {
   // saber desde aquí si ha iniciado sesión —la credencial vive en el llavero
   // del sistema— así que no se adivina: se convierte en el primer paso, y
   // desaparece en cuanto haya pasado algo.
+  //
+  // El punto de partida no es que haya pasado algo: lo guarda la barra al
+  // terminar de montar. Contándolo, esta tarjeta no salía nunca, justo el
+  // primer día (decisión 164). Una copia suya, o una que la barra guarda sola
+  // porque ha cambiado algo, sí cuenta.
   const quien = asistentes.elDeAhora();
-  const sinEmpezar = !continuacion && !sabe && !conectados && !copias.length;
+  const copiasSuyas = copias.filter((c) => !guardar.esElPuntoDePartida(c));
+  const sinEmpezar = !continuacion && !sabe && !conectados && !copiasSuyas.length;
 
   // Que falte el asistente no es solo un problema del primer día: si alguien lo
   // desinstala, o abre esta carpeta en otro ordenador, la barra sigue pintando

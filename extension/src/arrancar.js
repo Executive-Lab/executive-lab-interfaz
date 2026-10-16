@@ -1080,7 +1080,7 @@ async function elCamino(contexto, salida) {
     ...visto,
     git: { ...visto.git, sigueSinCopias: Boolean(loQueDecidio(contexto).get(CLAVE_SIN_GIT)) },
   };
-  const plan = rumbo.elegirRama(parte);
+  let plan = rumbo.elegirRama(parte);
   salida.appendLine(`[arrancar] ${plan.rama}: ${plan.porQue}`); // diccionario: interno
 
   if (momento.nadieDelante && !sePuedeSinNadie(plan, parte)) {
@@ -1116,7 +1116,19 @@ async function elCamino(contexto, salida) {
     if ((await confirmarDentroDeOtro(parte)) !== 'seguir') return { ok: false, cancelado: true };
   }
 
-  if (plan.rama === 'sinGit') return decidirSobreGit(contexto, parte);
+  // «Seguir sin copias» es seguir (decisión 164): se monta ya, sin ellas, con las
+  // preguntas de siempre. Antes se paraba aquí, y la principal, sin git, solo
+  // ofrecía ponerlo: lo que había elegido no llevaba a ningún sitio. Ponerlas
+  // queda en Ayuda › Sugerencias, y se dice al terminar (`sinCopias`).
+  let sinCopias = false;
+  if (plan.rama === 'sinGit') {
+    const decidido = await decidirSobreGit(contexto, parte);
+    if (!decidido.sigueSinCopias) return decidido;
+    parte.git = { ...parte.git, sigueSinCopias: true };
+    plan = rumbo.elegirRama(parte);
+    salida.appendLine(`[arrancar] sin copias, porque lo eligió: ${plan.rama}`); // diccionario: interno
+    sinCopias = true;
+  }
 
   if (plan.rama === 'yaEstaba') {
     return { ok: true, yaEstaba: true, mensaje: 'Esto ya estaba montado y entero.' };
@@ -1132,7 +1144,8 @@ async function elCamino(contexto, salida) {
   if (!respuestas) return { ok: false, cancelado: true };
 
   await recordarSiSeMontaAqui(plan);
-  return hacerLosPasos(plan, parte, respuestas, contexto, salida);
+  const hecho = await hacerLosPasos(plan, parte, respuestas, contexto, salida);
+  return sinCopias ? { ...hecho, sinCopias: true } : hecho;
 }
 
 // Un montaje que empieza aquí, en una carpeta sin historial, se apunta en el
@@ -1143,6 +1156,8 @@ async function recordarSiSeMontaAqui(plan) {
   if (!plan.pasos.some((p) => p.id === 'montarElArnes') || proyecto.existe('.git')) return false;
   return terreno.recordarQueSeMontoAqui();
 }
+
+const SIN_COPIAS_HASTA_QUE_QUIERAS = 'Sigo sin copias. Puedes ponerlas cuando quieras desde Ayuda › Sugerencias.';
 
 // Sin git no hay copias de seguridad. Se explica qué se pierde y se deja
 // elegir: Jose lo quiso así, y hasta ahora esto era un callejón — la pantalla
@@ -1160,7 +1175,9 @@ async function decidirSobreGit(contexto, parte) {
 
   if (elegido === seguir) {
     await loQueDecidio(contexto).update(CLAVE_SIN_GIT, true);
-    return { ok: false, sigueSinCopias: true, mensaje: 'Sigo sin copias. Puedes ponerlo cuando quieras desde Histórico.' };
+    // Decía «desde Histórico», que en la barra sencilla no existe: están en
+    // Sugerencias, con su botón (decisión 164).
+    return { ok: false, sigueSinCopias: true, mensaje: SIN_COPIAS_HASTA_QUE_QUIERAS };
   }
   if (elegido === ponerlo) return { ok: false, faltaGit: true };
   return { ok: false, cancelado: true };
@@ -1478,5 +1495,5 @@ module.exports = {
   prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
   COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
-  COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO,
+  COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO, SIN_COPIAS_HASTA_QUE_QUIERAS,
 };

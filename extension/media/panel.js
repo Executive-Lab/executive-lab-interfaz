@@ -488,7 +488,11 @@ const sinNombreQueValga = (etiqueta, frase) => `
     </div>
     <p class="pista">${texto(frase)}</p>`;
 
-const filaDeHabilidad = (c) => (!c.prompt
+// La que está siempre activa (`executive-lab`, de los raíles): un botón que la
+// pide no hace nada, así que se ve sin él, con lo que hace (decisión 164).
+const filaDeHabilidad = (c) => (c.siempre
+  ? sinNombreQueValga(c.nombre, c.frase || '')
+  : !c.prompt
   ? sinNombreQueValga(c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1), 'Su nombre no se puede usar para pedirla. Pídele al asistente que se lo cambie.')
   : filaDeAccion({
   etiqueta: c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1),
@@ -598,7 +602,9 @@ function pantallaSaberes(datos) {
     ${deSerie.length ? `
       <details class="acordeon grupo">
         <summary>Las del arnés<span class="cuantos">${deSerie.length}</span></summary>
-        <p class="detalle">Las monta el arnés para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.</p>
+        <p class="detalle">${deSerie.some((c) => c.deLaBarra)
+          ? 'Las montan el arnés y la barra para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.'
+          : 'Las monta el arnés para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.'}</p>
         ${deSerie.map(filaDeHabilidad).join('')}
       </details>` : ''}
 
@@ -1781,15 +1787,22 @@ function pantallaSinArnes() {
       accion: { tipo: 'arrancar' },
     });
 
+  // «Lo último» encabezaba también una carpeta vacía, donde no hay nada que
+  // contar (decisión 164): solo sale si ya había algo.
+  const hayAlgo = Boolean(estado.yaEmpezada || estado.aMedioPreparar);
+  // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias, que
+  // entonces se prepara sin ellas y ponerlas queda en Sugerencias (decisión 164).
+  const primeroGit = estado.faltaGit && !estado.sigueSinCopias;
+
   return `
     ${bloqueAviso()}
     ${lineaDeVarias()}
     <div class="brujula">
-      <h2>Lo último</h2>
+      ${hayAlgo ? '<h2>Lo último</h2>' : ''}
       <p class="donde">${texto(estado.donde)}</p>
       <p class="hiciste">${texto(estado.aviso)}</p>
     </div>
-    ${estado.faltaGit ? bloqueFaltaGit() : ofrecer}
+    ${primeroGit ? bloqueFaltaGit() : ofrecer}
     ${/* La lista de piezas solo se alcanzaba desde pantallas que exigen tener
           el arnés montado — o sea, nunca cuando hace falta. Aquí es donde
           alguien se pregunta qué pasa. */''}
@@ -1836,7 +1849,9 @@ function pantallaPrincipalSencilla() {
   // sale la siguiente. Apagada la pieza, salen todas, como en la completa.
   const recargar = estado.versionPuesta && estado.versionPuesta === estado.hayVersionNueva;
   const enOrden = [
-    estado.faltaGit ? bloqueFaltaGit() : '',
+    // Sin git, arriba; salvo si eligió seguir sin copias: entonces está en
+    // Sugerencias, con su botón, y no tapa lo demás (decisión 164).
+    estado.faltaGit && !estado.sigueSinCopias ? bloqueFaltaGit() : '',
     t.sinAsistente, t.primerPaso, t.sinAjustar,
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
@@ -3433,7 +3448,7 @@ function atender(data) {
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
-          'seAdapta']) {
+          'seAdapta', 'sigueSinCopias']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }

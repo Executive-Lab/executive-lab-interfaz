@@ -20,7 +20,11 @@
     "que no decir nada.",
     "",
     "El identificador de verdad no se esconde: sale en la (i) de cada fila, y es",
-    "lo que se escribe para invocarlo (`/unslop`, `/resume-session`)."
+    "lo que se escribe para invocarlo (`/unslop`, `/resume-session`).",
+    "",
+    "Una excepción: `executive-lab`, la habilidad de los raíles de la barra. Es de",
+    "esta casa, pero su cabecera no lleva nombre porque no es un botón: está",
+    "siempre activa. Sale plegada con las del arnés, sin botón (decisión 164)."
   ],
   "comandos": {
     "resume-session": {
@@ -118,8 +122,12 @@
       "queHace": "Te lo enseña con un esquema cuando es más fácil verlo que leerlo."
     },
     "unslop": {
-      "nombre": "Repaso de marcas de IA",
+      "nombre": "Repasar un texto antes de mandarlo",
       "queHace": "Busca las marcas de que lo ha escrito una máquina, y las quita."
+    },
+    "executive-lab": {
+      "nombre": "Executive Lab",
+      "queHace": "Siempre activa: le fija al asistente el español y las palabras de esta barra."
     },
     "orient": {
       "nombre": "Brújula",
