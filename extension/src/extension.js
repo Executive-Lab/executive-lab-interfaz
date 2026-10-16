@@ -68,7 +68,7 @@ const LOS_DEL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'poner
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // En una carpeta que va por delante, lo que escribe con el arnés espera a que la
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
-const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad', 'quitarHabilidad', 'quitarAgente', 'recuperarLoQueHabia']);
+const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad', 'cambiarInterruptor', 'quitarHabilidad', 'quitarAgente', 'recuperarLoQueHabia']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
@@ -93,6 +93,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const avisoDeCodex = require('./aviso-de-codex');
 const loDelEditor = require('./lo-del-editor');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
@@ -108,6 +109,7 @@ const porDondeIbas = require('./por-donde-ibas');
 // puso a la vez; al abrir, lo que cuenta ese aviso y nada más (decisión 162): el
 // de los avisos del sistema no se lleva el español que se puso otro día.
 const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } };
+const QUITAR_EL_AVISO_DE_CODEX = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarElAvisoDeCodex' } };
 const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que } });
 
 // Lo que se dice cuando un texto ha quedado escrito en la caja del asistente:
@@ -558,7 +560,7 @@ ${cabecera}
     const llave = `${proyecto.raiz()}:${clave}`;
     if (this.ofrecidos.has(llave)) return;
     this.ofrecidos.add(llave);
-    Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
+    return Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
   }
 
   // El ajuste del asistente, cambiado con la barra abierta (decisión 158): se nota
@@ -621,6 +623,51 @@ ${cabecera}
     const frase = retirados.laFrase(hechos);
     if (frase) vscode.window.showInformationMessage(frase);
     return hechos;
+  }
+
+  // Avisarte cuando Codex termine (decisión 171). Es su configuración de usuario y
+  // vale para todas sus conversaciones: no se pone solo (P9), se ofrece una vez con
+  // su botón. Solo con un `node` de verdad, y sin un `notify` suyo.
+  async ofrecerElAvisoDeCodex() {
+    const codex = asistentes.porId('codex');
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return null;
+    if (!asistentes.estaInstalado(codex) && !asistentes.losDelArnes().includes(codex)) return null;
+    const fuente = path.join(this.contexto.extensionPath, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    const oferta = avisoDeCodex.queSeOfrece({ fuente, node: avisoDeCodex.nodeDeVerdad({ propio: entorno.node() }) });
+    this.salida.appendLine(`[codex] aviso al terminar: ${oferta.ofrecer ? 'se ofrece' : `no se ofrece (${oferta.motivo})`}`); // diccionario: interno
+    if (!oferta.ofrecer) return oferta;
+    const si = 'Avisarme cuando Codex termine';
+    const no = 'No, gracias';
+    this.ofertaDeCodex = this.unaVez('avisoDeCodex', async () => {
+      const quiere = await vscode.window.showInformationMessage(
+        'Si quieres, te aviso cuando Codex termine, aunque estés en otra ventana. Saldrá un aviso al acabar cada respuesta, solo en tus carpetas de Executive Lab. Cambia la configuración de Codex de tu ordenador, y puedes quitarlo cuando quieras.',
+        si, no,
+      );
+      if (quiere === no) {
+        this.salida.appendLine(`[codex] aviso al terminar: ${avisoDeCodex.noGracias().hecho}`); // diccionario: interno
+        return;
+      }
+      if (quiere !== si) return;
+      const hecho = avisoDeCodex.ponerlo({ fuente, node: oferta.node });
+      this.salida.appendLine(`[codex] aviso al terminar: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
+      if (hecho.hecho !== 'puesto') {
+        vscode.window.showWarningMessage('No he podido dejar el aviso de Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+        return;
+      }
+      this.dejarElAviso(avisoDeCodex.FRASE, QUITAR_EL_AVISO_DE_CODEX);
+      this.soltarElAviso();
+    });
+    return oferta;
+  }
+
+  // «Quitarlo», del aviso de Codex: solo lo que puso la barra, y no se vuelve a ofrecer.
+  async quitarElAvisoDeCodex() {
+    const hecho = avisoDeCodex.quitarlo();
+    this.salida.appendLine(`[codex] quitar el aviso al terminar: ${hecho.hecho}`); // diccionario: interno
+    const bien = ['quitado', 'yaNoEstaba'].includes(hecho.hecho);
+    return this.enviar(bien
+      ? { tipo: 'aviso', texto: 'Quitado. No lo vuelvo a poner.' }
+      : { tipo: 'aviso', texto: 'No he podido quitarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
   }
 
   // Lo del asistente que deja el instalador en los ajustes de usuario, si falta
@@ -1365,11 +1412,13 @@ ${cabecera}
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
+      cambiarInterruptor: () => this.cambiarInterruptor(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
       // Sin `que`, todo lo de la barra; con una lista, solo eso; con otra cosa, nada.
       quitarLoDeClaude: () => mensaje.que === undefined ? this.quitarLoDeClaude()
         : Array.isArray(mensaje.que) ? this.quitarLoDeClaude(mensaje.que.filter((q) => typeof q === 'string')) : undefined,
+      quitarElAvisoDeCodex: () => this.quitarElAvisoDeCodex(),
       verAsistente: () => this.verAsistente(),
       verComoTrabaja: () => this.verComoTrabaja(),
       verFijadas: () => this.verFijadas(),
@@ -2813,9 +2862,47 @@ ${cabecera}
   // Las reglas que el asistente respeta siempre. Son tres sitios de RSC y no se
   // veía ninguno — y uno de ellos, la constitución, es de los dos ficheros que
   // el arnés marca como "léete esto antes de cada cosa que hagas".
-  async verReglas() {
+  async verReglas(avisoLocal = null) {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'reglas', ...reglas.queHay() });
+    this.enviar({ tipo: 'reglas', ...reglas.queHay(), ...(avisoLocal ? { aviso: avisoLocal } : {}) });
+  }
+
+  // Los interruptores de RSC, a un clic (decisión 172): la rama principal, el
+  // trabajo aparte y compartir el conocimiento. El clic es el sí de la persona (P9);
+  // lo que cambia lo cambia la orden oficial del arnés, por la misma vía que todo
+  // lo que la barra le manda (`rsc.correr`: nombres que salen de la carpeta, carpeta
+  // que va por delante, relevo), y después se mira el disco: se dice lo que ha pasado
+  // de verdad, no lo que RSC contesta.
+  async cambiarInterruptor(boton) {
+    const decir = (texto, malo = false) => this.verReglas({ texto, malo });
+    // `boton` solo elige de una tabla de la barra: la orden no viene del panel.
+    const que = reglas.elBoton(boton);
+    if (!que) return decir('Eso ya no se puede cambiar desde aquí. Pídeselo al asistente.', true);
+    if (vscode.workspace.isTrusted === false) return decir('Esta carpeta no es de confianza en el editor, y la barra no cambia nada en ella. Si confías en ella, dale tu confianza y vuelve a pulsar.', true);
+    if (!proyecto.raiz() || !proyecto.existe('.rsc.json')) return decir('Esta carpeta todavía no está preparada. Prepárala y vuelve a pulsar.', true);
+    if (this.conElArnes()) return decir(OCUPADA, true);
+
+    this.botonesDelArnes = (this.botonesDelArnes || 0) + 1;
+    let hecho;
+    try {
+      this.enviar({ tipo: 'esperando', que: 'Cambiándolo…' });
+      hecho = await rsc.correr(que.args, { tiempoMaximo: 120000 });
+    } finally {
+      this.botonesDelArnes -= 1;
+    }
+    const salida = String(hecho.error || hecho.salida || '').trim();
+    this.salida.appendLine(`[interruptor] ${que.args.join(' ')}: ${hecho.codigo}${salida ? ` · ${salida}` : ''}`); // diccionario: interno
+    if (hecho.porDelante) return decir(POR_DELANTE, true);
+    if (hecho.codigo !== 0) {
+      // Con lo que el arnés ha dicho, sin claves y sin pasarse de largo.
+      const suya = conexiones.taparClaves(salida).split('\n').filter(Boolean).slice(-3).join(' · ').slice(0, 300);
+      return decir(`No he podido cambiarlo.${suya ? ` El arnés dice: «${suya}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`, true);
+    }
+    // El arnés dijo que sí: se mira en el disco que la carpeta haya quedado como toca.
+    if (reglas.estadoDe(que.cual) !== que.llega) {
+      return decir('El arnés dice que lo ha hecho, pero la carpeta sigue igual. Pulsa «Algo va mal» y pásale el código a tu tutor.', true);
+    }
+    return decir(`Hecho. ${reglas.INTERRUPTORES[que.cual].dice[que.llega]}`);
   }
 
   // ── Los raíles de esta carpeta, al día ─────────────────────────────────
@@ -4233,6 +4320,8 @@ function activate(contexto) {
     // no existe (decisión 157).
     await panel.ponerLoDeClaudeAlAbrir().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
     await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
+    // Y el aviso al terminar de Codex, si se quiere (decisión 171): se ofrece, no se pone solo.
+    await panel.ofrecerElAvisoDeCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y lo demás que se puede hacer solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
     // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).

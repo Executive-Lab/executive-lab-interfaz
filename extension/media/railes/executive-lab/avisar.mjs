@@ -11,6 +11,18 @@
 //   · `idle_prompt`: «Claude ha terminado en «Contabilidad».» Sale un minuto
 //     después de terminar, si no se ha escrito nada desde entonces.
 //
+// Y con Codex (decisión 171), que lo lanza su `notify` del `config.toml` de usuario
+// (learn.chatgpt.com/docs/config-file/config-advanced): el JSON no llega por la
+// entrada sino como último argumento, y solo hay un evento, `agent-turn-complete`:
+//
+//   · «Codex ha terminado en «Contabilidad».» Sale al acabar cada respuesta.
+//
+// Ese JSON trae también lo que la persona le escribió y lo que contestó el
+// asistente (`input-messages`, `last-assistant-message`): aquí no se mira ni se
+// enseña. Solo el tipo y `cwd`. Y como el `notify` vale para todas las
+// conversaciones de Codex, también las de fuera de la barra, solo avisa si `cwd`
+// está dentro de una carpeta que montó la barra (con su `.rsc.json`).
+//
 // Cualquier otro tipo, o una entrada que no se entiende, no avisa de nada.
 //
 // Lo engancha la barra en `.claude/settings.local.json` de sus carpetas
@@ -32,7 +44,8 @@
 //
 //   argv[2] = la carpeta del proyecto   stdin = el JSON del enganche (Notification)
 import { execFile, spawn } from 'node:child_process';
-import { basename } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 export const TITULO = 'Executive Lab';
 
@@ -40,7 +53,36 @@ export const TITULO = 'Executive Lab';
 const QUE_DICE = {
   permission_prompt: (donde) => (donde ? `Claude te está preguntando algo en «${donde}».` : 'Claude te está preguntando algo.'),
   idle_prompt: (donde) => (donde ? `Claude ha terminado en «${donde}».` : 'Claude ha terminado.'),
+  'agent-turn-complete': (donde) => (donde ? `Codex ha terminado en «${donde}».` : 'Codex ha terminado.'),
 };
+
+// La carpeta de la barra que contiene `cwd`, o '' si no está en ninguna. Sube como
+// mucho unos niveles: Codex puede estar en una subcarpeta.
+export function laCarpetaDeLaBarra(cwd) {
+  if (typeof cwd !== 'string' || !cwd.trim() || cwd.length > 4096) return '';
+  let dir = cwd.trim();
+  for (let i = 0; i < 8; i += 1) {
+    try { if (existsSync(join(dir, '.rsc.json'))) return dir; } catch { /* sigue */ }
+    const arriba = dirname(dir);
+    if (arriba === dir) break;
+    dir = arriba;
+  }
+  return '';
+}
+
+// Lo que manda Codex: un JSON como último argumento, con `type`. Si el último
+// argumento no es eso (el enganche de Claude pasa la carpeta), null.
+export function laEntradaDeCodex(argv = process.argv) {
+  if (argv.length < 3) return null;
+  const ultimo = argv[argv.length - 1];
+  if (typeof ultimo !== 'string' || ultimo.length > 256 * 1024 || !ultimo.trimStart().startsWith('{')) return null;
+  try {
+    const datos = JSON.parse(ultimo);
+    return datos && typeof datos === 'object' && typeof datos.type === 'string' ? { type: datos.type, cwd: datos.cwd } : null;
+  } catch {
+    return null;
+  }
+}
 
 // Milisegundos: lo que se espera a la entrada, al programa que avisa y a todo.
 export const TOPE = { entrada: 1500, programa: 4000, todo: 6000 };
@@ -65,7 +107,12 @@ export function elNombre(...candidatos) {
 // El texto del aviso, o null si no hay que avisar de nada.
 export function elTexto(entrada, carpeta = '') {
   if (!entrada || typeof entrada !== 'object') return null;
-  const decir = Object.prototype.hasOwnProperty.call(QUE_DICE, entrada.notification_type) ? QUE_DICE[entrada.notification_type] : null;
+  // Codex: solo en lo de la barra, y con el nombre de esa carpeta.
+  if (entrada.type === 'agent-turn-complete') {
+    const mia = laCarpetaDeLaBarra(entrada.cwd);
+    return mia ? QUE_DICE['agent-turn-complete'](elNombre(mia)) : null;
+  }
+  const decir = entrada.notification_type !== 'agent-turn-complete' && Object.prototype.hasOwnProperty.call(QUE_DICE, entrada.notification_type) ? QUE_DICE[entrada.notification_type] : null;
   return decir ? decir(elNombre(carpeta, process.env.CLAUDE_PROJECT_DIR, entrada.cwd)) : null;
 }
 
@@ -170,7 +217,9 @@ if (/(^|[\\/])avisar\.mjs$/.test(process.argv[1] || '')) {
   process.on('unhandledRejection', salir);
   setTimeout(salir, TOPE.todo).unref();
   try {
-    await avisar({ entrada: await leerLaEntrada(), carpeta: process.argv[2] || '' });
+    // Con Codex, el JSON va en los argumentos y no hay nada que esperar en la entrada.
+    const deCodex = laEntradaDeCodex();
+    await avisar(deCodex ? { entrada: deCodex } : { entrada: await leerLaEntrada(), carpeta: process.argv[2] || '' });
   } catch {
     // Un aviso que no sale no es un fallo del asistente.
   }
