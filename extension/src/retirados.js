@@ -177,7 +177,7 @@ function escribir(fichero, texto) {
 }
 
 // Un fichero: { hecho, fichero, copia?, modelos? }.
-function arreglarUnFichero(fichero, retirados, { conPerfil = false, ahora = new Date() } = {}) {
+function arreglarUnFichero(fichero, retirados, { conPerfil = false, ahora = new Date(), soloMirar = false } = {}) {
   if (esEnlace(fichero)) return { hecho: 'enlace', fichero };
   if (!fs.existsSync(fichero)) return { hecho: 'noHay', fichero };
   let texto;
@@ -199,6 +199,8 @@ function arreglarUnFichero(fichero, retirados, { conPerfil = false, ahora = new 
   if (new Set(sitios).size !== sitios.length) return { hecho: 'raro', fichero };
   const quitar = aMirar.filter((m) => retirados.has(m.id));
   if (!quitar.length) return { hecho: 'nada', fichero };
+  // Decisión 177: para ofrecerlo, sin tocar nada.
+  if (soloMirar) return { hecho: 'seArreglaria', fichero, modelos: [...new Set(quitar.map((m) => m.id))] };
 
   const fuera = new Set(quitar.map((m) => m.i));
   const copia = `${fichero}.copia-executive-lab-${sello(ahora)}`;
@@ -233,7 +235,13 @@ function entraConClave(codex) {
 }
 
 // El suyo de usuario y, si se da, el de la carpeta.
-function arreglar({ codex = carpetaDeCodex(), raiz = null, ahora = new Date(), tabla = leerLaTabla() } = {}) {
+//
+// Decisión 177, en una carpeta de alguien, donde la barra no toca nada sola:
+//   · `soloLaCarpeta`: el de usuario no se toca; con `raiz`, solo el de la carpeta.
+//     Las guardas son las mismas (la clave de la API, otro proveedor), porque
+//     miran lo que Codex hace en este ordenador, y valen igual para su carpeta.
+//   · `soloMirar`: no escribe nada, dice qué arreglaría (`seArreglaria`).
+function arreglar({ codex = carpetaDeCodex(), raiz = null, ahora = new Date(), tabla = leerLaTabla(), soloLaCarpeta = false, soloMirar = false } = {}) {
   const retirados = losRetirados(ahora, tabla);
   if (!retirados.size) return [];
   const suyo = path.join(codex, 'config.toml');
@@ -248,11 +256,11 @@ function arreglar({ codex = carpetaDeCodex(), raiz = null, ahora = new Date(), t
       return [{ hecho: 'otroProveedor', fichero: suyo }];
     }
   }
-  const hechos = [arreglarUnFichero(suyo, retirados, { conPerfil: true, ahora })];
+  const hechos = soloLaCarpeta ? [] : [arreglarUnFichero(suyo, retirados, { conPerfil: true, ahora, soloMirar })];
   if (raiz) {
     // La de la carpeta, tampoco a través de un enlace: llevaría fuera de ella.
     const suya = path.join(raiz, '.codex', 'config.toml');
-    hechos.push(esEnlace(path.dirname(suya)) ? { hecho: 'enlace', fichero: suya } : arreglarUnFichero(suya, retirados, { ahora }));
+    hechos.push(esEnlace(path.dirname(suya)) ? { hecho: 'enlace', fichero: suya } : arreglarUnFichero(suya, retirados, { ahora, soloMirar }));
   }
   return hechos;
 }

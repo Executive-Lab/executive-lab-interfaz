@@ -205,7 +205,12 @@ function loQueFalta({ local, deLaCarpeta, suyos, conGuion = false }) {
   return { idioma, preguntar, avisos };
 }
 
-async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit = enGitASecas } = {}) {
+// `conSuSi` (decisión 177): en una carpeta de alguien, a quien la barra no le pone
+// nada sola, lo pide esa persona con su botón. Mismas guardas, sin excepción;
+// solo se pone lo que el botón cuenta, el español y que pregunte antes de subir
+// (los avisos del sistema son otra cosa y no entran), y la constancia lo dice.
+// `soloMirar`: no escribe nada, dice qué haría (`sePuede`) para poder ofrecerlo.
+async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit = enGitASecas, conSuSi = false, soloMirar = false } = {}) {
   if (!raiz) return { hecho: 'sinCarpeta' };
   const declaracion = leer(path.join(raiz, '.rsc.json'));
   if (!declaracion || !Array.isArray(declaracion.targets) || !declaracion.targets.includes('claude')) return { hecho: 'noEsParaClaude' };
@@ -240,9 +245,10 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   const falta = {
     idioma: sinQuitar.idioma && !antes.language,
     preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
-    avisos: sinQuitar.avisos && !antes.avisos,
+    avisos: sinQuitar.avisos && !antes.avisos && !conSuSi,
   };
   if (!falta.idioma && !falta.preguntar.length && !falta.avisos) return { hecho: 'yaEstaba', fichero };
+  if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false };
 
   try {
     const nuevo = { ...local };
@@ -265,7 +271,9 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
     };
     fs.mkdirSync(path.dirname(constancia), { recursive: true });
     escribir(constancia, {
-      porQue: 'Lo puso la barra de Executive Lab (decisiones 157 y 162). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
+      porQue: conSuSi
+        ? 'Lo puso la barra de Executive Lab porque lo pidió esta persona con su botón (decisión 177). Al quitarlo, solo se quita lo que sigue como lo dejó.' // diccionario: interno
+        : 'Lo puso la barra de Executive Lab (decisiones 157 y 162). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
       ...(anotado.language ? { language: anotado.language } : {}),
       ask: anotado.ask,
       ...(anotado.avisos ? { avisos: true } : {}),

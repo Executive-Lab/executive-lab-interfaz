@@ -982,6 +982,13 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
     }
   }
 
+  // En una carpeta de alguien, lo que la barra no hace sola (decisión 177): cada
+  // cosa con su botón y su «Ahora no», y una vez dicho que no, no vuelve. Qué se
+  // ofrece y cómo se hace, en `de-alguien.js`.
+  if (conArnes) {
+    for (const p of await piezasDeAlguien(asistentes)) piezas.push(p);
+  }
+
   // Lo que el repositorio declara y no está en esta máquina. Es lo que RSC
   // llama «what a fresh clone looks like», y hasta ahora se veía como un arnés
   // sano: la barra pintaba botones que no respondían.
@@ -1242,6 +1249,74 @@ function loQueFaltaPorPoner() {
 }
 
 const tieneElBloque = () => loQueFaltaPorPoner().length === 0;
+
+// Las piezas de la 177. Nada si la carpeta es de la barra, o no se puede mirar.
+async function piezasDeAlguien(asistentes) {
+  try {
+    const deAlguien = require('./de-alguien');
+    const arrancar = require('./arrancar');
+    const retirados = require('./retirados');
+    const codex = asistentes.porId('codex');
+    const conCodex = asistentes.estaInstalado(codex) || asistentes.losDelArnes().includes(codex);
+    const oferta = await deAlguien.queSeOfrece({
+      raiz: proyecto.raiz(),
+      memoria: estadoDeLaCarpeta,
+      aqui: await montadaAqui(),
+      estaEnGit: arrancar.estaEnGitConLaBarra,
+      conCodex,
+    });
+    const ahoraNo = (cual) => ({ etiqueta: 'Ahora no', accion: { tipo: 'noOfrecerMas', cual } });
+    const piezas = [];
+
+    // Lo que apagó una barra de antes: solo lo que se ve apagado, por su nombre.
+    if (oferta.marcas) {
+      const ids = { '.no-audit': ['audit'], '.no-worktree-cleanup': ['worktree-reaper'], '.no-gitmoji': ['gitmoji-guard'] };
+      const quePide = new Set(oferta.marcas.marcas.flatMap((m) => ids[m] || []));
+      const nombres = require('./reglas').loApagado().filter((a) => quePide.has(a.id)).map((a) => a.nombre);
+      if (nombres.length) {
+        piezas.push({
+          nombre: 'Lo que apagó una versión anterior de la barra',
+          estado: 'no',
+          detalle: nombres.join(' · '),
+          porHacer: true,
+          arreglo: { como: 'solo', etiqueta: 'Volver a encenderlo', accion: { tipo: 'volverAEncender' }, retiene: 'loDecide' },
+          ahoraNo: ahoraNo('marcas'),
+        });
+      }
+    }
+
+    if (oferta.claude) {
+      const { idioma, preguntar } = oferta.claude;
+      const cosas = [idioma ? 'que te hable en español' : null, preguntar ? 'que pregunte antes de subir' : null].filter(Boolean);
+      const etiqueta = idioma && preguntar ? 'Que Claude me hable en español y pregunte antes de subir'
+        : (idioma ? 'Que Claude me hable en español' : 'Que Claude pregunte antes de subir');
+      piezas.push({
+        nombre: 'Claude, a tu manera',
+        estado: 'no',
+        detalle: `Todavía no: ${cosas.join(' y ')}. Esta carpeta ya era de alguien, y esto toca tus ajustes de Claude en ella.`,
+        porHacer: true,
+        arreglo: { como: 'solo', etiqueta, accion: { tipo: 'ponerLoDeClaudeAqui' }, retiene: 'loDecide' },
+        ahoraNo: ahoraNo('claude'),
+      });
+    }
+
+    if (oferta.codex) {
+      const filas = (retirados.leerLaTabla() || {}).codex || [];
+      const nombres = oferta.codex.modelos.map((id) => (filas.find((f) => f && f.id === id) || {}).nombre || id);
+      piezas.push({
+        nombre: 'La versión de Codex',
+        estado: 'no',
+        detalle: `Esta carpeta tiene elegida una versión que ya no existe (${nombres.join(', ')}), y Codex no contesta.`,
+        porHacer: true,
+        arreglo: { como: 'solo', etiqueta: 'Arreglar el modelo de Codex', accion: { tipo: 'arreglarCodexAqui' }, retiene: 'loDecide' },
+        ahoraNo: ahoraNo('codex'),
+      });
+    }
+    return piezas;
+  } catch {
+    return [];
+  }
+}
 
 // Qué freno ante órdenes peligrosas está enganchado aquí: el nuestro (los
 // raíles), el de RSC (cuando el plan practica la cadena SDD), los dos o ninguno.
