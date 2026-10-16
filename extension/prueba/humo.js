@@ -19302,6 +19302,140 @@ exec git "$@"
     }
   });
 
+  // ── La revisión de la 166: tres retoques ─────────────────────────────────
+
+  await comprobar('si el encargo no llega al asistente, la barra dice el hecho y que no ha llegado (decisión 166, la revisión)', async () => {
+    // `puente.enviar` puede lanzar (el portapapeles o la conversación rechazan) y
+    // la barra se quedaba muda: sin aviso y sin repintar Documentos.
+    const proveedor = vscode.registrado.proveedor;
+    const otra = montar();
+    const enviados = [];
+    const brujulaM = cargar('brujula');
+    const antes = { enviar: proveedor.enviar, raiz: vscode.guion.raiz, donde: proveedor.donde, escribir: vscode.env.clipboard.writeText, enlace: vscode.guion.enlaceFalla, comandos: vscode.guion.comandosDeClaude, ficheros: vscode.guion.ficheros, olvidar: brujulaM.olvidar };
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = otra;
+    let olvidados = 0;
+    brujulaM.olvidar = (...a) => { olvidados += 1; return antes.olvidar(...a); };
+    const uno = (nombre) => ({ nombre, datos: Buffer.from(`papel ${nombre}`).toString('base64') });
+    const NO_LLEGA = 'Documento añadido. No he podido pasarle el encargo a Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.';
+    try {
+      // El enlace no lo recoge nadie y no hay comandos: va al portapapeles, y este rechaza.
+      vscode.guion.enlaceFalla = true;
+      vscode.guion.comandosDeClaude = [];
+      vscode.env.clipboard.writeText = async () => { throw new Error('portapapeles cerrado'); };
+      // Soltado encima de Documentos: se queda en Documentos, con el aviso.
+      proveedor.donde = { tipo: 'documentos' };
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('f.txt')] });
+      assert.ok(fs.existsSync(path.join(otra, '02-DOCS', 'inbox', 'f.txt')), 'el documento no se guarda');
+      const enDocumentos = enviados.at(-1);
+      assert.equal(enDocumentos.tipo, 'documentos', 'no se repinta Documentos');
+      assert.deepEqual([enDocumentos.aviso.texto, enDocumentos.aviso.malo], [NO_LLEGA, true], 'no dice que el encargo no ha llegado');
+      // Soltado en otra pantalla: aviso suelto.
+      proveedor.donde = { tipo: 'principal' };
+      await proveedor.manejar({ tipo: 'soltarDocumentos', ficheros: [uno('g.txt')] });
+      const suelto = [...enviados].reverse().find((m) => m.tipo === 'aviso');
+      assert.deepEqual([suelto.texto, suelto.malo], [NO_LLEGA, true]);
+      // «Elegirlos»: se llega a la brújula, como en el camino bueno.
+      const elegido = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'elegir-')), 'h.txt');
+      fs.writeFileSync(elegido, 'h');
+      vscode.guion.ficheros = [elegido];
+      olvidados = 0;
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'anadirDocumentos', desde: 'documentos' });
+      assert.equal(olvidados, 1, 'no se llega a la brújula');
+      assert.equal(enviados.at(-1).tipo, 'documentos');
+      assert.equal(enviados.at(-1).aviso.texto, NO_LLEGA);
+      // Y la marca, por el mismo camino.
+      await proveedor.manejar({ tipo: 'soltarDocumentos', para: 'marca', ficheros: [{ nombre: 'logo.svg', datos: Buffer.from('<svg/>').toString('base64') }] });
+      assert.match(enviados.at(-1).aviso.texto, /^Guardado 1\. No he podido pasarle el encargo a Claude\./);
+      return 'dice el hecho y que no ha llegado, repinta y llega a la brújula';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      vscode.guion.raiz = antes.raiz;
+      vscode.env.clipboard.writeText = antes.escribir;
+      vscode.guion.enlaceFalla = antes.enlace;
+      vscode.guion.comandosDeClaude = antes.comandos;
+      vscode.guion.ficheros = antes.ficheros;
+      brujulaM.olvidar = antes.olvidar;
+    }
+  });
+
+  await comprobar('un doble clic en «Poner Claude» no lo pone dos veces (decisión 166, la revisión)', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, extensiones: vscode.guion.extensionesInstaladas, ejecutar: vscode.commands.executeCommand, vueltas: proveedor.vueltasAlPoner, donde: proveedor.donde };
+    proveedor.enviar = (m) => enviados.push(m);
+    let puestos = 0;
+    vscode.commands.executeCommand = async (id, ...args) => {
+      if (id === 'workbench.extensions.installExtension') {
+        puestos += 1;
+        await new Promise((r) => setTimeout(r, 150));
+        vscode.guion.extensionesInstaladas = [...vscode.guion.extensionesInstaladas, args[0]];
+      }
+    };
+    vscode.guion.extensionesInstaladas = [];
+    proveedor.vueltasAlPoner = 2;
+    try {
+      await Promise.all([proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' }), proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' })]);
+      assert.equal(puestos, 1, `se pone ${puestos} veces`);
+      assert.equal(enviados.filter((m) => m.tipo === 'aviso' && /^Ya está puesto Claude/.test(m.texto)).length, 1, 'se dice dos veces');
+      // Y vale otra vez cuando acaba (si falló, se puede volver a intentar).
+      assert.equal(proveedor.poniendoElAsistente, false, 'se queda puesto el candado');
+      vscode.guion.extensionesInstaladas = [];
+      await proveedor.manejar({ tipo: 'ponerElAsistente', cual: 'claude' });
+      assert.equal(puestos, 2, 'después de acabar no se puede volver a poner');
+      return 'una sola vez con dos clics, y el candado se suelta';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      proveedor.donde = antes.donde;
+      proveedor.vueltasAlPoner = antes.vueltas;
+      vscode.commands.executeCommand = antes.ejecutar;
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+    }
+  });
+
+  await comprobar('el encargo largo solo se deja en un fichero si git dice que queda fuera (decisión 166, la revisión)', async () => {
+    // El bloque de la barra puede decir que sí y un `!` más abajo, dejarlo entrar.
+    const pedidosM = cargar('pedidos');
+    const noEntra = require(path.join(RAIZ, 'media', 'railes', 'no-entra-en-git.js'));
+    const cp = require('node:child_process');
+    const hacer = (gitignore, conGit) => {
+      const c = fs.mkdtempSync(path.join(os.tmpdir(), 'fuera-de-git-'));
+      fs.mkdirSync(path.join(c, '02-DOCS', 'raw'), { recursive: true });
+      fs.writeFileSync(path.join(c, '.gitignore'), gitignore);
+      if (conGit) cp.spawnSync('git', ['init', '-q'], { cwd: c });
+      return c;
+    };
+    const carpetas = [];
+    try {
+      // Con git y el bloque a secas: fuera, y se deja.
+      const bien = hacer(`${noEntra.elBloque()}\n`, true);
+      carpetas.push(bien);
+      assert.equal(await pedidosM.quedaFueraDeGit(bien), true, 'con git y el bloque, no queda fuera');
+      assert.equal((await pedidosM.dejarUnEncargo(bien, 'hola')).ok, true);
+      // Con git, y algo que lo deja entrar después del bloque: el bloque dice que sí y git que no.
+      const entra = hacer(`${noEntra.elBloque()}\n!02-DOCS/raw/pedidos/\n`, true);
+      carpetas.push(entra);
+      assert.equal(await pedidosM.quedaFueraDeGit(entra), false, 'el bloque dice que sí y git que no, y queda fuera');
+      const noSeDeja = await pedidosM.dejarUnEncargo(entra, 'hola');
+      assert.equal(noSeDeja.ok, false, 'deja el encargo donde git lo recogería');
+      assert.ok(!fs.existsSync(path.join(entra, '02-DOCS', 'raw', 'pedidos')), 'crea la carpeta');
+      // Sin git (no es un repositorio): vale el bloque, como antes.
+      const sinGit = hacer(`${noEntra.elBloque()}\n`, false);
+      carpetas.push(sinGit);
+      assert.equal(await pedidosM.quedaFueraDeGit(sinGit), true, 'sin git, vale el bloque');
+      // Y sin el bloque, no, haya git o no.
+      const sinBloque = hacer('node_modules/\n', true);
+      carpetas.push(sinBloque);
+      assert.equal(await pedidosM.quedaFueraDeGit(sinBloque), false);
+      assert.equal(await pedidosM.quedaFueraDeGit(null), false);
+      return 'git manda sobre el bloque; sin git, el bloque';
+    } finally {
+      for (const c of carpetas) fs.rmSync(c, { recursive: true, force: true });
+    }
+  });
+
   // --------------------------------------------- el wizard, de verdad
   // Monta un arnés entero: tarda minutos y toca la red, así que no va en la
   // pasada normal. `node prueba/humo.js --con-arnes` lo incluye.

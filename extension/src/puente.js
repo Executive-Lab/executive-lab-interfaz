@@ -116,7 +116,7 @@ function cabeEntero(texto) {
   return cabeEnElEnlace(`${claude.enlace}?${claude.parametro}=${encodeURIComponent(texto)}`, 'win32');
 }
 
-function dejarloEnUnFichero(texto, salida) {
+async function dejarloEnUnFichero(texto, salida) {
   const apuntar = (linea) => { if (salida) salida.appendLine(`[puente] encargo largo: ${linea}`); }; // diccionario: interno
   let limpio;
   try {
@@ -126,7 +126,7 @@ function dejarloEnUnFichero(texto, salida) {
     apuntar(`no lo dejo en un fichero, no se ha podido tapar: ${error.message}`);
     return null;
   }
-  const hecho = require('./pedidos').dejarUnEncargo(require('./proyecto').raiz(), limpio);
+  const hecho = await require('./pedidos').dejarUnEncargo(require('./proyecto').raiz(), limpio);
   if (!hecho.ok) {
     apuntar(`no lo dejo en un fichero (${hecho.motivo})`);
     return null;
@@ -163,7 +163,7 @@ async function enviar(texto, salida, { plataforma = process.platform } = {}) {
   }
 
   // Lo que no cabe, a un fichero, y se manda la línea que lo nombra (arriba).
-  if (!cabeEntero(texto)) texto = dejarloEnUnFichero(texto, salida) || texto;
+  if (!cabeEntero(texto)) texto = await dejarloEnUnFichero(texto, salida) || texto;
 
   const quien = asistentes.elDeAhora();
 

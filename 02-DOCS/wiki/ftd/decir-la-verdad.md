@@ -66,6 +66,8 @@ El detalle y el porqué de cada uno, en `docs/decisiones.md`, 166.
 - [x] 5. El encargo largo, a un fichero, en los dos sistemas y con los dos asistentes; el raíl.
 - [x] 6. Pruebas con mutaciones, decisión 166, diccionario y este documento.
 - [x] 7. Todas las comprobaciones en verde, con origin/main traído.
+- [x] 8. La revisión: el encargo que no llega se dice (`pasarleYDecir`), el doble clic de «Poner» y `quedaFueraDeGit`
+  que pregunta a git. Tres pruebas y tres mutaciones tumbadas.
 
 ## Evidence
 

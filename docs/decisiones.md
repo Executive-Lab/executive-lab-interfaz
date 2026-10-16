@@ -6649,6 +6649,26 @@ Así no vale como pasada: lo dice al final y sale con 1.
 
 LISTA_52, las 52 tumbadas
 
+### La revisión
+
+Tres retoques de la revisión de esta rama, cada uno con su prueba en `humo.js` y su mutación tumbada:
+
+- **Si el encargo no llega, la barra no se queda muda** (`pasarleYDecir`). `puente.enviar` puede lanzar (el
+  portapapeles o abrir la conversación rechazan) y la pantalla no decía nada ni se repintaba. Ahora el hecho se
+  dice igual y se añade, en aviso malo: «Documento añadido. No he podido pasarle el encargo a Claude. Pulsa
+  «Algo va mal» y pásale el código a tu tutor.». Documentos se repinta y se llega a `brujula.olvidar()` como en el
+  camino bueno, porque la función devuelve el aviso en lugar de lanzar.
+- **Un doble clic en «Poner Claude» no lo pone dos veces** (`ponerElAsistente`), con el mismo candado que
+  `ponerLaNueva` (`poniendoElAsistente`, `try/finally`).
+- **El encargo largo solo va a un fichero si git dice que queda fuera** (`quedaFueraDeGit`). Además del bloque
+  de la barra en el `.gitignore`, se pregunta a git (`check-ignore -q` sobre un fichero de `pedidos/`, con el
+  `procesos.git` de la casa): un `!` más abajo, o un `.gitignore` de otra carpeta, podían dejar entrar lo que el
+  bloque deja fuera. Si git dice que no está ignorada, se trata como no fuera de git; si no hay git o no
+  contesta, vale el bloque, como antes. Pasa a ser asíncrona (`dejarUnEncargo` y `dejarloEnUnFichero` con ella);
+  el único que la llama, `puente.enviar`, ya lo era.
+
+Tres pruebas más: `humo.js` pasa de 426 a 429.
+
 ### Lo que no hace, todavía
 
 - **No se ha visto en un VS Code de verdad**: cuánto tarda el editor en ver una extensión recién puesta, la

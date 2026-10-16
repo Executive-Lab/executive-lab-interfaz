@@ -1323,7 +1323,15 @@ ${cabecera}
   async pasarleYDecir(hecho, encargo) {
     const quien = asistentes.elDeAhora();
     if (!asistentes.estaInstalado(quien)) return { ...asistentes.falta(quien), texto: `${hecho} ${asistentes.falta(quien).texto}` };
-    const como = await puente.enviar(encargo, this.salida);
+    let como;
+    try {
+      como = await puente.enviar(encargo, this.salida);
+    } catch (error) {
+      // El portapapeles o la conversación pueden rechazar: el hecho se dice igual
+      // y se dice que el encargo no ha llegado (decisión 166, la revisión).
+      this.salida.appendLine(`[asistente] el encargo no ha llegado: ${error && error.message}`); // diccionario: interno
+      return { texto: `${hecho} No he podido pasarle el encargo a ${quien.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`, malo: true };
+    }
     if (como === 'directo') return { texto: `${hecho} ${DALE_A_ENVIAR}`, malo: false };
     return { texto: hecho, malo: false };
   }
@@ -1352,6 +1360,17 @@ ${cabecera}
   // dice puesto se mira otra vez: hasta que el editor lo ve, no se puede hablar con
   // él, y entonces se dice que hay que recargar.
   async ponerElAsistente(cual, desde = null) {
+    // Un segundo clic mientras se pone no lo instala dos veces (como `poniendoLaNueva`).
+    if (this.poniendoElAsistente) return undefined;
+    this.poniendoElAsistente = true;
+    try {
+      return await this.ponerElAsistenteDeVerdad(cual, desde);
+    } finally {
+      this.poniendoElAsistente = false;
+    }
+  }
+
+  async ponerElAsistenteDeVerdad(cual, desde) {
     const quien = asistentes.porId(cual);
     if (!quien) {
       this.salida.appendLine(`[asistente] poner uno que no existe: ${JSON.stringify(cual)}`); // diccionario: interno

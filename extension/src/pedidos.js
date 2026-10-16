@@ -196,9 +196,22 @@ const ENCARGO = /^encargo-\d{8}-\d{9}-[0-9a-f]{6}\.md$/;
 // se acumulan para siempre.
 const ENCARGOS_GUARDADOS = 20;
 
-// Si el bloque de la barra en el `.gitignore` deja fuera esta carpeta. Se mira
-// la línea exacta: un bloque de antes de la decisión 150 no la lleva.
-function quedaFueraDeGit(raiz) {
+// Si esta carpeta queda fuera de git. Primero se mira el bloque de la barra en el
+// `.gitignore`, la línea exacta (uno de antes de la decisión 150 no la lleva); y
+// después, lo que de verdad dice git (`check-ignore`): un `!` más abajo, o un
+// `.gitignore` de otra carpeta, puede dejar entrar lo que el bloque deja fuera.
+// Si git dice que no, no está fuera. Si no hay git o no contesta, vale lo que dice
+// el bloque, como antes (decisión 166, la revisión).
+async function quedaFueraDeGit(raiz) {
+  if (!elBloqueLoDeja(raiz)) return false;
+  let codigo = -1;
+  try {
+    ({ codigo } = await require('./procesos').git('-C', raiz, 'check-ignore', '-q', '--', `${CARPETA.join('/')}/encargo-x.md`));
+  } catch { /* sin git: vale el bloque */ }
+  return codigo !== 1;
+}
+
+function elBloqueLoDeja(raiz) {
   if (!raiz) return false;
   let texto;
   try {
@@ -256,8 +269,8 @@ function recogerLosViejos(donde) {
 // Deja el encargo y dice dónde, relativo a la carpeta de trabajo y con `/`, que
 // es como lo lee el asistente. Lo que llega aquí ya va limpio de claves: lo tapa
 // quien llama, como el informe de «Algo va mal».
-function dejarUnEncargo(raiz, texto, ahora = new Date()) {
-  if (!quedaFueraDeGit(raiz)) return { ok: false, motivo: 'el .gitignore no deja fuera los pedidos' }; // diccionario: interno
+async function dejarUnEncargo(raiz, texto, ahora = new Date()) {
+  if (!await quedaFueraDeGit(raiz)) return { ok: false, motivo: 'el .gitignore no deja fuera los pedidos' }; // diccionario: interno
   const donde = carpetaParaEscribir(raiz);
   if (!donde) return { ok: false, motivo: 'la carpeta de los pedidos no es una carpeta de verdad' }; // diccionario: interno
   // Con los milésimos: por el nombre se sabe cuáles son los viejos.
