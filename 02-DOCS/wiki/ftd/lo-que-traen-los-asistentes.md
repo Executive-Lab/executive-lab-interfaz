@@ -66,6 +66,8 @@ RSC 3.0.22, y se mete lo que es local, se deshace y no decide nada por nadie (P9
   ajustes de Claude se ponen al montar y al abrir…», «Codex con una versión que ya no existe…» y «la barra
   arregla Codex al abrir…». Con `--con-arnes`, el montaje de verdad deja las marcas y los ajustes.
 - Mutaciones a mano: 33, las 33 tumbadas; y 53 más con las dos revisiones, las 53 tumbadas.
+- Con las revisiones arregladas y main traído (152 y 156): `humo.js` 408, siete de esta decisión; `contrato.js` 14,
+  `empresas-distintas.js`, `mapeos-codex.js` 14 y el diccionario, en verde.
 - `contrato.js` (14), `empresas-distintas.js`, `mapeos-codex.js` (14) y `comprobar-diccionario.js`, en verde.
 
 ## Next

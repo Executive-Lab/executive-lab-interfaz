@@ -6106,6 +6106,7 @@ reforzar su prueba). `contrato.js`, `empresas-distintas.js`, `mapeos-codex.js` y
   - Los doce mutantes que la revisión dejó vivos tienen ahora una prueba que los tumba. Entre ellos, el
     git de la barra con un fichero que va en git de verdad.
 
-Con los arreglos de las dos revisiones: `humo.js` COMPROBACIONES, siete pruebas de la decisión. 53 mutaciones más a
-mano (21 de seguridad, 21 de corrección, y los 12 mutantes que la revisión dejó vivos, uno ya contado), las 53
-tumbadas: dos sobrevivieron al principio y cayeron al reforzar sus pruebas.
+Con los arreglos de las dos revisiones, y main traído con la 152 y la 156: `humo.js` 408 comprobaciones, siete de
+esta decisión. 53 mutaciones más a mano, las 53 tumbadas: 21 de seguridad, 22 de corrección y 10 de los mutantes que
+la revisión dejó vivos (los otros dos van entre los de corrección). Dos sobrevivieron al principio y cayeron al
+reforzar sus pruebas. `contrato.js`, `empresas-distintas.js`, `mapeos-codex.js` y el diccionario, en verde.
