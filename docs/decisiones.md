@@ -8168,8 +8168,8 @@ comporta Claude Code, y las pruebas lo fijan; si un día no fuera así, se cambi
   las variables de entorno y sus valores, ni las cabeceras, ni la dirección, ni los nombres de las variables. Los
   campos no se copian a ninguna variable que salga de la función.
 - Solo los asistentes que se usan en la carpeta (`.rsc.json`, y si no hay, el de ahora).
-- Sin seguir enlaces (el fichero, ni la carpeta `.codex`), con tope: 256 KB para `.mcp.json` y `config.toml`, 8 MB
-  para `.claude.json` (guarda también datos de cada carpeta); pasado el tope, ese fichero no se lee.
+- Sin seguir enlaces (el fichero, ni la carpeta `.codex`), con tope: 256 KB para `.mcp.json` y `config.toml`, 32 MB
+  para `.claude.json` (guarda también el historial de cada carpeta; con mucho pasa de 8 MB); pasado el tope, ese fichero no se lee.
 - Si no se entiende, de ese fichero no se enseña nada y no se adivina: JSON roto, o `mcpServers` que no es un
   mapa; en TOML, cadenas de varias líneas, comillas o listas sin cerrar, claves con puntos de `mcp_servers`
   arriba del todo, tablas de tablas, un servidor dos veces, una línea de más de 2000 letras.

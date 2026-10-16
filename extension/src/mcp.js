@@ -24,7 +24,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const TOPE_DE_UNA_CONFIGURACION = 256 * 1024; // .mcp.json y config.toml
-const TOPE_DE_CLAUDE_JSON = 8 * 1024 * 1024; // el de Claude guarda también el historial de cada carpeta
+const TOPE_DE_CLAUDE_JSON = 32 * 1024 * 1024; // el de Claude guarda también el historial de cada carpeta; con mucho pasa de 8 MB (se lee solo al abrir Conexiones)
 const LINEA_MAS_LARGA = 2000;
 const MAS_SERVIDORES_QUE_ESTOS = 100; // por fichero; más no es una lista de verdad
 const NOMBRE_MAS_LARGO = 60;
@@ -34,22 +34,25 @@ const TIPOS_WEB = new Set(['http', 'sse', 'ws', 'streamable-http']);
 
 const esEnlace = (ruta) => { try { return fs.lstatSync(ruta).isSymbolicLink(); } catch { return false; } };
 
-// El texto de un fichero normal, o null: sin enlaces, sin pasarse del tope.
+// Qué no se pudo leer (un enlace, uno que se pasa del tope, uno que falla al abrirse): se dice, no se calla.
+const NO_SE_PUDO = Symbol('no se pudo leer');
+
+// El texto de un fichero normal; null si no hay; NO_SE_PUDO si hay y no se lee.
 function leerSinEnlaces(ruta, tope, { carpetas = [] } = {}) {
   try {
-    if (carpetas.some(esEnlace) || esEnlace(ruta)) return null;
+    if (carpetas.some(esEnlace) || esEnlace(ruta)) return NO_SE_PUDO;
     const stat = fs.lstatSync(ruta);
-    if (!stat.isFile() || stat.size > tope) return null;
+    if (!stat.isFile() || stat.size > tope) return NO_SE_PUDO;
     return fs.readFileSync(ruta, 'utf8');
-  } catch {
-    return null;
+  } catch (error) {
+    return error && error.code === 'ENOENT' ? null : NO_SE_PUDO;
   }
 }
 
 // El nombre tal cual lo puso la persona, sin nada raro: es lo único que sale del fichero, aparte del tipo.
 function limpiarElNombre(nombre) {
   if (typeof nombre !== 'string') return null;
-  const limpio = nombre.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '').trim();
+  const limpio = nombre.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '').trim();
   return limpio && limpio.length <= NOMBRE_MAS_LARGO ? limpio : null;
 }
 
@@ -88,6 +91,7 @@ function deClaude({ raiz, casa, entorno }) {
   const ficheroJson = (ruta, tope) => {
     const texto = leerSinEnlaces(ruta, tope);
     if (texto === null) return { hay: false };
+    if (texto === NO_SE_PUDO) return { hay: true, datos: undefined };
     try {
       return { hay: true, datos: JSON.parse(texto) };
     } catch {
@@ -257,7 +261,7 @@ function deCodex({ raiz, casa, entorno }) {
   const delUsuario = leerSinEnlaces(path.join(entorno.CODEX_HOME || path.join(casa, '.codex'), 'config.toml'), TOPE_DE_UNA_CONFIGURACION);
   for (const [texto, origen] of [[delaCarpeta, 'carpeta'], [delUsuario, 'usuario']]) {
     if (texto === null) continue;
-    const lista = servidoresDeToml(texto, origen);
+    const lista = texto === NO_SE_PUDO ? null : servidoresDeToml(texto, origen);
     if (lista) servidores.push(...lista); else noSeEntendio.push({ asistente: 'codex', origen });
   }
   return { servidores, noSeEntendio };
@@ -277,17 +281,26 @@ function leer({ raiz, asistentes = [], casa = os.homedir(), entorno = process.en
   };
 }
 
+// En una carpeta sin confianza, lo que sale de un fichero de la carpeta (que puede
+// venir en un repo clonado) el asistente no lo activa así: se dice que falta aprobarlo.
+function conLaConfianza(servidores, confiable) {
+  return servidores.map((s) => (!confiable && s.origen === 'carpeta' ? { ...s, sinAprobar: true } : s));
+}
+
 const parecido = (texto) => String(texto).toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
 
 // Si el servidor se llama como una herramienta que la barra ya conoce, se dice
 // cuál: la lista no la duplica, la nombra junto a ella. Solo si coincide entero.
+// `esSuya`: solo si sale de lo de la persona (su `.claude.json`) se afirma que es
+// su conexión; un fichero de la carpeta puede venir en un repo clonado y llamarse
+// como cualquiera, así que ahí solo se dice que se llama igual.
 function conLasConocidas(servidores, proveedores = []) {
   const conocidas = proveedores.map((p) => ({ clave: [parecido(p.id), parecido(p.etiqueta)], etiqueta: p.etiqueta }));
   return servidores.map((s) => {
     const mia = parecido(s.nombre);
     const hallada = mia ? conocidas.find((c) => c.clave.includes(mia)) : null;
-    return hallada ? { ...s, herramienta: hallada.etiqueta } : s;
+    return hallada ? { ...s, herramienta: hallada.etiqueta, esSuya: s.origen !== 'carpeta' } : s;
   });
 }
 
-module.exports = { leer, conLasConocidas, servidoresDeToml, ASISTENTES };
+module.exports = { leer, conLasConocidas, conLaConfianza, servidoresDeToml, ASISTENTES };

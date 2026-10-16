@@ -1788,19 +1788,23 @@ ${cabecera}
     try {
       let quienes = asistentes.losDelArnes().map((a) => a.id);
       if (!quienes.length) quienes = [asistentes.conQuien().id];
-      return mcp.conLasConocidas(mcp.leer({ raiz: proyecto.raiz(), asistentes: quienes }).servidores, proveedores);
+      const visto = mcp.leer({ raiz: proyecto.raiz(), asistentes: quienes });
+      const servidores = mcp.conLaConfianza(mcp.conLasConocidas(visto.servidores, proveedores), vscode.workspace.isTrusted !== false);
+      return { servidores, noLeidos: visto.noSeEntendio };
     } catch (error) {
       this.salida.appendLine(`[mcp] ${error.message}`); // diccionario: interno
-      return [];
+      return { servidores: [], noLeidos: [] };
     }
   }
 
   verConexiones() {
     this.donde = { tipo: 'conexiones' };
     const lista = conexiones.proveedores();
+    const deMcp = this.lasDeMcp(lista);
     this.enviar({
       tipo: 'conexiones',
-      mcp: this.lasDeMcp(lista),
+      mcp: deMcp.servidores,
+      mcpNoLeido: deMcp.noLeidos,
       // Cada una, con cómo fue su última prueba, si sus claves no han cambiado.
       proveedores: lista.map((p) => ({ ...p, prueba: this.laUltimaPrueba(p.id), caduca: this.loQueCaduca(p.id) })),
       // Si el arnés se montó sobre un proyecto que ya existía, puede haber

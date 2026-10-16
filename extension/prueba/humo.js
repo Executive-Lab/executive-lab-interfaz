@@ -876,6 +876,23 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     assert.deepEqual(ver(['claude']).servidores, [], 'mcpServers que no es un mapa');
     fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ otra: 1 }));
     assert.deepEqual(ver(['claude']).noSeEntendio, [], 'un JSON válido sin servidores no es un fallo');
+    // Los caracteres que no se ven (bidi, ancho cero) no llegan al nombre: `a‮gnp.exe​` se pintaba al revés.
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: { 'a\u202egnp.exe\u200b': { command: 'x' }, '\u202e\u200b': { command: 'x' } } }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['agnp.exe'], 'sin bidi ni ancho cero, y uno que se queda vacío no sale');
+    assert.ok(!/[\u202e\u200b]/.test(JSON.stringify(ver(['claude']))));
+    // Más del tope de `.claude.json` (32 MB): no se lee, y se dice (revisión de la 175).
+    const grande = path.join(casa, '.claude.json');
+    const fd = fs.openSync(grande, 'w');
+    fs.writeSync(fd, '{"mcpServers":{"a":{"command":"x"}},"historial":"');
+    fs.ftruncateSync(fd, 33 * 1024 * 1024);
+    fs.closeSync(fd);
+    fs.rmSync(path.join(carpeta, '.mcp.json'));
+    assert.deepEqual(ver(['claude']).servidores, [], 'uno de más del tope no se lee');
+    assert.deepEqual(ver(['claude']).noSeEntendio, [{ asistente: 'claude', origen: 'usuario' }], 'y se dice que no se pudo leer');
+    // Con 20 MB de historial sí: el tope de antes (8 MB) era corto.
+    fs.writeFileSync(grande, JSON.stringify({ mcpServers: { a: { command: 'x' } }, historial: 'h'.repeat(20 * 1024 * 1024) }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['a'], 'con 20 MB de historial se lee');
+    fs.rmSync(grande);
 
     for (const [titulo, texto] of [
       ['una cadena de varias líneas', `[mcp_servers.a]\ncommand = "x"\nnota = """\nhola\n"""\n`],
@@ -935,7 +952,27 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     assert.match(pintado, /tienda-web — Claude · de esta carpeta · dirección web/);
     assert.match(pintado, /solo-aqui — Claude · solo tuya, en esta carpeta · dirección web/);
     assert.match(pintado, /mi\.servidor — Codex · de tu usuario/);
-    assert.match(pintado, /holded — Claude · de esta carpeta · programa de tu ordenador · es tu conexión Holded, la de arriba/);
+    // Un fichero de la carpeta (que puede venir en un repo clonado) no afirma que sea tuya: solo que se llama igual.
+    assert.match(pintado, /holded — Claude · de esta carpeta · programa de tu ordenador · se llama como tu conexión Holded/);
+    assert.ok(!/es tu conexión Holded/.test(pintado), 'una de la carpeta no dice que es tu conexión');
+    const tuya = mcp.conLasConocidas([{ nombre: 'Holded', asistente: 'claude', origen: 'usuario', tipo: 'web' }, { nombre: 'holded', asistente: 'claude', origen: 'tuyoAqui', tipo: 'web' }], [{ id: 'HOLDED', etiqueta: 'Holded' }]);
+    assert.equal((p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: tuya }).match(/es tu conexión Holded, la de arriba/g) || []).length, 2, 'las de tu usuario, sí');
+    // Lo que no se pudo leer, se dice.
+    const sinLeer = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: [], mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }, { asistente: 'claude', origen: 'tuyoAqui' }, { asistente: 'codex', origen: 'carpeta' }] });
+    assert.match(sinLeer, /No he podido leer lo de Claude de tu usuario\./);
+    assert.match(sinLeer, /No he podido leer lo de Codex de esta carpeta\./);
+    assert.equal((sinLeer.match(/lo de Claude de tu usuario/g) || []).length, 1, 'una sola vez');
+    assert.match(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: lista, mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }] }), /No he podido leer lo de Claude de tu usuario[\s\S]*context7/, 'también con otros servidores');
+    // Sin confianza en la carpeta, los de sus ficheros llevan «sin aprobar todavía».
+    const sinConfianza = mcp.conLaConfianza(lista, false);
+    const deLaCarpeta = lista.filter((s) => s.origen === 'carpeta').length;
+    assert.equal(sinConfianza.filter((s) => s.sinAprobar).length, deLaCarpeta);
+    assert.ok(sinConfianza.filter((s) => s.sinAprobar).every((s) => s.origen === 'carpeta'), 'los de tu usuario no');
+    const htmlSin = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: sinConfianza });
+    assert.equal((htmlSin.match(/sin aprobar todavía/g) || []).length, deLaCarpeta);
+    assert.match(htmlSin, /tienda-web — Claude · de esta carpeta · dirección web · sin aprobar todavía/);
+    assert.ok(!/sin aprobar/.test(pintado), 'con confianza, no sale');
+    assert.equal(mcp.conLaConfianza(lista, true).filter((s) => s.sinAprobar).length, 0);
     for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!pintado.includes(valor), `el valor «${cual}» sale en pantalla`);
     assert.ok(!/ejemplo\.test|npx|uvx|Bearer|HOLDED_API_KEY/.test(pintado), 'ni órdenes ni direcciones');
     const con = p.mandar({ tipo: 'conexiones', proveedores: [{ id: 'HOLDED', etiqueta: 'Holded', faltan: 0, fueraDeSitio: 0, cositas: 0 }], sueltas: null, mcp: lista });
@@ -19404,16 +19441,26 @@ exec git "$@"
     vscode.guion.raiz = carpeta;
     process.env.CLAUDE_CONFIG_DIR = casa;
     process.env.CODEX_HOME = entorno.CODEX_HOME;
+    const confianzaAntes = vscode.guion.confianza;
     try {
+      vscode.guion.confianza = true;
       await proveedor.manejar({ tipo: 'verConexiones' });
       const mensaje = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
       assert.equal(mensaje.mcp.length, 7, 'la extensión manda lo que lee');
+      assert.equal(mensaje.mcp.filter((s) => s.sinAprobar).length, 0, 'con confianza, ninguno sin aprobar');
+      assert.deepEqual(mensaje.mcpNoLeido, []);
+      vscode.guion.confianza = false;
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const sin = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
+      assert.deepEqual(sin.mcp.filter((s) => s.sinAprobar).map((s) => s.nombre).sort(), ['context7', 'figma', 'holded', 'tienda-web'], 'sin confianza, los de ficheros de la carpeta, sin aprobar');
+      assert.ok(sin.mcp.filter((s) => s.origen !== 'carpeta').every((s) => !s.sinAprobar));
       const entero = JSON.stringify(mensaje);
       for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!entero.includes(valor), `el valor «${cual}» viaja en el estado`);
       assert.ok(!(entero.includes('ejemplo.test')), 'ni la dirección');
     } finally {
       proveedor.enviar = antes.enviar;
       vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = confianzaAntes;
       for (const [k, v] of [['CLAUDE_CONFIG_DIR', antes.claude], ['CODEX_HOME', antes.codex]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     }
     return 'en el estado, 7 servidores';
