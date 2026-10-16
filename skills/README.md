@@ -18,6 +18,10 @@ Deja cuatro cosas y no pisa nada que el alumno haya escrito:
 | Los diales | `02-DOCS/wiki/harness/user-profile.md` | Es lo que lee `orient` para calibrar la brújula |
 | La declaración | `.rsc.json` → `ownSkills` | Constancia de que es nuestra; RSC la conserva y no la toca |
 
+Mira solo, con git, de quién es el historial de esa carpeta. Si no lo creó la barra, no apaga nada
+de lo que decide su equipo (las marcas que RSC apunta en su `.rsc.json`), y si git no se puede usar la
+trata como de alguien (decisión 161).
+
 Se puede volver a ejecutar tantas veces como haga falta: no duplica nada. Sobre el perfil, **ajusta
 solo los diales y respeta el resto** (RSC escribe ahí el objetivo del alumno). Y si el perfil ya lleva
 la marca de los raíles, no lo toca: el alumno puede haber pedido "no me expliques tanto" y `orient`

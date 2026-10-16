@@ -36,38 +36,21 @@ function loQueHayDentro(raiz) {
 }
 
 // ¿Este historial es nuestro o de alguien? Nuestro quiere decir que nació en
-// la barra, y eso no lo cambia que luego guarde en él quien trabaja aquí, ni
-// que sea un clon en otro ordenador (B6).
+// la barra (B6).
 //
 // Se decidía por los autores de los 20 últimos commits, y fallaba de dos
 // maneras: el `git init` de la barra no ponía identidad, así que con la de la
 // persona puesta en el ordenador el propio punto de partida salía con su nombre;
 // y una copia suya encima ya lo volvía «ajeno». El guardado solo no corría.
 //
-// Ahora, dos pruebas, de más fuerte a menos:
-//   1. la marca que deja la barra al crearlo (`git config --local`), que no
-//      viaja en un clon;
-//   2. su raíz, el primer commit: si es uno de los que escribe la barra —el
-//      punto de partida o una copia—, nació aquí. Esa sí viaja.
-// Sin commits todavía no hay nada que proteger.
-const MARCA_DEL_HISTORIAL = 'executivelab.historial';
-const ASUNTOS_DE_LA_BARRA = /^(Punto de partida|Copia automática|Copia de seguridad) — /;
+// Cómo se decide ahora vive en `media/railes/historial-ajeno.js`: los raíles lo
+// preguntan también, porque se ponen a mano (decisión 161). Y lo que git no deja
+// leer, o una rama huérfana de un repositorio con commits, es de alguien.
+const historialDeLaCarpeta = require('../media/railes/historial-ajeno');
 
-async function historialAjeno(raiz) {
-  if (!fs.existsSync(path.join(raiz, '.git'))) return false;
+const { MARCA_DEL_HISTORIAL } = historialDeLaCarpeta;
 
-  const marca = await procesos.git('config', '--local', '--get', MARCA_DEL_HISTORIAL);
-  if (marca.codigo === 0 && marca.salida.trim() === 'nuestro') return false;
-
-  const raices = await procesos.git('rev-list', '--max-parents=0', 'HEAD');
-  if (raices.codigo !== 0) return false; // recién creado, sin commits
-  const [primera, ...otras] = raices.salida.split('\n').map((l) => l.trim()).filter(Boolean);
-  // Dos raíces son dos historias juntadas, y una de ellas no es nuestra.
-  if (!primera || otras.length) return true;
-
-  const asunto = await procesos.git('log', '-1', '--format=%s', primera);
-  return !(asunto.codigo === 0 && ASUNTOS_DE_LA_BARRA.test(asunto.salida.trim()));
-}
+const historialAjeno = (raiz) => historialDeLaCarpeta.esAjeno(raiz, (args) => procesos.git(...args));
 
 // Para lo que la barra hace sola en una carpeta por ser suya (decisión 157: sus
 // marcas de la 3, los ajustes de Claude y el `model` de Codex de la carpeta), no
@@ -741,6 +724,24 @@ async function queHay() {
 // con su mensaje y en su momento.
 const podemosGuardarElPuntoDePartida = async () => !(await historialAjeno(proyecto.raiz()));
 
+// ¿Puede la barra guardar sola una copia aquí? (decisión 164, que la enciende de
+// fábrica.) Solo en un historial de esta carpeta que creó la barra en este
+// ordenador: con su marca local (`git config --local`), que no viaja en un clon.
+// No vale lo que basta para el punto de partida (`historialAjeno`):
+//   · sin `.git` propio, git sube a buscar el de más arriba, y la copia acabaría
+//     en el historial de otro proyecto;
+//   · un `git init` suyo, sin commits todavía, se da allí por nuestro, y la
+//     copia sola haría commit en él cada hora y correría su `pre-commit`;
+//   · un clon de un historial de la barra empieza por «Punto de partida — …»,
+//     y es de quien lo clonó.
+// Guardar a mano no pasa por aquí: lo pulsa alguien que está mirando.
+async function podemosGuardarSolo() {
+  const raiz = proyecto.raiz();
+  if (!raiz || !fs.existsSync(path.join(raiz, '.git'))) return false;
+  const marca = await procesos.git('config', '--local', '--get', MARCA_DEL_HISTORIAL);
+  return marca.codigo === 0 && marca.salida.trim() === 'nuestro';
+}
+
 // ---------------------------------------------------------- la radiografía
 
 // "¿Hasta qué punto está montada esta carpeta?" — pieza por pieza, y sin
@@ -765,7 +766,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
   const donde = require('./donde');
 
   const hay = await queHay();
-  if (hay.tipo === 'sinCarpeta') return { queEs: hay.tipo, piezas: [], listo: false };
+  if (hay.tipo === 'sinCarpeta') return { queEs: hay.tipo, piezas: [], listo: false, algoRoto: false };
 
   // Lo que se ha encontrado sin tocar nada: de aquí salen las piezas que la
   // lista de antes no enseñaba por ningún lado.
@@ -819,6 +820,14 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
   // decisión 142; ver `solo.js`): `alAbrir: true`, y la barra lo hace al abrir
   // la carpeta sin esperar a nadie; o `retiene`, con el caso de P9 que pide el sí
   // de esa persona. Los que solo llevan a otra pantalla no dicen nada.
+  //
+  // ── Lo que falta no siempre está roto (decisión 164) ──────────────────
+  //
+  // Una carpeta recién montada no tiene conexiones, ni conocimiento, ni copia
+  // fuera: es lo normal el primer día, y llega con el trabajo. Esas piezas
+  // llevan `porHacer: true`. Siguen saliendo en esta lista, con su marca y su
+  // botón, pero no son «algo roto»: al terminar de montar no se enseña la lista
+  // por ellas, se va a la principal (`algoRoto`, abajo).
   const conArreglo = (pieza, arreglo) => (pieza.estado === 'si' || pieza.estado === 'noAplica' || !arreglo
     ? pieza
     : { ...pieza, arreglo });
@@ -873,6 +882,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       detalle: !conArnes ? 'Cuando esté montado' : (!proveedores.length
         ? 'Ninguna todavía'
         : `${proveedores.length}${aMedias ? `, y ${aMedias} sin terminar` : ''}`),
+      // Qué conectar lo decide su negocio, y una a medias ya la dice la tarjeta.
+      porHacer: true,
     }, { como: 'solo', etiqueta: 'Ver tus conexiones', accion: { tipo: 'verConexiones' } }),
     // El encargo ya estaba escrito en `sueltas.js` y **solo se podía lanzar
     // desde la pantalla de conexiones, que exige arnés montado**. O sea: justo
@@ -883,11 +894,14 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       detalle: fuera
         ? `${fuera.claves === 1 ? '1 clave' : `${fuera.claves} claves`} en ${fuera.sitios === 1 ? 'un sitio' : `${fuera.sitios} sitios`}; el asistente puede ${fuera.claves === 1 ? 'ordenarla' : 'ordenarlas'}`
         : 'Nada suelto',
+      // Eran suyas antes del arnés, y ordenarlas ya va en el primer mensaje.
+      porHacer: true,
     }, comoEncargo(encargos.ordenarLasClaves())),
     conArreglo({
       nombre: 'Conocimiento',
       estado: !conArnes ? 'noAplica' : (temas ? 'si' : 'no'),
       detalle: !conArnes ? 'Cuando esté montado' : (temas ? `${temas} ${temas === 1 ? 'tema' : 'temas'}` : 'Todavía no ha aprendido nada'),
+      porHacer: true,
     }, { como: 'solo', etiqueta: 'Darle documentos (inbox)', accion: { tipo: 'verPapeles' } }),
     // Los botones solo son una pieza que falta si ese asistente llega a
     // tenerlos: una cruz permanente no es información, es un reproche por algo
@@ -898,6 +912,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       nombre: 'Habilidades con botón',
       estado: !conArnes ? 'noAplica' : (botones ? 'si' : 'no'),
       detalle: !conArnes ? 'Cuando esté montado' : (botones ? `${botones}` : 'Ninguno todavía'),
+      porHacer: true,
     }, { como: 'solo', etiqueta: 'Ver los que hay', accion: { tipo: 'verSaberes' } })] : []),
     // Con el arnés puesto y sin historial en la carpeta no hay copias, aunque
     // lo demás esté entero: pasa cuando se eligió seguir sin ellas (B3), y
@@ -913,6 +928,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         // se queda fuera de la copia, y con demasiado peso nuevo no se guarda
         // (decisión 147, `guardar.js`).
         arreglo: { como: 'solo', etiqueta: 'Ponerlas ahora', accion: { tipo: 'ponerCopias' }, ...(sigueSinCopias ? { retiene: 'loDecide' } : { alAbrir: true }) },
+        // Lo que eligió no está roto; lo que tenía que salir solo y no salió, sí.
+        ...(sigueSinCopias ? { porHacer: true } : {}),
       }
       : conArreglo({
         nombre: 'Copias de seguridad aquí',
@@ -927,6 +944,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       detalle: cuenta.conectado
         ? `Dentro${cuenta.usuario ? ` como ${cuenta.usuario}` : ''}${cuenta.remoto && cuenta.remoto.esGitHub ? ` · ${cuenta.remoto.corto}` : ''}`
         : 'Aún no has entrado en tu cuenta',
+      // La cuenta es suya, y si la deja para más tarde, la tiene en Sugerencias.
+      porHacer: true,
     }, { como: 'persona', etiqueta: 'Guardar fuera de aquí', accion: { tipo: 'verCopiaFuera' } }),
   ];
 
@@ -983,6 +1002,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
       estado: 'no',
       detalle: 'El asistente todavía no lo ha mirado',
       arreglo: comoEncargo(encargos.ordenarLaCarpeta(parte)),
+      porHacer: true,
     });
   }
 
@@ -1148,6 +1168,8 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
         ? '1 cosa que se aplazó al montarlo y hoy ya encaja'
         : `${aFondo.recomendaciones.length} cosas que se aplazaron al montarlo y hoy ya encajan`,
       arreglo: comoEncargo(encargos.reajustar(aFondo.recomendaciones)),
+      // Una propuesta del arnés, no una avería: aceptarla lo decide una persona.
+      porHacer: true,
     });
   }
 
@@ -1158,6 +1180,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
     return {
       queEs: hay.tipo,
       listo: false,
+      algoRoto: true,
       piezas: [{
         nombre: 'El fichero que dice cómo está montado esto',
         estado: 'no',
@@ -1198,8 +1221,13 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
     });
   }
 
-  return { queEs: hay.tipo, piezas, listo: piezas.every((p) => p.estado === 'si' || p.estado === 'noAplica') };
+  return { queEs: hay.tipo, piezas, listo: piezas.every((p) => p.estado === 'si' || p.estado === 'noAplica'), algoRoto: hayAlgoRoto(piezas) };
 }
+
+// Si hay algo roto de verdad (decisión 164): una pieza que falta o está a medias
+// y que no es lo que llega con el trabajo (`porHacer`). Es lo único que hace
+// enseñar la lista al terminar de montar; lo demás, a la principal.
+const hayAlgoRoto = (piezas = []) => piezas.some((p) => (p.estado === 'no' || p.estado === 'aMedias') && !p.porHacer);
 
 // Si el `CLAUDE.md` de la carpeta ya trae nuestro bloque, el que importa
 // `siempre.md` en cada conversación.
@@ -1300,7 +1328,7 @@ function fechaDelPlan() {
 
 module.exports = {
   queCarpetaEs, comoEsEstaCarpeta, queHayEncima, MARCA_DEL_HISTORIAL,
-  queHay, reconocer, mirarYClasificar, podemosGuardarElPuntoDePartida, radiografia, fechaDelPlan,
+  queHay, reconocer, mirarYClasificar, podemosGuardarElPuntoDePartida, podemosGuardarSolo, radiografia, hayAlgoRoto, fechaDelPlan,
   montadaAqui, recordarQueSeMontoAqui, saberDondeRecordar, CLAVE_MONTADA_AQUI,
   laUltimaRevision, dondeViveLaRevision, comoEstanLosRailes, saberDondeEstamos, comoEstaElFreno, tieneTexto, tieneElBloque, loQueFaltaPorPoner,
 };

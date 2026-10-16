@@ -276,6 +276,34 @@ async function copias(cuantas = 10) {
   return lista.map((c) => ({ ...c, etiqueta: `Como estaba ${haceCuanto(c.cuando)}` }));
 }
 
+// La copia que deja la barra al terminar de montar (`arrancar.js`): «Punto de
+// partida — <fecha>». La guarda ella, no la persona, así que no dice que se haya
+// empezado nada (decisión 164: con ella, la tarjeta de la cuenta no salía nunca).
+const esElPuntoDePartida = (copia) => Boolean(copia) && /^Punto de partida — /.test(String(copia.asunto || ''));
+
+// ── Guardar solo (decisión 164: cada hora, de fábrica) ───────────────────
+//
+// Una vuelta del reloj de `extension.js`. Devuelve qué ha pasado, para poder
+// probarlo sin esperar una hora. No guarda:
+//   · si está apagado o no toca todavía;
+//   · si en esta carpeta eligió seguir sin copias;
+//   · sin git en el ordenador;
+//   · en un historial que no creó la barra en este ordenador
+//     (`terreno.podemosGuardarSolo`): ni en el de arriba, ni en uno suyo, ni en
+//     un clon;
+//   · si no hay nada nuevo.
+// Se mira de quién es el historial antes de contar los cambios: sin `.git`
+// propio, `git status` contaría los del proyecto de arriba.
+async function guardarSiToca({ horas, desde, ahora = Date.now(), sigueSinCopias = false }) {
+  if (!horas) return { hecho: 'apagado' };
+  if (ahora - desde < horas * 60 * 60 * 1000) return { hecho: 'noToca' };
+  if (sigueSinCopias) return { hecho: 'sinCopias' };
+  if (!(await hayGit())) return { hecho: 'sinGit' };
+  if (!(await require('./terreno').podemosGuardarSolo())) return { hecho: 'noEsSuyo' };
+  if (!(await cambiosSinGuardar())) return { hecho: 'sinCambios' };
+  return { hecho: 'guardada', ...(await guardar(`Copia automática — ${fechaLarga()}`)) };
+}
+
 // Deja la carpeta exactamente como estaba en esa copia — también quita lo que
 // se creó después — sin destruir nada: antes se guarda lo de ahora, y la
 // vuelta atrás queda registrada como una copia más, así que también se puede
@@ -437,4 +465,4 @@ async function cambiosSinGuardar() {
   return h.cuantosCambios(donde, comoLlamar());
 }
 
-module.exports = { LIMITE_FICHERO, LIMITE_TOTAL, cuantoPesa, iniciar, guardar, copias, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };
+module.exports = { LIMITE_FICHERO, LIMITE_TOTAL, cuantoPesa, iniciar, guardar, copias, esElPuntoDePartida, guardarSiToca, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };
