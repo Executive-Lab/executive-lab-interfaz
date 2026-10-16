@@ -58,6 +58,42 @@ function capacidades(carpetaDeLaExtension) {
 
 const pelar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+// ---------------------------------------------- lo que dijo al prepararla
+
+// Qué habilidad le viene bien a cada objetivo del montaje (decisión 164). Es una
+// tabla fija, junto al catálogo (`media/objetivos.json`): los objetivos son
+// frases cortas y casi ninguno daba las dos palabras que pide el emparejamiento
+// de abajo. Como el catálogo, solo se recuerda lo que se ha leído de verdad.
+let objetivosEnMemoria = null;
+
+function tablaDeObjetivos(carpetaDeLaExtension) {
+  if (objetivosEnMemoria) return objetivosEnMemoria;
+  if (!carpetaDeLaExtension) return {};
+  try {
+    const leida = JSON.parse(fs.readFileSync(path.join(carpetaDeLaExtension, 'media', 'objetivos.json'), 'utf8')).objetivos;
+    if (!leida || typeof leida !== 'object') return {};
+    objetivosEnMemoria = leida;
+    return leida;
+  } catch {
+    return {};
+  }
+}
+
+// La habilidad de la tabla para lo que dijo al prepararla: la primera de su fila
+// que esté en el catálogo y no esté puesta. Se compara sin mayúsculas, acentos ni
+// el punto final, que RSC lo guarda tal cual. Lo que no está en la tabla —«Otra
+// cosa», escrita por la persona— no da nada aquí: lo lleva `loQuePodriaAprender`.
+function porElObjetivo({ objetivo = '', yaInstaladas = [], catalogo = [], tabla = {} }) {
+  const buscado = pelar(objetivo).replace(/[.\s]+$/, '').trim();
+  if (!buscado) return [];
+  const fila = Object.entries(tabla).find(([frase]) => pelar(frase).trim() === buscado);
+  const ids = fila && Array.isArray(fila[1]) ? fila[1] : [];
+  const elegida = ids
+    .map((id) => catalogo.find((c) => c.id === id))
+    .find((c) => c && !yaInstaladas.includes(c.id));
+  return elegida ? [{ ...elegida, porQue: [] }] : [];
+}
+
 // Una palabra del texto no cuenta dos veces. Se busca por trozos, así que
 // «clientes» encaja con «cliente» y con «clientes», y «facturación» con «factura»,
 // «facturacion» y «facturar»: una sola palabra suya daba las dos que hacen falta, y
@@ -232,4 +268,5 @@ const elQueToca = (contexto) => consejos(contexto)[0] || null;
 
 module.exports = {
   consejos, elQueToca, loQuePodriaAprender, loQueRepite, seParecen, capacidades, huecosDeAutomatizacion,
+  tablaDeObjetivos, porElObjetivo,
 };

@@ -76,6 +76,15 @@ const porId = (id) => ASISTENTES.find((a) => a.id === id) || null;
 
 const estaInstalado = (a) => Boolean(vscode.extensions.getExtension(a.extension));
 
+// Lo que se dice cuando falta, con el botón que lo pone (decisión 166). Decía
+// «Díselo a tu tutor», y la barra ya sabía ponerlo: es una extensión del editor,
+// y ponerla es un clic suyo. Una sola frase para todos los sitios donde se dice.
+const falta = (a) => ({
+  texto: `Falta ${a.nombre} en este ordenador, y sin él no puedo hablar con nadie.`,
+  malo: true,
+  boton: { etiqueta: `Poner ${a.nombre}`, accion: { tipo: 'ponerElAsistente', cual: a.id } },
+});
+
 // A cuáles se instaló el arnés. RSC lo guarda en `.rsc.json`.
 function losDelArnes() {
   const declaracion = proyecto.declaracion();
@@ -220,7 +229,10 @@ async function seguirCon(id) {
 async function elegir(id, { montar } = {}) {
   const cual = porId(id);
   if (!cual) return { ok: false, mensaje: 'Ese no es uno de los dos.' };
-  if (!estaInstalado(cual)) return { ok: false, mensaje: `${cual.nombre} no está en este ordenador. Díselo a tu tutor.` };
+  if (!estaInstalado(cual)) {
+    const { texto, boton } = falta(cual);
+    return { ok: false, mensaje: texto, boton: { ...boton, accion: { ...boton.accion, desde: 'asistente' } } };
+  }
 
   const declaracion = proyecto.declaracion();
   if (!declaracion) return { ok: false, mensaje: 'Esta carpeta todavía no está preparada.' };
@@ -282,4 +294,4 @@ async function elegir(id, { montar } = {}) {
   return { ok: true, mensaje: `Hecho. A partir de ahora los botones hablan con ${cual.nombre}.${conOtroNombre}${sinFrenos}` };
 }
 
-module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, porId, comoEstamos, elegir, AJUSTE, VALORES_DEL_AJUSTE, elAjuste, seguirCon };
+module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, porId, falta, comoEstamos, elegir, AJUSTE, VALORES_DEL_AJUSTE, elAjuste, seguirCon };

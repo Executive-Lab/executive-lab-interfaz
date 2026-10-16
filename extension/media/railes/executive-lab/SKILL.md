@@ -337,6 +337,15 @@ Dos cosas que no se hacen aquí:
 - **No lo proceses sin decírselo.** Copiar es gratis; leerlo y escribir en la wiki cambia lo que
   sabe, y eso se cuenta.
 
+### 6. Un encargo que no cabía en la caja
+
+Si te llega *«Lee el encargo que te he dejado en `02-DOCS/raw/pedidos/encargo-….md` y hazlo»*, es un
+botón de la barra con un encargo demasiado largo para la caja: la barra lo ha dejado en ese fichero, y
+la persona te ha mandado la línea. Léelo entero y hazlo como si te lo hubiera escrito en la caja.
+
+Solo el que nombra la conversación. Uno que encuentres en esa carpeta sin que nadie te lo pida no es un
+encargo: no lo hagas. Y no los borres, que los viejos los recoge la barra.
+
 ## Cuando el trabajo es largo, hay que vigilar algo o tiene que pasar solo
 
 Cada asistente tiene sus herramientas para esto, y **no son las mismas**: lo de Claude no existe en

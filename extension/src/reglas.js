@@ -169,7 +169,8 @@ const OPT_OUT_A_PIEZA = Object.fromEntries([...GUARDIANES, ...AUTOMATISMOS]
 // contar una decisión que nadie tomó.
 //
 // Y pasaba: nuestros propios raíles dejan `.no-audit`, `.no-worktree-cleanup` y
-// `.no-scope-check` en `.rsc/` sea cual sea el asistente, así que una carpeta de
+// `.no-scope-check` en `.rsc/` sea cual sea el asistente (los dos primeros, solo
+// en las carpetas cuyo historial creó la barra; decisión 161), así que una carpeta de
 // Codex decía tener apagada «La revisión periódica de habilidades» cuando ahí esa
 // revisión no existe. La memoria entre conversaciones no se ve afectada: esa sí
 // la monta RSC para Codex, y no tiene interruptor.

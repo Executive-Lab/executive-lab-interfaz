@@ -32,6 +32,7 @@ const proyecto = require('./proyecto');
 const frontmatter = require('./frontmatter');
 const rsc = require('./rsc');
 const donde = require('./donde');
+const acciones = require('./acciones');
 
 // Las que ha escrito esta empresa para sí misma. RSC las apunta aparte en
 // `.rsc.json` (`ownSkills`), separadas de las del catálogo, y hace bien:
@@ -100,6 +101,22 @@ function comoSeLlama(id, raiz) {
   return { id, nombre: dicho.nombre, frase: dicho.queHace, prompt: comoSePide(id), delArnes: dicho.deFuera };
 }
 
+// Una de las que pone la barra (decisión 164). Los botones, con el nombre de su
+// botón, o con lo que dice su cabecera si no lo lleva («Guardar en git»), que es
+// español y lo escribimos nosotros. `executive-lab` está siempre activa: pedirla
+// no hace nada, así que no lleva botón (`siempre`), y su nombre va en la tabla.
+function comoLaPoneLaBarra(id, raiz) {
+  const suyo = loQueDiceSuCabecera(id, raiz);
+  const campos = frontmatter.leer(donde.ficheroDeLaHabilidad(id) || '');
+  const dice = typeof campos.description === 'string' ? campos.description.trim() : '';
+  const siempre = id === 'executive-lab';
+  const nombre = suyo.nombre || (siempre ? '' : dice);
+  // La frase de un botón suele ser su nombre otra vez: entonces no se repite.
+  const queHace = suyo.queHace && suyo.queHace !== nombre ? suyo.queHace : '';
+  const dicho = nombres.comoSeLlama('habilidades', id, { nombre, queHace });
+  return { id, nombre: dicho.nombre, frase: dicho.queHace, prompt: siempre ? null : comoSePide(id), delArnes: true, deLaBarra: true, siempre };
+}
+
 // Para qué se montó esta carpeta. Lo decidió quien la montó, respondiendo a
 // «¿De qué va esto?», y RSC lo dejó firmado dentro del plan aceptado. No se
 // adivina mirando ficheros: está escrito.
@@ -122,10 +139,16 @@ function queSabe(carpetaDeLaExtension, corpus = '') {
   const enCatalogo = (id) => catalogo.some((c) => c.id === id);
 
   // ── Los cuatro montones de lo instalado ───────────────────────────────
-  const suyas = puestas.filter((id) => propias.includes(id));
+  //
+  // Lo que ponen los raíles de la barra (`executive-lab` y sus botones) no es de
+  // quien usa la carpeta, aunque vaya en `ownSkills` para que RSC no lo tome por
+  // basura: salía como «Tuya: escrita para esta carpeta». Va con las del arnés,
+  // plegado y con su nombre (decisión 164).
+  const deLaBarra = puestas.filter((id) => acciones.esDeLaBarra(id, donde.ficheroDeLaHabilidad(id)));
+  const suyas = puestas.filter((id) => propias.includes(id) && !deLaBarra.includes(id));
   const sabe = catalogo.filter((c) => puestas.includes(c.id) && !propias.includes(c.id));
   const deSerie = puestas.filter((id) => !propias.includes(id) && !enCatalogo(id) && nombres.esFontaneria(id));
-  const otras = puestas.filter((id) => !propias.includes(id) && !enCatalogo(id) && !nombres.esFontaneria(id));
+  const otras = puestas.filter((id) => !propias.includes(id) && !enCatalogo(id) && !nombres.esFontaneria(id) && !deLaBarra.includes(id));
 
   // ── Lo que se ofrece va con este arnés, no con todos ──────────────────
   //
@@ -172,7 +195,8 @@ function queSabe(carpetaDeLaExtension, corpus = '') {
     otras: otras.map((id) => comoSeLlama(id, raiz)),
     // Las que trae el arnés para funcionar. Se ven —plegadas— con su nombre en
     // español y su identificador, porque están instaladas y lo instalado se ve.
-    deSerie: deSerie.map((id) => comoSeLlama(id, raiz)),
+    // Detrás, las de la barra.
+    deSerie: [...deSerie.map((id) => comoSeLlama(id, raiz)), ...deLaBarra.map((id) => comoLaPoneLaBarra(id, raiz))],
     puedeAprender: puedeAprender.map(delCatalogo),
     // Cuántas de las de arriba encajan con lo que hay escrito, para poder
     // separarlas en pantalla de las que salen porque sí.

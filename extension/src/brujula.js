@@ -23,6 +23,7 @@ const rumbo = require('./rumbo');
 const conexiones = require('./conexiones');
 const cerebro = require('./cerebro');
 const asistentes = require('./asistentes');
+const porDondeIbas = require('./por-donde-ibas');
 
 // Nombres del diccionario para las dos carpetas del arnés.
 const ZONAS = { '02-DOCS': 'Conocimiento', '01-TOOLS': 'Conexiones' };
@@ -61,7 +62,9 @@ function zonasTocadas(rutas) {
     if (!partes.length || partes[0].startsWith('.')) continue;
 
     if (partes[0] === '02-DOCS') {
-      const tema = partes[1] === 'wiki' && partes[2] && !partes[2].includes('.') && partes[2] !== 'harness';
+      // El andamio del arnés no es un tema: tocar un documento de trabajo salía
+      // «Conocimiento (Ftd)», y desde la decisión 160 eso se ve en la tarjeta del día.
+      const tema = partes[1] === 'wiki' && partes[2] && !partes[2].includes('.') && !cerebro.esAndamio(partes[2]);
       zonas.add(tema ? `${ZONAS['02-DOCS']} (${humanizar(partes[2])})` : ZONAS['02-DOCS']);
     } else if (partes[0] === '01-TOOLS') {
       // Un fichero suelto en 01-TOOLS no es una herramienta. Sin esto, tocar
@@ -241,8 +244,14 @@ async function calcular() {
   // saber desde aquí si ha iniciado sesión —la credencial vive en el llavero
   // del sistema— así que no se adivina: se convierte en el primer paso, y
   // desaparece en cuanto haya pasado algo.
+  //
+  // El punto de partida no es que haya pasado algo: lo guarda la barra al
+  // terminar de montar. Contándolo, esta tarjeta no salía nunca, justo el
+  // primer día (decisión 164). Una copia suya, o una que la barra guarda sola
+  // porque ha cambiado algo, sí cuenta.
   const quien = asistentes.elDeAhora();
-  const sinEmpezar = !continuacion && !sabe && !conectados && !copias.length;
+  const copiasSuyas = copias.filter((c) => !guardar.esElPuntoDePartida(c));
+  const sinEmpezar = !continuacion && !sabe && !conectados && !copiasSuyas.length;
 
   // Que falte el asistente no es solo un problema del primer día: si alguien lo
   // desinstala, o abre esta carpeta en otro ordenador, la barra sigue pintando
@@ -269,17 +278,27 @@ async function calcular() {
   const rama = rumbo.elegirRama({ ...terreno.mirarYClasificar(), git: { hay: conGit } }).rama;
   const sinAjustar = rama === 'adoptar' || rama === 'ponerAlDia' ? rama : null;
 
+  // Dónde tocó la última sesión, según la memoria del arnés.
+  const laUltimaZona = interpretar(continuacion);
+
   return {
     listo: true,
     sinAjustar,
-    donde: interpretar(continuacion) || (conectados === 0 && sabe === 0 ? 'Acabas de empezar' : 'Tu trabajo'),
+    donde: laUltimaZona || (conectados === 0 && sabe === 0 ? 'Acabas de empezar' : 'Tu trabajo'),
+    laUltimaZona,
     hiciste,
+    // Por dónde ibas, para «Seguir donde lo dejé» (decisión 160): lo que dice
+    // `next:` o el documento de trabajo en marcha más reciente, leído del disco.
+    // Sin nada en marcha, null, y el botón se queda como estaba.
+    ibasPor: porDondeIbas.porDondeIbas(proyecto.raiz(), continuacion),
     sabe,
     conectados,
     esperando,
     faltaGit: !conGit,
     comoSeInstalaGit: git.comoSeInstala(),
     faltaElAsistente: faltaElAsistente ? quien.nombre : null,
+    // Y el botón que lo pone, hecho aquí, que es quien sabe cuál (decisión 166).
+    ponerElAsistente: faltaElAsistente ? asistentes.falta(quien).boton : null,
     primerPaso: sinEmpezar ? {
       asistente: quien.nombre,
       instalado: asistentes.estaInstalado(quien),
