@@ -1152,7 +1152,7 @@ ${cabecera}
       cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre «${unRotulo(mensaje.titulo)}». Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
       anadirDocumentos: () => this.anadirDocumentos(mensaje.desde),
       soltarDocumentos: () => this.soltarDocumentos(mensaje.ficheros, mensaje.para),
-      abrirPanelCompleto: () => cerebro.abrirPanel(),
+      abrirPanelCompleto: () => this.abrirPanelCompleto(mensaje.desde),
       verDocumentos: () => this.verDocumentos(),
       verLaFoto: () => this.verLaFoto(mensaje.desde),
       guardarLaFoto: () => this.guardarLaFoto(mensaje.png),
@@ -1575,7 +1575,10 @@ ${cabecera}
   }
 
   verConexion(proveedor, aviso = null) {
-    const datos = conexiones.claves(proveedor);
+    // Lo que escribió el asistente (los pasos, de dónde se saca cada clave y el
+    // nombre), tapado como en el PDF: con ello arma el panel lo que «No lo
+    // encuentro» le pasa al asistente.
+    const datos = informatico.conexionALaVista(conexiones.claves(proveedor));
     if (!datos) return this.verConexiones();
     // Un aviso con `seQueda` sobrevive al repintado del vigía: el de la guía en PDF
     // se escribe en `01-TOOLS/`, y sin esto se borraba al momento (decisión 159).
@@ -2073,8 +2076,17 @@ ${cabecera}
       sueltos,
       herramientas: salidas.loQueHaProducido(),
       fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()),
+      // El panel completo de RSC, junto a la foto, solo si está (arreglos sueltos de la tanda).
+      hayPanel: cerebro.hayPanel(),
       aviso,
     });
+  }
+
+  // El panel completo se abre en el navegador. Si ya no está, o ahora es un
+  // enlace, se repinta donde estaba, sin el botón: solo sale lo que se tiene.
+  abrirPanelCompleto(desde) {
+    if (cerebro.abrirPanel()) return undefined;
+    return desde === 'documentos' ? this.verDocumentos() : this.verCerebro();
   }
 
   // ── La foto del cerebro (decisión 151, punto 11 de la 142) ──────────────
