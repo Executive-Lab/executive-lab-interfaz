@@ -67,7 +67,7 @@ const LOS_DEL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'poner
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // En una carpeta que va por delante, lo que escribe con el arnés espera a que la
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
-const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad']);
+const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad', 'cambiarInterruptor']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
@@ -1318,6 +1318,7 @@ ${cabecera}
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       verReglas: () => this.verReglas(),
       abrirReglas: () => this.abrirReglas(mensaje.cual),
+      cambiarInterruptor: () => this.cambiarInterruptor(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
       // Sin `que`, todo lo de la barra; con una lista, solo eso; con otra cosa, nada.
@@ -2763,9 +2764,47 @@ ${cabecera}
   // Las reglas que el asistente respeta siempre. Son tres sitios de RSC y no se
   // veía ninguno — y uno de ellos, la constitución, es de los dos ficheros que
   // el arnés marca como "léete esto antes de cada cosa que hagas".
-  async verReglas() {
+  async verReglas(avisoLocal = null) {
     this.donde = { tipo: 'quieto' };
-    this.enviar({ tipo: 'reglas', ...reglas.queHay() });
+    this.enviar({ tipo: 'reglas', ...reglas.queHay(), ...(avisoLocal ? { aviso: avisoLocal } : {}) });
+  }
+
+  // Los interruptores de RSC, a un clic (decisión 172): la rama principal, el
+  // trabajo aparte y compartir el conocimiento. El clic es el sí de la persona (P9);
+  // lo que cambia lo cambia la orden oficial del arnés, por la misma vía que todo
+  // lo que la barra le manda (`rsc.correr`: nombres que salen de la carpeta, carpeta
+  // que va por delante, relevo), y después se mira el disco: se dice lo que ha pasado
+  // de verdad, no lo que RSC contesta.
+  async cambiarInterruptor(boton) {
+    const decir = (texto, malo = false) => this.verReglas({ texto, malo });
+    // `boton` solo elige de una tabla de la barra: la orden no viene del panel.
+    const que = reglas.elBoton(boton);
+    if (!que) return decir('Eso ya no se puede cambiar desde aquí. Pídeselo al asistente.', true);
+    if (vscode.workspace.isTrusted === false) return decir('Esta carpeta no es de confianza en el editor, y la barra no cambia nada en ella. Si confías en ella, dale tu confianza y vuelve a pulsar.', true);
+    if (!proyecto.raiz() || !proyecto.existe('.rsc.json')) return decir('Esta carpeta todavía no está preparada. Prepárala y vuelve a pulsar.', true);
+    if (this.conElArnes()) return decir(OCUPADA, true);
+
+    this.botonesDelArnes = (this.botonesDelArnes || 0) + 1;
+    let hecho;
+    try {
+      this.enviar({ tipo: 'esperando', que: 'Cambiándolo…' });
+      hecho = await rsc.correr(que.args, { tiempoMaximo: 120000 });
+    } finally {
+      this.botonesDelArnes -= 1;
+    }
+    const salida = String(hecho.error || hecho.salida || '').trim();
+    this.salida.appendLine(`[interruptor] ${que.args.join(' ')}: ${hecho.codigo}${salida ? ` · ${salida}` : ''}`); // diccionario: interno
+    if (hecho.porDelante) return decir(POR_DELANTE, true);
+    if (hecho.codigo !== 0) {
+      // Con lo que el arnés ha dicho, sin claves y sin pasarse de largo.
+      const suya = conexiones.taparClaves(salida).split('\n').filter(Boolean).slice(-3).join(' · ').slice(0, 300);
+      return decir(`No he podido cambiarlo.${suya ? ` El arnés dice: «${suya}».` : ''} Pulsa «Algo va mal» y pásale el código a tu tutor.`, true);
+    }
+    // El arnés dijo que sí: se mira en el disco que la carpeta haya quedado como toca.
+    if (reglas.estadoDe(que.cual) !== que.llega) {
+      return decir('El arnés dice que lo ha hecho, pero la carpeta sigue igual. Pulsa «Algo va mal» y pásale el código a tu tutor.', true);
+    }
+    return decir(`Hecho. ${reglas.INTERRUPTORES[que.cual].dice[que.llega]}`);
   }
 
   // ── Los raíles de esta carpeta, al día ─────────────────────────────────
