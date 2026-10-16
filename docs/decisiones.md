@@ -7940,9 +7940,11 @@ parejas, así que no queda ninguna sin botón.
 
 ### Las pruebas
 
-`humo.js`, una comprobación nueva (de 475 a 476): los botones de cada entrada según su estado (con las tres
+`humo.js`, una comprobación nueva (de 478 a 479): los botones de cada entrada según su estado (con las tres
 marcas de la rama), la pantalla, las seis órdenes con sus marcas, el fallo con su salida, el «sí» que no
 cambia nada, la carpeta por delante, sin confianza, sin montar, nombres que no son suyos, un arnés de la 2,
 Codex y el arreglo en marcha. Y con `--con-arnes`, el
-paso a paso con el RSC de verdad sobre la carpeta recién montada: cada botón, su marca, `.rsc.json` y
-vuelta.
+paso a paso con el RSC de verdad sobre la carpeta recién montada (487): cada botón, su marca, `.rsc.json` y
+vuelta. Quince mutaciones a mano (la orden de cada botón, la confianza, la carpeta montada, el arreglo en
+marcha, el «sí» que no cambia nada, la carpeta por delante, el nombre del panel, la salida del fallo, la
+precedencia de las marcas, el Codex y la 2, el botón y el texto del equipo): las quince tumbadas.

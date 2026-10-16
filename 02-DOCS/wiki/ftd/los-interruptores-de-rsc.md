@@ -4,7 +4,7 @@ title: Los interruptores de RSC, a un clic
 date: 2026-10-16
 author: Jose Sanchis
 branch: los-interruptores-de-rsc
-status: in-progress
+status: hecho
 ---
 
 # Los interruptores de RSC, a un clic
@@ -48,11 +48,15 @@ verdad. El clic de la persona es su sí (P9). Decisión 172.
 - [x] 3. Por `rsc.correr`, con confianza, carpeta montada y relevo; sin escribir marcas a mano.
 - [x] 4. Decir lo que ha pasado: hecho, fallo con su salida, «sí» que no cambia.
 - [x] 5. Pruebas en `humo.js` y con el RSC de verdad.
-- [ ] 6. Mutaciones, batería entera y PR.
+- [x] 6. Mutaciones, batería entera y PR.
 
 ## Evidence
 
-(Se rellena al cerrar.)
+- `humo.js` 479 (una nueva: 478 en main); con `--con-arnes`, 487 con el RSC de verdad (una vez falló
+  «el guion de los avisos: no se lanza el aviso», ajena, y no se repitió).
+- `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js` en verde, `comprobar-diccionario.js` y
+  `revisar-powershell.js` en verde.
+- 15 mutaciones, 15 tumbadas.
 
 ## Next
 
