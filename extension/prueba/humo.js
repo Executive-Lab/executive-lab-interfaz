@@ -23438,9 +23438,10 @@ exec git "$@"
         assert.equal(fs.readFileSync(path.join(copia.carpeta, '.claude', 'skills', 'review', 'SKILL.md'), 'utf8'), SU_REVIEW, 'lo que hay en la copia no es la suya');
 
         const visto = ideas.queSeVe({ carpetaDeLaExtension: RAIZ });
-        assert.match(visto.parece.texto, /^Esto parece una aplicación hecha con React, con claves de Stripe y 1 documento sin colocar\.$/);
+        // La carpeta entera es una aplicación: sus claves de arriba están en su sitio, son suyas (decisión 167).
+        assert.match(visto.parece.texto, /^Esto parece una aplicación hecha con React, con 1 documento sin colocar\.$/);
         assert.match(visto.parece.copia.texto, /la habilidad «review»/);
-        assert.equal(visto.ideas[0].id, 'conectar-STRIPE');
+        assert.ok(!visto.ideas.some((i) => i.id === 'conectar-STRIPE'), 'se ofrece conectar las claves de la aplicación');
         assert.ok(!JSON.stringify(visto).includes(valor), 'el valor de una clave sale de su fichero');
         return `${copia.cosas.join(', ')} · «${visto.parece.texto}»`;
       } finally {
