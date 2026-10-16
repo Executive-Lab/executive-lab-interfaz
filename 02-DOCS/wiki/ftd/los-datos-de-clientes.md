@@ -4,7 +4,7 @@ title: Los datos de clientes, en Ayuda y a tiempo
 date: 2026-10-15
 author: Jose Sanchis
 branch: los-datos-de-clientes
-status: in-progress
+status: hecho
 ---
 
 # Los datos de clientes, en Ayuda y a tiempo
@@ -109,7 +109,8 @@ Las páginas, con lo que dice cada una, están en la decisión 153. En corto:
 
 ## Next
 
-- Las máquinas de GitHub, y fusionar: lo decide Jose.
+- ~~Las máquinas de GitHub, y fusionar.~~ Fusionada el 15-10 (PR #38), con las cuatro máquinas en verde.
+- Verlo en un VS Code de verdad, con una persona delante.
 - Si el texto cambia de verdad (otra licencia, otro menú), decidir si la tarjeta vuelve a salir. Hoy sale una
   vez por carpeta y no vuelve.
 - Volver a mirar las páginas antes de cada versión que toque esto: cambian, y la fecha va en pantalla.
