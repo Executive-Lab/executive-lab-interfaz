@@ -92,6 +92,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const avisoDeCodex = require('./aviso-de-codex');
 const loDelEditor = require('./lo-del-editor');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
@@ -107,6 +108,7 @@ const porDondeIbas = require('./por-donde-ibas');
 // puso a la vez; al abrir, lo que cuenta ese aviso y nada más (decisión 162): el
 // de los avisos del sistema no se lleva el español que se puso otro día.
 const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } };
+const QUITAR_EL_AVISO_DE_CODEX = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarElAvisoDeCodex' } };
 const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que } });
 
 // Lo que se dice cuando un texto ha quedado escrito en la caja del asistente:
@@ -557,7 +559,7 @@ ${cabecera}
     const llave = `${proyecto.raiz()}:${clave}`;
     if (this.ofrecidos.has(llave)) return;
     this.ofrecidos.add(llave);
-    Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
+    return Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
   }
 
   // El ajuste del asistente, cambiado con la barra abierta (decisión 158): se nota
@@ -620,6 +622,51 @@ ${cabecera}
     const frase = retirados.laFrase(hechos);
     if (frase) vscode.window.showInformationMessage(frase);
     return hechos;
+  }
+
+  // Avisarte cuando Codex termine (decisión 171). Es su configuración de usuario y
+  // vale para todas sus conversaciones: no se pone solo (P9), se ofrece una vez con
+  // su botón. Solo con un `node` de verdad, y sin un `notify` suyo.
+  async ofrecerElAvisoDeCodex() {
+    const codex = asistentes.porId('codex');
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return null;
+    if (!asistentes.estaInstalado(codex) && !asistentes.losDelArnes().includes(codex)) return null;
+    const fuente = path.join(this.contexto.extensionPath, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    const oferta = avisoDeCodex.queSeOfrece({ fuente, node: avisoDeCodex.nodeDeVerdad({ propio: entorno.node() }) });
+    this.salida.appendLine(`[codex] aviso al terminar: ${oferta.ofrecer ? 'se ofrece' : `no se ofrece (${oferta.motivo})`}`); // diccionario: interno
+    if (!oferta.ofrecer) return oferta;
+    const si = 'Avisarme cuando Codex termine';
+    const no = 'No, gracias';
+    this.ofertaDeCodex = this.unaVez('avisoDeCodex', async () => {
+      const quiere = await vscode.window.showInformationMessage(
+        'Si quieres, te aviso cuando Codex termine, aunque estés en otra ventana. Saldrá un aviso al acabar cada respuesta, solo en tus carpetas de Executive Lab. Cambia la configuración de Codex de tu ordenador, y puedes quitarlo cuando quieras.',
+        si, no,
+      );
+      if (quiere === no) {
+        this.salida.appendLine(`[codex] aviso al terminar: ${avisoDeCodex.noGracias().hecho}`); // diccionario: interno
+        return;
+      }
+      if (quiere !== si) return;
+      const hecho = avisoDeCodex.ponerlo({ fuente, node: oferta.node });
+      this.salida.appendLine(`[codex] aviso al terminar: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
+      if (hecho.hecho !== 'puesto') {
+        vscode.window.showWarningMessage('No he podido dejar el aviso de Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+        return;
+      }
+      this.dejarElAviso(avisoDeCodex.FRASE, QUITAR_EL_AVISO_DE_CODEX);
+      this.soltarElAviso();
+    });
+    return oferta;
+  }
+
+  // «Quitarlo», del aviso de Codex: solo lo que puso la barra, y no se vuelve a ofrecer.
+  async quitarElAvisoDeCodex() {
+    const hecho = avisoDeCodex.quitarlo();
+    this.salida.appendLine(`[codex] quitar el aviso al terminar: ${hecho.hecho}`); // diccionario: interno
+    const bien = ['quitado', 'yaNoEstaba'].includes(hecho.hecho);
+    return this.enviar(bien
+      ? { tipo: 'aviso', texto: 'Quitado. No lo vuelvo a poner.' }
+      : { tipo: 'aviso', texto: 'No he podido quitarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
   }
 
   // Lo del asistente que deja el instalador en los ajustes de usuario, si falta
@@ -1277,6 +1324,7 @@ ${cabecera}
       // Sin `que`, todo lo de la barra; con una lista, solo eso; con otra cosa, nada.
       quitarLoDeClaude: () => mensaje.que === undefined ? this.quitarLoDeClaude()
         : Array.isArray(mensaje.que) ? this.quitarLoDeClaude(mensaje.que.filter((q) => typeof q === 'string')) : undefined,
+      quitarElAvisoDeCodex: () => this.quitarElAvisoDeCodex(),
       verAsistente: () => this.verAsistente(),
       verComoTrabaja: () => this.verComoTrabaja(),
       verFijadas: () => this.verFijadas(),
@@ -4174,6 +4222,8 @@ function activate(contexto) {
     // no existe (decisión 157).
     await panel.ponerLoDeClaudeAlAbrir().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
     await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
+    // Y el aviso al terminar de Codex, si se quiere (decisión 171): se ofrece, no se pone solo.
+    await panel.ofrecerElAvisoDeCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y lo demás que se puede hacer solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
     // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).

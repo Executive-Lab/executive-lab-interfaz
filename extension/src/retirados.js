@@ -104,6 +104,9 @@ function leerElToml(texto) {
   const modelos = [];
   const proveedores = new Map();
   let conProveedoresPropios = false;
+  // Para la 171: los nombres de las claves de arriba, y dónde está la primera tabla.
+  const clavesDeArriba = new Set();
+  let primeraTabla = -1;
   let tabla = '';
   let perfil = null;
   let conClave = false;
@@ -120,6 +123,7 @@ function leerElToml(texto) {
     }
     const cabecera = linea.match(CABECERA);
     if (cabecera) {
+      if (primeraTabla < 0) primeraTabla = i;
       tabla = laTabla(cabecera[1]);
       if (tabla === 'model_providers' || tabla.startsWith('model_providers.')) conProveedoresPropios = true;
       return;
@@ -127,6 +131,10 @@ function leerElToml(texto) {
     if (/^\s*\[/.test(linea) || cuantos(limpia, '{', '}') !== 0) {
       raro = true;
       return;
+    }
+    if (tabla === '') {
+      const clave = linea.match(/^\s*(?:"([^"\\]*)"|'([^']*)'|([A-Za-z0-9_-]+))\s*[.=]/);
+      if (clave) clavesDeArriba.add(clave[1] ?? clave[2] ?? clave[3]);
     }
     // Una lista que sigue en las líneas de abajo.
     const abiertos = cuantos(limpia, '[', ']');
@@ -149,7 +157,7 @@ function leerElToml(texto) {
     const entrada = linea.match(ENTRADA) || linea.match(ENTRADA_DE_ANTES);
     if (entrada && /^(api|apikey)$/i.test(elValor(entrada))) conClave = true;
   });
-  return raro || enUnaLista !== 0 ? null : { lineas, modelos, perfil, conClave, proveedores, conProveedoresPropios };
+  return raro || enUnaLista !== 0 ? null : { lineas, modelos, perfil, conClave, proveedores, conProveedoresPropios, clavesDeArriba, primeraTabla };
 }
 
 // 20261015-143000
