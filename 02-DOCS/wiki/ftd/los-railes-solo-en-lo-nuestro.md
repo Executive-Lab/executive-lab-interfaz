@@ -43,13 +43,28 @@ alguien era decidir por su equipo (P4). Decisión 161.
 - [x] 2. `CALLAR` separa lo del equipo de lo de esta máquina; con `--historial-ajeno` o `--ajena`, solo lo segundo.
 - [x] 3. `ponerLosRailes` pasa `--historial-ajeno` cuando el historial no es de la barra, también con su sí.
 - [x] 4. Lo que ya está no se toca, y su `.rsc.json` tampoco.
-- [x] 5. Sin `.rsc/`, los raíles no la crean; reproducido con el `sync` del paquete que antes se perdía lo declarado.
+- [x] 5. Sin `.rsc/`, los raíles no la crean. Reproducido con el `sync` del paquete: antes se perdía lo declarado.
 - [x] 6. Pruebas en `humo.js` (cuatro nuevas y dos del montaje de verdad) y mutaciones a mano.
 - [x] 7. Decisión 161 y este documento.
 
 ## Evidence
 
-- Pendiente de la última pasada.
+- `humo.js --con-arnes`, con main traído (la 0.53.0): 433 comprobaciones, 425 sin `--con-arnes`. Las cuatro nuevas: «los raíles apagan
+  lo del equipo solo en lo nuestro, y lo de esta máquina en todas», «en una carpeta de alguien, lo que su
+  .rsc.json declara y lo que puso una barra de antes se queda», «los raíles no crean .rsc/…» y «al montar
+  encima de lo de alguien, con su sí, los raíles no deciden por su equipo». Las tres primeras corren el `sync`
+  del paquete, con una casa de mentira. Y dos montajes de verdad lo miran: el de una carpeta vacía (las cuatro
+  marcas) y el de un proyecto de alguien (solo `.no-scope-check`, y nada en su `.rsc.json`).
+- Mutaciones a mano: 13, las 13 tumbadas.
+  - En `aplicar.js`: ignorar `--ajena`; ignorar `--historial-ajeno`; poner lo del equipo también en lo suyo;
+    no poner ni lo de esta máquina; `scope-check` del equipo; `gitmoji` de esta máquina; crear `.rsc/` antes
+    que RSC; sin `.rsc/`, no poner nada; quitar lo de antes en lo suyo.
+  - En `arrancar.js`: no pasar `--historial-ajeno`; pasarlo solo con `--ajena`; al revés; siempre.
+  - «No pasarlo» y «al revés», corridas además con `--con-arnes`: caen también en los montajes de verdad.
+- Antes de arreglarlo, reproducido con el paquete: raíles y luego `sync` en una carpeta sin `.rsc/` dejaban
+  `.rsc.json` sin `knowledge-sync`, `trunk-guard` ni `auto-update`.
+- `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), `comprobar-diccionario.js` y
+  `revisar-powershell.js`, en verde.
 
 ## Next
 

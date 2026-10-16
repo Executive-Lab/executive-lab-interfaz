@@ -6578,3 +6578,8 @@ clon lo rehace. Era decidir por su equipo, y P4 dice que lo suyo no se toca.
   próxima vez que se pongan los raíles. Antes de esta decisión pasaba igual, salvo con los raíles de una
   versión anterior, y entonces se perdía lo de arriba.
 
+`humo.js`: 433 comprobaciones con `--con-arnes` y main traído (la 0.53.0), 425 sin él. Cuatro son nuevas, y tres de ellas
+corren el `sync` del paquete de verdad. Y dos montajes de verdad lo miran: el de una carpeta vacía y el de un
+proyecto de alguien. 13 mutaciones a mano, las 13 tumbadas. Dos de ellas, corridas además con `--con-arnes`,
+caen también en los montajes de verdad. `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29),
+el diccionario y `revisar-powershell.js`, en verde.
