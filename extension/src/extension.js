@@ -67,6 +67,8 @@ const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacida
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
+// Lo de la carpeta que entra en un encargo, en una línea y sin comillas (`limpio.js`).
+const { etiqueta: unRotulo } = require('./limpio');
 const nombres = require('./nombres');
 const pulso = require('./pulso');
 const fijadas = require('./fijadas');
@@ -996,7 +998,7 @@ ${cabecera}
       verTema: () => this.verTema(mensaje.tema),
       leerArticulo: () => this.leerArticulo(mensaje.ruta, mensaje.tema, mensaje.desde),
       abrirFuera: () => this.abrirFuera(mensaje.ruta),
-      cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre "${mensaje.titulo}". Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
+      cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre «${unRotulo(mensaje.titulo)}». Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
       anadirDocumentos: () => this.anadirDocumentos(mensaje.desde),
       soltarDocumentos: () => this.soltarDocumentos(mensaje.ficheros, mensaje.para),
       abrirPanelCompleto: () => cerebro.abrirPanel(),
@@ -1732,9 +1734,15 @@ ${cabecera}
 
   // Modo mixto: lo que solo mira se ejecuta y se enseña; lo que pide datos o
   // toca algo se lo pedimos al asistente, que pregunta y pide permiso.
+  //
+  // Lo que se le pide sale del disco y no del mensaje del panel: el programa tiene
+  // que estar en esa conexión, y su rótulo, que escribe quien hizo la carpeta, va
+  // limpio (revisión de la 154 y la 155, `limpio.js`).
   async hacerCosita(proveedor, fichero, etiqueta, pideDatos) {
     if (pideDatos) {
-      await this.pedir(`Quiero "${etiqueta}". Usa 01-TOOLS/${proveedor}/${fichero} y pregúntame los datos que te falten.`);
+      const suyo = conexiones.scripts(proveedor).find((c) => c.fichero === fichero);
+      if (!suyo) return this.verConexion(proveedor, { texto: 'Ese programa ya no está en esta conexión.', malo: true });
+      await this.pedir(`Quiero «${unRotulo(suyo.etiqueta)}». Usa 01-TOOLS/${unRotulo(proveedor, 80)}/${unRotulo(suyo.fichero, 80)} y pregúntame los datos que te falten.`);
       return;
     }
 
