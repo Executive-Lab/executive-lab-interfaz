@@ -1302,8 +1302,10 @@ function secretosDeTexto(texto, nombre) {
   for (const m of String(texto).matchAll(/Private-Lines:\s*\d+\s*\n([\s\S]*?)(?:\nPrivate-MAC|$)/g)) {
     for (const linea of m[1].split(/\r?\n/)) if (linea.trim().length >= 16) valores.push(linea.trim());
   }
-  for (const m of String(texto).matchAll(/\bpassword\s+(\S+)/g)) valores.push(m[1]);
-  for (const m of String(texto).matchAll(/\b[a-z][a-z0-9+.-]{1,20}:\/\/[^:/\s@]+:([^@\s]+)@/gi)) valores.push(m[1]);
+  // Con comillas, entera (`password "ab cd"`); sin ellas, hasta el espacio.
+  for (const m of String(texto).matchAll(/\bpassword\s+(?:"([^"]*)"|(\S+))/g)) valores.push(m[1] ?? m[2]);
+  // Usuario y contraseña acotados: sin tope, un fichero de 60 KB de `http://a:` seguidos costaba segundos.
+  for (const m of String(texto).matchAll(/\b[a-z][a-z0-9+.-]{1,20}:\/\/[^:/\s@]{1,64}:([^@\s]{1,256})@/gi)) valores.push(m[1]);
   for (const m of String(texto).matchAll(/\baws_(?:secret_access_key|session_token)\s*=\s*(\S+)/gi)) valores.push(m[1]);
   if (/^\.(pgpass|htpasswd)$/i.test(nombre)) {
     for (const linea of String(texto).split(/\r?\n/)) {

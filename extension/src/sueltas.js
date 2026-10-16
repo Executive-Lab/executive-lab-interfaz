@@ -299,6 +299,7 @@ function nombraA(texto, id) {
 const TOPE_POR_CARPETA = 300;
 const TOPE_DE_LECTURAS = 60;
 const TOPE_DE_SUBCARPETAS = 40;
+const NOMBRE_DE_CREDENCIALES = /^(keys?|secrets?|credentials?|creds|private|auth|certs?|certificados?|claves)$/i;
 
 function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = false } = {}) {
   const raiz = proyecto.raiz();
@@ -317,7 +318,9 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
       if (!entrada.isFile()) continue;
       // Abrir un `.json` cuesta; los demás se resuelven por el nombre y son
       // gratis. Solo los que hay que abrir gastan del tope.
-      const hayQueAbrirlo = /\.json$/i.test(entrada.name);
+      // Uno que su nombre ya dice (`credentials.json`) no gasta del tope: se
+      // reconoce igual aunque ya no quede (decisión 170).
+      const hayQueAbrirlo = /\.json$/i.test(entrada.name) && !JSON_INEQUIVOCO.test(entrada.name);
       if (hayQueAbrirlo && leidos >= TOPE_DE_LECTURAS) continue;
       if (hayQueAbrirlo) leidos += 1;
 
@@ -360,25 +363,25 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
   } catch { /* sin permiso: se mira lo demás */ }
   // Un `keys/` en la raíz es desorden; el de dentro de una herramienta no. Y lo
   // de una aplicación es suyo, como sus claves.
-  for (const carpeta of [...new Set([...primerNivel, ...CARPETAS, 'keys'])]) {
-    if (!conLasDeLasApps && esUnaApp(carpeta)) continue;
-    mirarCarpeta(carpeta);
-    // Y un nivel más (decisión 170): `datos/google/cuenta.json` es donde la gente
-    // guarda una cuenta de servicio, y no mirarlo la dejaba en las copias. Con
-    // tope, que esto corre en cada repintado, y sin entrar en las carpetas que el
-    // inventario nunca mira ni en las que son una aplicación.
-    let hijas = [];
+  // Las lecturas son pocas, así que se gastan por orden de importancia
+  // (decisión 170): primero el primer nivel, después las subcarpetas con nombre de
+  // credenciales, y al final el resto del segundo nivel.
+  const primeras = [...new Set([...primerNivel, ...CARPETAS, 'keys'])].filter((c) => conLasDeLasApps || !esUnaApp(c));
+  for (const carpeta of primeras) mirarCarpeta(carpeta);
+  const hijasDe = (carpeta) => {
     try {
-      hijas = fs.readdirSync(proyecto.ruta(carpeta), { withFileTypes: true })
+      return fs.readdirSync(proyecto.ruta(carpeta), { withFileTypes: true })
         .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !NO_SE_MIRA.has(e.name))
-        .map((e) => e.name).slice(0, TOPE_DE_SUBCARPETAS);
-    } catch { /* sin permiso: se mira lo demás */ }
-    for (const hija of hijas) {
-      const relativa = path.posix.join(carpeta, hija);
-      if (!conLasDeLasApps && esUnaApp(relativa)) continue;
-      mirarCarpeta(relativa);
-    }
-  }
+        .map((e) => e.name).slice(0, TOPE_DE_SUBCARPETAS)
+        .map((h) => path.posix.join(carpeta, h))
+        .filter((r) => conLasDeLasApps || !esUnaApp(r));
+    } catch { return []; }
+  };
+  // Y un nivel más: `datos/google/cuenta.json` es donde la gente guarda una cuenta de servicio.
+  const segundas = primeras.flatMap(hijasDe);
+  const conNombreDeClave = (r) => NOMBRE_DE_CREDENCIALES.test(path.posix.basename(r));
+  for (const r of segundas.filter(conNombreDeClave)) mirarCarpeta(r);
+  for (const r of segundas.filter((x) => !conNombreDeClave(x))) mirarCarpeta(r);
 
   // Dentro de cada herramienta, lo que esté FUERA de su `keys/`. Lo que hay en
   // `keys/` está en su casa y no se cuenta como desorden.

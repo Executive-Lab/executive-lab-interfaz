@@ -7760,6 +7760,47 @@ exec git "$@"
     return 'OAuth · .ppk · dos niveles · lo del sistema se protege y no se mueve · nada del contenido sale';
   });
 
+  await comprobar('las credenciales que no son un .env: revisión de seguridad de la 170 (tiempo, comillas y orden de las lecturas)', async () => {
+    const fs2 = require('node:fs');
+    const carpeta = fs2.mkdtempSync(path.join(os.tmpdir(), 'creds2-'));
+    const escribir = (relativa, texto) => {
+      fs2.mkdirSync(path.dirname(path.join(carpeta, relativa)), { recursive: true });
+      fs2.writeFileSync(path.join(carpeta, relativa), texto);
+    };
+    const SECRETO = deMentira('-----BEGIN PRIVATE', ' KEY-----\nMIIEvQ_falsa_dos_170\n-----END PRIVATE', ' KEY-----\n');
+    escribir('.rsc.json', JSON.stringify({ version: 1, targets: ['claude'] }));
+    // 37 subcarpetas con 2 .json cada una (más keys y zzz: 39, dentro del tope de 40), delante (por orden de nombre) de lo importante.
+    for (let n = 0; n < 37; n += 1) for (const f of ['a', 'b']) escribir(`datos/s${String(n).padStart(2, '0')}/${f}.json`, '{"a":1}');
+    escribir('zeta/cuenta.json', JSON.stringify({ type: 'service_account', private_key: SECRETO }));
+    escribir('secrets/otra.json', JSON.stringify({ type: 'service_account', private_key: SECRETO }));
+    escribir('datos/keys/tercera.json', JSON.stringify({ type: 'service_account', private_key: SECRETO }));
+    escribir('datos/zzz/credentials.json', '{}');
+    vscode.guion.raiz = carpeta; vscode.guion.confianza = true;
+    try {
+      const vistos = cargar('sueltas').ficherosDeAcceso().map((f) => f.donde);
+      assert.ok(vistos.includes('zeta/cuenta.json'), 'una de primer nivel se ve aunque haya 80 .json por el medio');
+      assert.ok(vistos.includes('secrets/otra.json'), 'una en secrets/ se ve');
+      assert.ok(vistos.includes('datos/keys/tercera.json'), 'una en una subcarpeta con nombre de credenciales va antes que el resto del segundo nivel');
+      assert.ok(vistos.includes('datos/zzz/credentials.json'), 'un nombre inequívoco no gasta lectura y se ve aunque no quede tope');
+
+      // Comillas en un .netrc, y el tiempo de las URL con usuario.
+      const conexionesM = cargar('conexiones');
+      const CONTRA = deMentira('ab cd ', 'efghijklmnop');
+      escribir('.netrc', `machine x login y password "${CONTRA}"\n`);
+      const tapado = conexionesM.taparClaves(`dicho: ${CONTRA}`);
+      assert.ok(!tapado.includes('efghijklmnop'), 'una contraseña con espacios y comillas se tapa entera');
+      for (const entrada of ['http://a:'.repeat(7000), `${'ab://'.repeat(12000)}x:`]) {
+        escribir('.git-credentials', entrada);
+        const t0 = Date.now();
+        conexionesM.valoresDeClaves();
+        assert.ok(Date.now() - t0 < 100, `una URL con credenciales repetida no puede costar ${Date.now() - t0} ms`);
+      }
+    } finally {
+      vscode.guion.raiz = empresa; vscode.guion.confianza = false;
+    }
+    return 'URLs en tiempo acotado · contraseña entre comillas · las lecturas, por orden de importancia';
+  });
+
   await comprobar('las claves de una aplicación están en su sitio, y siguen sin salir de este ordenador', async () => {
     // Jose, 29-09-2026, con una captura de nexus-presupuestos: «Hay 9 claves
     // fuera de sitio» — Resend, Supabase, y NEXUS y USE «por montar», que no
