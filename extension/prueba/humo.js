@@ -17623,9 +17623,123 @@ exec git "$@"
     assert.match(leerTexto('instalador', 'windows', 'ExecutiveLab.iss'), /\[UninstallRun\][\s\S]*ajustes-del-editor\.js"" --quitar/, 'desinstalar en Windows no lo quita');
     assert.match(leerTexto('instalador', 'windows', 'desinstalar.ps1'), /'ajustes-del-editor\.js'[\s\S]*if \(Test-Path \$constancia\) \{[\s\S]*\$moduloAjustes --quitar[\s\S]*\} else \{\s*# Una instalacion de antes[^\n]*\n\s*LimpiarAjustes \(Join-Path \$env:APPDATA/, 'el desinstalador a mano de Windows no lo quita, o limpia por el nombre aunque haya constancia');
     assert.match(leerTexto('instalador', 'mac', 'desinstalar.command'), /"\$MODULO" --quitar --ajustes "\$AJUSTES"[\s\S]*if \[ "\$HABIA_CONSTANCIA" = "1" \]; then/, 'el desinstalador del Mac no lo quita, o limpia por el valor aunque haya constancia');
-    assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerEnElFichero\(\{[\s\S]{0,200}asistentes: \['claude'\]/, 'el instalador del Mac no lo pone');
+    assert.match(leerTexto('instalador', 'mac', 'instalar.js'), /ponerEnElFichero\(\{[\s\S]{0,200}asistentes: ASISTENTES,/, 'el instalador del Mac no lo pone');
     assert.match(fs.readFileSync(path.join(RAIZ, 'preparar-paquete.js'), 'utf8'), /'ajustes\.js', 'ajustes-del-editor\.js'/, 'la barra no lo lleva dentro');
     return 'puesto · lo decidido, respetado · una vez · Claude, Codex y los dos · y se quita solo lo nuestro';
+  });
+
+  await comprobar('los instaladores, con los dos asistentes y comprobados: el Mac y el .exe preguntan, y probar.sh y probar.ps1 miran cada clave con su valor (decisión 168)', async () => {
+    const cp = require('node:child_process');
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const mac = path.join(RAIZ, '..', 'instalador', 'mac');
+    const win = path.join(RAIZ, '..', 'instalador', 'windows');
+    const texto = (...p) => fs.readFileSync(path.join(...p), 'utf8');
+
+    // El .dmg: la app pregunta con tres botones y pasa lo elegido a arrancar.sh,
+    // que se lo pasa a instalar.js.
+    const app = texto(mac, 'instalar.applescript');
+    assert.match(app, /buttons \{"Claude", "Codex", "Los dos"\} default button "Claude"/, 'el .dmg no pregunta con qué asistente, o no deja Claude por defecto');
+    assert.match(app, /"Los dos" then set elAsistente to "losDos"/);
+    assert.match(app, /" --asistente " & elAsistente/, 'la app no le pasa lo elegido a la instalación');
+
+    // instalar.js: de lo elegido sale la extensión y lo que se pone en los ajustes.
+    const instalarMac = require(path.join(mac, 'instalar.js'));
+    assert.deepEqual(instalarMac.asistentesDe('losDos'), ['claude', 'codex']);
+    assert.deepEqual(instalarMac.asistentesDe('codex'), ['codex']);
+    assert.deepEqual(instalarMac.asistentesDe('claude'), ['claude']);
+    assert.deepEqual(instalarMac.asistentesDe('otra cosa'), ['claude'], 'sin entender lo elegido, Claude');
+    assert.equal(instalarMac.EXTENSION_DEL_ASISTENTE.codex, 'openai.chatgpt');
+    const instalarJs = texto(mac, 'instalar.js');
+    assert.match(instalarJs, /asistentes: ASISTENTES,/, 'los ajustes del editor no van con lo elegido');
+    assert.match(instalarJs, /!SECO && ASISTENTES\.includes\('claude'\)/, 'el control remoto de Claude se pone aunque no se haya elegido Claude');
+
+    // Y de verdad, en seco y en una casa de mentira: qué extensiones pide.
+    const instalarEnSeco = (asistente) => {
+      const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'i168-casa-'));
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'i168-tmp-'));
+      const args = [path.join(mac, 'instalar.js'), '--seco', '--sin-dock'].concat(asistente ? ['--asistente', asistente] : []);
+      const r = cp.spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 120000, env: { ...process.env, HOME: casa, TMPDIR: tmp, TEMP: tmp, TMP: tmp } });
+      const log = fs.existsSync(path.join(tmp, 'executive-lab-instalacion.log')) ? fs.readFileSync(path.join(tmp, 'executive-lab-instalacion.log'), 'utf8') : '';
+      fs.rmSync(casa, { recursive: true, force: true });
+      fs.rmSync(tmp, { recursive: true, force: true });
+      return { r, log };
+    };
+    const claudeSolo = instalarEnSeco(null);
+    assert.equal(claudeSolo.r.status, 0, claudeSolo.log);
+    assert.match(claudeSolo.log, /install-extension anthropic\.claude-code/);
+    assert.doesNotMatch(claudeSolo.log, /openai\.chatgpt/, 'sin elegir nada, se pone también Codex');
+    const losDos = instalarEnSeco('losDos');
+    assert.match(losDos.log, /install-extension anthropic\.claude-code/);
+    assert.match(losDos.log, /install-extension openai\.chatgpt/, 'con los dos, falta la extensión de Codex');
+    assert.match(losDos.log, /asistentes: claude, codex/);
+    const soloCodex = instalarEnSeco('codex');
+    assert.match(soloCodex.log, /install-extension openai\.chatgpt/);
+    assert.doesNotMatch(soloCodex.log, /anthropic\.claude-code/, 'con Codex solo, se pone Claude');
+
+    // El .exe: tres opciones, y en silencio se elige con /ASISTENTE=.
+    const iss = texto(win, 'ExecutiveLab.iss');
+    assert.match(iss, /Add\('Claude'\);\s*PaginaAsistente\.Add\('Codex'\);\s*PaginaAsistente\.Add\('Los dos'\);/, 'el .exe no ofrece «Los dos»');
+    assert.match(iss, /SelectedValueIndex = 2 then\s*Result := 'losDos'/, 'el .exe no manda losDos a preparar.js');
+    assert.match(iss, /\{param:ASISTENTE\|\}/, 'en silencio no se puede elegir');
+
+    // Lo que comprueban: cada clave con su valor, escritas a mano en los dos.
+    const ps = texto(win, 'probar.ps1');
+    const sh = texto(mac, 'probar.sh');
+    for (const asistentes of [['claude'], ['codex'], ['claude', 'codex']]) {
+      for (const [clave, valor] of Object.entries(ade.queToca(asistentes, { delEditor: true }))) {
+        assert.ok(sh.includes(`'${clave}': ${JSON.stringify(valor).replace(/"/g, "'")}`), `probar.sh no mira ${clave} con su valor`);
+        assert.ok(ps.includes(`'${clave}' = '${JSON.stringify(valor)}'`) || ps.includes(`['${clave}'] = '${JSON.stringify(valor)}'`), `probar.ps1 no mira ${clave} con su valor`);
+      }
+    }
+    assert.match(sh, /remoteControlAtStartup":true/);
+    assert.match(ps, /remoteControlAtStartup -ne \$true/);
+    assert.match(sh, /openai\.chatgpt/);
+    assert.match(ps, /'openai\.chatgpt'/);
+    assert.match(ps, /"\/ASISTENTE=\$Asistente"/, 'probar.ps1 no instala con lo elegido');
+
+    // Y probar.sh, de verdad, sobre una casa de mentira: bien con todo, mal con una clave cambiada.
+    if (process.platform !== 'darwin') return 'las órdenes y las tablas, bien; probar.sh de verdad, SALTADA (es de macOS)';
+    const probarEn = (asistente, preparar) => {
+      const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'i168-probar-'));
+      const ajustesDir = path.join(casa, 'Library', 'Application Support', 'Code', 'User');
+      fs.mkdirSync(path.join(casa, 'Library', 'Application Support', 'ExecutiveLab'), { recursive: true });
+      fs.mkdirSync(ajustesDir, { recursive: true });
+      return ade.ponerEnElFichero({ fichero: path.join(ajustesDir, 'settings.json'), asistentes: ade.asistentesDe(asistente) }).then(() => {
+        const ext = path.join(casa, '.vscode', 'extensions');
+        for (const e of ['executivelab.arnes-ui-0.0.0', 'anthropic.claude-code-2.0.0', 'openai.chatgpt-26.0.0']) {
+          if (e.startsWith('openai') && asistente === 'claude') continue;
+          if (e.startsWith('anthropic') && asistente === 'codex') continue;
+          fs.mkdirSync(path.join(ext, e), { recursive: true });
+        }
+        if (asistente !== 'codex') {
+          fs.mkdirSync(path.join(casa, '.claude'), { recursive: true });
+          fs.writeFileSync(path.join(casa, '.claude', 'settings.json'), '{"remoteControlAtStartup": true}\n');
+          fs.writeFileSync(path.join(casa, '.claude', '.executive-lab-control-remoto'), 'x\n');
+        }
+        if (preparar) preparar(casa, path.join(ajustesDir, 'settings.json'));
+        const env = { ...process.env };
+        delete env.CLAUDE_CONFIG_DIR;
+        const antes = new Set(fs.readdirSync(mac).filter((n) => n.startsWith('informe-')));
+        const r = cp.spawnSync('bash', [path.join(mac, 'probar.sh'), '--casa', casa, '--sin-firma', '--asistente', asistente], { encoding: 'utf8', timeout: 120000, env });
+        for (const n of fs.readdirSync(mac)) if (n.startsWith('informe-') && !antes.has(n)) fs.rmSync(path.join(mac, n), { force: true });
+        fs.rmSync(casa, { recursive: true, force: true });
+        const linea = (cual) => (r.stdout.split('\n').find((l) => l.includes(cual)) || '').replace(/\x1b\[[0-9;]*m/g, '').trim();
+        return { editor: linea('lo del editor y lo del asistente'), remoto: linea('control remoto de Claude'), piezas: linea('piezas del editor'), todo: r.stdout };
+      });
+    };
+    for (const asistente of ['claude', 'codex', 'losDos']) {
+      const bien = await probarEn(asistente);
+      assert.match(bien.editor, /^✓ .*(10|8) claves/, `probar.sh, con ${asistente} bien puesto: ${bien.editor}\n${bien.todo}`);
+      assert.match(bien.piezas, /^✓/, `${asistente}: ${bien.piezas}`);
+      assert.match(bien.remoto, asistente === 'codex' ? /^·/ : /^✓/, `${asistente}: ${bien.remoto}`);
+    }
+    const cambiada = await probarEn('losDos', (casa, f) => fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('"update.mode": "none"', '"update.mode": "manual"')));
+    assert.match(cambiada.editor, /^✗ .*update\.mode vale "manual"/, 'probar.sh no ve un valor cambiado');
+    const sinCodex = await probarEn('losDos', (casa) => fs.rmSync(path.join(casa, '.vscode', 'extensions', 'openai.chatgpt-26.0.0'), { recursive: true }));
+    assert.match(sinCodex.piezas, /^✗ .*falta la de Codex/, 'probar.sh no echa en falta Codex con «los dos»');
+    const sinRemoto = await probarEn('claude', (casa) => fs.writeFileSync(path.join(casa, '.claude', 'settings.json'), '{}\n'));
+    assert.match(sinRemoto.remoto, /^✗/, 'probar.sh no ve que falta el control remoto');
+    return 'el .dmg y el .exe preguntan · instalar.js pide la extensión de cada uno · probar.sh y probar.ps1 miran cada clave con su valor · y probar.sh, sobre una casa de mentira, dice bien y dice mal';
   });
 
   await comprobar('los ajustes del editor: se insertan dentro del objeto, se validan antes de escribir, se escriben enteros y desinstalar quita solo lo que ponemos (revisión de la 163)', async () => {

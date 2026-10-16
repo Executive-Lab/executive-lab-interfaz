@@ -54,8 +54,10 @@ lo investigado, con sus fuentes y lo que no se pone, está en la decisión 163.
 - **La barra solo pone lo del asistente**, para quien solo instaló la barra. Lo de todo el editor lo pone
   solo el instalador: en el ordenador de quien usa el editor para otras cosas le cambiaría todas las
   ventanas (decisiones 15 y 71).
-- El de Windows pregunta por Claude o Codex; `preparar.js` admite también `--asistente losDos`. El de
-  macOS pone Claude.
+- Los dos instaladores preguntan con qué asistente (decisión 168): Claude (por defecto), Codex o Los dos.
+  En silencio se elige con `/ASISTENTE=codex` o `/ASISTENTE=losDos` en el `.exe`, y con
+  `--asistente codex|losDos` en `instalar.js`; sin nada, Claude. `probar.ps1 -Asistente …` y
+  `probar.sh --asistente …` comprueban lo elegido.
 
 Antes esto montaba también un arnés en `Documentos/Mi Empresa IA`, con seis preguntas dentro del
 instalador. Eran las mismas seis que hace el panel, mantenidas por duplicado —y las de Windows se
@@ -146,8 +148,8 @@ aviso de privacidad del propio Instalador nada más empezar (decisión 21 en
 
 Diferencias con Windows, y por qué:
 
-- **No pregunta nada, ni siquiera el asistente.** En Windows se pregunta porque el `.exe` tiene que
-  elegir qué extensión instalar antes de ejecutar nada; aquí `instalar.js` puede mirarlo.
+- **Pregunta el asistente en un diálogo de Apple**, antes de empezar, y se lo pasa a `instalar.js`
+  con `--asistente` (decisión 168). Es lo único que pregunta.
 - **No lleva el editor dentro.** Se descarga al instalar, y si esa persona ya lo tiene no se descarga
   nada: 103 MB en vez de 380.
 - **No toca nada fuera de la carpeta del alumno**, así que no pide administrador.

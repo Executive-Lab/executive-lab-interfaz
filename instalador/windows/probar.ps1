@@ -3,12 +3,20 @@
 # Se copia esta carpeta (el .exe y este fichero) a la maquina de pruebas y:
 #
 #   powershell -ExecutionPolicy Bypass -File probar.ps1
+#   powershell -ExecutionPolicy Bypass -File probar.ps1 -Asistente losDos
+#
+# -Asistente es con cual se instala y se comprueba: claude (por defecto), codex
+# o losDos (decision 168).
 #
 # Responde solo las preguntas 3, 4 y 6 del spike. Las otras dos (SmartScreen y
 # que no pida administrador) son de mirar: hay que descargar el .exe con Edge y
 # hacer doble clic con un usuario normal, grabando la pantalla.
 
+param([ValidateSet('claude', 'codex', 'losDos')][string]$Asistente = 'claude')
+
 $ErrorActionPreference = 'Continue'
+$conClaude = $Asistente -ne 'codex'
+$conCodex = $Asistente -ne 'claude'
 $aqui = Split-Path -Parent $MyInvocation.MyCommand.Path
 $exe = Join-Path $aqui 'Output\ExecutiveLab-Setup.exe'
 if (-not (Test-Path $exe)) { $exe = Join-Path $aqui 'ExecutiveLab-Setup.exe' }
@@ -31,13 +39,14 @@ Write-Host "  Windows:  $([System.Environment]::OSVersion.Version)"
 Write-Host "  Usuario:  $env:USERNAME"
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 Write-Host "  Admin:    $admin $(if ($admin) { '<-- la pregunta 4 solo vale con un usuario SIN admin' })"
+Write-Host "  Asistente: $Asistente"
 Write-Host "  Paquete:  $exe`n"
 
 Comprobar 'el instalador esta donde toca' { if (-not (Test-Path $exe)) { throw 'no encuentro ExecutiveLab-Setup.exe' }; '{0:N0} MB' -f ((Get-Item $exe).Length / 1MB) }
 
 Write-Host "`nInstalando en silencio. Tarda unos minutos...`n"
 $reloj = [Diagnostics.Stopwatch]::StartNew()
-$proceso = Start-Process -FilePath $exe -ArgumentList '/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES' -Wait -PassThru
+$proceso = Start-Process -FilePath $exe -ArgumentList '/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES',"/ASISTENTE=$Asistente" -Wait -PassThru
 $reloj.Stop()
 Comprobar 'el instalador termina sin error' { if ($proceso.ExitCode -ne 0) { throw "ha salido con codigo $($proceso.ExitCode)" }; "en $([int]$reloj.Elapsed.TotalSeconds) s" }
 
@@ -100,30 +109,72 @@ Comprobar 'el registro de la instalacion no tiene errores' {
   if ($malos.Count) { throw "$($malos.Count) errores: $($malos[0].Line)" }
   'limpio'
 }
-Comprobar 'VS Code y las dos extensiones' {
+Comprobar 'VS Code y las extensiones del asistente elegido' {
   $code = Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code.cmd'
   if (-not (Test-Path $code)) { throw 'no se ha instalado VS Code' }
   $lista = & cmd /c "`"$code`" --list-extensions" 2>&1
-  foreach ($ext in @('anthropic.claude-code', 'executivelab.arnes-ui')) {
+  $debenEstar = @('executivelab.arnes-ui')
+  if ($conClaude) { $debenEstar += 'anthropic.claude-code' }
+  if ($conCodex) { $debenEstar += 'openai.chatgpt' }
+  foreach ($ext in $debenEstar) {
     if ("$lista" -notlike "*$ext*") { throw "falta la extension $ext" }
   }
-  'las dos'
+  "$($debenEstar.Count) ($Asistente)"
 }
-# Lo del editor y lo de Claude (decision 163), y la constancia de lo puesto: sin
-# ella, desinstalar no sabria que es nuestro y que es suyo. Se mira el texto, que
-# con comentarios ConvertFrom-Json no lo lee.
-Comprobar 'lo del editor esta puesto, y apuntado para desinstalar' {
+# Lo del editor y lo del asistente elegido (decisiones 163 y 168), cada clave con
+# su valor, y la constancia de lo puesto: sin ella, desinstalar no sabria que es
+# nuestro y que es suyo. La tabla esta escrita aqui a mano, no sacada del modulo:
+# si el modulo cambiara un valor, esto debe enterarse. Los valores van como JSON.
+Comprobar 'lo del editor y lo del asistente estan puestos, con su valor y apuntados para desinstalar' {
   $usuario = Join-Path $env:APPDATA 'Code\User'
   $ajustes = Join-Path $usuario 'settings.json'
   if (-not (Test-Path $ajustes)) { throw 'no hay ajustes del editor' }
-  $texto = Get-Content $ajustes -Raw
-  foreach ($clave in @('security.workspace.trust.enabled', 'update.mode', 'workbench.startupEditor', 'claudeCode.focusView')) {
-    if ($texto -notmatch ('"' + [regex]::Escape($clave) + '"\s*:')) { throw "falta $clave" }
+  $esperado = [ordered]@{
+    'security.workspace.trust.enabled' = 'false'
+    'update.mode' = '"none"'
+    'update.showReleaseNotes' = 'false'
+    'telemetry.telemetryLevel' = '"off"'
+    'extensions.ignoreRecommendations' = 'true'
+    'workbench.startupEditor' = '"none"'
+    'workbench.welcomePage.walkthroughs.openOnInstall' = 'false'
   }
+  if ($conClaude) {
+    $esperado['extensions.confirmedUriHandlerExtensionIds'] = '["anthropic.claude-code"]'
+    $esperado['claudeCode.focusView'] = 'true'
+    $esperado['claudeCode.hideOnboarding'] = 'true'
+  }
+  if ($conCodex -and -not $conClaude) { $esperado['chatgpt.openOnStartup'] = 'true' }
+
   $constancia = Join-Path $usuario '.executive-lab-ajustes.json'
   if (-not (Test-Path $constancia)) { throw 'no queda constancia de lo puesto: desinstalar no sabria que quitar' }
-  if ((Get-Content $constancia -Raw) -notmatch 'claudeCode\.focusView') { throw 'la constancia no dice lo que se puso' }
-  'la confianza, la bienvenida y la vista enfocada, con su constancia'
+  try {
+    $actuales = Get-Content $ajustes -Raw | ConvertFrom-Json
+    $puestas = (Get-Content $constancia -Raw | ConvertFrom-Json).puestas
+  } catch { throw "no entiendo los ajustes: $($_.Exception.Message)" }
+
+  $mal = @()
+  foreach ($clave in $esperado.Keys) {
+    $p = $actuales.PSObject.Properties[$clave]
+    if (-not $p) { $mal += "falta $clave"; continue }
+    $valor = ConvertTo-Json -InputObject $p.Value -Compress
+    if ($valor -ne $esperado[$clave]) { $mal += "$clave vale $valor y debia valer $($esperado[$clave])"; continue }
+    $q = $puestas.PSObject.Properties[$clave]
+    if (-not $q -or (ConvertTo-Json -InputObject $q.Value -Compress) -ne $esperado[$clave]) { $mal += "la constancia no dice $clave" }
+  }
+  if ($mal.Count) { throw ($mal -join '; ') }
+  "$($esperado.Count) claves, cada una con su valor y su constancia"
+}
+# El control remoto de Claude (decision 143): su clave en los ajustes de Claude y
+# la marca que deja, que es lo que permite quitarlo al desinstalar.
+Comprobar 'el control remoto de Claude esta puesto, con su marca' {
+  if (-not $conClaude) { return 'sin Claude, no viene a cuento' }
+  $carpeta = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+  $f = Join-Path $carpeta 'settings.json'
+  if (-not (Test-Path $f)) { throw "no hay $f" }
+  $datos = Get-Content $f -Raw | ConvertFrom-Json
+  if ($datos.remoteControlAtStartup -ne $true) { throw 'remoteControlAtStartup no esta a true' }
+  if (-not (Test-Path (Join-Path $carpeta '.executive-lab-control-remoto'))) { throw 'no queda la marca: desinstalar no sabria que es nuestro' }
+  'remoteControlAtStartup a true, con su marca'
 }
 # El arnes tampoco viaja en la app: va dentro de la barra (el .vsix), que es
 # quien lo usa. Se busca donde lo deja el editor al instalarla.
