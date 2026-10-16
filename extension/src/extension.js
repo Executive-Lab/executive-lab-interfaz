@@ -89,6 +89,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const porDondeIbas = require('./por-donde-ibas');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -103,6 +104,10 @@ const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeC
 // escrito, no enviado (`asistentes.js`). Lo dicen `pedir` y lo que manda algo
 // detrás de hacer otra cosa, como darle documentos (decisión 166).
 const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
+
+// Lo que se dice al dejar la cuenta de GitHub para más tarde, al montar: dónde
+// queda, con su botón (decisión 164).
+const GITHUB_MAS_TARDE = 'Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.';
 
 const LO_QUE_SE_HIZO = {
   traer: 'Ya tienes aquí lo que este proyecto traía puesto.',
@@ -379,6 +384,7 @@ ${cabecera}
         arreglar: async () => {
           const { ok, detalle } = await soporte.arreglar();
           if (detalle) this.salida.appendLine(detalle);
+          if (ok) await this.losRailesDetras();
           return ok;
         },
         // Sin git no se instala nada solo: eso abre el instalador del sistema. Y con
@@ -664,6 +670,8 @@ ${cabecera}
       costumbrePuesta: await this.ponerLasCostumbres(),
       // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
       datosDeClientes: this.laTarjetaDeLosDatos(),
+      // La primera vez de cada día, dónde lo dejó la última vez (decisión 160).
+      laUltimaVez: await this.laUltimaVezQueToca(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -674,6 +682,9 @@ ${cabecera}
       // (decisión 138). Nada se ha borrado: está apagado.
       barraCompleta: vscode.workspace.getConfiguration().get('executiveLab.barraCompleta') === true,
       piezas: this.lasPiezas(),
+      // Si aquí se eligió seguir sin copias: sin git, se prepara igual, y ponerlo
+      // no tapa la tarjeta que toca (decisión 164).
+      sigueSinCopias: this.eligioSinCopias(),
       // Para la sencilla: lo que hay en Acciones, la línea de las copias y la versión.
       habilidades: this.habilidadesSuyas(),
       copias: await this.lasCopias(),
@@ -1115,6 +1126,8 @@ ${cabecera}
       cuandoCaduca: () => this.apuntarCuandoCaduca(mensaje.proveedor, mensaje.en, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
+      seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt, mensaje.dia),
+      ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(mensaje.dia),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
       verRecordatorios: () => this.verRecordatorios(),
       crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
@@ -1584,8 +1597,21 @@ ${cabecera}
     const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
     await this.marcarHecho(nombre);
     if (!uno) return this.actualizarRecordatorios();
-    await this.pedir(uno.prompt);
+    await this.pedir(await this.elEncargoDe(uno));
     return this.actualizarRecordatorios();
+  }
+
+  // El de «Seguir donde lo dejé», con por dónde ibas si se sabe: es lo que dice
+  // su tarjeta (revisión de la PR #55, decisión 160).
+  async elEncargoDe(uno) {
+    if (uno.nombre !== 'seguir') return uno.prompt;
+    try {
+      const { ibasPor } = await brujula.estado();
+      return (ibasPor && ibasPor.accion && ibasPor.accion.prompt) || uno.prompt;
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return uno.prompt;
+    }
   }
 
   async dejarElRecordatorio(nombre) {
@@ -2387,6 +2413,33 @@ ${cabecera}
     }
   }
 
+  // ── La última vez (decisión 160) ──────────────────────────────────────
+  //
+  // La primera vez de cada día, en una carpeta con algo hecho, por dónde iba. Lo
+  // que sabe la brújula, que se acaba de calcular y está recordado: no cuesta otro
+  // proceso. Si falla, la barra sigue igual, y queda apuntado.
+  async laUltimaVezQueToca() {
+    try {
+      return await porDondeIbas.laDeHoy(this.almacen(), await brujula.estado());
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // Sus dos botones la quitan hasta el día siguiente al de la tarjeta, que viaja
+  // con ellos. «Seguir donde lo dejé» lleva el encargo que armó la extensión (P6).
+  async seguirDondeLoDeje(prompt, dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    await this.pedir(prompt);
+    return this.refrescar(true);
+  }
+
+  async ahoraNoLaUltimaVez(dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    return this.refrescar(true);
+  }
+
   // La tarjeta: hasta que se lee o se pulsa «Entendido», y solo si ya entran datos
   // de verdad, por una conexión puesta o por los documentos que le ha dado.
   laTarjetaDeLosDatos() {
@@ -2629,6 +2682,15 @@ ${cabecera}
         silenciados: this.almacen().get(CLAVE_SILENCIADOS) || {},
       });
       ahora = [...ahora, ...visto.ideas.filter((idea) => !ahora.some((c) => c.id === idea.id))];
+      // Y lo que se dejó para más tarde al montar, las copias y GitHub, con su
+      // botón, mientras siga sin hacerse (decisión 164).
+      const conCopias = proyecto.existe('.git');
+      ahora = [...ahora, ...ideas.loAplazado({
+        conArnes: proyecto.arnesCompleto(),
+        conCopias,
+        sigueSinCopias: this.eligioSinCopias(),
+        subeAAlgunSitio: conCopias && Boolean(await github.remoto()),
+      })];
     } catch (error) {
       this.salida.appendLine(`[sugerencias] ${error.stack || error.message}`);
     }
@@ -3219,8 +3281,24 @@ ${cabecera}
     this.enviar({ tipo: 'esperando', que: 'Arreglándolo…' });
     const { ok, mensaje, detalle } = await soporte.arreglar();
     if (detalle) this.salida.appendLine(detalle);
+    if (ok) await this.losRailesDetras();
     this.enviar({ tipo: 'aviso', texto: mensaje, malo: !ok });
     await this.refrescar(true);
+  }
+
+  // Detrás de «Revisar y arreglar», como en el montaje (decisión 161). `repair`
+  // rehace lo del arnés y no lo nuestro: en una carpeta traída de otro ordenador,
+  // `.rsc/` es nueva y le faltan las marcas de los raíles, también la que calla el
+  // aviso que manda a correr `npx @ericrisco/rsc@latest`. Se reponen como al
+  // abrir: solo si la carpeta ya los tiene, porque reponer no es decidir; y en una
+  // carpeta de alguien, lo que toca sus ficheros sigue esperando a su sí (C-4). Que
+  // no salga no tumba el arreglo: se apunta para «Algo va mal» (P3).
+  async losRailesDetras() {
+    if (!terreno.comoEstanLosRailes().habilidadPropia) return null;
+    const ajena = !(await terreno.podemosGuardarElPuntoDePartida());
+    const ok = await arrancar.ponerLosRailes(this.contexto, { ajena }).catch(() => false);
+    this.salida.appendLine(`[railes] detrás de arreglar: ${ok}${ajena ? ' (historial de alguien: lo suyo, pendiente)' : ''}`); // diccionario: interno
+    return ok;
   }
 
   // La pieza que falta es git, y sin ella no se monta nada (git.js dice por
@@ -3341,13 +3419,11 @@ ${cabecera}
     // que pulsar, y la pantalla ya lo enseña.
     if (hecho.faltaGit) return this.refrescar(true);
 
-    // Ha elegido seguir sin copias. Tampoco es un error.
-    if (hecho.sigueSinCopias) {
-      this.enviar({ tipo: 'aviso', texto: hecho.mensaje });
-      return this.refrescar(true);
-    }
-
     if (!hecho.ok) return this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: true });
+
+    // Ha elegido seguir sin copias, y se ha montado sin ellas: se dice dónde
+    // quedan, al pintar la principal y después de lo demás (decisión 164).
+    const sinCopias = hecho.sinCopias ? arrancar.SIN_COPIAS_HASTA_QUE_QUIERAS : null;
 
     // Lo que ya estaba no se celebra: no se ha montado nada.
     if (hecho.yaEstaba) {
@@ -3377,7 +3453,7 @@ ${cabecera}
     if (!reciénMontado) {
       this.enviar({
         tipo: 'aviso',
-        texto: [LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje, ...dichos].join(' '),
+        texto: [LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje, ...dichos, sinCopias].filter(Boolean).join(' '),
         ...(dichos.length ? { boton: QUITAR_LO_DE_CLAUDE } : {}),
       });
       await this.siFaltaAlgoDecirlo(true);
@@ -3395,6 +3471,7 @@ ${cabecera}
     if (sencilla === 'Sí, más sencillo') await this.modoSencillo();
     // Sale al pintar la principal, aquí abajo.
     for (const dicho of dichos) this.dejarElAviso(dicho, QUITAR_LO_DE_CLAUDE);
+    this.dejarElAviso(sinCopias);
     await this.refrescar(true);
     // La lista de lo que falta se deja para el final, después de GitHub: si
     // saliera ahora, la pregunta de la cuenta le caería encima.
@@ -3406,15 +3483,23 @@ ${cabecera}
     // crearse una cuenta. Montar la carpeta es cuando se está montando todo, y
     // es la única vez que el alumno espera trámites.
     //
-    // Se ofrece, no se impone: quien no lo quiera ahora lo tiene en Histórico
-    // para siempre, y la carpeta funciona igual sin ello.
-    if (!(await github.estado()).conectado) {
+    // Se ofrece, no se impone: quien no lo quiera ahora lo tiene en Ayuda ›
+    // Sugerencias, con su botón, y la carpeta funciona igual sin ello. Decía
+    // «en Histórico», que en la barra sencilla no existe (decisión 164).
+    // Sin copias no hay nada que subir: no se pregunta.
+    let fueAGitHub = false;
+    if (!hecho.sinCopias && !(await github.estado()).conectado) {
       const ahora = await vscode.window.showInformationMessage(
         'Te queda una cosa: una cuenta de GitHub para guardar tu trabajo fuera de este ordenador. Si se rompe el portátil, lo recuperas. ¿Te la preparo ahora?',
         'Sí, ahora',
         'Más tarde',
       );
-      if (ahora === 'Sí, ahora') await this.verCopiaFuera();
+      if (ahora === 'Sí, ahora') {
+        fueAGitHub = true;
+        await this.verCopiaFuera();
+      } else {
+        this.dejarElAviso(GITHUB_MAS_TARDE);
+      }
     }
 
     // La cara, al momento y por la barra: ya tenemos la web, así que no hay
@@ -3431,7 +3516,9 @@ ${cabecera}
     // va con los demás encargos del arranque, en `hecho.paraElMensaje` (A7).
     const comoSeLlama = hecho.nombres.arnes || identidad.deQuien();
     await puente.enviar(arrancar.primerMensaje(hecho, { comoSeLlama, conWeb, conFreno: arrancar.hayFreno() }));
-    await this.siFaltaAlgoDecirlo(false);
+    // Al final, la principal, con la tarjeta que toca y lo aplazado dicho; o la
+    // lista, si algo se ha roto. Si fue a preparar la cuenta, se queda allí.
+    await this.siFaltaAlgoDecirlo(!fueAGitHub);
     return undefined;
   }
 
@@ -3439,9 +3526,14 @@ ${cabecera}
   // pantalla principal?». Eso. La lista de piezas solo sale cuando hay algo que
   // decir — y entonces sale con un botón por cada cosa, que es lo que le
   // faltaba a esa pantalla desde el principio.
+  //
+  // «Algo que decir» es algo roto de verdad (decisión 164). Sin conexiones, sin
+  // conocimiento y sin copia fuera es como queda toda carpeta recién montada, y
+  // por eso salía siempre una lista técnica de catorce filas en vez de la
+  // principal. Eso llega con el trabajo (`porHacer` en `terreno.js`).
   async siFaltaAlgoDecirlo(refrescarSiEstaTodo) {
     const revision = await terreno.radiografia({ sigueSinCopias: this.eligioSinCopias() });
-    if (revision.listo) {
+    if (!revision.algoRoto) {
       if (refrescarSiEstaTodo) await this.refrescar(true);
       return;
     }
@@ -3659,12 +3751,18 @@ function vigilarElModo(contexto) {
 //   · **No toca el historial de otra persona.** Si la carpeta ya venía con
 //     trabajo de alguien, no se guarda nada solo: la decisión 28 lo dice para
 //     el primer guardado y aquí vale igual, o con más razón, porque aquí no
-//     hay nadie mirando.
+//     hay nadie mirando. Ni en una carpeta sin historial propio, que git
+//     guardaría en el del proyecto de arriba (decisión 164).
 //   · **No guarda si no hay nada nuevo.** Una copia idéntica a la anterior es
 //     ruido en una lista que alguien tiene que poder leer.
 //   · **No avisa.** Una barra que interrumpe cada hora para decir que todo va
 //     bien es una barra que se acaba cerrando. Si falla, se apunta en la salida
 //     y ya; es un extra, no puede estropearle el rato a nadie.
+//
+// Desde la decisión 164 va encendido de fábrica, cada hora: lo pedía la
+// propuesta de simplificar la barra («Nada se pierde»), y lo que lo frenaba, que
+// lo pesado entrara en el historial, lo resolvió la 147. Las guardias, en
+// `guardar.guardarSiToca`.
 function guardarSolo(panel, salida) {
   // Se mira cada cuarto de hora y se guarda cuando toque: así cambiar el ajuste
   // no obliga a reiniciar nada, y un portátil que se suspende no pierde el turno.
@@ -3673,15 +3771,8 @@ function guardarSolo(panel, salida) {
 
   const reloj = setInterval(async () => {
     try {
-      const horas = ajustes.cadaCuantoGuarda();
-      if (!horas) return;
-      if (Date.now() - ultima < horas * 60 * 60 * 1000) return;
-
-      if (!(await copias.hayGit())) return;
-      if (!(await copias.cambiosSinGuardar())) return;
-      if (!(await terreno.podemosGuardarElPuntoDePartida())) return;
-
-      const hecho = await copias.guardar(`Copia automática — ${copias.fechaLarga()}`);
+      const hecho = await copias.guardarSiToca({ horas: ajustes.cadaCuantoGuarda(), desde: ultima, sigueSinCopias: panel.eligioSinCopias() });
+      if (hecho.hecho !== 'guardada') return;
       ultima = Date.now();
       if (!hecho.ok) salida.appendLine(`[guardarSolo] ${hecho.mensaje}`);
       else await panel.refrescar(true);

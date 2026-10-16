@@ -18,6 +18,45 @@ const nombres = require('./nombres');
 // hacer. Dentro de cada grupo, por orden alfabético de etiqueta.
 const ORDEN_DE_GRUPOS = ['diario', 'aprendido'];
 
+// ── Lo que ponen los raíles de la barra (decisión 164) ───────────────────
+//
+// `executive-lab` y los botones de `media/railes/comandos/` (ayuda, empezar,
+// guardar, seguir) los pone la barra, no quien usa la carpeta. En Habilidades
+// salían como «Tuya: escrita para esta carpeta», y la fila de Recordatorios salía
+// desde el primer día por ellos. Ahora van plegados con los del arnés, y no
+// cuentan para Recordatorios.
+//
+// Una con ese nombre es nuestra si su `description` es la nuestra: la misma regla
+// con la que los raíles no pisan una suya que se llame igual (`aplicar.js`). La de
+// `executive-lab` vale también por su `origin`, que no cambia de una versión a otra.
+// `media/` y `src/` viajan como hermanos dentro del .vsix (como `nombres.js`).
+const RAILES = path.join(__dirname, '..', 'media', 'railes');
+let deLaBarraEnMemoria = null;
+
+function lasDeLaBarra() {
+  if (deLaBarraEnMemoria) return deLaBarraEnMemoria;
+  const tabla = new Map();
+  const suya = frontmatter.leer(path.join(RAILES, 'executive-lab', 'SKILL.md')).description;
+  if (typeof suya === 'string') tabla.set('executive-lab', suya.trim());
+  let fuentes = [];
+  try { fuentes = fs.readdirSync(path.join(RAILES, 'comandos')).filter((f) => f.endsWith('.md')); } catch { /* sin raíles, ninguna */ }
+  for (const fuente of fuentes) {
+    const dice = frontmatter.leer(path.join(RAILES, 'comandos', fuente)).description;
+    if (typeof dice === 'string') tabla.set(fuente.replace(/\.md$/, ''), dice.trim());
+  }
+  // Solo se recuerda si se ha leído algo: un intento que no sale no es una respuesta.
+  if (tabla.size) deLaBarraEnMemoria = tabla;
+  return tabla;
+}
+
+function esDeLaBarra(id, fichero) {
+  const nuestra = lasDeLaBarra().get(id);
+  if (!nuestra || !fichero) return false;
+  const campos = frontmatter.leer(fichero);
+  if (id === 'executive-lab' && campos.origin === 'executive-lab') return true;
+  return typeof campos.description === 'string' && campos.description.trim() === nuestra;
+}
+
 // ── Las habilidades con botón (decisión 141) ─────────────────────────────
 //
 // Con Claude y con Codex un botón es una habilidad con `boton:` en su cabecera
@@ -189,4 +228,4 @@ function todos() {
   });
 }
 
-module.exports = { acciones, todos, habilidadesConBoton };
+module.exports = { acciones, todos, habilidadesConBoton, esDeLaBarra };

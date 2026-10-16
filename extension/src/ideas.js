@@ -245,7 +245,9 @@ function ordenadas({ porMontar = [], documentos = 0, delObjetivo = [], deLoQueHa
   if (porMontar.length) lista.push(conectar(porMontar[0]));
   if (documentos) lista.push(colocar(documentos));
   const yaEsta = new Set();
+  // La de la tabla y la de las palabras pueden ser la misma (decisión 164): una vez.
   for (const capacidad of delObjetivo) {
+    if (yaEsta.has(capacidad.id)) continue;
     yaEsta.add(capacidad.id);
     lista.push(anadir(capacidad, objetivo));
   }
@@ -267,6 +269,39 @@ function lasIdeas(opciones = {}) {
 // Las de Ayuda › Sugerencias: la lista entera, sin las apartadas.
 function todasLasIdeas(opciones = {}) {
   return ordenadas(opciones).filter(sinApartar(opciones));
+}
+
+// ── Lo que se dejó para más tarde al montar (decisión 164) ────────────────
+//
+// Al montar se ofrecen dos cosas que se pueden aplazar: las copias, si falta
+// git («Seguir sin copias»), y la cuenta de GitHub («Más tarde»). Lo aplazado
+// se decía que estaba «en Histórico», que en la barra sencilla no existe. Ahora
+// está en Ayuda › Sugerencias, con su botón, mientras siga sin hacerse. No va en
+// la tarjeta: lo decidió la persona, y no tiene que tapar lo que toca.
+//
+// `conArnes`         la carpeta está montada
+// `conCopias`        tiene historial propio
+// `sigueSinCopias`   eligió seguir sin ellas
+// `subeAAlgunSitio`  ya tiene a dónde subir (un `origin`)
+function loAplazado({ conArnes = false, conCopias = false, sigueSinCopias = false, subeAAlgunSitio = false } = {}) {
+  if (!conArnes) return [];
+  if (!conCopias) {
+    return [{
+      id: 'poner-copias',
+      texto: sigueSinCopias
+        ? 'Esta carpeta no tiene copias de seguridad, porque lo elegiste. Sin ellas no podrás volver atrás si algo sale mal.'
+        : 'Esta carpeta todavía no tiene copias de seguridad. Sin ellas no podrás volver atrás si algo sale mal.',
+      boton: 'Ponerlas ahora',
+      accion: { tipo: 'ponerCopias' },
+    }];
+  }
+  if (subeAAlgunSitio) return [];
+  return [{
+    id: 'subir-a-github',
+    texto: 'Tu trabajo solo está en este ordenador. Si lo subes a GitHub y se rompe el portátil, lo recuperas.',
+    boton: 'Subir a GitHub',
+    accion: { tipo: 'verCopiaFuera' },
+  }];
 }
 
 // ── Lo que se lee del disco ──────────────────────────────────────────────
@@ -510,10 +545,16 @@ function queSeVe({ carpetaDeLaExtension, corpus = '', silenciados = {}, ahora = 
     // «factura-enero.pdf» dice «factura enero».
     ...documentos.map((d) => d.replace(/\.[^.]+$/, '').replace(/[-_.]+/g, ' ')),
   ].join(' ');
+  // Lo que dijo al prepararla: primero la tabla de los objetivos del montaje
+  // (decisión 164), y detrás lo que encaje por palabras.
+  const delObjetivo = [
+    ...consejos.porElObjetivo({ objetivo, yaInstaladas, catalogo, tabla: consejos.tablaDeObjetivos(carpetaDeLaExtension) }),
+    ...consejos.loQuePodriaAprender({ corpus: objetivo, yaInstaladas, catalogo }),
+  ];
   const opciones = {
     porMontar,
     documentos: documentos.length,
-    delObjetivo: consejos.loQuePodriaAprender({ corpus: objetivo, yaInstaladas, catalogo }),
+    delObjetivo,
     deLoQueHay: consejos.loQuePodriaAprender({ corpus: loQueHay, yaInstaladas, catalogo }),
     objetivo,
     silenciados,
@@ -524,6 +565,6 @@ function queSeVe({ carpetaDeLaExtension, corpus = '', silenciados = {}, ahora = 
 }
 
 module.exports = {
-  loQueParece, lasIdeas, todasLasIdeas, queSeDiceDeLaCopia, laCopiaDelMontaje, laCopiaEnPantalla, queSeVe, lasClaves, comoSeLlama,
+  loQueParece, lasIdeas, todasLasIdeas, loAplazado, queSeDiceDeLaCopia, laCopiaDelMontaje, laCopiaEnPantalla, queSeVe, lasClaves, comoSeLlama,
   enUnaFrase, sinColocar, hayAlgoSuyo, APARTADA_DURANTE, CABEN,
 };
