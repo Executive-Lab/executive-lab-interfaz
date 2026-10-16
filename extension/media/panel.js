@@ -2546,7 +2546,31 @@ function tarjetaDeLasAppsEnLasCopias(enLasCopias, { principal }) {
     </div>`;
 }
 
-function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
+// «Conectadas por MCP» (decisión 175): lo que los asistentes tienen conectado por
+// su cuenta, fuera de esta barra. Solo nombres, de quién es, de dónde sale y qué
+// es; nunca un valor. Sin ninguna, no sale nada.
+function conectadasPorMcp(mcp, noLeido = []) {
+  const lista = Array.isArray(mcp) ? mcp : [];
+  // Un fichero que hay y no se ha podido leer se dice, en vez de callar (revisión de la 175).
+  const DE = { claude: 'Claude', codex: 'Codex' };
+  const DONDE = { carpeta: 'de esta carpeta', usuario: 'de tu usuario', tuyoAqui: 'de tu usuario' };
+  const sinLeer = [...new Set((Array.isArray(noLeido) ? noLeido : []).filter((n) => DE[n.asistente] && DONDE[n.origen]).map((n) => `No he podido leer lo de ${DE[n.asistente]} ${DONDE[n.origen]}.`))];
+  if (!lista.length && !sinLeer.length) return '';
+  const CABEN_MCP = 8;
+  const ORIGEN = { carpeta: 'de esta carpeta', tuyoAqui: 'solo tuya, en esta carpeta', usuario: 'de tu usuario' };
+  const TIPO = { programa: 'programa de tu ordenador', web: 'dirección web' };
+  const ASISTENTE = { claude: 'Claude', codex: 'Codex' };
+  const linea = (s) => `${s.nombre} — ${ASISTENTE[s.asistente] || ''} · ${ORIGEN[s.origen] || ''} · ${TIPO[s.tipo] || ''}${s.herramienta ? (s.esSuya ? ` · es tu conexión ${s.herramienta}, la de arriba` : ` · se llama como tu conexión ${s.herramienta}`) : ''}${s.sinAprobar ? ' · sin aprobar todavía' : ''}`;
+  return `
+    <hr class="separador">
+    <h2>Conectadas por MCP</h2>
+    <p class="detalle">Lo que tus asistentes tienen conectado por su cuenta, fuera de esta barra. Solo veo cómo se llama y de dónde sale, nunca sus claves.</p>
+    ${sinLeer.map((t) => `<p class="pista malo">${texto(t)}</p>`).join('')}
+    ${lista.slice(0, CABEN_MCP).map((s) => `<p class="pista">· ${texto(linea(s))}</p>`).join('')}
+    ${lista.length > CABEN_MCP ? `<p class="pista">· ${texto(plural(lista.length - CABEN_MCP, 'Y 1 más', 'Y {n} más'))}.</p>` : ''}`;
+}
+
+function pantallaConexiones({ proveedores, sueltas, enLasCopias = null, mcp = [], mcpNoLeido = [] }) {
   // Caso brownfield: el arnés se montó sobre algo que ya existía y las claves
   // están donde estuvieran. El alumno vería "no hay conexiones" teniendo seis.
   // Y se dice a quién va cada una, que es lo que el inventario ya sabe por el
@@ -2644,6 +2668,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       ${desordenadas}
       ${deApps}
       ${porMontar}
+      ${conectadasPorMcp(mcp, mcpNoLeido)}
       ${nada('Todavía no hay ninguna puesta en su sitio. Cuando le pidas al asistente que conecte tu correo, tu facturación o lo que uses, aparecerán aquí.')}
       ${boton({ etiqueta: 'Conectar algo nuevo', icono: '➕', principal: !sueltas && !enLasCopias, accion: CONECTAR_ALGO_NUEVO })}
       ${volver()}`;
@@ -2684,6 +2709,7 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
       accion: { tipo: 'verConexion', proveedor: p.id },
     })).join('')}
     ${porMontar}
+    ${conectadasPorMcp(mcp, mcpNoLeido)}
   `;
 }
 

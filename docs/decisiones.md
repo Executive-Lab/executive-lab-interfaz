@@ -8134,7 +8134,6 @@ vuelta. Quince mutaciones a mano (la orden de cada botón, la confianza, la carp
 marcha, el «sí» que no cambia nada, la carpeta por delante, el nombre del panel, la salida del fallo, la
 precedencia de las marcas, el Codex y la 2, el botón y el texto del equipo): las quince tumbadas.
 
-
 ## 173. Deshacer con RSC: quitar una habilidad y volver a la copia
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **FTD** `02-DOCS/wiki/ftd/deshacer-con-rsc.md`
@@ -8252,3 +8251,98 @@ la máquina, no de lo que hace el código.
   repintado por el vigía (800 ms).
 
 Comprobado con ocho procesos de carga dando vueltas: seis pasadas seguidas de estas pruebas sin un fallo.
+
+## 175. Las conexiones MCP se ven
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · FTD `las-conexiones-mcp`
+
+Muchos alumnos conectan herramientas pidiéndoselo al asistente, por MCP, sin pasar por la barra. La barra no
+sabía nada de eso: «Conexiones (tools)» solo enseñaba `01-TOOLS/`, y una persona con tres servidores MCP puestos
+veía «todavía no hay ninguna». Ahora se ven, solo lectura (P9): no se añade, no se quita ni se cambia ninguno.
+
+### Dónde mira cada asistente (fuentes oficiales)
+
+| Asistente | Sitio | Qué hay | Fuente |
+|---|---|---|---|
+| Claude, de la carpeta | `.mcp.json` en la raíz, `mcpServers` | nombre → `{type, command\|url, …}` | code.claude.com/docs/en/mcp (ámbito «project») |
+| Claude, solo tuyo y en esta carpeta | `.claude.json`, `projects["<ruta>"].mcpServers` | igual | ídem (ámbito «local», el de por defecto) |
+| Claude, de tu usuario | `.claude.json`, `mcpServers` de arriba | igual | ídem (ámbito «user») |
+| Codex, de la carpeta | `.codex/config.toml`, `[mcp_servers.<nombre>]` | `command` (programa) o `url` (web), más `env`, `http_headers`, … | developers.openai.com/codex/mcp (sale a learn.chatgpt.com/docs/extend/mcp); solo en carpetas de confianza |
+| Codex, de tu usuario | `$CODEX_HOME/config.toml` o `~/.codex/config.toml` | igual | ídem |
+
+Tipos de Claude: `stdio` (o sin `type` y con `command`) es un programa de tu ordenador; `http`, `streamable-http`,
+`sse` y `ws` son una dirección web. Una entrada con `url` y sin `type` Claude misma la salta con un error, y `sdk`
+solo la registra un programa que la usa: ninguna sale. En Codex, con `command` es un programa y con `url`, una
+dirección; con `enabled = false`, no sale.
+
+**Sin confirmar en la documentación:** que `CLAUDE_CONFIG_DIR` cambie dónde está `.claude.json`. La página de MCP
+nombra solo `~/.claude.json` y la de variables de entorno no lo dice en lo leído. Se lee de ahí, que es como se
+comporta Claude Code, y las pruebas lo fijan; si un día no fuera así, se cambia una línea de `mcp.js`.
+
+### Lo que lee la barra
+
+- `extension/src/mcp.js`, nuevo. De cada servidor guarda **cuatro cosas**: el nombre, el asistente, de dónde sale
+  (`carpeta`, `tuyoAqui`, `usuario`) y el tipo (`programa`, `web`). Nada más: ni la orden, ni los argumentos, ni
+  las variables de entorno y sus valores, ni las cabeceras, ni la dirección, ni los nombres de las variables. Los
+  campos no se copian a ninguna variable que salga de la función.
+- Solo los asistentes que se usan en la carpeta (`.rsc.json`, y si no hay, el de ahora).
+- Sin seguir enlaces (el fichero, ni la carpeta `.codex`), con tope: 256 KB para `.mcp.json` y `config.toml`, 32 MB
+  para `.claude.json` (guarda también el historial de cada carpeta; con mucho pasa de 8 MB); pasado el tope, ese fichero no se lee.
+- Si no se entiende, de ese fichero no se enseña nada y no se adivina: JSON roto, o `mcpServers` que no es un
+  mapa; en TOML, cadenas de varias líneas, comillas o listas sin cerrar, claves con puntos de `mcp_servers`
+  arriba del todo, tablas de tablas, un servidor dos veces, una línea de más de 2000 letras.
+- TOML propio y pequeño, no `retirados.leerElToml` (rechaza el fichero entero ante una tabla en línea, y
+  `env = { A = "b" }` es lo normal aquí) ni `toml-campos.js` (se para en la primera tabla).
+- Un nombre del servidor se limpia de caracteres de control y no pasa de 60 letras; con más, ese servidor no sale.
+
+### Lo que enseña la barra
+
+Un apartado al final de «Conexiones (tools)», **«Conectadas por MCP»**, con una línea por servidor:
+`{nombre} — {Claude|Codex} · {de esta carpeta | solo tuya, en esta carpeta | de tu usuario} · {programa de tu
+ordenador | dirección web}`. Ocho como mucho y «Y N más». Si el nombre coincide entero (sin mayúsculas ni signos)
+con una conexión que la barra ya tiene, la línea lo dice al final («es tu conexión Holded, la de arriba») en vez
+de duplicarla. Sin ningún servidor, no sale nada. Los textos, en `docs/diccionario.md`.
+
+### Lo que no se ha hecho
+
+- Añadir, quitar o apagar un servidor: sería otra decisión (escribe en ficheros suyos, y en el de Claude hay que
+  saber qué ámbito).
+- Saber si un servidor funciona o si la carpeta (`.mcp.json`) está aprobada por la persona: Claude lo pregunta
+  la primera vez y eso no está en el fichero que se lee.
+- Servidores gestionados por la empresa (`managed-mcp.json`), los de plugins y los de conectores de la cuenta
+  (claude.ai): no están en estos ficheros y no se miran.
+- Los de `[mcp_servers]` dentro de un perfil de Codex.
+- No se ha visto con una persona delante.
+
+### Las pruebas
+
+`humo.js`: cuatro comprobaciones nuevas junto a las de Conexiones, con una casa y una carpeta de mentira y
+servidores falsos cuyos «secretos» se construyen en tiempo de ejecución: la lectura (siete servidores, dos
+asistentes, tres orígenes, y los que no salen), lo que no se entiende (ocho formas de TOML, JSON roto, topes y
+enlaces), la pantalla, y lo que viaja de la extensión a la pantalla (ningún valor, ni en el HTML ni en el
+estado). Mutaciones a mano en lo importante, restauradas desde una copia.
+
+### La revisión
+
+Cuatro retoques tras revisar la PR #72:
+
+1. **Caracteres que no se ven.** `limpiarElNombre` quita también `\p{Cf}` (bidi y ancho cero): `a‮gnp.exe​` se
+   pintaba al revés. Un nombre que se queda vacío no sale.
+2. **«Es tu conexión X» solo si lo es.** Un `.mcp.json` o un `.codex/config.toml` puede venir en un repo
+   clonado y llamarse «Holded». Solo lo que sale de tu usuario o de «solo tuya, en esta carpeta» (`.claude.json`)
+   dice «es tu conexión Holded, la de arriba»; lo de un fichero de la carpeta dice «se llama como tu conexión Holded».
+3. **Lo que no se pudo leer se dice.** Un fichero que hay y no se lee (demasiado grande, JSON o TOML roto, un
+   enlace) sale como «No he podido leer lo de Claude de tu usuario.» en vez de callar. El tope de `.claude.json`
+   sube a 32 MB: con mucho historial pasa de 8 MB, y solo se lee al abrir Conexiones.
+4. **Sin confianza, sin aprobar.** En una carpeta sin confianza (`vscode.workspace.isTrusted` false), los
+   servidores de ficheros de la carpeta llevan «· sin aprobar todavía»: el asistente no los activaría así.
+
+Pruebas: cuatro afirmaciones nuevas dentro de las comprobaciones de MCP (491 en `humo.js`, ninguna nueva en
+número) y una mutación por retoque, las diez tumbadas (también la de `esSuya`, el panel, el tope, el
+«no se pudo leer», la confianza en la extensión y en el módulo, y el texto «sin aprobar»).
+
+Batería entera, una vez, tras traer `origin/main` (173 y 174 ya estaban; la 175 va la última): `humo.js` 491,
+`humo.js --con-arnes` 500, `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js`,
+`comprobar-diccionario.js` y `revisar-powershell.js` en verde. `--con-arnes` falló una vez con un error de
+resolución de módulos sin ninguna comprobación en rojo, al correr justo después de `humo.js`, y no se repitió
+(pasó la segunda); ajena.
