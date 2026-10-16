@@ -19,16 +19,26 @@
 //     (code.claude.com/docs/en/permission-modes). Un `ask` gana a cualquier
 //     `allow`, también al que pone RSC con `gitPermissions`, y pregunta aunque la
 //     orden vaya encadenada a otra (code.claude.com/docs/en/permissions). No es una
-//     muralla: `git -C . push` no casa con la regla. Si esta persona ya dijo algo
-//     de esa regla, aquí o en sus ajustes de usuario, se respeta.
+//     muralla: `git -C . push` no casa con la regla. Si esta persona ya la tiene
+//     en `ask` o en `deny`, aquí o en sus ajustes de usuario, se respeta. Un
+//     `allow` no cuenta: el `ask` le gana igual, y uno plantado en este fichero
+//     bastaba para que no se pusiera nunca (revisión de seguridad de la 157, B5).
 //
 // Con el cuidado del control remoto (decisión 143, `control-remoto.js`):
 //   · sin tocar nada más del fichero, y entero o nada, con sus permisos;
 //   · si no se entiende como JSON, no se toca; ni a través de un enlace; ni si el
 //     fichero está en git, porque entonces viaja y es del equipo;
-//   · y se deja constancia de lo que se puso, en `.rsc/`, que tampoco viaja, para
-//     poder quitar solo eso y solo si sigue como se dejó:
-//     `node ajustes-locales.js --quitar <carpeta>`.
+//   · y se deja constancia de lo que se puso, en `.rsc/`, después de escribirlo:
+//     «Quitarlo», en el aviso, o `node ajustes-locales.js --quitar <carpeta>`,
+//     quita solo eso y solo si sigue como se dejó. Lo que se quita, a mano o así,
+//     no se vuelve a poner.
+//
+// La constancia no se cree sin más (revisión de seguridad de la 157, M2): podría
+// venir plantada en la carpeta. No entra en git (`no-entra-en-git.js`), lleva la
+// huella de lo que dejó la barra y de la carpeta donde lo dejó, y solo nombra lo
+// que la barra sabe poner: el español y sus dos reglas. Si la huella no casa, no
+// se quita nada ni se da por nuestro. Y lo que está en git no se toca tampoco al
+// quitar.
 //
 // Cuándo y en qué carpetas lo decide `arrancar.js`: al montar y, en las que ya
 // estaban montadas, al abrir; y solo en las que la barra creó su historial (P4).
@@ -37,8 +47,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const IDIOMA = 'español';
+// Con el `*` al final, detrás de un espacio y como único comodín, la regla casa
+// también con la orden pelada: `Bash(git push *)` pregunta por un `git push` sin
+// nada más (code.claude.com/docs/en/permissions, «Wildcard patterns»).
 const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
 const FICHERO = ['.claude', 'settings.local.json'];
 const CONSTANCIA = ['.rsc', 'executive-lab-ajustes-locales.json'];
@@ -52,7 +66,10 @@ const tiene = (datos, clave) => Boolean(datos) && Object.prototype.hasOwnPropert
 function leer(fichero) {
   if (!fs.existsSync(fichero)) return {};
   try {
-    const datos = JSON.parse(fs.readFileSync(fichero, 'utf8'));
+    const texto = fs.readFileSync(fichero, 'utf8');
+    // Vacío, o con solo espacios, es que no dice nada todavía.
+    if (!texto.trim()) return {};
+    const datos = JSON.parse(texto);
     return datos && typeof datos === 'object' && !Array.isArray(datos) ? datos : null;
   } catch {
     return null;
@@ -70,6 +87,30 @@ function queDice(ajustes, regla) {
     if (Array.isArray(permisos[cual]) && permisos[cual].some((r) => mismaRegla(r, regla))) return cual;
   }
   return null;
+}
+
+// Si ya está decidido que pregunte o que no se haga. Un `allow` no lo decide: el
+// `ask` le gana de todos modos.
+const yaLoDice = (ajustes, regla) => ['deny', 'ask'].includes(queDice(ajustes, regla));
+
+// La huella de lo que dejó la barra, atada a la carpeta donde lo dejó: una
+// constancia traída de otro sitio no casa.
+function laHuella(raiz, { language = null, ask = [] } = {}) {
+  let donde = raiz;
+  try { donde = fs.realpathSync(raiz); } catch { /* la que hay */ }
+  const que = JSON.stringify({ donde, language, ask: [...ask].sort() });
+  return crypto.createHash('sha256').update(que).digest('hex');
+}
+
+// La constancia, solo si es de verdad nuestra: lo que la barra sabe poner y con
+// su huella. Si no, null, y no cuenta para nada.
+function laConstancia(raiz) {
+  const anotado = leer(path.join(raiz, ...CONSTANCIA));
+  if (!anotado || typeof anotado.huella !== 'string') return null;
+  const ask = Array.isArray(anotado.ask) ? anotado.ask : [];
+  if (!ask.every((r) => PREGUNTAR.includes(r)) || ![undefined, IDIOMA].includes(anotado.language)) return null;
+  const nuestro = { language: anotado.language || null, ask };
+  return anotado.huella === laHuella(raiz, nuestro) ? nuestro : null;
 }
 
 // Entero o nada: se escribe al lado y se cambia de golpe, con los permisos que
@@ -110,7 +151,7 @@ function loQueFalta({ local, deLaCarpeta, suyos }) {
   const permisos = local.permissions;
   const seEntienden = permisos === undefined
     || (permisos && typeof permisos === 'object' && !Array.isArray(permisos) && (permisos.ask === undefined || Array.isArray(permisos.ask)));
-  const preguntar = seEntienden ? PREGUNTAR.filter((regla) => !queDice(local, regla) && !queDice(suyos, regla)) : [];
+  const preguntar = seEntienden ? PREGUNTAR.filter((regla) => !yaLoDice(local, regla) && !yaLoDice(suyos, regla)) : [];
   return { idioma, preguntar };
 }
 
@@ -132,19 +173,19 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
 
   const local = leer(fichero);
   if (!local) return { hecho: 'ilegible', fichero };
-  const falta = loQueFalta({ local, deLaCarpeta: leer(path.join(carpeta, 'settings.json')), suyos: leer(path.join(claude, 'settings.json')) });
+  // Lo que la barra ya puso alguna vez y ya no está, lo quitó esta persona (a
+  // mano o con «Quitarlo»): se respeta, y no se vuelve a poner en cada apertura
+  // (revisión de corrección de la 157, M2). De la constancia solo cuenta lo que
+  // tiene su huella.
+  const antes = laConstancia(raiz) || { language: null, ask: [] };
+  const sinQuitar = loQueFalta({ local, deLaCarpeta: leer(path.join(carpeta, 'settings.json')), suyos: leer(path.join(claude, 'settings.json')) });
+  const falta = {
+    idioma: sinQuitar.idioma && !antes.language,
+    preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
+  };
   if (!falta.idioma && !falta.preguntar.length) return { hecho: 'yaEstaba', fichero };
 
   try {
-    // Primero la constancia: si después no se pudiera escribir el fichero, quitar
-    // no encontraría nada suyo que quitar.
-    const antes = leer(constancia) || {};
-    fs.mkdirSync(path.dirname(constancia), { recursive: true });
-    escribir(constancia, {
-      porQue: 'Lo puso la barra de Executive Lab (decisión 157). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
-      ...((falta.idioma || antes.language) ? { language: IDIOMA } : {}),
-      ask: [...new Set([...(Array.isArray(antes.ask) ? antes.ask : []), ...falta.preguntar])],
-    });
     const nuevo = { ...local };
     if (falta.idioma) nuevo.language = IDIOMA;
     if (falta.preguntar.length) {
@@ -152,21 +193,38 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
       nuevo.permissions = { ...permisos, ask: [...(permisos.ask || []), ...falta.preguntar] };
     }
     escribir(fichero, nuevo);
+    // Después del fichero: si no se escribe, no hay constancia. Y con lo de antes,
+    // para que lo que se quitó siga contando como quitado.
+    const anotado = {
+      language: falta.idioma || antes.language ? IDIOMA : null,
+      ask: PREGUNTAR.filter((r) => falta.preguntar.includes(r) || antes.ask.includes(r)),
+    };
+    fs.mkdirSync(path.dirname(constancia), { recursive: true });
+    escribir(constancia, {
+      porQue: 'Lo puso la barra de Executive Lab (decisión 157). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
+      ...(anotado.language ? { language: anotado.language } : {}),
+      ask: anotado.ask,
+      huella: laHuella(raiz, anotado),
+    });
   } catch (error) {
     return { hecho: 'fallo', fichero, error: error.message };
   }
   return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar };
 }
 
-// Solo lo que puso la barra (la constancia) y sigue como lo dejó: si después lo
-// cambió, es suyo.
-function quitarLosDeLaBarra({ raiz } = {}) {
+// Solo lo que puso la barra (la constancia, con su huella) y sigue como lo dejó:
+// si después lo cambió, es suyo. Y nada si el fichero está en git. Lo quitado no
+// vuelve: la constancia se queda y dice que la barra ya lo puso una vez.
+async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas } = {}) {
   if (!raiz) return { hecho: 'sinCarpeta' };
   const constancia = path.join(raiz, ...CONSTANCIA);
   const fichero = path.join(raiz, ...FICHERO);
   if ([path.join(raiz, '.claude'), fichero, path.dirname(constancia), constancia].some(esEnlace)) return { hecho: 'enlace', fichero };
   if (!fs.existsSync(constancia)) return { hecho: 'noEraNuestro' };
-  const anotado = leer(constancia) || {};
+  const anotado = laConstancia(raiz);
+  if (!anotado) return { hecho: 'noCasa', fichero };
+  const enGit = await estaEnGit(raiz, FICHERO.join('/'));
+  if (enGit !== false) return { hecho: enGit ? 'enGit' : 'sinSaber', fichero };
   const local = leer(fichero);
   if (!local) return { hecho: 'ilegible', fichero };
 
@@ -188,7 +246,8 @@ function quitarLosDeLaBarra({ raiz } = {}) {
     }
   }
   if (quitado) escribir(fichero, nuevo);
-  fs.rmSync(constancia, { force: true });
+  // La constancia se queda: es lo que dice después que se quitó a propósito, y que
+  // no se vuelve a poner al abrir.
   return { hecho: quitado ? 'quitado' : 'yaNoEstaba', fichero };
 }
 
@@ -198,11 +257,11 @@ function laFrase({ idioma = false, preguntar = [] } = {}) {
   return cosas.length ? `He dejado a Claude ${cosas.join(' y ')}.` : null;
 }
 
-module.exports = { IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, carpetaDeClaude, ponerLosDeLaBarra, quitarLosDeLaBarra, laFrase, queDice };
+module.exports = { IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, carpetaDeClaude, ponerLosDeLaBarra, quitarLosDeLaBarra, laFrase, queDice, laHuella };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const raiz = path.resolve(args.find((a) => !a.startsWith('--')) || process.cwd());
-  const hacer = args.includes('--quitar') ? async () => quitarLosDeLaBarra({ raiz }) : () => ponerLosDeLaBarra({ raiz });
+  const hacer = args.includes('--quitar') ? () => quitarLosDeLaBarra({ raiz }) : () => ponerLosDeLaBarra({ raiz });
   hacer().then((hecho) => console.log(`ajustes de Claude de esta carpeta: ${hecho.hecho}`)); // diccionario: interno
 }

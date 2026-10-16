@@ -53,7 +53,8 @@ const proyecto = require('./proyecto');
 
 const QUE_NO_SALE = ['.no-knowledge-sync', '.no-auto-update'];
 const PRINCIPAL_ABIERTA = ['.no-trunk-guard'];
-// Solo en las carpetas cuyo historial creó la barra, como la rama principal.
+// Solo en las carpetas cuyo historial creó la barra, como la rama principal, y que
+// además se montaron en este ordenador: un clon trae el historial, no la marca.
 const COMO_EN_CLASE = ['.no-worktree-isolation', '.team-safe-3'];
 const MARCAS_DE_LA_BARRA = [...QUE_NO_SALE, ...PRINCIPAL_ABIERTA, ...COMO_EN_CLASE];
 
@@ -75,8 +76,9 @@ function pasaALaTres() {
 
 // Pone las marcas y devuelve lo que ha creado, para poder quitarlo. Nunca a través
 // de un enlace, y nunca pisa nada que ya tenga ese nombre. `nuestra`: el historial
-// de la carpeta lo creó la barra.
-function decidirComoLaBarra({ nuestra = true } = {}) {
+// de la carpeta lo creó la barra. `aqui`: y además lo dice una marca de este
+// ordenador, que un clon no trae (`terreno.montadaAqui`); lo de la 157 la pide.
+function decidirComoLaBarra({ nuestra = true, aqui = nuestra } = {}) {
   const raiz = proyecto.raiz();
   if (!raiz) return null;
   const dondeVan = path.join(raiz, '.rsc');
@@ -87,7 +89,7 @@ function decidirComoLaBarra({ nuestra = true } = {}) {
     const abrir = nuestra && !declaradas.includes('trunk-open');
     const puestas = { carpeta: !existe(dondeVan), ficheros: [] };
     fs.mkdirSync(dondeVan, { recursive: true });
-    const marcas = [...declaradas.map((id) => `.no-${id}`), ...QUE_NO_SALE, ...(abrir ? PRINCIPAL_ABIERTA : []), ...(nuestra ? COMO_EN_CLASE : [])];
+    const marcas = [...declaradas.map((id) => `.no-${id}`), ...QUE_NO_SALE, ...(abrir ? PRINCIPAL_ABIERTA : []), ...(nuestra && aqui ? COMO_EN_CLASE : [])];
     for (const marca of marcas) {
       const fichero = path.join(dondeVan, marca);
       if (existe(fichero)) continue;
@@ -112,8 +114,9 @@ function quitar(puestas) {
 // no cargar `terreno` (que carga `rsc`) al cargar este módulo.
 async function antesDeEscribir() {
   if (!pasaALaTres()) return null;
-  const nuestra = await require('./terreno').podemosGuardarElPuntoDePartida();
-  return decidirComoLaBarra({ nuestra: Boolean(nuestra) });
+  const terreno = require('./terreno');
+  const nuestra = Boolean(await terreno.podemosGuardarElPuntoDePartida());
+  return decidirComoLaBarra({ nuestra, aqui: nuestra && Boolean(await terreno.montadaAqui()) });
 }
 
 module.exports = { QUE_NO_SALE, PRINCIPAL_ABIERTA, COMO_EN_CLASE, MARCAS_DE_LA_BARRA, existe, pasaALaTres, decidirComoLaBarra, quitar, antesDeEscribir };

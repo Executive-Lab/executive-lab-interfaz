@@ -5774,7 +5774,8 @@ abajo, con su porqué.
 **Lo que se propone y no se construye:**
 - En una carpeta de alguien, los ajustes de Claude y el Codex de la carpeta, ofrecidos con su botón, como
   el freno (C-4).
-- Un interruptor en «Cómo quieres que trabaje» para quitar lo de Claude sin ir a mano.
+- Las carpetas sin git montadas antes de esta versión no tienen la marca de este ordenador: lo de esta
+  decisión no les llega hasta que se pongan copias o se vuelvan a montar.
 - `.team-safe-3` cuando una carpeta de la barra que ya va en la 3 se trae a otro ordenador: `.rsc/` no
   viaja, `decidir.js` no toca una carpeta que ya va en la 3, y el aviso saldría una vez.
 - Mirar la tabla de retirados también con el editor abierto, no solo al abrir.
@@ -5785,3 +5786,53 @@ decidir por su equipo. Se apunta para revisarlo aparte.
 
 `humo.js`: 397 comprobaciones con main traído, seis nuevas. 33 mutaciones a mano, las 33 tumbadas (una, tras
 reforzar su prueba). `contrato.js`, `empresas-distintas.js`, `mapeos-codex.js` y el diccionario, en verde.
+
+**Lo que encontraron las dos revisiones de la PR #46**, arreglado, cada cosa con su prueba y su mutación:
+
+- **Seguridad.**
+  - *Una línea hecha para atascar.* La cabecera del TOML se leía con una expresión que, con `[` y 5.000
+    espacios sin cerrar, tardaba más de un minuto. Corría al abrir la carpeta, también con el
+    `config.toml` de usuario. Ahora se mira antes el tamaño (1.000 caracteres por línea, 256 KB por
+    fichero) y la expresión no tiene espacios alrededor del nombre.
+  - *Una constancia plantada.* La de `.rsc/` se creía sin más: con una que listara `Bash(rm *)` y el
+    idioma de la persona, «quitar» se llevaba lo suyo. Ahora:
+    - no entra en git;
+    - lleva una huella de lo que dejó la barra y de la carpeta donde lo dejó;
+    - solo nombra el español y las dos reglas de la barra;
+    - se escribe después del fichero, no antes;
+    - y quitar no toca un fichero que esté en git.
+  - *Lo que no se entiende del TOML*: una cabecera con corchetes dentro de un nombre entre comillas, o una
+    tabla en línea partida en dos líneas, hacía que se borrara la línea equivocada. Ahora no se toca.
+  - *Nuestra, y de este ordenador.* Un clon trae el primer commit «Punto de partida — …», y una carpeta
+    sin `.git` no dice nada. Para lo de esta decisión (las dos marcas, los ajustes de Claude y el `model`
+    de la carpeta) hace falta además una marca que no viaja: la del historial (`git config --local`, que
+    la barra pone al crearlo) o, sin git, la que deja el montaje en el estado del editor. La rama
+    principal abierta (decisión 145) sigue como estaba.
+  - *Un `allow` plantado* en `settings.local.json` impedía poner el `ask`. Ahora solo cuentan un `deny`
+    o un `ask` que ya estén: el `ask` le gana al `allow` de todos modos.
+- **Corrección.**
+  - *Otro proveedor.* Con `model_provider = "azure"` (u `oss`, OpenRouter, LiteLLM…) o con proveedores
+    propios (`[model_providers.*]`), `model` es el nombre de un despliegue suyo. Se quitaba, y la barra
+    decía «He arreglado Codex». Ahora no se toca, ni el de la carpeta. Tampoco si `auth.json` dice que
+    entra con clave de la API: se mira si el campo tiene algo, sin usar su valor.
+  - *Lo que la persona quita, no vuelve.* Se volvía a poner en cada apertura, con la frase cada vez. Si la
+    constancia ya lo nombra y no está en el fichero, es que lo quitó: se respeta.
+  - *Al montar se dice.* La frase iba solo al registro. Ahora sale en la pantalla una vez, con su botón.
+  - *«Quitarlo».* Solo había orden suelta. Ahora el aviso que lo cuenta lleva el botón: es local y se
+    deshace, y lo quitado no vuelve.
+  - *Una frase tapaba a la otra.* Al abrir, el aviso de los ajustes y el de lo que se arregla solo se
+    pisaban. Ahora se juntan y salen una vez, al final.
+  - *El diagnóstico con 1* solo vale si dice `healthy: false`.
+  - *Un `settings.local.json` vacío* cuenta como vacío, no como «no se entiende».
+  - *La copia de Codex.* La de la carpeta no entra en git, y si el cambio no sale, no se queda la copia:
+    si no, habría una por cada vez que se abre.
+  - *Las listas de varias líneas* del TOML se siguen: un `["x"]` dentro es un elemento, no una cabecera.
+  - `Bash(git push *)` casa también con un `git push` sin nada: es el único comodín, detrás de un espacio
+    y al final (code.claude.com/docs/en/permissions). Una prueba mira que las dos reglas tengan esa
+    forma.
+  - Los doce mutantes que la revisión dejó vivos tienen ahora una prueba que los tumba. Entre ellos, el
+    git de la barra con un fichero que va en git de verdad.
+
+Con los arreglos de las dos revisiones: `humo.js` COMPROBACIONES, siete pruebas de la decisión. 53 mutaciones más a
+mano (21 de seguridad, 21 de corrección, y los 12 mutantes que la revisión dejó vivos, uno ya contado), las 53
+tumbadas: dos sobrevivieron al principio y cayeron al reforzar sus pruebas.

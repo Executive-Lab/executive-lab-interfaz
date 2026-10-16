@@ -305,13 +305,15 @@ function habilidadesPuestas() {
 // Y sale con 1 cuando falta algo, con el informe entero igual: desde la 2.0.19
 // (#277 de RSC, `scripts/rsc.js` y `healthy` en `scripts/doctor.js`). La barra
 // lo tiraba, y «Algo va mal» y «Qué falta por montar» se quedaban sin saber nada
-// justo con el arnés roto (decisión 157). Un 1 con un informe que se lee es un
-// informe; lo demás —otro código, o algo que no es un informe— sigue sin serlo.
+// justo con el arnés roto (decisión 157). Un 1 con un informe que dice que no
+// está sano es un informe; lo demás —otro código, algo que no es un informe, o un
+// 1 que no lo dice— sigue sin serlo.
 function comoEstaDeSalud({ codigo, salida }) {
   if (codigo !== 0 && codigo !== 1) return null;
   try {
     const informe = JSON.parse(salida);
-    return informe && typeof informe === 'object' && !Array.isArray(informe) ? informe : null;
+    if (!informe || typeof informe !== 'object' || Array.isArray(informe)) return null;
+    return codigo === 1 && informe.healthy !== false ? null : informe;
   } catch {
     return null;
   }

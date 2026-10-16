@@ -65,35 +65,91 @@ const MODELO = unaClave('model');
 const PERFIL = unaClave('profile');
 const ENTRADA = unaClave('forced_login_method');
 const ENTRADA_DE_ANTES = unaClave('preferred_auth_method');
-const CABECERA = /^\s*\[\[?\s*([^[\]]*?)\s*\]\]?\s*(?:#.*)?$/;
+const PROVEEDOR = unaClave('model_provider');
+// Sin espacios alrededor del nombre dentro de la expresión: con ellos, una línea
+// de `[` y miles de espacios sin cerrar tardaba minutos, y esto corre al abrir la
+// carpeta (revisión de seguridad de la 157, M1). Se recortan después.
+const CABECERA = /^\s*\[\[?([^[\]]*)\]\]?\s*(?:#.*)?$/;
 const elValor = (m) => (m[1] !== undefined ? m[1] : m[2]);
-const laTabla = (bruto) => bruto.split('.').map((p) => p.trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1')).join('.');
+const laTabla = (bruto) => bruto.trim().split('.').map((p) => p.trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1')).join('.');
+
+// Un `config.toml` de verdad cabe de sobra en esto; lo que no, no se entiende. Se
+// mira antes de pasarle ninguna expresión.
+const LINEA_MAS_LARGA = 1000;
+const FICHERO_MAS_GRANDE = 256 * 1024;
+
+// Las llaves y los corchetes que abre y no cierra una línea, sin contar lo que va
+// entre comillas ni el comentario.
+const sinTextos = (linea) => linea.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""').replace(/#.*$/, '');
+const cuantos = (texto, abre, cierra) => texto.split(abre).length - texto.split(cierra).length;
 
 // Lo que importa de un `config.toml`, línea a línea; o null si no se entiende.
 // `tabla` es '' arriba, antes de la primera cabecera.
+//
+// No se entiende —y entonces no se toca— un texto de varias líneas, una línea
+// larguísima, una que empieza por `[` y no es una cabecera que se sepa leer (un
+// nombre entre comillas con corchetes dentro, por ejemplo), una tabla en línea que
+// sigue en otra línea y una lista que no se cierra. En todos, lo que parece la
+// línea de `model` podría no serlo, o serlo de otra tabla (revisión de seguridad
+// de la 157, B3). Dentro de una lista de varias líneas no hay ni cabeceras ni
+// claves: un `["x"]` ahí es un elemento (revisión de corrección, B9).
+//
+// De paso se apunta con qué proveedor va cada sitio (`model_provider`) y si hay
+// proveedores propios (`[model_providers.*]`): con otro que no sea OpenAI, `model`
+// es el nombre de un despliegue suyo, que no se retira (revisión de corrección, M1).
 function leerElToml(texto) {
-  if (/"""|'''/.test(texto)) return null;
+  if (texto.length > FICHERO_MAS_GRANDE || /"""|'''/.test(texto)) return null;
   const lineas = texto.split('\n');
+  if (lineas.some((l) => l.length > LINEA_MAS_LARGA)) return null;
   const modelos = [];
+  const proveedores = new Map();
+  let conProveedoresPropios = false;
   let tabla = '';
   let perfil = null;
   let conClave = false;
+  let enUnaLista = 0;
+  let raro = false;
   lineas.forEach((cruda, i) => {
+    if (raro) return;
     const linea = cruda.replace(/\r$/, '');
+    const limpia = sinTextos(linea);
+    if (enUnaLista > 0) {
+      enUnaLista += cuantos(limpia, '[', ']');
+      if (enUnaLista < 0 || cuantos(limpia, '{', '}') !== 0) raro = true;
+      return;
+    }
     const cabecera = linea.match(CABECERA);
     if (cabecera) {
       tabla = laTabla(cabecera[1]);
+      if (tabla === 'model_providers' || tabla.startsWith('model_providers.')) conProveedoresPropios = true;
       return;
     }
+    if (/^\s*\[/.test(linea) || cuantos(limpia, '{', '}') !== 0) {
+      raro = true;
+      return;
+    }
+    // Una lista que sigue en las líneas de abajo.
+    const abiertos = cuantos(limpia, '[', ']');
+    if (abiertos < 0) {
+      raro = true;
+      return;
+    }
+    if (abiertos > 0) {
+      enUnaLista = abiertos;
+      return;
+    }
+    if (/^\s*model_providers\s*[.=]/.test(limpia)) conProveedoresPropios = true;
     const modelo = linea.match(MODELO);
     if (modelo) modelos.push({ i, tabla, id: elValor(modelo) });
+    const proveedor = linea.match(PROVEEDOR);
+    if (proveedor) proveedores.set(tabla, elValor(proveedor));
     if (tabla !== '') return;
     const elPerfil = linea.match(PERFIL);
     if (elPerfil) perfil = elValor(elPerfil);
     const entrada = linea.match(ENTRADA) || linea.match(ENTRADA_DE_ANTES);
     if (entrada && /^(api|apikey)$/i.test(elValor(entrada))) conClave = true;
   });
-  return { lineas, modelos, perfil, conClave };
+  return raro || enUnaLista !== 0 ? null : { lineas, modelos, perfil, conClave, proveedores, conProveedoresPropios };
 }
 
 // 20261015-143000
@@ -124,8 +180,11 @@ function arreglarUnFichero(fichero, retirados, { conPerfil = false, ahora = new 
   }
   const leido = leerElToml(texto);
   if (!leido) return { hecho: 'raro', fichero };
+  // Con proveedores propios, o con uno que no es OpenAI, no se sabe de quién es ese nombre.
+  const deOpenAI = (sitio) => [undefined, 'openai'].includes(leido.proveedores.get(sitio));
+  if (leido.conProveedoresPropios || !deOpenAI('')) return { hecho: 'otroProveedor', fichero };
 
-  const cuentan = (m) => m.tabla === '' || (conPerfil && leido.perfil !== null && m.tabla === `profiles.${leido.perfil}`);
+  const cuentan = (m) => m.tabla === '' || (conPerfil && leido.perfil !== null && m.tabla === `profiles.${leido.perfil}` && deOpenAI(m.tabla));
   const aMirar = leido.modelos.filter(cuentan);
   // Dos `model` en el mismo sitio no es TOML: no se sabe cuál manda.
   const sitios = aMirar.map((m) => m.tabla);
@@ -135,13 +194,34 @@ function arreglarUnFichero(fichero, retirados, { conPerfil = false, ahora = new 
 
   const fuera = new Set(quitar.map((m) => m.i));
   const copia = `${fichero}.copia-executive-lab-${sello(ahora)}`;
+  let copiada = false;
   try {
     fs.copyFileSync(fichero, copia, fs.constants.COPYFILE_EXCL);
+    copiada = true;
     escribir(fichero, leido.lineas.filter((_, i) => !fuera.has(i)).join('\n'));
   } catch (error) {
+    // Si no se pudo cambiar, la copia sobra: si no, quedaría una por cada vez que
+    // se abre (revisión de corrección de la 157, B8).
+    if (copiada) fs.rmSync(copia, { force: true });
     return { hecho: 'fallo', fichero, error: error.message };
   }
   return { hecho: 'arreglado', fichero, copia, modelos: [...new Set(quitar.map((m) => m.id))] };
+}
+
+// Si entra en Codex con una clave de la API, según su `auth.json`. Solo se mira si
+// el campo de la clave tiene algo, o si dice que entra así; su valor no se usa ni
+// se apunta en ningún sitio (revisión de corrección de la 157, M1).
+function entraConClave(codex) {
+  const fichero = path.join(codex, 'auth.json');
+  try {
+    if (fs.statSync(fichero).size > 64 * 1024) return false;
+    const datos = JSON.parse(fs.readFileSync(fichero, 'utf8'));
+    if (!datos || typeof datos !== 'object') return false;
+    const conCampo = typeof datos.OPENAI_API_KEY === 'string' && datos.OPENAI_API_KEY.length > 0;
+    return conCampo || (typeof datos.auth_mode === 'string' && /api/i.test(datos.auth_mode));
+  } catch {
+    return false;
+  }
 }
 
 // El suyo de usuario y, si se da, el de la carpeta.
@@ -150,10 +230,15 @@ function arreglar({ codex = carpetaDeCodex(), raiz = null, ahora = new Date(), t
   if (!retirados.size) return [];
   const suyo = path.join(codex, 'config.toml');
   // Con una clave de la API, esos modelos siguen funcionando: no se toca nada.
+  if (entraConClave(codex)) return [{ hecho: 'conClave', fichero: path.join(codex, 'auth.json') }];
   if (!esEnlace(suyo) && fs.existsSync(suyo)) {
     let leido = null;
     try { leido = leerElToml(fs.readFileSync(suyo, 'utf8')); } catch { /* se mira abajo */ }
     if (leido && leido.conClave) return [{ hecho: 'conClave', fichero: suyo }];
+    // Con otro proveedor arriba, el `model` de la carpeta también es suyo.
+    if (leido && (leido.conProveedoresPropios || ![undefined, 'openai'].includes(leido.proveedores.get('')))) {
+      return [{ hecho: 'otroProveedor', fichero: suyo }];
+    }
   }
   const hechos = [arreglarUnFichero(suyo, retirados, { conPerfil: true, ahora })];
   if (raiz) {

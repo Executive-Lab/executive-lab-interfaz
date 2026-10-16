@@ -69,6 +69,42 @@ async function historialAjeno(raiz) {
   return !(asunto.codigo === 0 && ASUNTOS_DE_LA_BARRA.test(asunto.salida.trim()));
 }
 
+// Para lo que la barra hace sola en una carpeta por ser suya (decisión 157: sus
+// marcas de la 3, los ajustes de Claude y el `model` de Codex de la carpeta), no
+// basta con que lo parezca: un clon trae el primer commit «Punto de partida — …»,
+// y una carpeta sin `.git` no dice nada (revisión de seguridad de la 157, B4).
+// Hace falta además una marca de este ordenador que no viaja: la del historial
+// (`git config --local`, la pone la barra al crearlo) o, sin git, la que deja el
+// montaje en el estado del editor para esta carpeta.
+const CLAVE_MONTADA_AQUI = 'executiveLab.montadaAqui';
+let estadoDeLaCarpeta = null;
+const saberDondeRecordar = (workspaceState) => { estadoDeLaCarpeta = workspaceState || null; };
+
+async function montadaAqui() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return false;
+  if (fs.existsSync(path.join(raiz, '.git'))) {
+    const marca = await procesos.git('config', '--local', '--get', MARCA_DEL_HISTORIAL);
+    return marca.codigo === 0 && marca.salida.trim() === 'nuestro';
+  }
+  try {
+    return Boolean(estadoDeLaCarpeta) && estadoDeLaCarpeta.get(CLAVE_MONTADA_AQUI) === raiz;
+  } catch {
+    return false;
+  }
+}
+
+async function recordarQueSeMontoAqui() {
+  const raiz = proyecto.raiz();
+  if (!raiz || !estadoDeLaCarpeta) return false;
+  try {
+    await estadoDeLaCarpeta.update(CLAVE_MONTADA_AQUI, raiz);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function cambiosSinGuardar(raiz) {
   if (!fs.existsSync(path.join(raiz, '.git'))) return 0;
   const { codigo, salida } = await procesos.git('status', '--porcelain');
@@ -1265,5 +1301,6 @@ function fechaDelPlan() {
 module.exports = {
   queCarpetaEs, comoEsEstaCarpeta, queHayEncima, MARCA_DEL_HISTORIAL,
   queHay, reconocer, mirarYClasificar, podemosGuardarElPuntoDePartida, radiografia, fechaDelPlan,
+  montadaAqui, recordarQueSeMontoAqui, saberDondeRecordar, CLAVE_MONTADA_AQUI,
   laUltimaRevision, dondeViveLaRevision, comoEstanLosRailes, saberDondeEstamos, comoEstaElFreno, tieneTexto, tieneElBloque, loQueFaltaPorPoner,
 };

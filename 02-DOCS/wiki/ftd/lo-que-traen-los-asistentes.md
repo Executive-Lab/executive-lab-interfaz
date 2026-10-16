@@ -51,6 +51,13 @@ RSC 3.0.22, y se mete lo que es local, se deshace y no decide nada por nadie (P9
   texto de varias líneas que contenía la línea retirada).
 - [x] 6. Main traído (decisiones 150, 151, 153, 154 y 155), `preparar-paquete.js` y toda la batería en verde.
 - [x] 7. Decisión 157, diccionario y este documento.
+- [x] 8. La revisión de seguridad (PR #46): la línea que atasca el TOML, la constancia plantada, lo que no se
+  entiende del TOML, la marca de este ordenador y el `allow` plantado. Cada uno con su prueba.
+- [x] 9. La revisión de corrección: otro proveedor y `auth.json`, lo quitado no vuelve, la frase al montar,
+  «Quitarlo», una sola frase al abrir, el 1 sin `healthy: false`, el fichero vacío, la copia de Codex y las
+  listas del TOML. Y los doce mutantes que dejó vivos, con prueba.
+- [x] 10. Mutaciones a mano de las dos revisiones: 53, las 53 tumbadas (dos, tras reforzar su prueba).
+  Con el Mac cargado, sobre una copia de `humo.js` filtrada a las pruebas de la decisión y a la activación.
 
 ## Evidence
 
@@ -58,7 +65,7 @@ RSC 3.0.22, y se mete lo que es local, se deshace y no decide nada por nadie (P9
   lee…», «en una carpeta de la barra no se trabaja aparte…», «los ajustes de Claude de esta persona…», «los
   ajustes de Claude se ponen al montar y al abrir…», «Codex con una versión que ya no existe…» y «la barra
   arregla Codex al abrir…». Con `--con-arnes`, el montaje de verdad deja las marcas y los ajustes.
-- Mutaciones a mano: 33, las 33 tumbadas.
+- Mutaciones a mano: 33, las 33 tumbadas; y 53 más con las dos revisiones, las 53 tumbadas.
 - `contrato.js` (14), `empresas-distintas.js`, `mapeos-codex.js` (14) y `comprobar-diccionario.js`, en verde.
 
 ## Next
@@ -66,7 +73,8 @@ RSC 3.0.22, y se mete lo que es local, se deshace y no decide nada por nadie (P9
 - Probar con una persona que Claude, con el `ask`, pregunta antes de subir también en modo auto, y que
   `language` se nota sin abrir otra conversación.
 - En una carpeta de alguien: ofrecer los ajustes de Claude y el arreglo de Codex con su botón (C-4).
-- Un interruptor en «Cómo quieres que trabaje» para quitar lo de Claude sin ir a mano.
+- Las carpetas sin git que se montaron antes de esta versión no tienen la marca de este ordenador: lo de
+  la 157 no les llega hasta que se pongan copias o se vuelvan a montar.
 - `.team-safe-3` cuando una carpeta de la barra ya en la 3 se trae a otro ordenador.
 - Revisar aparte que los raíles apaguen avisos (`.no-audit` y compañía) en carpetas de alguien: RSC los apunta
   en su `.rsc.json`.
