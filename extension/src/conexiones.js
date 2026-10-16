@@ -355,6 +355,14 @@ const ANTES_DE_EMPEZAR = /^(?:antes\s+de\s+empezar|lo\s+que\s+hace\s+falta|qu[e�
 const LA_FUENTE = /^(?:fuentes?|fuente\s+oficial|sources?)\s*:\s*(\S.*)$/i;
 // Una línea sin la marca de lista, sin negritas ni comillas invertidas.
 const enLimpio = (linea) => String(linea).trim().replace(/^(?:\d+[.)]|[-*])\s+/, '').replace(/\*\*|__|`/g, '').trim();
+// Un punto de una lista, con tope antes de la expresión: `\s+(.*\S)\s*$` vuelve
+// atrás sin fin con una línea de espacios, y un README con una de 40.000 tardaba
+// 10 s en cada repintado (revisión de seguridad de la 159). Un paso de más de
+// 2.000 letras no es un paso.
+const LARGO_DE_UN_PASO = 2000;
+const unPunto = (linea) => (linea.length > LARGO_DE_UN_PASO ? null : linea.match(/^\s*(?:\d+[.)]|[-*])\s+(.*\S)\s*$/));
+// Un párrafo en una línea, sin `\s*\n\s*`, que también vuelve atrás sin fin con espacios.
+const enUnaLineaDeTexto = (t) => t.split('\n').map((l) => l.trim()).filter(Boolean).join(' ');
 const noEsUnPaso = (linea) => ANTES_DE_EMPEZAR.test(enLimpio(linea)) || LA_FUENTE.test(enLimpio(linea));
 
 function laSeccionDeLosPasos(texto) {
@@ -372,7 +380,7 @@ function comoSeConecta(carpeta, tope = 8) {
   const util = (linea) => linea && !/[{<]/.test(linea) && !/\bcp\b|chmod|\.env\b/.test(linea) && !noEsUnPaso(linea);
 
   const pasos = seccion.split('\n')
-    .map((l) => l.match(/^\s*(?:\d+[.)]|[-*])\s+(.*\S)\s*$/))
+    .map(unPunto)
     .filter(Boolean)
     .map((m) => m[1].replace(/[`*]/g, '').trim())
     .filter(util);
@@ -381,7 +389,7 @@ function comoSeConecta(carpeta, tope = 8) {
   // Sin lista, los párrafos de esa sección. Son menos cómodos de seguir, pero
   // dicen lo mismo y es mejor que una pantalla muda.
   return seccion.split(/\n\s*\n/).slice(1)
-    .map((t) => t.replace(/\s*\n\s*/g, ' ').replace(/[`*]/g, '').trim())
+    .map((t) => enUnaLineaDeTexto(t).replace(/[`*]/g, '').trim())
     .filter((t) => util(t) && t.length > 20 && t.length < 400 && !t.startsWith('#') && !t.startsWith('|'))
     .slice(0, Math.min(tope, 4));
 }
@@ -405,9 +413,9 @@ function antesDeEmpezar(carpeta) {
   const suya = texto.split(/^##\s+/m).slice(1).find((t) => TITULO_DE_ANTES.test(t.trim()) && t !== pasos);
   if (!suya) return [];
   const cuerpo = suya.split('\n').slice(1);
-  const lista = cuerpo.map((l) => l.match(/^\s*(?:\d+[.)]|[-*])\s+(.*\S)\s*$/)).filter(Boolean).map((m) => enLimpio(m[1])).filter(sirve);
+  const lista = cuerpo.map(unPunto).filter(Boolean).map((m) => enLimpio(m[1])).filter(sirve);
   if (lista.length) return lista.slice(0, 6);
-  return cuerpo.join('\n').split(/\n\s*\n/).map((t) => enLimpio(t.replace(/\s*\n\s*/g, ' '))).filter((t) => sirve(t) && !t.startsWith('|')).slice(0, 3);
+  return cuerpo.join('\n').split(/\n\s*\n/).map((t) => enLimpio(enUnaLineaDeTexto(t))).filter((t) => sirve(t) && !t.startsWith('|')).slice(0, 3);
 }
 
 // De dónde salen los pasos: la página oficial que el asistente leyó y el día en

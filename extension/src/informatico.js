@@ -175,7 +175,10 @@ function enTextoLlano(md) {
 //   · Lo que tiene forma de clave (las de «Algo va mal») y lo que lo parece por
 //     lo revuelto que es: mayúsculas, minúsculas y cifras sin orden, o una ristra
 //     hexadecimal larga.
-const SEPARADOR = /[\s\-_.]/;
+// También lo que no se ve (un espacio de ancho cero, un acento suelto) y la «?»
+// con que la guía en PDF cambia lo que no sabe escribir: partían una clave sin que
+// se notara (revisión de seguridad de la 159).
+const SEPARADOR = /[\s\-_.?\p{Cf}\p{Mn}\p{Me}]/u;
 const MINIMO_DERIVADO = 8;
 
 // Los valores cortos de una clave secreta, de los `.env` de las conexiones.
@@ -224,7 +227,7 @@ function formasDe(valor) {
 
 // El valor partido por separadores: se busca sin ellos y se tapa el tramo.
 function taparPartido(texto, valor) {
-  const compacto = valor.replace(/[\s\-_.]/g, '');
+  const compacto = valor.replace(/[\s\-_.?\p{Cf}\p{Mn}\p{Me}]/gu, '');
   if (compacto.length < MINIMO_DERIVADO) return texto;
   let plano = '';
   const donde = [];

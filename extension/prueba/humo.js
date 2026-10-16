@@ -16015,17 +16015,54 @@ exec git "$@"
       sinLaClave(datos, falsa);
       assert.ok(!JSON.stringify(ultimo('conexion').aviso).includes(falsa), 'el aviso lleva la clave');
 
+      // Ni con algo que no se ve en medio, ni un dibujo, ni un acento suelto, ni en letras de ancho
+      // completo, ni con lo que el PDF cambia por «?»: el PDF los quita o los cambia, y la clave salía
+      // entera (revisión de seguridad de la 159). Tampoco en el nombre, en el título del documento,
+      // en el nombre del fichero ni en lo que se le pide al asistente.
+      const mitad = Math.floor(falsa.length / 2);
+      const disfrazadas = ['\u200b', '\u0301', '😀', '中', '\u00ad'].map((c) => `${falsa.slice(0, mitad)}${c}${falsa.slice(mitad)}`);
+      disfrazadas.push([...falsa].map((c) => (/[!-~]/.test(c) ? String.fromCodePoint(c.codePointAt(0) + 0xfee0) : c)).join(''));
+      const compacta = (t) => t.replace(/[^A-Za-z0-9]/g, '');
+      // El título y la fuente, con el dibujo en medio: lo que solo se ve al escribirlo en el PDF.
+      fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas ${disfrazadas[2]}\n\n## Cómo conectarla\n\nAntes de empezar: ${disfrazadas[5]}.\n\n${disfrazadas.map((d, i) => `${i + 1}. Pega ${d} aquí.`).join('\n')}\n\nFuente: https://ayuda.facturas.test/${disfrazadas[2]} · comprobado el 15-10-2026\n`);
+      const disfrazado = guiaM.guardar('Facturas');
+      assert.equal(disfrazado.ok, true, disfrazado.motivo);
+      const conDisfraz = fs.readFileSync(disfrazado.completa);
+      const leidoConDisfraz = leerPdf(conDisfraz);
+      assert.ok(!compacta(leidoConDisfraz.texto).includes(compacta(falsa)), 'una clave con algo en medio sale en el PDF');
+      assert.ok(!compacta(leidoConDisfraz.titulo).includes(compacta(falsa)) && !compacta(disfrazado.fichero).includes(compacta(falsa)), 'la clave sale en el título o en el nombre del fichero');
+      assert.ok(!leidoConDisfraz.paginas.flatMap((p) => p.enlaces).some((e) => compacta(decodeURIComponent(e.uri)).includes(compacta(falsa))), 'la clave sale en un enlace');
+      sinLaClave(conDisfraz, falsa);
+      fs.rmSync(disfrazado.completa);
+      fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas ${disfrazadas[0]}\n`);
+      assert.ok(!compacta(guiaM.loQueSeLePide(conexionesM.claves('Facturas').proveedor.etiqueta, 'Facturas')).includes(compacta(falsa)), 'lo que se le pide al asistente lleva la clave');
+      assert.ok(!guiaM.nombreDelFichero('a\u202efdp.exe').includes('\u202e'), 'el nombre del fichero se lee al revés');
+      // Y el mensaje para el informático, que tapa igual: lo invisible y la «?» también parten una clave.
+      for (const c of ['\u200b', '\u0301', '?']) {
+        assert.equal(informaticoM.sinClaves(`la mía: ${falsa.slice(0, mitad)}${c}${falsa.slice(mitad)} y ya`, [falsa]), 'la mía: [clave quitada] y ya', `partida con ${escape(c)}, no se tapa`);
+      }
+      // Un README con una línea de espacios no cuelga el repintado (revisión de seguridad de la 159).
+      fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas\n\n## Antes de empezar\n\n-${' '.repeat(30000)}\n\n${' '.repeat(30000)}x\n\n## Cómo conectarla\n\n-${' '.repeat(30000)}\n\n1. Entra.\n`);
+      const empieza = Date.now();
+      conexionesM.claves('Facturas');
+      conexionesM.laGuia('Facturas');
+      assert.ok(Date.now() - empieza < 1500, `un README con espacios se atasca: ${Date.now() - empieza} ms`);
+      fs.writeFileSync(path.join(suya, 'README.md'), readme());
+
       // La segunda no pisa la primera.
       await proveedor.manejar({ tipo: 'guiaEnPdf', proveedor: 'Facturas' });
       assert.ok(fs.existsSync(path.join(fuera, 'Guía para sacar la clave de Facturas (2).pdf')), 'la segunda no lleva «(2)»');
       assert.ok(fs.readFileSync(laPrimera).equals(datos), 'la segunda pisa la primera');
       assert.match(ultimo('conexion').aviso.texto, /«Guía para sacar la clave de Facturas \(2\)\.pdf»\.$/);
+      // El nombre, de la primera línea del README: sin nada que un sistema no acepte, y que quepa.
+      assert.equal(guiaM.nombreDelFichero('A/B:C*?"<>|\n..'), 'Guía para sacar la clave de A B C.pdf');
+      assert.ok(Buffer.byteLength(guiaM.nombreDelFichero('😀'.repeat(100), 500)) <= 255, 'el nombre no cabe en un nombre de fichero');
 
       // En una carpeta con la plantilla de RSC, `out/` no entra en las copias.
       const git = (...a) => require('node:child_process').spawnSync('git', a, { cwd: carpeta, encoding: 'utf8' });
       if (git('init', '-q').status === 0) {
         fs.writeFileSync(path.join(suya, '.gitignore'), '.env\nkeys/\nout/\n');
-        assert.equal(git('check-ignore', '-q', '--', path.relative(carpeta, laPrimera)).status, 0, 'con la plantilla, la guía entra en git');
+        assert.equal(git('check-ignore', '-q', '--', path.relative(carpeta, laPrimera).split(path.sep).join('/')).status, 0, 'con la plantilla, la guía entra en git');
       }
 
       // Sin seguir enlaces: `out/` que es un enlace a otra carpeta, y un enlace colgando con su nombre.

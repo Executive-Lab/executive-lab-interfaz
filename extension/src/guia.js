@@ -55,15 +55,20 @@ const enUnaLinea = (t, cabe) => Array.from(String(t == null ? '' : t).replace(/[
 
 // El fichero: «Guía para sacar la clave de Holded.pdf», y el segundo, «(2)». El
 // nombre sale de la primera línea del README, así que no lleva nada que un
-// sistema no acepte en un nombre de fichero.
+// sistema no acepte en un nombre de fichero. Y 40 letras como mucho: con cuatro
+// bytes cada una, 60 pasaban de los 255 que admite un nombre en el Mac.
+// Sin caracteres invisibles: uno que da la vuelta al texto hacía que el nombre se
+// leyera al revés (revisión de seguridad de la 159).
 function nombreDelFichero(nombre, n = 1) {
-  const limpio = enUnaLinea(nombre, 60).replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').replace(/^[.\s]+|[.\s]+$/g, '') || 'esta conexión';
+  const limpio = enUnaLinea(String(nombre == null ? '' : nombre).replace(/\p{Cf}/gu, ''), 40).replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').replace(/^[.\s]+|[.\s]+$/g, '') || 'esta conexión';
   return `Guía para sacar la clave de ${limpio}${n > 1 ? ` (${n})` : ''}.pdf`;
 }
 
 // Lo que se le pide al asistente cuando todavía no hay pasos (P1): que los escriba
 // de la documentación oficial, donde la barra los lee.
-function loQueSeLePide(nombre, proveedorId) {
+// El nombre sale de la primera línea del README: en una línea, con tope y tapado.
+function loQueSeLePide(etiqueta, proveedorId) {
+  const nombre = enUnaLinea(informatico.sinClaves(enUnaLinea(etiqueta, 200)), 80) || proveedorId;
   return `Prepara la guía para sacar la clave de ${nombre} (01-TOOLS/${proveedorId}/), como dice tu habilidad executive-lab: `
     + 'busca en su documentación oficial cómo se saca y escribe los pasos en su README, bajo «## Cómo conectarla», numerados y con los nombres exactos de los menús y los botones. '
     + 'Pon delante lo que hace falta («Antes de empezar: …») y detrás la página oficial y el día en que lo comprobaste («Fuente: … · comprobado el …»). '
@@ -102,7 +107,13 @@ function contenido(proveedorId, { cuando = new Date() } = {}) {
   if (!datos || !leido) return null;
   const valores = informatico.valoresQueTapar();
   const tapar = (t) => informatico.sinClaves(String(t == null ? '' : t), valores);
-  const nombre = enUnaLinea(tapar(enUnaLinea(datos.proveedor.etiqueta, 200)), 80) || proveedorId;
+  // Tapado sobre el texto tal cual y **como se va a escribir**: el PDF quita lo que
+  // no se ve y cambia lo que no cabe en WinAnsi, y una clave con un espacio de ancho
+  // cero, un dibujo o un acento suelto en medio, o en letras de ancho completo,
+  // salía entera sin que el tapado la viera (revisión de seguridad de la 159).
+  const comoSale = (t) => tapar(pdf.deWinAnsi(pdf.aWinAnsi(tapar(t))));
+  // El nombre va en el título, en los datos del documento y en el nombre del fichero.
+  const nombre = enUnaLinea(comoSale(enUnaLinea(datos.proveedor.etiqueta, 200)), 80) || proveedorId;
   const pasos = leido.pasos.map((p) => tapar(p).slice(0, 1000));
   const clases = datos.proveedor.acceso || [];
   const titulo = `Cómo sacar la clave de ${nombre} y dónde ponerla`;
@@ -158,12 +169,13 @@ function contenido(proveedorId, { cuando = new Date() } = {}) {
     bloques.push({ tipo: 'parrafo', texto: compruebalo });
   }
 
-  // Y otra vez el tapado, sobre todo lo que se va a escribir: lo de la barra no
-  // lleva claves, y así nada del disco se queda sin pasar por él.
+  // Y otra vez el tapado, sobre todo lo que se va a escribir y como se va a escribir.
+  // Lo de la barra no lleva claves, y así nada del disco se queda sin pasar por él.
   for (const b of bloques) {
-    if (b.texto) b.texto = tapar(b.texto);
-    if (b.trozos) b.trozos = b.trozos.map((t) => ({ ...t, texto: tapar(t.texto), ...(t.enlace ? { enlace: tapar(t.enlace) } : {}) }));
-    if (b.elementos) b.elementos = b.elementos.map((e) => (Array.isArray(e) ? e.map((t) => ({ ...t, texto: tapar(t.texto) })) : tapar(e)));
+    if (b.texto) b.texto = comoSale(b.texto);
+    // El enlace, igual que su texto: lo que se ve es adónde lleva.
+    if (b.trozos) b.trozos = b.trozos.map((t) => ({ ...t, texto: comoSale(t.texto), ...(t.enlace ? { enlace: comoSale(t.enlace) } : {}) }));
+    if (b.elementos) b.elementos = b.elementos.map((e) => (Array.isArray(e) ? e.map((t) => ({ ...t, texto: comoSale(t.texto) })) : comoSale(e)));
   }
 
   return {

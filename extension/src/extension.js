@@ -1347,7 +1347,7 @@ ${cabecera}
       ordenar: desordenadas ? desordenadas.prompt : null,
       // Sin pasos no hay guía en PDF: lo que se le pide al asistente para que la
       // prepare, armado aquí, que es quien tiene los datos (P6, decisión 159).
-      prepararLaGuia: guiaPdf.loQueSeLePide(datos.proveedor.etiqueta, proveedor),
+      prepararLaGuia: datos.proveedor.pasos.length ? null : guiaPdf.loQueSeLePide(datos.proveedor.etiqueta, proveedor),
       aviso,
     });
   }
