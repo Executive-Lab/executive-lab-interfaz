@@ -7771,3 +7771,74 @@ ponen, no todas.
 El diálogo del `.dmg` y la página del `.exe` no se han visto con una persona delante: se comprueba
 que la app compila (`osacompile`), el texto y el paso de lo elegido. La extensión de Codex en las
 máquinas de GitHub se ve en `el-dmg`.
+
+---
+
+## 172. Los interruptores de RSC, a un clic
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · FTD `los-interruptores-de-rsc`
+
+Al montar una carpeta, la barra deja puestas las marcas `.rsc/.no-trunk-guard`, `.no-worktree-isolation` y
+`.no-knowledge-sync` (decisiones 145 y 157), y «Las reglas › Lo que se comprueba solo» las enseñaba, pero sin
+interruptor: cambiarlas solo se podía pidiéndoselo al asistente por chat. RSC 3.0.22 trae una orden oficial
+para cada una, y la persona decide cómo trabaja (P9): su clic es su sí.
+
+### Lo que trae RSC 3.0.22 (`scripts/rsc.js`, comprobado con el paquete)
+
+| Orden | Escribe | Dice |
+|---|---|---|
+| `main unlock` / `main lock` | `.rsc/.no-trunk-guard` (unlock); `.rsc/.no-trunk-open` (lock). Cada una quita la marca de la otra: `lock` es una decisión, no un volver a adivinar | «Commit .rsc.json so the team gets the same decision» |
+| `isolation off` / `on` | `.rsc/.no-worktree-isolation` (off la pone, on la quita) | lo mismo |
+| `knowledge-sync off` / `on` | `.rsc/.no-knowledge-sync` (off la pone, on la quita) | lo mismo |
+
+Las tres rehacen lo montado de cada asistente (`syncInstalled`) y por eso la marca llega a `optOuts` de
+`.rsc.json`, que va a git: **son decisiones del equipo**, y lo dice la línea de cada botón. Existen las tres
+parejas, así que no queda ninguna sin botón.
+
+### Lo que hace la barra
+
+- **Un apartado nuevo en «Las reglas»**, «Cómo trabaja el asistente» (entre los botones de añadir una regla y
+  «Lo que se comprueba solo», visible y sin plegar: son decisiones, no avisos), con tres entradas. Cada una dice
+  cómo está ahora, que es del equipo, y qué cambia al pulsar, con el botón debajo:
+  - **La rama principal**: *abierta* → **Cerrar la rama principal** (`main lock`); *cerrada* → **Abrir la rama
+    principal** (`main unlock`); *según el proyecto* (ninguna marca: RSC la cierra sola con equipo, CI o
+    despliegue) → los dos. Manda `.no-trunk-guard` sobre `.no-trunk-open`, como `trunkPolicy`;
+  - **El trabajo aparte**: **Apagar** / **Encender el trabajo aparte** (`isolation off|on`);
+  - **Compartir el conocimiento con el equipo**: **Dejar de compartir** / **Compartir el conocimiento**
+    (`knowledge-sync off|on`).
+- **No son botones de las filas de «Lo que se comprueba solo»**. Se probó así primero y se dejó: esas filas
+  existen según qué guardianes se montaron, y en una carpeta de empresa sin código (la que sale del
+  asistente de montaje) el freno de la rama principal no se monta, aunque `trunk-policy.mjs` y su marca siguen
+  mandando en lo demás (`userprompt-gate`, el aviso de arranque); además la del trabajo aparte solo salía
+  apagada. El estado sale de las marcas, que es lo que lee RSC.
+- **Solo donde RSC los trae**: con la 3 y con Claude (`trunk-policy.mjs` en `.rsc/`, que RSC copia con todo
+  arnés de la 3). Con una carpeta de la 2 esas órdenes no existen; con Codex RSC no engancha frenos y la
+  pantalla ya lo dice. Ahí no sale el apartado.
+- **Por la vía de siempre**: `rsc.correr`, con sus guardas: nombres que salen de la carpeta, carpeta por
+  delante de la barra (con su frase), el relevo, y las marcas de la barra antes de escribir (`decidir.js`,
+  que en una carpeta ya en la 3 no se mete). Además, aparte: **confianza del editor**, **carpeta montada**
+  (`.rsc.json`) y **que no esté arreglando sola** (`conElArnes`). Cuenta como botón del arnés mientras
+  corre, para que el vigía no repinte a medias.
+- **El panel solo manda el nombre del botón** (`principal-cerrar`, `aparte-apagar`…). La orden sale de una
+  tabla de la barra: `__proto__`, `constructor`, un array o «main lock» no llegan a nada.
+- **Se dice lo que ha pasado de verdad**: «Hecho.» más cómo queda, y solo si el disco ha quedado como toca;
+  si RSC falla, «No he podido cambiarlo. El arnés dice: «…»» con las tres últimas líneas de su salida, sin
+  claves y a 300 letras (como la 166); si RSC dice que sí y la carpeta sigue igual, se dice eso. La pantalla se
+  repinta con lo nuevo.
+- **El texto**, en `docs/diccionario.md`. Nada de nombres de órdenes, marcas ni ficheros en pantalla.
+
+### Lo que no se ha hecho
+
+- Ningún confirmar aparte: el clic es el sí. Abrir la rama principal a un equipo es lo más serio de los
+  tres; la línea de arriba lo dice con todas las letras, y el botón contrario deshace.
+- No se guarda el cambio en git: eso sigue siendo guardar.
+- No se ha visto con una persona delante, ni con un VS Code de verdad.
+
+### Las pruebas
+
+`humo.js`, una comprobación nueva (de 475 a 476): los botones de cada entrada según su estado (con las tres
+marcas de la rama), la pantalla, las seis órdenes con sus marcas, el fallo con su salida, el «sí» que no
+cambia nada, la carpeta por delante, sin confianza, sin montar, nombres que no son suyos, un arnés de la 2,
+Codex y el arreglo en marcha. Y con `--con-arnes`, el
+paso a paso con el RSC de verdad sobre la carpeta recién montada: cada botón, su marca, `.rsc.json` y
+vuelta.

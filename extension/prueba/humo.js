@@ -7122,6 +7122,145 @@ exec git "$@"
     }
   });
 
+  await comprobar('la rama principal, el trabajo aparte y compartir el conocimiento se cambian con un clic, por la orden de RSC (decisión 172)', async () => {
+    const reglas = cargar('reglas');
+    const rscM = cargar('rsc');
+    const p = require('./panel-falso').montarPanel();
+    const proveedor = vscode.registrado.proveedor;
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'interruptores-'));
+    fs.mkdirSync(path.join(carpeta, '.rsc'), { recursive: true });
+    const declarar = (datos) => fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], ...datos }));
+    declarar({});
+    // Una carpeta de empresa, sin código: ni freno de la rama principal ni nada de lo de SDD.
+    for (const f of ['trunk-policy.mjs', 'knowledge-sync.mjs', 'session-start.mjs']) fs.writeFileSync(path.join(carpeta, '.rsc', f), '// pieza del arnés');
+    const marca = (m) => path.join(carpeta, '.rsc', m);
+    const hay = (m) => fs.existsSync(marca(m));
+    const poner = (...ms) => ms.forEach((m) => fs.writeFileSync(marca(m), ''));
+    const quitar = (...ms) => ms.forEach((m) => fs.rmSync(marca(m), { force: true }));
+    const losDe = () => Object.fromEntries(reglas.queHay().interruptores.map((i) => [i.cual, i]));
+    const rotulos = () => Object.values(losDe()).flatMap((i) => i.botones.map((b) => b.etiqueta));
+
+    // Un RSC de mentira que hace lo que dice la orden oficial (`scripts/rsc.js`, 3.0.22).
+    const llamadas = [];
+    const antes = { correr: rscM.correr, enviar: proveedor.enviar, confianza: vscode.guion.confianza, raiz: vscode.guion.raiz };
+    let respuesta = null;
+    const comoRsc = {
+      'main unlock': () => { poner('.no-trunk-guard'); quitar('.no-trunk-open'); },
+      'main lock': () => { quitar('.no-trunk-guard'); poner('.no-trunk-open'); },
+      'isolation off': () => poner('.no-worktree-isolation'),
+      'isolation on': () => quitar('.no-worktree-isolation'),
+      'knowledge-sync off': () => poner('.no-knowledge-sync'),
+      'knowledge-sync on': () => quitar('.no-knowledge-sync'),
+    };
+    rscM.correr = async (args) => {
+      llamadas.push(args);
+      if (respuesta) return respuesta;
+      comoRsc[args.join(' ')]();
+      return { codigo: 0, salida: 'ok', error: '' };
+    };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = carpeta;
+    vscode.guion.confianza = true;
+    const pulsar = async (cual) => {
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'cambiarInterruptor', cual });
+      return enviados.filter((m) => m.tipo === 'reglas').pop();
+    };
+    try {
+      // Cómo está cada uno, y los botones que tocan; sin marcas, la rama la decide el proyecto: los dos.
+      assert.deepEqual(Object.keys(losDe()), ['principal', 'aparte', 'wiki']);
+      assert.deepEqual(losDe().principal.botones.map((b) => b.id), ['principal-cerrar', 'principal-abrir']);
+      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Abrir la rama principal', 'Apagar el trabajo aparte', 'Dejar de compartir el conocimiento']);
+      poner('.no-trunk-guard', '.no-worktree-isolation', '.no-knowledge-sync');
+      assert.deepEqual(rotulos(), ['Cerrar la rama principal', 'Encender el trabajo aparte', 'Compartir el conocimiento']);
+      assert.equal(losDe().principal.estado, 'abierta');
+      quitar('.no-trunk-guard'); poner('.no-trunk-open');
+      assert.deepEqual([losDe().principal.estado, losDe().principal.botones.map((b) => b.etiqueta)], ['cerrada', ['Abrir la rama principal']]);
+      poner('.no-trunk-guard');
+      assert.equal(losDe().principal.estado, 'abierta', 'abierta manda sobre cerrada, como en trunkPolicy');
+      quitar('.no-trunk-open');
+      assert.match(losDe().principal.equipo, /decisión del equipo.*git/, 'dice que es del equipo');
+
+      // En la pantalla: un botón por orden, que manda solo su nombre, con lo que cambia.
+      const html = p.mandar({ tipo: 'reglas', ...reglas.queHay() });
+      assert.match(html, /Cómo trabaja el asistente/);
+      for (const id of ['principal-cerrar', 'aparte-encender', 'wiki-compartir']) assert.ok(html.includes(`&quot;cual&quot;:&quot;${id}&quot;`), `sin botón ${id}`);
+      assert.match(html, /Si la cierras, el asistente trabaja en una copia aparte/);
+      assert.match(html, /Es una decisión del equipo/);
+      assert.ok(!/main lock|unlock|knowledge-sync|\.no-|&quot;args/.test(html), 'sale el nombre de una orden, de una marca o la orden misma');
+
+      // Cada botón llama a la orden oficial, sin escribir las marcas a mano, y dice lo que ha pasado.
+      let r = await pulsar('principal-cerrar');
+      assert.deepEqual(llamadas.pop(), ['main', 'lock']);
+      assert.equal(hay('.no-trunk-guard'), false);
+      assert.deepEqual([r.aviso.malo, r.aviso.texto], [false, 'Hecho. La rama principal está cerrada: el asistente trabaja en una copia aparte y te pregunta antes de tocarla.']);
+      assert.deepEqual(r.interruptores[0].botones.map((b) => b.etiqueta), ['Abrir la rama principal'], 'no se repinta con lo nuevo');
+      r = await pulsar('aparte-encender');
+      assert.deepEqual(llamadas.pop(), ['isolation', 'on']);
+      assert.equal(r.aviso.texto, 'Hecho. Con otra conversación en esta carpeta, lo nuevo se hace en una copia aparte para no pisarla.');
+      r = await pulsar('wiki-compartir');
+      assert.deepEqual(llamadas.pop(), ['knowledge-sync', 'on']);
+      assert.match(r.aviso.texto, /^Hecho\. Las conexiones y lo que sabe de tu empresa se suben solos/);
+      await pulsar('principal-abrir'); assert.deepEqual(llamadas.pop(), ['main', 'unlock']); assert.ok(hay('.no-trunk-guard') && !hay('.no-trunk-open'));
+      await pulsar('aparte-apagar'); assert.deepEqual(llamadas.pop(), ['isolation', 'off']); assert.ok(hay('.no-worktree-isolation'));
+      await pulsar('wiki-dejar'); assert.deepEqual(llamadas.pop(), ['knowledge-sync', 'off']); assert.ok(hay('.no-knowledge-sync'));
+      assert.equal(llamadas.length, 0);
+
+      // Si RSC falla, se dice con lo que ha dicho, y no se da nada por hecho.
+      respuesta = { codigo: 3, salida: '', error: 'rsc main lock: boom\nuna segunda línea' };
+      r = await pulsar('principal-cerrar');
+      assert.equal(r.aviso.malo, true);
+      assert.equal(r.aviso.texto, 'No he podido cambiarlo. El arnés dice: «rsc main lock: boom · una segunda línea». Pulsa «Algo va mal» y pásale el código a tu tutor.');
+      assert.ok(hay('.no-trunk-guard'), 'falló y la marca cambió');
+      // Dice que sí y no ha cambiado nada: no se cree.
+      respuesta = { codigo: 0, salida: 'rsc main lock: ok', error: '' };
+      r = await pulsar('principal-cerrar');
+      assert.equal(r.aviso.malo, true);
+      assert.match(r.aviso.texto, /dice que lo ha hecho, pero la carpeta sigue igual/);
+      // Una carpeta que va por delante: lo dice, no lo hace.
+      respuesta = { codigo: 1, salida: '', error: 'no se corre main: la carpeta va por delante de la barra', porDelante: true };
+      r = await pulsar('wiki-compartir');
+      assert.match(r.aviso.texto, /versión del arnés más nueva que la de la barra/);
+      respuesta = null;
+
+      // Sin confianza, sin carpeta montada, con un nombre que no es suyo, con Codex o con el arreglo en marcha: no se corre nada.
+      llamadas.length = 0;
+      vscode.guion.confianza = false;
+      r = await pulsar('principal-cerrar');
+      assert.match(r.aviso.texto, /no es de confianza/);
+      vscode.guion.confianza = true;
+      fs.renameSync(path.join(carpeta, '.rsc.json'), path.join(carpeta, 'rsc.json.guardado'));
+      r = await pulsar('principal-cerrar');
+      assert.match(r.aviso.texto, /todavía no está preparada/);
+      fs.renameSync(path.join(carpeta, 'rsc.json.guardado'), path.join(carpeta, '.rsc.json'));
+      for (const cual of ['__proto__', 'constructor', 'toString', 'principal', 'main lock', undefined, 7, ['principal-cerrar']]) {
+        r = await pulsar(cual);
+        assert.match(r.aviso.texto, /Eso ya no se puede cambiar desde aquí/, `se aceptó ${String(cual)}`);
+      }
+      fs.renameSync(marca('trunk-policy.mjs'), marca('guardada.mjs'));
+      assert.deepEqual(reglas.queHay().interruptores, [], 'con un arnés de la 2 no hay nada que ofrecer: no trae esas órdenes');
+      r = await pulsar('principal-cerrar');
+      assert.match(r.aviso.texto, /Eso ya no se puede cambiar/);
+      fs.renameSync(marca('guardada.mjs'), marca('trunk-policy.mjs'));
+      declarar({ targets: ['codex'] });
+      assert.deepEqual(reglas.queHay().interruptores, [], 'con Codex no hay frenos, y se ofrece cambiar uno');
+      declarar({});
+      proveedor.arreglandoSolo = true;
+      r = await pulsar('principal-cerrar');
+      proveedor.arreglandoSolo = false;
+      assert.match(r.aviso.texto, /Estoy arreglando esta carpeta/);
+      assert.equal(llamadas.length, 0, `se ha corrido ${JSON.stringify(llamadas)}`);
+      return 'tres interruptores, seis órdenes, y nada se da por hecho';
+    } finally {
+      rscM.correr = antes.correr;
+      proveedor.enviar = antes.enviar;
+      proveedor.arreglandoSolo = false;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
   await comprobar('la cara sale de la web al momento, y no pisa la puesta a mano', async () => {
     // Jose, 21-09-2026: «cuando dices la web en el init no te adapta la
     // interfaz […] debería ejecutarse en el init porque ya tienes la web». La
@@ -23303,6 +23442,49 @@ exec git "$@"
       vscode.guion.raiz = vacia;
       const botones = cargar('acciones').acciones().map((a) => a.etiqueta);
       assert.deepEqual(botones.sort(), ['Empezar algo nuevo', 'No sé qué hacer ahora', 'Seguir donde lo dejé']);
+
+      // Y los tres interruptores de «Las reglas» (decisión 172), con el RSC de verdad:
+      // cada botón llama a su orden, la marca cambia, `.rsc.json` lo apunta, y vuelta.
+      {
+        const proveedor = vscode.registrado.proveedor;
+        const reglasM = cargar('reglas');
+        const guardado = { enviar: proveedor.enviar, confianza: vscode.guion.confianza };
+        const dichos = [];
+        proveedor.enviar = (m) => dichos.push(m);
+        vscode.guion.confianza = true;
+        const optOuts = () => JSON.parse(fs.readFileSync(path.join(vacia, '.rsc.json'), 'utf8')).optOuts || [];
+        const marcaDe = (m) => fs.existsSync(path.join(vacia, '.rsc', m));
+        const botones = () => reglasM.losInterruptores().flatMap((i) => i.botones.map((b) => b.id));
+        try {
+          // Recién montada: la rama abierta, el trabajo aparte apagado y sin compartir.
+          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir'], 'los botones de una carpeta recién montada');
+          for (const [ir, volver, marca, optOut, estaba, llega] of [
+            ['principal-cerrar', 'principal-abrir', '.no-trunk-guard', 'trunk-guard', 'abierta', 'cerrada'],
+            ['aparte-encender', 'aparte-apagar', '.no-worktree-isolation', 'worktree-isolation', 'apagado', 'encendido'],
+            ['wiki-compartir', 'wiki-dejar', '.no-knowledge-sync', 'knowledge-sync', 'apagado', 'encendido'],
+          ]) {
+            const cual = reglasM.elBoton(ir).cual;
+            assert.equal(reglasM.estadoDe(cual), estaba);
+            assert.ok(marcaDe(marca) === (estaba !== 'cerrada' && estaba !== 'encendido') && optOuts().includes(optOut), `${ir}: la marca o su apunte en .rsc.json`);
+            dichos.length = 0;
+            await proveedor.manejar({ tipo: 'cambiarInterruptor', cual: ir });
+            const aviso = dichos.filter((m) => m.tipo === 'reglas').pop().aviso;
+            assert.equal(aviso.malo, false, `${ir}: ${aviso.texto}`);
+            assert.match(aviso.texto, /^Hecho\./);
+            assert.equal(marcaDe(marca), false, `${ir}: RSC no ha quitado ${marca}`);
+            assert.ok(!optOuts().includes(optOut), `${ir}: .rsc.json sigue diciendo que está apagado`);
+            assert.equal(reglasM.estadoDe(cual), llega, `${ir}: no queda ${llega}`);
+            if (cual === 'principal') assert.ok(marcaDe('.no-trunk-open'), 'cerrar la rama no la deja decidida');
+            await proveedor.manejar({ tipo: 'cambiarInterruptor', cual: volver });
+            assert.ok(marcaDe(marca) && optOuts().includes(optOut), `${volver}: no vuelve`);
+            assert.equal(reglasM.estadoDe(cual), estaba);
+          }
+          assert.deepEqual(botones(), ['principal-cerrar', 'aparte-encender', 'wiki-compartir'], 'queda como estaba');
+        } finally {
+          proveedor.enviar = guardado.enviar;
+          vscode.guion.confianza = guardado.confianza;
+        }
+      }
 
       // Y los nombres que puso, en el perfil: de ahí sale el rótulo. Con ellos,
       // qué lleva la carpeta y cuánta gente hay detrás.

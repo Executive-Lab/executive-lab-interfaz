@@ -651,7 +651,7 @@ const MARCA_GUARDIAN = { armado: '●', apagado: '○', noAplica: '·', pendient
 
 function pantallaReglas({
   innegociables = [], deLaCasa = [], guardianes = [], automatismos = [], hay = {}, cual = 'claude',
-  puedeTenerFrenos = true,
+  puedeTenerFrenos = true, interruptores = [], aviso: avisoLocal,
 }) {
   const lista = (reglas, vacio, comoQuitar) => (reglas.length
     ? reglas.map((r) => `<div class="entrada"><p class="nombre">${enLinea(r)}</p></div>`).join('')
@@ -659,7 +659,7 @@ function pantallaReglas({
 
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Las reglas' }])}
-    ${bloqueAviso()}
+    ${bloqueAviso(avisoLocal)}
     ${volver()}
 
     <div class="brujula">
@@ -688,6 +688,20 @@ function pantallaReglas({
       icono: '🚫',
       accion: { tipo: 'pedir', prompt: 'Hay cosas que no quiero que hagas nunca en esta carpeta. Pregúntame cuáles son, una a una, y déjalas escritas donde te las leas siempre.' },
     })}
+
+    ${/* Lo que se cambia con un clic (decisión 172): cómo está, qué cambia y su
+          botón. El clic es el sí de quien lo pulsa; lo hace la orden del arnés. */''}
+    ${interruptores.length ? `
+      <hr class="separador">
+      <h2>Cómo trabaja el asistente</h2>
+      ${interruptores.map((i) => `
+        <div class="pieza si">
+          <span class="pieza-nombre">${texto(i.nombre)}</span>
+        </div>
+        <p class="detalle">${texto(i.dice)} ${texto(i.equipo)}</p>
+        ${i.botones.map((b) => `
+          <p class="detalle">${texto(b.queCambia)}</p>
+          ${boton({ etiqueta: b.etiqueta, icono: '🔧', pequeno: true, accion: { tipo: 'cambiarInterruptor', cual: b.id } })}`).join('')}`).join('')}` : ''}
 
     ${/* Lo único del arnés que puede decir que NO. Va al final y plegado
           (decisión 101): es automático y de dentro, así que casi nunca se abre.
