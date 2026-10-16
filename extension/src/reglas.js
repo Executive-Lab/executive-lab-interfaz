@@ -116,7 +116,9 @@ const AUTOMATISMOS = [
   { id: 'ftd-nudge', fichero: 'ftd-nudge.mjs', interruptor: '.no-ftd-nudge' },
   { id: 'ftd-close', interruptor: '.no-ftd-close' },
   { id: 'trunk-open', interruptor: '.no-trunk-open' },
-  { id: 'worktree-isolation', interruptor: '.no-worktree-isolation' },
+  // Apagado por la barra en sus carpetas (decisión 157): con dos conversaciones, a
+  // un alumno lo mandaban a trabajar a otra carpeta.
+  { id: 'worktree-isolation', interruptor: '.no-worktree-isolation', porQueApagado: 'Apagado a propósito: todo se hace en esta carpeta' },
 ];
 
 // La memoria no tiene interruptor: se apaga en la declaración, con

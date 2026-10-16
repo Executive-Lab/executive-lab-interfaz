@@ -26,6 +26,7 @@ const rumbo = require('./rumbo');
 const trato = require('./trato');
 const ajena = require('./ajena');
 const encargosDelAsistente = require('./encargos');
+const ajustesLocales = require('./ajustes-locales');
 
 // Las preguntas que hace RSC, en cristiano. Antes se daban por supuestas tres
 // —siempre operaciones, siempre no técnico, siempre L3— y eso está mal: un
@@ -510,6 +511,36 @@ async function ponerLosRailes(contexto, { ajena = false, ponerFreno = false, pon
   return codigo === 0;
 }
 
+// Lo de esta persona en los ajustes de Claude de esta carpeta (decisión 157): que
+// le hable en español y que le pregunte antes de subir a GitHub. Al montar y, en
+// las carpetas que ya estaban montadas, al abrir. Solo en una carpeta cuyo
+// historial creó la barra, como la rama principal abierta (P4), y que se montó en
+// este ordenador (`terreno.montadaAqui`): en la de alguien, o en un clon, sus
+// ajustes y su forma de trabajar son suyos. Si el fichero está en git, lo mira
+// el git de la barra, y solo si se puede usar (en un Mac sin las herramientas de
+// Apple, `git` a secas abre su diálogo).
+async function estaEnGitConLaBarra(donde, relativo) {
+  if (!fs.existsSync(path.join(donde, '.git'))) return false;
+  if (!(await git.hay())) return null;
+  const { codigo, salida } = await procesos.git('ls-files', '--', relativo);
+  return codigo === 0 ? Boolean(salida.trim()) : null;
+}
+
+async function ponerLoDeClaude() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return { hecho: 'sinCarpeta' };
+  if (!(await terreno.montadaAqui())) return { hecho: 'noSeMontoAqui' };
+  return ajustesLocales.ponerLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra });
+}
+
+// «Quitarlo», desde el aviso que lo cuenta: es local y se deshace. Lo quitado no
+// vuelve a ponerse al abrir.
+async function quitarLoDeClaude() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return { hecho: 'sinCarpeta' };
+  return ajustesLocales.quitarLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra });
+}
+
 // Si lo que toca ficheros de esta persona tiene que esperar a su sí (C-4): el
 // historial no lo creó la barra, y en este montaje no se enseñó qué se tocaba.
 // Al montar encima de lo que había, ese sí ya se dio con el resumen (B4).
@@ -890,7 +921,18 @@ const COMO_SE_HACE = {
   },
 
   arreglarLoRoto: ({ salida }) => arreglarLoQueSePuedaSolo(salida),
-  ponerLosRailes: async ({ contexto, parte }) => ({ ok: await ponerLosRailes(contexto, { ajena: await sinSuSi(parte) }) }),
+  // Y con ellos, lo de esta persona en los ajustes de Claude (decisión 157). Que
+  // no salga no tumba los raíles: se apunta, y al abrir se vuelve a intentar.
+  // Lo que se puso se dice una vez al terminar (`dicho`), con su «Quitarlo».
+  ponerLosRailes: async ({ contexto, parte }) => {
+    const ok = await ponerLosRailes(contexto, { ajena: await sinSuSi(parte) });
+    const deClaude = await ponerLoDeClaude().catch((error) => ({ hecho: 'fallo', error: error.message }));
+    return {
+      ok,
+      detalle: `ajustes de Claude de esta carpeta: ${deClaude.hecho}${deClaude.error ? ` (${deClaude.error})` : ''}`, // diccionario: interno
+      ...(deClaude.hecho === 'puesto' ? { dicho: ajustesLocales.laFrase(deClaude) } : {}),
+    };
+  },
   ponerLosNombres: ({ respuestas }) => {
     const campos = { ...(respuestas.nombres || {}), alcance: respuestas.alcance, personas: respuestas.personas };
     return { ok: Object.values(campos).some(Boolean) ? ponerEnElPerfil(campos) : true };
@@ -1038,7 +1080,17 @@ async function elCamino(contexto, salida) {
   const respuestas = await entrevistar(plan, parte);
   if (!respuestas) return { ok: false, cancelado: true };
 
+  await recordarSiSeMontaAqui(plan);
   return hacerLosPasos(plan, parte, respuestas, contexto, salida);
+}
+
+// Un montaje que empieza aquí, en una carpeta sin historial, se apunta en el
+// estado del editor para esta carpeta, que un clon no trae (decisión 157): es lo
+// que dice después que la barra la montó en este ordenador. Con historial lo dice
+// la marca que deja la barra al crearlo (`prepararHistorial`).
+async function recordarSiSeMontaAqui(plan) {
+  if (!plan.pasos.some((p) => p.id === 'montarElArnes') || proyecto.existe('.git')) return false;
+  return terreno.recordarQueSeMontoAqui();
 }
 
 // Sin git no hay copias de seguridad. Se explica qué se pierde y se deja
@@ -1227,6 +1279,8 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
       const renombrados = [];
       // Lo que salió mal y hay que decir, aunque el montaje siga.
       const pegas = [];
+      // Y lo que se hizo solo y hay que decir una vez (decisión 157).
+      const dichos = [];
 
       for (const paso of plan.pasos) {
         if (paso.escribe) progreso.report({ message: `${paso.etiqueta}…` });
@@ -1235,6 +1289,7 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
         if (hecho.encargo) encargos.push(hecho.encargo);
         if (hecho.faltan) dijoRsc.push(...hecho.faltan);
         if (hecho.renombrados) renombrados.push(...hecho.renombrados);
+        if (hecho.dicho) dichos.push(hecho.dicho);
         if (hecho.detalle) salida.appendLine(`[arrancar] ${paso.id}: ${hecho.detalle}`); // diccionario: interno
 
         // Una pega en un paso que sale bien también se dice: el montaje sigue, y la
@@ -1299,6 +1354,7 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
           ? `${(respuestas.nombres && respuestas.nombres.arnes) || 'Tu arnés'} ya está montado. Al terminar te enseño lo que falta.`
           : `${(respuestas.nombres && respuestas.nombres.arnes) || 'Tu arnés'} ya está listo.`) + loQueSeRenombro(renombrados),
         renombrados,
+        dichos,
       };
     },
   );
@@ -1365,6 +1421,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
+  ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
   arrancar, sePuedeSinNadie, RAMAS_SIN_NADIE, momento, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque,

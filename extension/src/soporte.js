@@ -51,8 +51,8 @@ async function revisar({ lineas = [], carpetaAparte = null, barra = null } = {})
   const suelo = proyecto.sueloDelArnes();
 
   const doctor = await rsc.revisar();
-  // Para decidir, el mismo diagnóstico para máquina: el de texto sale con 0 pase
-  // lo que pase (G3).
+  // Para decidir, el mismo diagnóstico para máquina: el de texto es para leerlo,
+  // y el informe trae `healthy`, también cuando sale con 1 (decisión 157).
   const entero = rsc.estaEntero(rsc.comoEstaDeSalud(await rsc.salud()));
   const reparacion = await rsc.arreglarEnSeco();
 

@@ -58,6 +58,18 @@ const LO_QUE_NO_ENTRA = [
   '02-DOCS/raw/avisos/',
   // Lo que el asistente le pide a la barra y lo que ella le contesta (decisión 150).
   '02-DOCS/raw/pedidos/',
+  // Los ajustes de Claude de esta persona en este ordenador (decisión 157). Claude
+  // lo deja fuera de git cuando lo crea él, pero aquí lo crean RSC, para su memoria,
+  // y la barra. RSC solo lo excluye en `.git/info/exclude` si ya había git al
+  // montar: con «seguir sin copias» y «Ponerlas ahora» después, entraba en la copia,
+  // y con él en git la memoria de RSC deja de engancharse.
+  '.claude/settings.local.json',
+  // Y la constancia de lo que la barra puso en él, que es de este ordenador: si
+  // viajara, otra carpeta podría traer una plantada (revisión de seguridad de la 157).
+  '.rsc/executive-lab-ajustes-locales.json',
+  // La copia de cómo estaba la configuración de Codex de la carpeta antes de que la
+  // barra le quitara un modelo retirado (decisión 157): es para volver atrás aquí.
+  '.codex/*.copia-executive-lab-*',
   // Los vídeos y las imágenes de disco, que pesan mucho y hacen el historial enorme
   // sin vuelta atrás (decisión 147). Aquí, y no solo al guardar desde la barra,
   // porque así tampoco entran cuando guarda el asistente. Con las dos formas de
@@ -84,7 +96,7 @@ const ENTRE_MARCAS = /# executive-lab:start[\s\S]*?# executive-lab:end/;
 
 const elBloque = () => [
   DESDE,
-  '# Lo que no entra en las copias: claves, ficheros de acceso y vídeos. Lo pone la barra de Executive Lab.',
+  '# Lo que no entra en las copias: claves, ficheros de acceso, vídeos y lo de este ordenador. Lo pone la barra de Executive Lab.',
   ...LO_QUE_NO_ENTRA,
   HASTA,
 ].join('\n');

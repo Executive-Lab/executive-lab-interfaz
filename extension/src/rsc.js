@@ -301,10 +301,19 @@ function habilidadesPuestas() {
 
 // `doctor --json` sale entero por la salida normal. Si no se puede leer, se
 // dice que no se sabe: inventarse un informe sano sería peor que no tenerlo.
+//
+// Y sale con 1 cuando falta algo, con el informe entero igual: desde la 2.0.19
+// (#277 de RSC, `scripts/rsc.js` y `healthy` en `scripts/doctor.js`). La barra
+// lo tiraba, y «Algo va mal» y «Qué falta por montar» se quedaban sin saber nada
+// justo con el arnés roto (decisión 157). Un 1 con un informe que dice que no
+// está sano es un informe; lo demás —otro código, algo que no es un informe, o un
+// 1 que no lo dice— sigue sin serlo.
 function comoEstaDeSalud({ codigo, salida }) {
-  if (codigo !== 0) return null;
+  if (codigo !== 0 && codigo !== 1) return null;
   try {
-    return JSON.parse(salida);
+    const informe = JSON.parse(salida);
+    if (!informe || typeof informe !== 'object' || Array.isArray(informe)) return null;
+    return codigo === 1 && informe.healthy !== false ? null : informe;
   } catch {
     return null;
   }
@@ -397,10 +406,14 @@ function queFaltaEnDisco(informe) {
 }
 
 // Si el arnés dice que está entero: nada de lo declarado falta y sus enganches
-// pueden correr. `doctor` sale con 0 pase lo que pase, así que su código no dice
-// nada (G3). `null` si no se sabe.
+// pueden correr. `null` si no se sabe.
+//
+// Lo dice él, en `healthy`, desde la 2.0.19: es lo mismo que su código de salida
+// (decisión 157). Hasta entonces `doctor` salía con 0 pase lo que pase (G3), y
+// con un informe sin `healthy` se sigue mirando como antes.
 function estaEntero(informe) {
   if (!informe) return null;
+  if (typeof informe.healthy === 'boolean') return informe.healthy;
   const falta = queFaltaEnDisco(informe);
   return falta.length === 0 && informe.hookWired !== false;
 }
