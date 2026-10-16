@@ -10294,9 +10294,15 @@ exec git "$@"
     const cmd = 'C:\\Program Files\\Git\\cmd\\git.exe';
     const mingw = 'C:\\Program Files\\Git\\mingw64\\bin\\git.exe';
     const con = (...hay) => (donde) => hay.includes(donde);
-    assert.deepEqual(comun.buscarGitDeWindows(env, con()), { completo: null, aMedias: false });
-    assert.deepEqual(comun.buscarGitDeWindows(env, con(cmd)), { completo: null, aMedias: true }, 'git a medias vale');
-    assert.deepEqual(comun.buscarGitDeWindows(env, con(cmd, mingw)), { completo: cmd, aMedias: false });
+    // Lo que hay dentro de una carpeta, sacado de las mismas rutas.
+    const dentroDe = (...hay) => (carpeta) => [...new Set(hay.filter((p) => p.startsWith(`${carpeta}\\`)).map((p) => p.slice(carpeta.length + 1).split('\\')[0]))];
+    const buscar = (...hay) => comun.buscarGitDeWindows(env, con(...hay), dentroDe(...hay));
+    assert.deepEqual(buscar(), { completo: null, aMedias: false });
+    assert.deepEqual(buscar(cmd), { completo: null, aMedias: true }, 'git a medias vale');
+    assert.deepEqual(buscar(cmd, mingw), { completo: cmd, aMedias: false });
+    // La carpeta del git de verdad cambia con la versión: la 2.56 no se daba nunca por puesta.
+    assert.deepEqual(buscar(cmd, 'C:\\Program Files\\Git\\ucrt64\\bin\\git.exe'), { completo: cmd, aMedias: false }, 'solo vale mingw64');
+    assert.deepEqual(buscar(cmd, 'C:\\Program Files\\Git\\bin\\git.exe'), { completo: null, aMedias: true }, 'el lanzador de bin\\ cuenta como git entero');
     const fuenteComun = fs.readFileSync(path.join(RAIZ, '..', 'instalador', 'comun', 'git.js'), 'utf8');
     assert.ok(/if \(buscado\.aMedias\) return false;/.test(fuenteComun), 'hay() da por bueno un git a medias');
 

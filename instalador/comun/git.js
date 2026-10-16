@@ -145,11 +145,21 @@ async function hayEnMac(opciones = {}) {
 // En Windows, además, se mira dónde lo deja su instalador: recién puesto, por su
 // nombre no se ve (`gitsDeWindows`).
 // Un git de Windows a medias —el instalador copia `cmd\\git.exe` antes que el
-// resto— se ve por su sitio pero no sirve: solo vale con `mingw64\\bin\\git.exe`
-// al lado. `existe` es para la prueba.
-function buscarGitDeWindows(entorno = process.env, existe = fs.existsSync) {
+// resto— se ve por su sitio pero no sirve: solo vale con el git de verdad al lado,
+// en `<carpeta>\\bin\\git.exe`. La carpeta cambia con la versión (`mingw64`,
+// `ucrt64`, `clangarm64`…: con una fija, la 2.56 no se daba nunca por puesta), así
+// que vale cualquiera menos `cmd` y `bin`, que solo llevan lanzadores.
+// `existe` y `listar` son para la prueba.
+const SOLO_LANZADORES = new Set(['cmd', 'bin']);
+const listarCarpeta = (carpeta) => { try { return fs.readdirSync(carpeta); } catch { return []; } };
+function buscarGitDeWindows(entorno = process.env, existe = fs.existsSync, listar = listarCarpeta) {
   const puestos = gitsDeWindows(entorno).filter((donde) => existe(donde));
-  const completo = puestos.find((donde) => existe(path.win32.join(path.win32.dirname(path.win32.dirname(donde)), 'mingw64', 'bin', 'git.exe')));
+  const entero = (donde) => {
+    const raiz = path.win32.dirname(path.win32.dirname(donde));
+    return listar(raiz).some((dentro) => !SOLO_LANZADORES.has(String(dentro).toLowerCase())
+      && existe(path.win32.join(raiz, dentro, 'bin', 'git.exe')));
+  };
+  const completo = puestos.find(entero);
   return { completo: completo || null, aMedias: !completo && puestos.length > 0 };
 }
 
