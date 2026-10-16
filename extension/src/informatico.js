@@ -84,6 +84,38 @@ const POR_SEGURIDAD = {
 };
 const Y_EL_FICHERO = '- Y lo mismo con el fichero de acceso: tampoco por correo ni por mensajería.';
 
+// Lo mismo, dicho a quien saca la clave él mismo: es la parte «Por seguridad» de la
+// guía en PDF (decisión 159). Va aquí, al lado de la del informático, para que las
+// dos se revisen juntas y digan lo mismo: no por donde se queda guardada, solo en
+// la barra, una nueva y con lo mínimo, con caducidad, y qué hacer si se escapa.
+const POR_SEGURIDAD_PARA_TI = {
+  clave: [
+    'No la mandes por correo ni por mensajería, ni la pegues en la conversación con el asistente: ahí se queda guardada y se puede reenviar.',
+    'Pégala solo en la barra, en su casilla. Así no pasa por ningún otro sitio.',
+    'Mejor una nueva, solo para esto y con los permisos mínimos, que una que ya se use para otra cosa: así se puede quitar sin romper nada.',
+    'Si se le puede poner fecha de caducidad, pónsela. La barra te pregunta cuándo caduca y te avisa una semana antes.',
+    'Si se te escapa por correo o por mensajería, anúlala y saca otra: esa ya no es segura.',
+  ],
+  usuario: [
+    'No los mandes por correo ni por mensajería, ni los pegues en la conversación con el asistente: ahí se quedan guardados y se pueden reenviar.',
+    'Escríbelos solo en la barra, en sus casillas. Así no pasan por ningún otro sitio.',
+    'Mejor un usuario solo para esto y con los permisos mínimos, que el tuyo o el de otra persona: así se puede quitar sin romper nada.',
+    'Si la contraseña caduca, apúntalo en la barra cuando te pregunte: te avisa una semana antes.',
+    'Si se te escapan por correo o por mensajería, cambia la contraseña: esa ya no es segura.',
+  ],
+  fichero: [
+    'No lo mandes por correo ni por mensajería, ni lo pegues en la conversación con el asistente: ahí se queda guardado y se puede reenviar.',
+    'Suéltalo solo en la barra. Lo pone en su sitio y no sale de este ordenador.',
+    'Mejor uno nuevo, solo para esto y con los permisos mínimos, que uno que ya se use para otra cosa: así se puede anular sin romper nada.',
+    'Si se te escapa por correo o por mensajería, anúlalo y saca otro: ese ya no es seguro.',
+  ],
+  cuenta: [
+    'No hace falta pegar ninguna clave ni contraseña: entras con tu cuenta.',
+    'Si te pide permisos, mira qué aceptas: que sean los mínimos.',
+  ],
+};
+const Y_EL_FICHERO_PARA_TI = 'Y lo mismo con el fichero de acceso: tampoco por correo ni por mensajería.';
+
 // Cuál de las cuatro, por lo que pide. Sin saberlo, la de una clave, que es lo
 // más corriente y la más estricta.
 function cualDeSeguridad(acceso) {
@@ -98,6 +130,14 @@ function porSeguridad(acceso, nombre) {
   const cual = cualDeSeguridad(acceso);
   const lineas = POR_SEGURIDAD[cual].map((l) => l.replace('{X}', nombre));
   if (cual !== 'fichero' && (acceso || []).includes('fichero')) lineas.push(Y_EL_FICHERO);
+  return lineas;
+}
+
+// La de la guía en PDF, con la misma elección.
+function porSeguridadParaTi(acceso) {
+  const cual = cualDeSeguridad(acceso);
+  const lineas = [...POR_SEGURIDAD_PARA_TI[cual]];
+  if (cual !== 'fichero' && (acceso || []).includes('fichero')) lineas.push(Y_EL_FICHERO_PARA_TI);
   return lineas;
 }
 
@@ -135,7 +175,10 @@ function enTextoLlano(md) {
 //   · Lo que tiene forma de clave (las de «Algo va mal») y lo que lo parece por
 //     lo revuelto que es: mayúsculas, minúsculas y cifras sin orden, o una ristra
 //     hexadecimal larga.
-const SEPARADOR = /[\s\-_.]/;
+// También lo que no se ve (un espacio de ancho cero, un acento suelto) y la «?»
+// con que la guía en PDF cambia lo que no sabe escribir: partían una clave sin que
+// se notara (revisión de seguridad de la 159).
+const SEPARADOR = /[\s\-_.?\p{Cf}\p{Mn}\p{Me}]/u;
 const MINIMO_DERIVADO = 8;
 
 // Los valores cortos de una clave secreta, de los `.env` de las conexiones.
@@ -184,7 +227,7 @@ function formasDe(valor) {
 
 // El valor partido por separadores: se busca sin ellos y se tapa el tramo.
 function taparPartido(texto, valor) {
-  const compacto = valor.replace(/[\s\-_.]/g, '');
+  const compacto = valor.replace(/[\s\-_.?\p{Cf}\p{Mn}\p{Me}]/gu, '');
   if (compacto.length < MINIMO_DERIVADO) return texto;
   let plano = '';
   const donde = [];
@@ -373,3 +416,5 @@ function correo({ asunto, cuerpo }, { plataforma = process.platform } = {}) {
 }
 
 module.exports = { mensaje, correo, sinClaves, formasDe, porLineas, enTextoLlano, porSeguridad, cualDeSeguridad, POR_SEGURIDAD, QUITADA, CORREO_QUITADO, CABE_EN_WINDOWS };
+// Decisión 159: la guía en PDF tapa lo del disco igual, y dice la parte de seguridad a quien la saca.
+Object.assign(module.exports, { valoresQueTapar, porSeguridadParaTi, POR_SEGURIDAD_PARA_TI });

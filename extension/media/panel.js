@@ -2538,8 +2538,10 @@ function pantallaConexiones({ proveedores, sueltas, enLasCopias = null }) {
 // Y lo que la barra necesita leer después: los pasos en su README y de dónde
 // sale cada clave, para la guía de uno en uno.
 // Y, desde la decisión 156, la clase de acceso y lo que pedirle a su informático.
+// Desde la 159, los pasos de la documentación oficial, con su página y su fecha:
+// salen también en la guía en PDF.
 const CONECTAR_ALGO_NUEVO = 'Quiero conectar un programa nuevo con el que ya trabajo. Pregúntame cuál es. Si tienes la habilidad connect-tool, úsala. '
-  + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, y de dónde sale cada clave en su CREDENTIALS.md. '
+  + 'Deja los pasos en su README, en una sección «Cómo conectarla», uno por línea y en el orden en que los voy a ver, sacados de su documentación oficial y con la página y el día en que lo comprobaste, y de dónde sale cada clave en su CREDENTIALS.md. '
   + 'Escribe también en su CREDENTIALS.md la clase de acceso que pide, y en su README lo que tendría que pedirle a mi informático, como dice tu habilidad executive-lab. '
   + 'Comprueba que funciona antes de darla por buena.';
 
@@ -2575,7 +2577,7 @@ function bloqueCaduca(caduca, proveedor) {
     + boton({ etiqueta: 'Cambiar', icono: '✎', pequeno: true, discreto: true, accion: { tipo: 'cuandoCaduca', proveedor: proveedor.id, en: 'otraVez' } });
 }
 
-function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null }) {
+function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: avisoLocal, paso = 0, todosLosPasos = false, caduca = null, prepararLaGuia = null }) {
   // La clase de acceso que dejó escrita el asistente (decisión 156). Sin ella,
   // todo como antes (P1).
   const clases = proveedor.acceso || [];
@@ -2722,6 +2724,11 @@ function pantallaConexion({ proveedor, claves, cositas, ordenar = null, aviso: a
     ${bloqueCaduca(caduca, proveedor)}
     ${proveedor.ayuda && !faltaAlguna ? boton({ etiqueta: '¿Dónde consigo la clave?', icono: '❓', accion: { tipo: 'abrir', url: proveedor.ayuda } }) : ''}
     ${!proveedor.pasos.length ? boton({ etiqueta: 'Explícame cómo conectarla', icono: '💬', accion: { tipo: 'pedir', prompt: `Explícame paso a paso cómo conectar ${proveedor.etiqueta}: dónde entro, dónde saco cada clave y qué pego dónde. Y deja los pasos escritos para la próxima vez.` } }) : ''}
+    ${/* La guía para sacar la clave, en PDF (decisión 159). Sin pasos, no hay
+          PDF que hacer: se le pide al asistente que la prepare (P1). */''}
+    ${proveedor.pasos.length
+    ? boton({ etiqueta: 'La guía, en PDF', icono: '📄', accion: { tipo: 'guiaEnPdf', proveedor: proveedor.id } })
+    : (prepararLaGuia ? boton({ etiqueta: 'Que el asistente prepare la guía', icono: '📄', accion: { tipo: 'pedir', prompt: prepararLaGuia } }) : '')}
     ${/* Muchas veces la clave la tiene otra persona (decisión 156). */''}
     ${boton({ etiqueta: 'Pídeselo a tu informático', icono: '✉️', accion: { tipo: 'verParaElInformatico', proveedor: proveedor.id } })}
     ${boton({ etiqueta: 'Probar la conexión', icono: '🔎', accion: { tipo: 'probar', proveedor: proveedor.id } })}

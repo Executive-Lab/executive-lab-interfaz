@@ -21,6 +21,8 @@ const puente = require('./puente');
 const acciones = require('./acciones');
 const conexiones = require('./conexiones');
 const informatico = require('./informatico');
+// La guía para sacar la clave, en PDF (decisión 159). `guia` a secas ya es el paso de la guía de la barra.
+const guiaPdf = require('./guia');
 const sueltas = require('./sueltas');
 // Los encargos con su diagnóstico: «Resolver una incidencia» los usaba sin traerlos, y reventaba siempre (G1).
 const encargos = require('./encargos');
@@ -601,7 +603,8 @@ ${cabecera}
   async repintarLoQueHaya() {
     const d = this.donde;
     if (d.tipo === 'conexiones') return this.verConexiones();
-    if (d.tipo === 'conexion') return this.verConexion(d.proveedor);
+    // Con el aviso que se queda (el de la guía en PDF, que escribe en `out/` y despierta al vigía).
+    if (d.tipo === 'conexion') return this.verConexion(d.proveedor, d.aviso || null);
     if (d.tipo === 'cerebro') return this.verCerebro();
     if (d.tipo === 'tema') return this.verTema(d.tema);
     // Documentos y la foto del cerebro se repintan con lo nuevo, y con el aviso
@@ -1136,6 +1139,8 @@ ${cabecera}
       verParaElInformatico: () => this.verParaElInformatico(mensaje.proveedor),
       copiarParaElInformatico: () => this.copiarParaElInformatico(mensaje.proveedor),
       mandarAlInformatico: () => this.mandarAlInformatico(mensaje.proveedor),
+      // Decisión 159: la guía para sacar la clave, en PDF.
+      guiaEnPdf: () => this.guiaEnPdf(mensaje.proveedor),
       probar: () => this.probar(mensaje.proveedor),
       hacerCosita: () => this.hacerCosita(mensaje.proveedor, mensaje.fichero, mensaje.etiqueta, mensaje.pideDatos),
 
@@ -1572,10 +1577,13 @@ ${cabecera}
   verConexion(proveedor, aviso = null) {
     const datos = conexiones.claves(proveedor);
     if (!datos) return this.verConexiones();
-    this.donde = { tipo: 'conexion', proveedor };
+    // Un aviso con `seQueda` sobrevive al repintado del vigía: el de la guía en PDF
+    // se escribe en `01-TOOLS/`, y sin esto se borraba al momento (decisión 159).
+    this.donde = { tipo: 'conexion', proveedor, ...(aviso && aviso.seQueda ? { aviso } : {}) };
     // Conecta con una clave que puede escribir y no ha dicho qué hace: la pregunta
     // sigue aquí, también si se fue mientras se probaba (revisión del punto 7).
-    if (!aviso) {
+    // Y por delante del aviso que se queda, que es solo decir algo (revisión de corrección de la 159).
+    if (!aviso || aviso.seQueda) {
       const ultima = this.laUltimaPrueba(proveedor);
       if (ultima && ultima.puedeEscribir) aviso = this.loQueDijoLaPrueba(proveedor, { ok: true, puedeEscribir: true, mensaje: ultima.mensaje, huella: conexiones.huella(proveedor) });
     }
@@ -1594,7 +1602,46 @@ ${cabecera}
       // Si alguna clave de esta conexión está en otro sitio, el botón que lo
       // arregla va aquí mismo, que es donde se ve el problema (decisión 104).
       ordenar: desordenadas ? desordenadas.prompt : null,
+      // Sin pasos no hay guía en PDF: lo que se le pide al asistente para que la
+      // prepare, armado aquí, que es quien tiene los datos (P6, decisión 159).
+      prepararLaGuia: datos.proveedor.pasos.length ? null : guiaPdf.loQueSeLePide(datos.proveedor.etiqueta, proveedor),
       aviso,
+    });
+  }
+
+  // ── La guía para sacar la clave, en PDF (decisión 159) ─────────────────
+  //
+  // Se escribe en Resultados (out) de esa conexión, sin pisar ninguna, se abre con
+  // el programa de siempre y se dice en una frase (P9). Sin pasos, no se escribe
+  // un PDF vacío: se ofrece pedírselos al asistente (P1).
+  async guiaEnPdf(proveedor) {
+    const hecho = guiaPdf.guardar(proveedor);
+    if (hecho.motivo === 'noEsta') return this.verConexiones();
+    if (hecho.motivo === 'sinPasos') {
+      return this.verConexion(proveedor, {
+        texto: 'Todavía no hay pasos escritos para hacer la guía.',
+        malo: false,
+        boton: { etiqueta: 'Que el asistente prepare la guía', accion: { tipo: 'pedir', prompt: hecho.prompt } },
+      });
+    }
+    if (!hecho.ok) {
+      this.salida.appendLine(`[guiaEnPdf] ${hecho.motivo}${hecho.detalle ? `: ${hecho.detalle}` : ''}`); // diccionario: interno
+      return this.verConexion(proveedor, { texto: 'No he podido guardar la guía. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    }
+    try {
+      await papeles.abrirFichero(hecho.completa);
+    } catch (error) {
+      this.salida.appendLine(`[guiaEnPdf] no se abre: ${error.message}`); // diccionario: interno
+      return this.verConexion(proveedor, {
+        texto: `He guardado la guía, pero no he podido abrirla. La tienes en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
+        malo: true,
+        seQueda: true,
+      });
+    }
+    return this.verConexion(proveedor, {
+      texto: `Te he abierto la guía, y la tienes en Resultados (out), dentro de Documentos: «${hecho.fichero}».`,
+      malo: false,
+      seQueda: true,
     });
   }
 
