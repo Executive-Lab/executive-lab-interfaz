@@ -486,7 +486,7 @@ function guardarSoltados(ficheros = []) {
   return {
     ok: true,
     cuantos,
-    mensaje: cuantos === 1 ? 'Documento añadido. Se lo paso.' : `${cuantos} documentos añadidos. Se los paso.`,
+    mensaje: cuantos === 1 ? 'Documento añadido.' : `${cuantos} documentos añadidos.`,
   };
 }
 
@@ -519,11 +519,20 @@ async function anadirDocumentos() {
   return {
     ok: true,
     cuantos,
-    mensaje: cuantos === 1 ? 'Documento añadido. Se lo paso.' : `${cuantos} documentos añadidos. Se los paso.`,
+    mensaje: cuantos === 1 ? 'Documento añadido.' : `${cuantos} documentos añadidos.`,
   };
 }
 
+// Lo que se le pide al darle documentos, por el botón o soltándolos, con uno o con
+// varios: decía «un documento nuevo… Léelos» (decisión 166). Lo que dice la barra
+// al darlos solo dice lo que ha hecho ella, «Documento añadido.»: si el encargo ha
+// llegado y cómo, lo dice quien lo manda.
+const queLePedimos = (cuantos) => (cuantos === 1
+  ? 'Te he dejado un documento nuevo en la bandeja de entrada. Léelo, guárdalo donde toque y cuéntame en dos líneas qué has aprendido.'
+  : `Te he dejado ${cuantos} documentos nuevos en la bandeja de entrada. Léelos, guárdalos donde toque y cuéntame en dos líneas qué has aprendido.`);
+
 module.exports = {
+  queLePedimos,
   guardarSoltados,
   catalogo,
   articulos,

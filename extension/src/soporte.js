@@ -142,7 +142,15 @@ async function revisar({ lineas = [], carpetaAparte = null, barra = null } = {})
   // Si lo único que falta es saber lo que dice el arnés —su diagnóstico no se
   // pudo leer—, no se sabe: ni sano, ni roto (revisión de F7, m4).
   const desconocido = entero === null && proyecto.arnesCompleto() && hayGit;
-  const hayQueTocarAlgo = /repair|fix|missing|dangling/i.test(reparacion.salida || '');
+  // Si el arreglo tiene algo que hacer: una línea `[fix]` o `[ask]` por cada cosa
+  // que encuentra, que es como lo escribe el arnés (`queHayQueArreglar`). Se
+  // buscaba la palabra «repair», y el arnés sano contesta «Nothing to repair —
+  // this harness is healthy.»: en una carpeta sana salía «He mirado y está todo
+  // bien.» junto a «Arreglarlo ahora» (decisión 166). Sale con 0 lo encuentre o
+  // no, así que el código de salida solo dice si se puede leer: si no, las listas
+  // salen vacías y no se ofrece arreglar por lo que diga.
+  const loQueArreglaria = rsc.queHayQueArreglar(reparacion);
+  const hayQueTocarAlgo = loQueArreglaria.solas.length + loQueArreglaria.aDecidir.length > 0;
 
   return { codigo, fichero, sano, desconocido, hayQueTocarAlgo, faltaGit: !hayGit, informe };
 }
