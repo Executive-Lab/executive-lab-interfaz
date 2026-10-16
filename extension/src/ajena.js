@@ -144,12 +144,28 @@ const esUnEnlace = (fichero) => {
   }
 };
 
+// Si de verdad cae dentro de la carpeta: el sitio real, con los enlaces
+// seguidos. Un `.codex` o un `.claude` enlazados a otro sitio dejan la ruta
+// dentro y el fichero fuera (revisión adversaria de la 154).
+function dentroDeLaRaiz(fichero, raiz) {
+  try {
+    const relativa = path.relative(fs.realpathSync(raiz), fs.realpathSync(fichero));
+    return !path.isAbsolute(relativa) && relativa !== '..' && !relativa.startsWith(`..${path.sep}`);
+  } catch {
+    return false;
+  }
+}
+
 // Si se puede renombrar sin tocar nada de fuera, o por qué no.
 function porQueNoSeRenombra(choque, raiz) {
   const desde = path.join(raiz, ...choque.fichero.split('/'));
   const hacia = path.join(path.dirname(desde), `${choque.sugerido}${choque.que === 'habilidad' ? '' : path.extname(desde)}`);
   const conNombre = choque.que === 'habilidad' ? path.join(desde, 'SKILL.md') : desde;
   if (fs.existsSync(hacia)) return `ya existe ${path.basename(hacia)}`; // diccionario: interno
+  // Renombrar y cambiar el `name:` escriben donde está de verdad, no donde dice la ruta.
+  if (!dentroDeLaRaiz(path.dirname(desde), raiz) || (fs.existsSync(conNombre) && !dentroDeLaRaiz(conNombre, raiz))) {
+    return `${choque.fichero} está fuera de esta carpeta`; // diccionario: interno
+  }
   // Cambiar el `name:` de un enlace escribe en el fichero al que apunta, fuera
   // de esta carpeta y quizá de otros proyectos (revisión de F2, I4).
   if (esUnEnlace(conNombre)) return `${path.basename(conNombre)} es un enlace a otro sitio`; // diccionario: interno

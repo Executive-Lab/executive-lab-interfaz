@@ -26,6 +26,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const donde = require('./donde');
 const frontmatter = require('./frontmatter');
+const limpio = require('./limpio');
 const nombres = require('./nombres');
 
 const TOPE = 20;
@@ -86,13 +87,17 @@ function queHay() {
   return ficheros.sort().slice(0, TOPE).map((nombre) => {
     let crudo = '';
     try {
-      crudo = fs.readFileSync(path.join(carpeta, nombre), 'utf8');
+      crudo = frontmatter.leerHasta(path.join(carpeta, nombre));
     } catch { /* se queda con el nombre */ }
 
     const campos = camposDe(nombre, crudo);
     const humano = (v) => (typeof v === 'string' && v.trim() && !ES_PLANTILLA(v) ? v.trim() : '');
     const id = nombre.replace(/\.[^.]+$/, '');
-    const invocacion = donde.paraQuien() === 'codex' && humano(campos.name) ? humano(campos.name) : id;
+    // Con Codex se pide por su `name`, pero solo si es un nombre de verdad: lo
+    // escribe quien hizo la carpeta, y entra en el encargo (revisión adversaria
+    // de la 154). Si no, por el del fichero, limpio.
+    // Y si ninguno de los dos vale, no se lanza desde la barra: se ve, sin botón.
+    const invocacion = limpio.invocacion(donde.paraQuien() === 'codex' ? humano(campos.name) : '', id);
 
     // Lo que diga su fichero manda, con una condición: que esté en español.
     // Los agentes de RSC traen `name` en clave (`refuter-security`) y
@@ -119,7 +124,7 @@ function queHay() {
       // Cómo se le pide al asistente que lo lance: por su identificador, que
       // es lo que él tiene en su carpeta. «Quiero que cobros atrasados haga lo
       // suyo» no nombraba nada que el asistente pudiera buscar.
-      prompt: `Usa el agente «${invocacion}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.`,
+      prompt: invocacion ? `Usa el agente «${invocacion}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.` : null,
     };
   });
 }
