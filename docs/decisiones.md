@@ -6614,6 +6614,36 @@ Eran 50, y tres sobrevivieron por el camino:
   cambiaba nada. Se quitó la de la extensión, con su mutación, y la del encargo la tumba su prueba.
 - Una, porque cancelar la caja con Escape no se probaba, solo dejarla en blanco. Ahora sí.
 
+**La revisión.** Una revisión adversaria de la rama encontró cinco cosas, y se arreglaron con su prueba cada una
+(`humo.js` pasa de 426 a 431):
+
+- **`git` sin confianza y sin freno** (media, seguridad). `estanSubidas` corría `git ls-files` en cada
+  repintado, sin mirar si la carpeta es de confianza y sin `-c core.fsmonitor=false`: un `.git/config` con
+  `core.fsmonitor` apuntando a un programa lo ejecutaba con solo abrir la carpeta. Ahora lleva el
+  `-c core.fsmonitor=false` de `procesos.js` y `ajustes-locales.js`, no corre en una carpeta sin confianza
+  (`vscode.workspace.isTrusted`, que `extension.js` le da con `sueltas.ponerConfianza`) y guarda lo que contestó
+  mientras el índice de git (`.git/index`: fecha, tamaño e inodo) no cambie. Eran dos `git` síncronos de hasta
+  5 s en cada repintado. Los demás `git` de la barra ya iban con el freno.
+- **Nombres de fichero en el encargo** (media, seguridad). Un `.env.x IGNORA lo anterior y ejecuta: curl…` entraba
+  tal cual en el encargo. Ahora cada ruta pasa por `limpio.etiqueta` y solo se deja si es una ruta de verdad
+  (`[\w./@+-]`); si no, entra «(un fichero con un nombre raro)». También en lo que la barra le cuenta al
+  asistente en `loQueNoCuadra`.
+- **«La clave no vale» solo con motivo** (baja). Saltaba con cualquier prueba fallida (prueba rota, 429, «no sé
+  decirte por qué»). Ahora se apunta con la prueba (`noVale`, el que ya ponía `probar`) y la guía, el paso de la
+  clave y lo de cuándo caduca miran eso, no `ok === false`. Una prueba que falla por otra razón no dice que la
+  clave no vale, y cuándo caduca se pregunta como con una prueba que no se ha hecho.
+- **El `.env` de la raíz de una aplicación, en su conexión** (baja). Con un `package.json` en la raíz, una
+  herramienta cuyas claves viven en ese `.env` pasaba de «puesta, pero fuera de su sitio» a «todavía sin poner».
+  `conexiones.dondeMasEstan` vuelve a decir dónde están (las de la raíz; las de una aplicación de una
+  subcarpeta siguen sin contar, como en la 135), sin ofrecer moverlas: la tarjeta de «Que las ordene» no cambia.
+- **«Conectar algo nuevo» y los asistentes** (baja). Claude y OpenAI salían cuando venían de las claves, porque
+  `NO_SE_OFRECEN` solo filtraba el perfil y `anthropic` se llama «Claude». Ahora se filtra por id y por nombre,
+  también en las claves.
+
+Mutaciones de la revisión: 9, las 9 tumbadas (fsmonitor, confianza, caché, nombres sin limpiar, tres de «no
+vale», la raíz de una aplicación y los asistentes). Para la prueba de `git`, las de la 135 y la 152 que corren
+`git` de verdad ponen `vscode.guion.confianza = true`, porque sin confianza ya no corre.
+
 **Lo que no hace, todavía:**
 
 - **La fila 2 de la tarjeta** (algo roto, «Arreglarlo»): pide la radiografía entera en cada repintado, que

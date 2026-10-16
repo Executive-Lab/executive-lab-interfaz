@@ -65,8 +65,11 @@ function queSePuedeConectar({ catalogo = [] } = {}) {
 
   const yaEstan = new Set(conexiones.proveedores().flatMap((p) => [pelar(p.id), pelar(p.etiqueta)]));
   const vistos = new Map();
-  const poner = (nombre, deDonde) => {
+  const noSeOfrecen = new Set([...NO_SE_OFRECEN].flatMap((id) => [id, pelar(conexiones.PROVEEDORES[id])]));
+  const poner = (nombre, deDonde, id = '') => {
     const clave = pelar(nombre);
+    // Ni por su id ni por su nombre: `anthropic` sale como «Claude» (revisión de la 167).
+    if (noSeOfrecen.has(String(id).toLowerCase()) || noSeOfrecen.has(clave)) return;
     if (!clave || yaEstan.has(clave) || vistos.has(clave)) return;
     vistos.set(clave, { nombre: limpio.etiqueta(nombre, 60), deDonde });
   };
@@ -75,7 +78,7 @@ function queSePuedeConectar({ catalogo = [] } = {}) {
   // Sus claves: el que más claves tiene, primero.
   try {
     const { grupos } = sueltas.reparto(sueltas.buscar({ conLasDeLasApps: true }));
-    for (const p of ideas.lasClaves({ reparto: grupos }, catalogo).porMontar) poner(comoSeLlama(p.herramienta), 'claves');
+    for (const p of ideas.lasClaves({ reparto: grupos }, catalogo).porMontar) poner(comoSeLlama(p.herramienta), 'claves', p.herramienta);
   } catch { /* sin inventario, con el perfil basta */ }
 
   // Su perfil: los que la barra conoce, en el orden en que salen.

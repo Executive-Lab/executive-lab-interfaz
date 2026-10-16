@@ -83,6 +83,17 @@ pierde, o donde la barra le manda a hacer algo que rompe lo suyo. Decisión 167.
   cinco cosas a la vista, también con las de las claves), `comprobar-diccionario.js` y `revisar-powershell.js`,
   en verde.
 
+## La revisión
+
+Revisión adversaria de la rama, cinco arreglos (detalle en la decisión 167, «La revisión»), cada uno con su
+prueba en `humo.js` (426 a 431) y su mutación tumbada (9 de 9):
+
+- [x] `estanSubidas`: `-c core.fsmonitor=false`, nada sin confianza en la carpeta, y guardado mientras el índice de git no cambie.
+- [x] Los nombres de fichero entran en el encargo por `limpio.etiqueta` y solo si son una ruta de verdad.
+- [x] «La clave no vale» sale del motivo (`noVale`), no de `ok === false`.
+- [x] El `.env` de la raíz de una aplicación vuelve a decir dónde está en su conexión, sin ofrecer moverlo.
+- [x] «Conectar algo nuevo» no ofrece Claude ni OpenAI cuando salen de las claves.
+
 ## Next
 
 - La fila 2 de la tarjeta, si se encuentra una forma barata de saber que algo está roto.

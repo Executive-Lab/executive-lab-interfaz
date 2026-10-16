@@ -571,12 +571,24 @@ const ES_MARCADOR = (clave) => /[<{]/.test(clave);
 // Y también se mira el entorno del propio ordenador —lo que Jose llama «las
 // globales»—: una clave exportada en el perfil del sistema funciona hoy y no
 // viaja con la carpeta, así que se dice, no se cuenta como que falta.
-function dondeMasEstan(proveedorId, nombres) {
+//
+// Con `soloLasQueSeMueven` no entran las del `.env` de la raíz de una aplicación:
+// están en su sitio y la tarjeta no ofrece moverlas. Para decir dónde están sí cuentan: sin eso, con un `package.json` en la raíz, una
+// herramienta cuyas claves viven en ese `.env` pasaba de «ya la tienes» a
+// «todavía sin poner» (revisión de la 167).
+function dondeMasEstan(proveedorId, nombres, { soloLasQueSeMueven = false } = {}) {
   if (!nombres.length) return new Map();
   const donde = new Map();
   try {
     const sueltas = require('./sueltas');
-    for (const sitio of sueltas.buscar()) {
+    // Las de dentro de una aplicación de una subcarpeta siguen sin contar como de
+    // la herramienta (decisión 135); las de la raíz, si la carpeta entera es una
+    // aplicación, sí se dicen (decisión 167).
+    const sitios = soloLasQueSeMueven ? sueltas.buscar() : [
+      ...sueltas.buscar(),
+      ...sueltas.buscar({ conLasDeLasApps: true }).filter((s) => !s.donde.includes('/')),
+    ];
+    for (const sitio of sitios) {
       for (const nombre of sitio.nombres) {
         if (nombres.includes(nombre) && !donde.has(nombre)) donde.set(nombre, sueltas.enCristiano(sitio.donde));
       }
@@ -1110,7 +1122,7 @@ async function probar(proveedorId) {
 
   // Si la clave existe pero en otro sitio, decir «falta» manda a rellenar algo
   // que esa persona ya tiene. Se dice lo que pasa de verdad (decisión 104).
-  const fuera = [...dondeMasEstan(proveedorId, [...leerEnv(path.join(carpeta, '.env.example')).keys()]).values()];
+  const fuera = [...dondeMasEstan(proveedorId, [...leerEnv(path.join(carpeta, '.env.example')).keys()], { soloLasQueSeMueven: true }).values()];
   if (fuera.length && /missing .*\.env|not set/i.test(error)) {
     return { ok: false, mensaje: `Tus claves de esta conexión están ${fuera[0]}, y la prueba las busca aquí. Pulsa "Que las ordene" y vuelve a probar.` };
   }

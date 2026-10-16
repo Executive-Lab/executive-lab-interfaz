@@ -24,6 +24,8 @@ const informatico = require('./informatico');
 // La guía para sacar la clave, en PDF (decisión 159). `guia` a secas ya es el paso de la guía de la barra.
 const guiaPdf = require('./guia');
 const sueltas = require('./sueltas');
+// Sin confianza en la carpeta no se corre `git` en ella (revisión de la 167).
+sueltas.ponerConfianza(() => vscode.workspace.isTrusted !== false);
 // Los encargos con su diagnóstico: «Resolver una incidencia» los usaba sin traerlos, y reventaba siempre (G1).
 const encargos = require('./encargos');
 const cerebro = require('./cerebro');
@@ -1657,7 +1659,7 @@ ${cabecera}
     }
     // La última prueba dijo que esta clave no vale (decisión 167): la guía sigue,
     // y si no se ha movido por ella desde entonces, en el paso donde se saca.
-    const noVale = Boolean(ultima && ultima.ok === false);
+    const noVale = Boolean(ultima && ultima.noVale);
     const desordenadas = sueltas.resumen();
     const guia = (this.guias || {})[proveedor] || (noVale ? { paso: datos.proveedor.pasoDeLaClave } : {});
     return this.enviar({
@@ -1892,7 +1894,7 @@ ${cabecera}
       // Con prueba, solo después de una buena (decisión 167). Con la clave mala
       // salían a la vez «La clave no vale» y cinco botones para decir cuándo
       // caduca esa misma clave. Sin prueba no hay otra forma de saberlo: como antes.
-      if (conexiones.tienePrueba(proveedor) && !(ultima && ultima.ok)) return null;
+      if (conexiones.tienePrueba(proveedor) && (!ultima || ultima.noVale)) return null;
       return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };
     }
     // También «No lo sé» se dice, para que tenga su «Cambiar» (revisión de la 149).
@@ -1976,11 +1978,11 @@ ${cabecera}
     // se recuerda, y se queda lo que hubiera.
     if (hecho.pasajero) return hecho;
     const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
-    pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
+    pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.noVale ? { noVale: true } : {}), ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
     await this.almacen().update(CLAVE_PRUEBAS, pruebas);
     // No vale: la guía vuelve al paso donde se saca la clave (decisión 167). Se
     // olvida por qué paso iba, y `verConexion` la pone ahí.
-    if (!hecho.ok && this.guias) delete this.guias[proveedor];
+    if (hecho.noVale && this.guias) delete this.guias[proveedor];
     // Conecta pasada la fecha apuntada: la fecha estaba mal. Se olvida, y se vuelve
     // a preguntar, en vez de dejar «caducó» en la lista de una que funciona.
     const caducaba = this.cuandoCaduca(proveedor);
@@ -1999,6 +2001,8 @@ ${cabecera}
     return {
       ok: una.ok,
       mensaje: una.mensaje,
+      // Por qué falló: solo «la clave no vale» cambia lo que se enseña (revisión de la 167).
+      ...(una.noVale ? { noVale: true } : {}),
       cuando: copias.haceCuanto(new Date(una.cuando).toISOString()),
       // Conecta, pero la clave puede escribir y no ha dicho qué hace con ella.
       ...(una.puedeEscribir && !this.laDejoAsi(proveedor) ? { puedeEscribir: true } : {}),
@@ -2491,7 +2495,7 @@ ${cabecera}
       const desordenadas = sueltas.resumen();
       if (desordenadas) {
         if (desordenadas.claves) {
-          visto.push(`Hay ${desordenadas.claves === 1 ? 'una clave' : `${desordenadas.claves} claves`} fuera de sitio en: ${desordenadas.ficheros.join(', ')}.`);
+          visto.push(`Hay ${desordenadas.claves === 1 ? 'una clave' : `${desordenadas.claves} claves`} fuera de sitio en: ${sueltas.rutas(desordenadas.ficheros)}.`);
           for (const g of desordenadas.reparto) {
             visto.push(`  · ${g.claves.join(', ')} parecen de ${g.herramienta}${g.existe ? '' : ', que no tiene carpeta en 01-TOOLS'}.`);
           }
@@ -2499,11 +2503,11 @@ ${cabecera}
         }
         // Y las credenciales que son un fichero entero, que van a otro sitio.
         for (const f of desordenadas.ficherosDeAcceso) {
-          visto.push(`${f.donde} es ${f.queEs.toLowerCase()} y está fuera de su sitio${f.herramienta ? `; parece de ${f.herramienta}` : ', y no se sabe de quién'}.`);
+          visto.push(`${sueltas.rutas([f.donde])} es ${f.queEs.toLowerCase()} y está fuera de su sitio${f.herramienta ? `; parece de ${f.herramienta}` : ', y no se sabe de quién'}.`);
         }
       }
       const enLasCopias = sueltas.deLasAppsEnLasCopias();
-      if (enLasCopias) visto.push(`Hay claves de una aplicación guardadas en git, en su sitio pero dentro de cada copia: ${enLasCopias.ficheros.join(', ')}.`);
+      if (enLasCopias) visto.push(`Hay claves de una aplicación guardadas en git, en su sitio pero dentro de cada copia: ${sueltas.rutas(enLasCopias.ficheros)}.`);
       for (const g of reglas.losGuardianes()) {
         if (g.estado === 'apagado') visto.push(`El freno "${g.nombre}" está apagado.`);
       }
