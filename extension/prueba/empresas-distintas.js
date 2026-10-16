@@ -119,7 +119,11 @@ for (const [nombre, montar] of TODAS) {
   anadir('huecos', { huecos: cargar('cerebro').loQueAunNoSabe(4) }, null);
   anadir('comandos', { comandos: cargar('acciones').todos() }, null);
   anadir('saberes', cargar('saberes').queSabe(ext, 'contabilidad facturas contratos'), null);
-  anadir('rutinas', { horarios: [], automatica: cargar('rutinas').automatica(cargar('asistentes').elDeAhora().id) }, 'Rutinas y horarios');
+  anadir('recordatorios', {
+    horarios: [],
+    hayHabilidades: cargar('recordatorios').disponibles().length > 0,
+    queSeHagaSola: cargar('rutinas').explicacion(cargar('asistentes').elDeAhora().nombre),
+  }, 'Recordatorios');
   anadir('conexiones', { proveedores: cargar('conexiones').proveedores(), sueltas: [] }, null);
   anadir('agentes', { agentes: cargar('agentes').queHay() }, null);
   anadir('proyectos', { montones: cargar('proyectos').queHay() }, null);
@@ -152,6 +156,8 @@ for (const [nombre, montar] of TODAS) {
       hayProyectos: cargar('proyectos').hayAlgo(),
       puedeTenerBotones: cargar('donde').puedeTenerBotones(),
     },
+    // Recordatorios sale solo si hay algo: una habilidad con botón o un recordatorio.
+    hayRecordatorios: cargar('recordatorios').hayAlgo(),
     acciones: cargar('fijadas').puestas({ get: () => undefined, update: async () => {} }, ext),
     modo: 'sencillo',
     marcaPuesta: false,
@@ -235,6 +241,11 @@ for (const [nombre, montar] of TODAS) {
   const aLaVista = ['class="consejo"', 'class="aviso', 'class="acordeon grupo"', 'class="fila-de-pantalla"']
     .reduce((n, marca) => n + sencilla.split(marca).length - 1, 0);
   if (aLaVista > 5 || aLaVista < 4) rotas.push(`principal sencilla: ${aLaVista} cosas a la vista`);
+  // Recordatorios, dentro de Acciones, solo con algo que recordar o a lo que
+  // ponérselo. En una carpeta recién montada no hay nada: la fila no sale.
+  const conLaFila = sencilla.includes('verRecordatorios');
+  if (conLaFila !== cargar('recordatorios').hayAlgo()) rotas.push(`principal sencilla: la fila de Recordatorios ${conLaFila ? 'sale sin nada' : 'no sale con algo'}`);
+  if (nombre === 'recién montada' && conLaFila) rotas.push('recién montada: sale la fila de Recordatorios sin nada que recordar');
 
   const q = cargar;
   const resumen = [

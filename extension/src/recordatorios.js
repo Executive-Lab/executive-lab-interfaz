@@ -15,6 +15,7 @@ const path = require('node:path');
 const proyecto = require('./proyecto');
 const acciones = require('./acciones');
 const cuando = require('./cuando');
+const frontmatter = require('./frontmatter');
 
 const esHabilidad = (b) => Boolean(b.fichero && b.fichero.endsWith('SKILL.md'));
 
@@ -22,6 +23,30 @@ const disponibles = () => acciones.acciones().filter(esHabilidad);
 // También los que haya que corregir: esconder un horario mal escrito deja a
 // quien lo puso esperando un aviso que nunca llegará.
 const conHorario = () => acciones.acciones().filter((b) => b.cuando);
+
+// La fila de Recordatorios sale si hay algo que recordar o algo a lo que
+// ponérselo: una habilidad con botón, o un recordatorio (solo sale lo que se tiene).
+const hayAlgo = () => disponibles().length > 0 || conHorario().length > 0;
+
+// Si el fichero de un botón está de verdad en esta carpeta: con los enlaces
+// seguidos. Una habilidad compartida con otra carpeta se lee aquí, pero su
+// horario se cambia allí. Un enlace roto no lanza: no está (revisión
+// adversaria de la 155).
+function dentroDeLaCarpeta(fichero) {
+  const raiz = proyecto.raiz();
+  if (!raiz || !fichero) return false;
+  try {
+    const relativa = path.relative(fs.realpathSync(raiz), fs.realpathSync(fichero));
+    return relativa !== '' && !path.isAbsolute(relativa) && relativa !== '..' && !relativa.startsWith(`..${path.sep}`);
+  } catch {
+    return false;
+  }
+}
+
+// Cambiar el horario, solo en una habilidad de esta carpeta; quitarlo, también
+// de un comando de antes.
+const puedeCambiar = (boton) => Boolean(boton && esHabilidad(boton) && dentroDeLaCarpeta(boton.fichero));
+const puedeQuitar = (boton) => Boolean(boton && dentroDeLaCarpeta(boton.fichero));
 
 const losQueHay = () => conHorario()
   .filter((b) => cuando.valido(b.cuando))
@@ -120,13 +145,54 @@ function ponerCuando(nombre, cron) {
   if (cron && !esHabilidad(boton)) return { ok: false, motivo: 'esUnComando' };
   // Un botón puede leerse a través de un enlace compartido. Su horario no da
   // permiso para cambiar otra carpeta al escribir en esa habilidad.
-  const raiz = proyecto.raiz();
-  const relativa = raiz && path.relative(fs.realpathSync(raiz), fs.realpathSync(boton.fichero));
-  if (!raiz || path.isAbsolute(relativa) || relativa === '..' || relativa.startsWith(`..${path.sep}`)) return { ok: false, motivo: 'fueraDeLaCarpeta' };
+  if (!dentroDeLaCarpeta(boton.fichero)) return { ok: false, motivo: 'fueraDeLaCarpeta' };
   const nuevo = conCuando(fs.readFileSync(boton.fichero, 'utf8'), cron, boton.fichero.endsWith('SKILL.md'));
   if (nuevo === null) return { ok: false, motivo: 'sinCabecera' };
   fs.writeFileSync(boton.fichero, nuevo);
   return { ok: true, boton, enPalabras: cron ? cuando.enPalabras(cron) : null };
 }
 
-module.exports = { disponibles, conHorario, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando };
+// ── Si usa conexiones ──────────────────────────────────────────────────
+//
+// Las rutinas de Claude en la nube trabajan con una copia de lo subido a GitHub:
+// el `.env` y `keys/` no viajan, así que una habilidad que use una conexión de
+// esta carpeta no funciona allí. Se decide con reglas, leyendo el disco (P5): que
+// su `SKILL.md` nombre `01-TOOLS/`, una de las conexiones de la carpeta o una
+// variable de sus `.env`. Ante la duda, sí: lo peor de equivocarse hacia ese
+// lado es proponer la app de escritorio, que también funciona.
+function usaConexiones(boton) {
+  let texto;
+  try {
+    texto = frontmatter.leerHasta(boton.fichero);
+  } catch {
+    return false;
+  }
+  if (/01-TOOLS/.test(texto)) return true;
+  const base = proyecto.ruta('01-TOOLS');
+  const conexiones = [];
+  try {
+    for (const e of fs.readdirSync(base, { withFileTypes: true })) {
+      if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.')) continue;
+      conexiones.push(e.name);
+      // Y como la llama su README: «# Google Drive», en una carpeta GOOGLE_DRIVE.
+      try {
+        const titulo = frontmatter.leerHasta(path.join(base, e.name, 'README.md'), 512).split('\n')[0].replace(/^#\s*/, '').trim();
+        if (titulo && !titulo.includes('<')) conexiones.push(titulo);
+      } catch { /* sin README */ }
+    }
+  } catch { /* sin conexiones */ }
+  const variables = new Set();
+  const deUnEnv = (fichero) => {
+    let crudo = '';
+    try { crudo = frontmatter.leerHasta(fichero); } catch { return; }
+    // Solo los nombres, nunca los valores.
+    for (const m of crudo.matchAll(/^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]{2,})[ \t]*=/gm)) variables.add(m[1]);
+  };
+  for (const c of conexiones) for (const f of ['.env', '.env.example']) deUnEnv(path.join(base, c, f));
+  for (const f of ['.env', '.env.example']) deUnEnv(proyecto.ruta(f));
+  const comoPalabra = (nombre, banderas) => new RegExp(`(^|[^\\p{L}\\p{N}_])${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}_])`, banderas);
+  if (conexiones.some((c) => c.length >= 3 && comoPalabra(c, 'iu').test(texto))) return true;
+  return [...variables].some((v) => comoPalabra(v, 'u').test(texto));
+}
+
+module.exports = { disponibles, conHorario, hayAlgo, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando, dentroDeLaCarpeta, puedeCambiar, puedeQuitar, usaConexiones };

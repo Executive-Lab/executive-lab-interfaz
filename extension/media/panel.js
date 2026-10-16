@@ -413,42 +413,42 @@ function pantallaSalidas(datos) {
 
 // ------------------------------------------------------ habilidades (skills)
 
-// El reloj de la barra y las tareas que ejecuta cada asistente se explican en
-// el mismo sitio. El primero se gestiona aquí; las otras se preparan para su
-// gestor oficial, sin contarlas como activas en esta lista.
-function pantallaRutinas({ horarios = [], automatica = {}, aviso: avisoLocal }) {
+// Recordatorios (decisiones 144 y 155, y su revisión adversaria): un solo
+// nombre, el de Habilidades, para lo que lleva la barra —avisa a su hora y se
+// hace con un clic—. Cada uno, con lo que se puede hacer con él de verdad: hacerlo,
+// cambiarlo o quitarlo. Y, una vez y abajo, «Que se haga sola», que prepara el
+// encargo para el gestor del asistente: eso ya no es un recordatorio.
+function pantallaRecordatorios({ horarios = [], hayHabilidades = false, queSeHagaSola = '', aviso: avisoLocal }) {
   return `
-    ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Rutinas y horarios' }])}
+    ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Recordatorios' }])}
     ${bloqueAviso(avisoLocal)}
     ${volver()}
     <div class="brujula">
-      <h2>Rutinas y horarios</h2>
+      <h2>Recordatorios</h2>
       <p class="hiciste">La barra te avisa a su hora y tú decides cuándo hacerlo. Si el editor estaba cerrado, verás el aviso al volver.</p>
     </div>
-    ${boton({ etiqueta: 'Poner horario a una habilidad', icono: '🕑', principal: true, accion: { tipo: 'ponerHorario' } })}
-    ${boton({ etiqueta: 'Crear una rutina nueva', icono: '＋', discreto: true, accion: { tipo: 'crearRutina' } })}
-    <h2>Los avisos de esta carpeta</h2>
-    <p class="pista">Se usa la hora de este ordenador.</p>
-    ${horarios.length ? horarios.map((r) => `
-      <section class="rutina">
+    ${hayHabilidades
+    ? boton({ etiqueta: 'Poner un recordatorio', icono: '🕑', principal: !horarios.length, pequeno: horarios.length > 0, accion: { tipo: 'ponerHorario' } })
+    : `${boton({ etiqueta: 'Crear un recordatorio nuevo', icono: '＋', principal: true, accion: { tipo: 'crearRecordatorio' } })}
+      <p class="pista">Se lo pido al asistente: te pregunta qué quieres que te recuerde y cuándo.</p>`}
+    ${horarios.length ? '<p class="pista">Se usa la hora de este ordenador.</p>' : ''}
+    ${horarios.map((r) => `
+      <section class="recordatorio">
         <h3>${texto(r.etiqueta)}</h3>
         <p class="detalle">${texto(r.enPalabras || 'Hay que revisar el horario.')}</p>
         ${r.pendiente ? '<p class="pendiente">Tienes un aviso pendiente.</p>' : ''}
         <p class="pista">${texto(r.proxima ? `Próximo aviso: ${r.proxima}.` : 'No hay una próxima fecha válida. Cambia el horario para volver a recibir avisos.')}</p>
-        ${r.enPalabras ? boton({ etiqueta: 'Hacerlo ahora', icono: '▸', pequeno: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } }) : ''}
-        ${r.pendiente ? boton({ etiqueta: 'Ahora no', pequeno: true, discreto: true, accion: { tipo: 'ahoraNoRecordatorio', nombre: r.nombre } }) : ''}
+        ${r.compartida ? '<p class="pista">Está compartida con otra carpeta: se cambia allí.</p>' : ''}
         <div class="fila">
-          ${r.puedeCambiar ? boton({ etiqueta: 'Cambiar horario', pequeno: true, discreto: true, accion: { tipo: 'ponerHorario', nombre: r.nombre } }) : ''}
-          ${boton({ etiqueta: 'Quitar', pequeno: true, discreto: true, accion: { tipo: 'quitarRecordatorio', nombre: r.nombre } })}
+          ${r.enPalabras ? boton({ etiqueta: 'Hacerlo ahora', icono: '▸', pequeno: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } }) : ''}
+          ${r.puedeCambiar ? boton({ etiqueta: 'Cambiar', pequeno: true, discreto: true, accion: { tipo: 'ponerHorario', nombre: r.nombre } }) : ''}
+          ${r.puedeQuitar ? boton({ etiqueta: 'Quitar', pequeno: true, discreto: true, accion: { tipo: 'quitarRecordatorio', nombre: r.nombre } }) : ''}
         </div>
-        ${boton({ etiqueta: 'Preparar para que se haga sola', pequeno: true, discreto: true, accion: { tipo: 'prepararTareaProgramada', nombre: r.nombre } })}
-      </section>`).join('') : nada('Todavía no hay avisos con horario. Elige una habilidad o crea una rutina con el asistente.')}
-    <hr class="separador">
-    <h2>Tareas que se hacen solas</h2>
-    <p class="detalle">${texto(automatica.texto || '')}</p>
-    <p class="pista">Aquí preparas el encargo. Su horario, sus ejecuciones y sus resultados se revisan en el gestor del asistente.</p>
-    ${boton({ etiqueta: 'Preparar una tarea automática', icono: '↗', accion: { tipo: 'prepararTareaProgramada' } })}
-    ${automatica.guia ? boton({ etiqueta: 'Ver la guía del asistente', pequeno: true, discreto: true, accion: { tipo: 'abrir', url: automatica.guia } }) : ''}
+      </section>`).join('')}
+    ${hayHabilidades && queSeHagaSola ? `
+      <hr class="separador">
+      <p class="detalle">${texto(queSeHagaSola)}</p>
+      ${boton({ etiqueta: 'Que se haga sola', icono: '↗', pequeno: true, discreto: true, accion: { tipo: 'queSeHagaSola' } })}` : ''}
   `;
 }
 
@@ -552,17 +552,9 @@ function pantallaSaberes(datos) {
       <p class="hiciste">Las que están puestas se piden con un clic, o escribiendo su nombre en la conversación. Las del catálogo se añaden desde aquí.</p>
     </div>
 
-    ${boton({ etiqueta: 'Rutinas y horarios', icono: '🕑', pequeno: true, accion: { tipo: 'verRutinas' } })}
-
-    ${/* Lo que se recuerda y cuándo, y cómo dejar de recordarlo (decisión 144). */''}
-    ${(datos.recordatorios || []).length ? `
-      <h2>Recordatorios</h2>
-      ${datos.recordatorios.map((r) => `
-        <div class="fila">
-          <p class="nombre">${texto(`${r.etiqueta}: ${r.enPalabras}`)}</p>
-          ${boton({ etiqueta: 'Quitar', icono: '✕', pequeno: true, discreto: true, accion: { tipo: 'quitarRecordatorio', nombre: r.nombre } })}
-        </div>`).join('')}
-      <hr class="separador">` : ''}
+    ${/* Lo que se recuerda y cuándo tiene su pantalla, con el mismo nombre
+          (decisión 144 y revisión adversaria de la 155). Solo si hay algo. */''}
+    ${datos.hayRecordatorios ? boton({ etiqueta: 'Recordatorios', icono: '🕑', pequeno: true, accion: { tipo: 'verRecordatorios' } }) : ''}
 
     <h2>Instaladas</h2>
     ${instaladas.length
@@ -1892,7 +1884,7 @@ function grupoAccionesSencillo() {
             Habilidades. La fila de Comandos queda apagada en la tabla, no borrada. */''}
       ${encendida('comandos') && estado.comandos ? boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } }) : ''}
       ${estado.habilidades || estado.comandos ? boton({ etiqueta: 'Habilidades (skills)', icono: '✨', pequeno: true, accion: { tipo: 'verSaberes' } }) : ''}
-      ${boton({ etiqueta: 'Rutinas y horarios', icono: '🕑', pequeno: true, accion: { tipo: 'verRutinas' } })}
+      ${estado.hayRecordatorios ? boton({ etiqueta: 'Recordatorios', icono: '🕑', pequeno: true, accion: { tipo: 'verRecordatorios' } }) : ''}
       ${estado.hayAgentes ? boton({ etiqueta: 'Agentes', icono: '🤖', pequeno: true, accion: { tipo: 'verAgentes' } }) : ''}`,
   });
 }
@@ -2147,7 +2139,6 @@ function lasTarjetas() {
       <p class="que">${texto(`Toca: ${r.etiqueta} (${r.enPalabras}).`)}</p>
       ${boton({ etiqueta: 'Hacerlo ahora', icono: '▸', principal: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } })}
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNoRecordatorio', nombre: r.nombre } })}
-      ${boton({ etiqueta: 'Ver las rutinas', pequeno: true, discreto: true, accion: { tipo: 'verRutinas' } })}
     </div>`;
   // Y la costumbre que la barra acaba de convertir en recordatorio: se hizo
   // sola (P9), así que se dice, una vez, y se puede deshacer.
@@ -2293,7 +2284,7 @@ function grupoAccionesCompleto() {
               de una vez, lo que sabe hacer, y con qué está conectado. */''}
         ${boton({ etiqueta: 'Comandos', icono: '🔖', pequeno: true, accion: { tipo: 'verComandos' } })}
         ${boton({ etiqueta: 'Habilidades (skills)', icono: '✨', pequeno: true, accion: { tipo: 'verSaberes' } })}
-        ${boton({ etiqueta: 'Rutinas y horarios', icono: '🕑', pequeno: true, accion: { tipo: 'verRutinas' } })}
+        ${estado.hayRecordatorios ? boton({ etiqueta: 'Recordatorios', icono: '🕑', pequeno: true, accion: { tipo: 'verRecordatorios' } }) : ''}
         ${/* Los ayudantes estaban en un apartado suyo, arriba, con un solo
               botón dentro: un desplegable entero para llegar a una cosa. Y son
               lo mismo que los otros dos —algo que esta carpeta sabe hacer—, así
@@ -3273,7 +3264,7 @@ function atender(data) {
       // con todo dentro (decisión 131).
       estado = data.estado ? { ...data.estado } : data.estado;
       if (estado) {
-        for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
+        for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
           'seAdapta']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
@@ -3301,7 +3292,7 @@ function atender(data) {
     case 'copiaFuera': return pintar(pantallaCopiaFuera(data));
     case 'radiografia': return pintar(pantallaRadiografia(data));
     case 'saberes': return pintar(pantallaSaberes(data));
-    case 'rutinas': return pintar(pantallaRutinas(data));
+    case 'recordatorios': return pintar(pantallaRecordatorios(data));
     case 'salidas': return pintar(pantallaSalidas(data));
     case 'papeles': return pintar(pantallaPapeles(data));
     case 'documentos': return pintar(pantallaDocumentos(data));

@@ -98,11 +98,13 @@ const ficheroDeLaHabilidad = (id) => {
 
 // Las habilidades con botón (decisión 141): dónde están, y cómo se piden.
 const carpetaDeBotones = () => carpetaDe('botones');
+// Con Codex, por el `name` de su cabecera; solo si es un nombre de verdad, que
+// va escrito en el botón y lo manda la barra (revisión adversaria de la 154).
 const elBoton = (nombre) => {
   const carpeta = carpetaDeBotones();
   const campos = carpeta ? require('./frontmatter').leer(path.join(carpeta, nombre, 'SKILL.md')) : {};
   const declarado = typeof campos.name === 'string' ? campos.name.trim() : '';
-  const invocacion = paraQuien() === 'codex' && declarado ? declarado : nombre;
+  const invocacion = require('./limpio').invocacion(paraQuien() === 'codex' ? declarado : '', nombre);
   return { nombre, prompt: `${susSitios().botonSePideCon || '/'}${invocacion}` };
 };
 const acabaUnComando = () => susSitios().comandoAcabaEn || '.md';

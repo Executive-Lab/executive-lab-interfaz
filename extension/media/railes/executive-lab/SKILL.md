@@ -101,7 +101,7 @@ añade en su `metadata` un `cuando` con la hora, en el formato de cron (minuto, 
 día de la semana): `cuando: "0 9 * * 1"` es cada lunes a las 9, y `cuando: "0 9 1 * *"`, el día 1 a las
 9. A esa hora la barra se lo recuerda con un botón para hacerlo; si el editor estaba cerrado, lo verá al volver.
 Díselo en una línea («Te lo recordaré cada lunes a las 9»). Para quitarlo, borra esa línea; él puede
-hacerlo desde *Rutinas y horarios*, donde también puede cambiar el día y la hora sin escribirlos en el fichero. La barra también lo pone sola cuando ve que pulsa un botón con
+hacerlo desde *Recordatorios*, donde también puede cambiar el día y la hora sin escribirlos en el fichero. La barra también lo pone sola cuando ve que pulsa un botón con
 costumbre: si lo ves en su `metadata`, es eso.
 
 ### 2. Cada clave, en el `.env` de su herramienta — y solo ahí
@@ -286,14 +286,18 @@ línea exacta para que la mande, porque las pide él.
 - **Vigilar algo mientras trabaja** —«avísame si llega el correo del banco»—: `/loop 30m <qué mirar>`.
   **Solo con Claude**, solo mientras la conversación sigue abierta, y se apaga sola a los siete días.
   Codex no tiene nada parecido en el editor.
-- **Que pase aunque tenga el ordenador apagado**: con **Claude**, `/schedule`, que lo hace en su nube.
-  Pide que la carpeta esté en GitHub («Subir a GitHub»), no ve lo que no se haya subido, y lo que hace
-  lo deja allí, no en su ordenador: explícaselo antes, y ofrécelo solo si de verdad lo necesita. Con
-  **Codex**, prepara el encargo para su gestor de tareas programadas de ChatGPT: para trabajar con
-  los archivos de esta carpeta, la app de escritorio, con el ordenador encendido y la app abierta;
-  para documentos y conexiones accesibles en la web, también se pueden crear allí. El editor no
-  ofrece ese gestor. Desde *Rutinas y horarios* se prepara el encargo; la tarea queda activa cuando
-  se crea en el gestor del asistente y se comprueba allí. Sus ejecuciones y resultados se revisan allí.
+- **Que se haga sola, sin avisarle**: eso ya no es un recordatorio, es una rutina de Claude o una tarea
+  programada de ChatGPT, y se crea en el gestor de cada uno. Desde *Recordatorios › Que se haga sola*
+  la barra te prepara el encargo; no la des por creada hasta que él te lo confirme.
+  - Con **Claude**, en su nube (`/schedule`), funciona con el ordenador apagado, pero trabaja con una
+    **copia de lo subido a GitHub**: pide la carpeta en GitHub («Subir a GitHub»), un plan de pago de
+    Claude, y va como mucho una vez cada hora. El `.env` y `keys/` no viajan, así que **una habilidad
+    que use una conexión de esta carpeta no funciona allí**. Entonces, la **app de escritorio de
+    Claude** (tareas programadas): trabaja con esta carpeta, con el ordenador encendido y la app
+    abierta. **Nunca le propongas copiar claves a la nube.**
+  - Con **Codex**, las tareas programadas son de ChatGPT, y desde el editor no se gestionan: la app de
+    escritorio trabaja con esta carpeta (ordenador encendido y app abierta); la web, sin ella. Dile los
+    pasos que hace él en ChatGPT y espera a que te confirme que está creada.
 
 ## Cuando la barra falla o no se entiende
 
