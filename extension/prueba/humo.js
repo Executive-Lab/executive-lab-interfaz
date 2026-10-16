@@ -1498,6 +1498,19 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
   // detector de GitHub las toma por de verdad y no deja subir la rama.
   const deMentira = (...trozos) => trozos.join('');
 
+  // Como si corriera en otro sistema, y se devuelve el de verdad. Lo que depende
+  // del sistema —en Windows, un correo largo va al portapapeles (decisión 130)—
+  // se prueba igual en cualquier máquina: falló en la de Windows de GitHub.
+  const comoEn = async (plataforma, hacer) => {
+    const deVerdad = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { ...deVerdad, value: plataforma });
+    try {
+      return await hacer();
+    } finally {
+      Object.defineProperty(process, 'platform', deVerdad);
+    }
+  };
+
   await comprobar('un aviso sale limpio: ni claves, ni carpetas, ni su empresa, ni correos', () => {
     const clave = conexiones.leerEnv(path.join(empresa, '01-TOOLS', 'HOLDED', '.env')).get('HOLDED_API_KEY');
     assert.ok(clave && clave.length >= 6, 'la empresa de mentira no tiene clave con la que probar');
@@ -15365,7 +15378,8 @@ exec git "$@"
 
       // «Mandarlo por correo»: un mailto: sin destinatario, como texto, y que se lee entero.
       vscode.registrado.portapapeles = null;
-      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' });
+      // Como en un Mac: aquí se mira el correo entero, que en Windows iría al portapapeles.
+      await comoEn('darwin', () => proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' }));
       const enlace = abiertos[abiertos.length - 1];
       assert.equal(typeof enlace, 'string', 'se abre con Uri.parse: el editor recodifica el «?» y parte el «&»');
       const correo = leerElCorreo(enlace);
@@ -15376,7 +15390,7 @@ exec git "$@"
       assert.equal(ultimo('informatico').aviso.texto, 'Te he abierto el correo con el mensaje. Pon a quién va y mándalo tú.');
       // Si no se abre, se copia y se dice.
       abre = false;
-      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' });
+      await comoEn('darwin', () => proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' }));
       assert.equal(vscode.registrado.portapapeles, pantalla.cuerpo);
       assert.equal(ultimo('informatico').aviso.malo, true);
       assert.match(ultimo('informatico').aviso.texto, /^No he podido abrir tu correo\. Te lo he copiado/);
@@ -15434,14 +15448,8 @@ exec git "$@"
 
       // En Windows, con el manejador de verdad: largo, al portapapeles, y el correo con la línea para pegarlo.
       fs.writeFileSync(path.join(suya, 'README.md'), `# Facturas\n\n## Para tu informático\n\n${'- Una línea larga con tildes, para que no quepa en una dirección de Windows.\n'.repeat(40)}`);
-      const plataforma = Object.getOwnPropertyDescriptor(process, 'platform');
-      Object.defineProperty(process, 'platform', { ...plataforma, value: 'win32' });
-      try {
-        vscode.registrado.portapapeles = null;
-        await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' });
-      } finally {
-        Object.defineProperty(process, 'platform', plataforma);
-      }
+      vscode.registrado.portapapeles = null;
+      await comoEn('win32', () => proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Facturas' }));
       assert.equal(vscode.registrado.portapapeles, informaticoM.mensaje('Facturas').cuerpo, 'en Windows, largo, no se copia');
       assert.equal(ultimo('informatico').aviso.texto, 'Es un texto largo: te lo he copiado para que llegue entero. Pégalo en el correo con Ctrl+V.');
       assert.ok(abiertos[abiertos.length - 1].length <= informaticoM.CABE_EN_WINDOWS && /pégalo%20aquí|p%C3%A9galo%20aqu%C3%AD/.test(abiertos[abiertos.length - 1]));
@@ -15543,7 +15551,7 @@ exec git "$@"
     try {
       await proveedor.manejar({ tipo: 'verParaElInformatico', proveedor: 'Banco' });
       const pantalla = ultimo('informatico');
-      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Banco' });
+      await comoEn('darwin', () => proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Banco' }));
       const enlace = abiertos[abiertos.length - 1];
       assert.equal(typeof enlace, 'string');
       const cuerpo = decodeURIComponent(enlace.split('&body=')[1]);
@@ -15583,7 +15591,7 @@ exec git "$@"
       assert.doesNotThrow(() => informaticoM.correo({ asunto: 'x', cuerpo: `a\uD83D b` }));
       fs.writeFileSync(path.join(suya, 'README.md'), `# Banco\n\n## Para tu informático\n\n- Para qué es: leer los movimientos del banco, solo eso. \uD83D\n`);
       const antesDeEste = enviados.length;
-      await proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Banco' });
+      await comoEn('darwin', () => proveedor.manejar({ tipo: 'mandarAlInformatico', proveedor: 'Banco' }));
       assert.ok(!enviados.slice(antesDeEste).some((m) => m.tipo === 'aviso' && /^Algo no ha ido bien/.test(m.texto || '')), 'un emoji partido rompe «Mandarlo por correo»');
       return 'ocho vías tapadas, sin correos, y las páginas ajenas a la vista';
     } finally {
