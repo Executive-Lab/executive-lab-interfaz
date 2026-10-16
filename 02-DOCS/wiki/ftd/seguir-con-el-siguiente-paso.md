@@ -24,8 +24,9 @@ el asistente y sin red. Y, de la revisión de producto, que quien vuelve al día
 - **Terminado no se ofrece**: `status: done` o `hecho`, o ninguna casilla sin marcar. En las carpetas de la
   barra nadie fusiona y los documentos se quedan `in-progress` para siempre.
 - **Del disco, con cuidado**: sin seguir enlaces (ni el documento ni sus carpetas), 256 KB por documento,
-  20 leídos y 500 mirados como mucho, y cada línea cortada antes de pasarle una expresión. Limpio con
-  `limpio.etiqueta` y sin claves (`informatico.sinClaves`), antes de cortar.
+  5 leídos en total, 500 ms y 500 mirados como mucho. De cada uno, 50 líneas del Next y 50 casillas de
+  400 letras, sin expresiones que vuelvan atrás. Limpio con `limpio.etiqueta` y sin claves
+  (`informatico.sinClaves`), antes de cortar; si no se pueden tapar, no se enseña.
 - **Dónde sale**: debajo de «Seguir donde lo dejé» en Ayuda, en el recordatorio de «Seguir donde lo dejé» y
   en el encargo del botón, que arma la extensión (P6). Sin nada en marcha, todo como antes (P1).
 - **La tarjeta de la última vez**: la primera vez de cada día, en una carpeta con algo hecho. Se decide esa
@@ -59,6 +60,8 @@ el asistente y sin red. Y, de la revisión de producto, que quien vuelve al día
   y 4, y las tres empresas.
 - [x] 5. Mutaciones a mano — 86, 83 tumbadas; las 3 que pasan son capas repetidas a propósito (ver la 160).
 - [x] 6. Todas las baterías en verde, también con main traído.
+- [x] 7. Lo de la revisión adversaria: tiempo, encargo delimitado, BOM, el Next, terminado, medianoche,
+  falla cerrado y el recordatorio. Comprobaciones 1 a 4.
 
 ## Evidence
 
@@ -67,6 +70,8 @@ el asistente y sin red. Y, de la revisión de producto, que quien vuelve al día
   despacho (Codex) dicen por dónde iban.
 - `mapeos-codex.js` 29, `contrato.js` 15, `comprobar-diccionario.js` y `revisar-powershell.js` en verde.
 - Las 86 mutaciones, otra vez con main traído: lo mismo, 83 tumbadas.
+- Revisión adversaria de la PR #55: lo grave (25 documentos preparados, 15 s → 7 ms) y los menores, cada uno
+  con su prueba. Las 10 mutaciones más importantes, las 10 tumbadas.
 
 ## Next
 

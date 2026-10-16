@@ -1112,8 +1112,8 @@ ${cabecera}
       cuandoCaduca: () => this.apuntarCuandoCaduca(mensaje.proveedor, mensaje.en, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
-      seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt),
-      ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(),
+      seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt, mensaje.dia),
+      ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(mensaje.dia),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
       verRecordatorios: () => this.verRecordatorios(),
       crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
@@ -1500,8 +1500,21 @@ ${cabecera}
     const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
     await this.marcarHecho(nombre);
     if (!uno) return this.actualizarRecordatorios();
-    await this.pedir(uno.prompt);
+    await this.pedir(await this.elEncargoDe(uno));
     return this.actualizarRecordatorios();
+  }
+
+  // El de «Seguir donde lo dejé», con por dónde ibas si se sabe: es lo que dice
+  // su tarjeta (revisión de la PR #55, decisión 160).
+  async elEncargoDe(uno) {
+    if (uno.nombre !== 'seguir') return uno.prompt;
+    try {
+      const { ibasPor } = await brujula.estado();
+      return (ibasPor && ibasPor.accion && ibasPor.accion.prompt) || uno.prompt;
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return uno.prompt;
+    }
   }
 
   async dejarElRecordatorio(nombre) {
@@ -2303,16 +2316,16 @@ ${cabecera}
     }
   }
 
-  // Sus dos botones la quitan hasta mañana. «Seguir donde lo dejé» lleva el
-  // encargo que armó la extensión (P6).
-  async seguirDondeLoDeje(prompt) {
-    await porDondeIbas.hastaManana(this.almacen());
+  // Sus dos botones la quitan hasta el día siguiente al de la tarjeta, que viaja
+  // con ellos. «Seguir donde lo dejé» lleva el encargo que armó la extensión (P6).
+  async seguirDondeLoDeje(prompt, dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
     await this.pedir(prompt);
     return this.refrescar(true);
   }
 
-  async ahoraNoLaUltimaVez() {
-    await porDondeIbas.hastaManana(this.almacen());
+  async ahoraNoLaUltimaVez(dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
     return this.refrescar(true);
   }
 
