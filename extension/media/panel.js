@@ -1326,7 +1326,7 @@ const QUE_LOS_LEA = 'Lee los documentos que tienes sin leer en la bandeja de ent
 // El mismo encargo que en Documentos entregados.
 const QUE_LOS_COLOQUE = 'Hay documentos sueltos en la carpeta, fuera de la bandeja. Míralos, ponlos donde toque y cuéntame en dos líneas qué has sacado de ellos.';
 
-function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], fotos = [], aviso: avisoLocal }) {
+function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], fotos = [], hayPanel = false, aviso: avisoLocal }) {
   const sinLeer = esperando.map((d) => filaDePapel(d, { seQuita: true, desde: 'documentos' })).join('');
 
   return `
@@ -1361,6 +1361,10 @@ function pantallaDocumentos({ esperando = [], sueltos = [], herramientas = [], f
       ? `<p class="detalle">Ábrelo para verlo, o guárdatelo donde quieras.</p>${gruposDeResultados(herramientas, fotos)}`
       : nada('Todavía no ha preparado nada para llevarse.')}
     ${boton({ etiqueta: 'La foto del cerebro', icono: '🧠', pequeno: true, accion: { tipo: 'verLaFoto', desde: 'documentos' } })}
+    ${/* El panel completo que deja RSC al repasar la wiki, junto a la foto. Está
+          fuera de git y muchas veces no existe: solo sale si está. En la
+          sencilla, Conocimiento está apagado, y era el único sitio donde salía. */''}
+    ${hayPanel ? boton({ etiqueta: 'El panel completo', icono: '🗂️', pequeno: true, accion: { tipo: 'abrirPanelCompleto', desde: 'documentos' } }) : ''}
   `;
 }
 

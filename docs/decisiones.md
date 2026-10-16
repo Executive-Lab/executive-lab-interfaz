@@ -5522,6 +5522,21 @@ ficheros que solo cambian en mayúsculas, y la foto que no dice que no está ent
 por otras pruebas, cada mutación se corrió con el trozo de `humo.js` que toca esto, que pasa entero sin
 mutar. La batería entera se pasó al final, sin mutar.
 
+Después (arreglos sueltos de la tanda): **El panel completo, también en Documentos.** RSC deja
+`02-DOCS/wiki/dashboard.html` cuando el asistente repasa la wiki, fuera de git, así que muchas veces no está.
+Solo salía en Conocimiento, que en la sencilla está apagado.
+
+- Ahora sale en Documentos, junto a La foto del cerebro, con el nombre del diccionario: «El panel completo».
+  Solo si está: sin él, no se pinta la fila.
+- Sin seguir enlaces, como la foto: tiene que ser un fichero de verdad dentro de la carpeta de trabajo. Ni un
+  enlace a otro sitio, ni a otro fichero de la carpeta, que podría ser el `.env` de una conexión, ni con la
+  wiki enlazada fuera. Antes se miraba solo que existiera. Esto vale también para Conocimiento.
+- Se mira otra vez al pulsar. Si ya no está, no se abre nada y se repinta la pantalla de donde se venía, sin
+  él.
+- Una comprobación más en `humo.js`, y `empresas-distintas.js` lo pinta en la gestoría. Mutaciones: 14, las
+  14 tumbadas. Una sobrevivió a la primera pasada (seguir el enlace a otro fichero de la carpeta) y se cerró
+  con su prueba.
+
 ## 152. Se adapta y da ideas
 
 **Fecha:** 15 de octubre de 2026 · **Estado:** hecho en el código (F6 del plan de simplificar la barra, y el punto 8 de «Hay que construirlo» de la 142)
@@ -6487,6 +6502,13 @@ que ya había en este Mac y sin red:
   (revisión de la 153). En el PDF no se puede: solo van los de https, y se ve la dirección entera.
 - **Los pasos que enseña la barra no se tapan.** Si el asistente pegó una clave en el README, la guía de un
   paso cada vez la enseña (eso ya era así). El PDF no la lleva.
+  Después (arreglos sueltos de la tanda): ya se tapan. La pantalla de la conexión pasa por el mismo tapado
+  que el PDF los pasos, de dónde se saca cada clave y el nombre (`informatico.conexionALaVista`). Con eso
+  arma el panel lo que «No lo encuentro» le pasa al asistente. La prueba siembra ocho formas: tal cual, en
+  una dirección, en base64, partida por espacios, con algo que no se ve en medio, corta, con usuario y clave
+  en una dirección y con forma de clave. Mira cada paso, la lista entera y «No lo encuentro». Mutaciones: 7,
+  las 7 tumbadas. Las letras de ancho completo siguen tapándose solo en el PDF, que las cambia al escribir:
+  en la pantalla y en el mensaje del informático se ven como son.
 - **Sin pasos, hay dos botones parecidos**: «Explícame cómo conectarla» (146) y «Que el asistente prepare la
   guía». Se han dejado los dos: uno es para que te lo explique ahora y el otro, para que lo deje escrito.
 - **«Antes de empezar»** ya era, en la barra completa, el nombre de `proposals/`. En el PDF es una sección de

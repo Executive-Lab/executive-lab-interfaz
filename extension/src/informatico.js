@@ -281,6 +281,25 @@ function sinClaves(texto, valores = valoresQueTapar()) {
   return limpio.replace(/[A-Za-z0-9+=_-]{20,400}/g, (t) => (PARECE_REVUELTO(t) ? QUITADA : t));
 }
 
+// ── Lo que la pantalla de una conexión enseña del disco ──────────────────
+//
+// La guía de un paso cada vez (decisión 146) enseñaba los pasos de «Cómo
+// conectarla» tal cual: si el asistente pegó una clave en el README, salía en la
+// barra y en lo que «No lo encuentro» le pasa al asistente, que lo arma el panel
+// con el paso. El PDF y este mensaje ya la tapaban (decisión 159, «Lo que no
+// hace»). Ahora pasa por el mismo tapado todo lo que la pantalla enseña de lo que
+// escribió el asistente: los pasos, de dónde se saca cada clave y el nombre, que
+// va en el título y en cada encargo de esa pantalla.
+function conexionALaVista(datos, valores = valoresQueTapar()) {
+  if (!datos) return datos;
+  const tapar = (t) => (t == null ? t : sinClaves(t, valores));
+  return {
+    ...datos,
+    proveedor: { ...datos.proveedor, etiqueta: tapar(datos.proveedor.etiqueta), pasos: (datos.proveedor.pasos || []).map(tapar) },
+    claves: (datos.claves || []).map((c) => ({ ...c, donde: tapar(c.donde) })),
+  };
+}
+
 // Por líneas enteras: cortar a mitad de línea podía partir una clave y dejar
 // medio valor que ya no se reconoce. Y una línea sola que no cabe, por letras
 // enteras: un emoji partido hacía fallar el correo.
@@ -418,3 +437,5 @@ function correo({ asunto, cuerpo }, { plataforma = process.platform } = {}) {
 module.exports = { mensaje, correo, sinClaves, formasDe, porLineas, enTextoLlano, porSeguridad, cualDeSeguridad, POR_SEGURIDAD, QUITADA, CORREO_QUITADO, CABE_EN_WINDOWS };
 // Decisión 159: la guía en PDF tapa lo del disco igual, y dice la parte de seguridad a quien la saca.
 Object.assign(module.exports, { valoresQueTapar, porSeguridadParaTi, POR_SEGURIDAD_PARA_TI });
+// Y la pantalla de la conexión, con lo del disco tapado igual (arreglos sueltos de la tanda).
+Object.assign(module.exports, { conexionALaVista });

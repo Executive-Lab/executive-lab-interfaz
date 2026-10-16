@@ -52,6 +52,8 @@ function gestoria() {
   escribir(r, '02-DOCS/wiki/index.md', '# Knowledge Base Index\n\n## contabilidad\n\n| Artículo | Resumen |\n|---|---|\n| [Cierre de mes](contabilidad/cierre.md) | Cómo se cierra el mes |\n');
   escribir(r, '02-DOCS/wiki/contabilidad/cierre.md', '---\ntype: article\ntitle: Cierre de mes\n---\n\n# Cierre de mes\n\nSe cierra el día 5.\n');
   escribir(r, '02-DOCS/inbox/README.md', '# Inbox\n');
+  // El panel completo que deja el asistente al repasar la wiki: sale en Documentos.
+  escribir(r, '02-DOCS/wiki/dashboard.html', '<!doctype html><title>Panel</title>\n');
   escribir(r, '.claude/commands/cerrar-el-mes.md', '---\ndescription: "Cierra el mes"\nboton: "Cerrar el mes"\nicono: "📊"\n---\nCierra el mes.\n');
   // Un cierre a medias: «Seguir donde lo dejé» dice por dónde iba (decisión 160).
   escribir(r, '02-DOCS/wiki/ftd/cierre-de-septiembre.md', '---\nstatus: in-progress\n---\n\n# Cierre de septiembre\n\n- [x] Bajar los extractos\n- [ ] Cuadrar el banco\n\n## Next\n\nCuadrar el banco\n');
@@ -145,6 +147,7 @@ for (const [nombre, montar] of TODAS) {
     ...cargar('papeles').sinLeerTodavia(),
     herramientas: cargar('salidas').loQueHaProducido(),
     fotos: fotoM.lasFotos(path.join(vscode.guion.raiz, ...fotoM.CARPETA), vscode.guion.raiz),
+    hayPanel: cargar('cerebro').hayPanel(),
     aviso: null,
   }, null);
   anadir('foto', { ...fotoM.laFoto(wiki, cargar('cerebro').todosLosDocumentos()), desde: 'documentos', aviso: null }, null);
