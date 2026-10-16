@@ -742,15 +742,21 @@ async function queHay() {
 const podemosGuardarElPuntoDePartida = async () => !(await historialAjeno(proyecto.raiz()));
 
 // ¿Puede la barra guardar sola una copia aquí? (decisión 164, que la enciende de
-// fábrica.) Solo en un historial de esta carpeta, y nuestro. Sin `.git` propio
-// no: `historialAjeno` da por bueno lo que no tiene historial —para el punto de
-// partida, que va justo después de crearlo—, pero git sube a buscar el de más
-// arriba, y una copia sola acabaría en el historial de otro proyecto. Y una
-// carpeta sin copias, porque lo eligió o porque no hay, sigue sin ellas.
+// fábrica.) Solo en un historial de esta carpeta que creó la barra en este
+// ordenador: con su marca local (`git config --local`), que no viaja en un clon.
+// No vale lo que basta para el punto de partida (`historialAjeno`):
+//   · sin `.git` propio, git sube a buscar el de más arriba, y la copia acabaría
+//     en el historial de otro proyecto;
+//   · un `git init` suyo, sin commits todavía, se da allí por nuestro, y la
+//     copia sola haría commit en él cada hora y correría su `pre-commit`;
+//   · un clon de un historial de la barra empieza por «Punto de partida — …»,
+//     y es de quien lo clonó.
+// Guardar a mano no pasa por aquí: lo pulsa alguien que está mirando.
 async function podemosGuardarSolo() {
   const raiz = proyecto.raiz();
   if (!raiz || !fs.existsSync(path.join(raiz, '.git'))) return false;
-  return !(await historialAjeno(raiz));
+  const marca = await procesos.git('config', '--local', '--get', MARCA_DEL_HISTORIAL);
+  return marca.codigo === 0 && marca.salida.trim() === 'nuestro';
 }
 
 // ---------------------------------------------------------- la radiografía

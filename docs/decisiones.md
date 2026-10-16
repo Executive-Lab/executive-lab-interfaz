@@ -6589,6 +6589,27 @@ guarda en un `.git` de esta carpeta y nuestro (`terreno.podemosGuardarSolo`), y 
 cambios. Probado con git de verdad: la nuestra guarda; la de otra persona, la de dentro de otro proyecto y la
 que no tiene copias, no.
 
+**La revisión de la PR #59 encontró dos huecos más, y están cerrados con su prueba** (media-alta). Para el
+punto de partida, `historialAjeno` da por nuestro un historial sin commits, y uno cuyo primer commit es «Punto
+de partida — …». Para la copia sola, eso dejaba pasar dos cosas:
+
+- un `git init` de la persona, sin commits todavía: la copia sola habría hecho commit en él cada hora, y habría
+  corrido su `pre-commit` (reproducido con `historial.guardar()`);
+- un clon de una carpeta de la barra, que es de quien lo clonó.
+
+Ahora la copia sola pide la marca local que pone la barra al crear el historial (`executivelab.historial =
+nuestro`, en `git config --local`, que no viaja en un clon), en un `.git` de esta carpeta: desde una
+subcarpeta, git leería la marca del de arriba. Sin la marca no guarda solo; guardar a mano sigue como estaba.
+`historialAjeno` no se toca: lo está cambiando otra rama, y el punto de partida sigue con él. Y si en la
+carpeta eligió seguir sin copias, el reloj se lo pasa a `guardarSiToca`, que no guarda. Una carpeta de una
+barra de antes de la marca no guarda sola: se queda en guardar a mano.
+
+La prueba, con git de verdad: un `git init` suyo con un `pre-commit` que deja rastro (ni commit ni rastro), un
+clon de la nuestra (no cambia su historial), la de dentro de un proyecto que sí es nuestro, y la nuestra
+habiendo elegido seguir sin copias. Cinco mutaciones más, las cinco tumbadas: volver a `historialAjeno`, dar
+por buena cualquier marca, no mirar el `.git` propio, no mirar si eligió seguir sin copias y que el reloj no
+se lo pase.
+
 **6. En Habilidades, lo de la barra no es «Tuyo».** Los raíles (`executive-lab` y los botones `ayuda`,
 `empezar`, `guardar` y `seguir`) salían como «Tuya: escrita para esta carpeta», porque van en `ownSkills` para
 que RSC no los tome por basura. Con Codex, los botones salían «fuera del catálogo». «Executive lab» era un
@@ -6635,7 +6656,8 @@ En `empresas-distintas.js`, una cuarta carpeta: vacía y montada de verdad, con 
 arnés de la clase. Acaba en la principal, con la tarjeta de la cuenta, la idea de Facturación, sin la fila de
 Recordatorios y con cinco cosas a la vista.
 
-**Mutaciones a mano: 81, las 81 tumbadas.** Cada una cambia una cosa del código o de una tabla, corre las
+**Mutaciones a mano: 81, las 81 tumbadas**, y cinco más de la revisión (en el punto 5): 86.
+Cada una cambia una cosa del código o de una tabla, corre las
 comprobaciones que le tocan y se deshace. Diez se corrieron también contra `empresas-distintas.js`, y la tumba
 también.
 

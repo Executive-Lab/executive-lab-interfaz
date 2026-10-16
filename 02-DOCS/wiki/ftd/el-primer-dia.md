@@ -81,6 +81,9 @@ Una pasada entera después del último cambio de código, sobre `origin/main` en
 - `node extension/prueba/contrato.js` → 15 · `node extension/prueba/mapeos-codex.js` → 29 ·
   `node docs/comprobar-diccionario.js` → limpio · `node herramientas/revisar-powershell.js` → sin pegas.
 - Mutaciones a mano: 81, las 81 tumbadas (cuatro sobrevivieron a la primera y se cerraron con su prueba).
+- Revisión de la PR #59: la copia sola pide la marca local de la barra (`executivelab.historial`), y no
+  guarda en un `git init` suyo sin commits, ni en un clon, ni si eligió seguir sin copias. Probado con git de
+  verdad, y cinco mutaciones más, las cinco tumbadas.
 
 Cada punto del checklist tiene su comprobación en `humo.js`, con su nombre:
 

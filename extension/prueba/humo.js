@@ -4708,6 +4708,39 @@ exec git "$@"
       assert.equal((await guardarM.guardarSiToca({ horas: 1, desde: hace })).hecho, 'noEsSuyo', 'guarda en el historial de otra persona');
       assert.deepEqual(asuntos(suya), ['Mi trabajo'], 'su historial ha cambiado');
 
+      // Un `git init` suyo, sin commits todavía y con su `pre-commit`: no es nuestro,
+      // aunque para el punto de partida lo parezca. Ni se guarda ni corre su enganche.
+      const vacioSuyo = nueva('vacio-suyo');
+      git(vacioSuyo, 'init', '-q', '-b', 'main');
+      quien(vacioSuyo);
+      const corrio = path.join(vacioSuyo, '.git', 'el-pre-commit-ha-corrido');
+      fs.writeFileSync(path.join(vacioSuyo, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\ntouch "${corrio}"\n`, { mode: 0o755 });
+      fs.writeFileSync(path.join(vacioSuyo, 'mio.txt'), 'mío');
+      vscode.guion.raiz = vacioSuyo;
+      assert.equal((await guardarM.guardarSiToca({ horas: 1, desde: hace })).hecho, 'noEsSuyo', 'guarda solo en un git init suyo sin commits');
+      assert.notEqual(cp.spawnSync('git', ['rev-parse', '--verify', '-q', 'HEAD'], { cwd: vacioSuyo }).status, 0, 'ha hecho commit en su historial vacío');
+      assert.ok(!fs.existsSync(corrio), 'ha corrido su pre-commit');
+
+      // Un clon de una carpeta nuestra: empieza por el punto de partida, pero la marca
+      // no viaja. Es de quien lo clonó.
+      const clon = path.join(nueva('clon'), 'carpeta');
+      cp.execFileSync('git', ['clone', '-q', nuestra, clon], { encoding: 'utf8' });
+      quien(clon);
+      fs.writeFileSync(path.join(clon, 'nuevo.txt'), 'nuevo');
+      vscode.guion.raiz = clon;
+      const delClon = asuntos(clon);
+      assert.match(delClon[delClon.length - 1], /^Punto de partida — /, 'el clon no empieza por el punto de partida: la prueba no mira nada');
+      assert.equal((await guardarM.guardarSiToca({ horas: 1, desde: hace })).hecho, 'noEsSuyo', 'guarda solo en un clon sin la marca de este ordenador');
+      assert.deepEqual(asuntos(clon), delClon, 'el historial del clon ha cambiado');
+
+      // Y en la nuestra, si eligió seguir sin copias, tampoco.
+      vscode.guion.raiz = nuestra;
+      fs.writeFileSync(path.join(nuestra, 'd.txt'), 'd');
+      assert.equal((await guardarM.guardarSiToca({ horas: 1, desde: hace, sigueSinCopias: true })).hecho, 'sinCopias', 'guarda solo habiendo elegido seguir sin copias');
+      assert.equal(asuntos(nuestra).length, 3, 'habiendo elegido seguir sin copias, guarda');
+      // Y el reloj se lo pasa.
+      assert.match(trozo, /sigueSinCopias: panel\.eligioSinCopias\(\)/, 'el reloj no le dice si eligió seguir sin copias');
+
       // Sin historial propio, dentro del proyecto de otro: git subiría a guardar
       // en el de arriba. Es lo que pasaría con una carpeta sin copias ahí dentro.
       const arriba = nueva('arriba');
@@ -4716,6 +4749,9 @@ exec git "$@"
       fs.writeFileSync(path.join(arriba, 'suyo.txt'), 'suyo');
       git(arriba, 'add', '-A');
       git(arriba, 'commit', '-q', '-m', 'Lo de arriba');
+      // Aunque el de arriba sea nuestro: la marca se lee también desde dentro, y la
+      // copia sería de otra carpeta.
+      git(arriba, 'config', '--local', 'executivelab.historial', 'nuestro');
       const dentro = path.join(arriba, 'mi-carpeta');
       fs.mkdirSync(dentro);
       fs.writeFileSync(path.join(dentro, 'nota.txt'), 'nota');
@@ -4729,7 +4765,7 @@ exec git "$@"
       vscode.guion.raiz = sinCopias;
       assert.equal((await guardarM.guardarSiToca({ horas: 1, desde: hace })).hecho, 'noEsSuyo', 'en una carpeta sin copias hace algo');
       assert.ok(!fs.existsSync(path.join(sinCopias, '.git')), 'a una carpeta sin copias le pone historial');
-      return 'cada hora de fábrica · la nuestra sí · la de otro, la de arriba y la que no tiene, no';
+      return 'cada hora de fábrica · la nuestra sí · la de otro, la vacía suya, el clon, la de arriba, la que no tiene y la que no quiere, no';
     } finally {
       vscode.guion.raiz = empresa;
       if (antesGit === undefined) delete process.env.GIT_CONFIG_GLOBAL;

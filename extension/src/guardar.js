@@ -286,15 +286,18 @@ const esElPuntoDePartida = (copia) => Boolean(copia) && /^Punto de partida — /
 // Una vuelta del reloj de `extension.js`. Devuelve qué ha pasado, para poder
 // probarlo sin esperar una hora. No guarda:
 //   · si está apagado o no toca todavía;
+//   · si en esta carpeta eligió seguir sin copias;
 //   · sin git en el ordenador;
-//   · en una carpeta sin historial propio, o con el de otra persona
-//     (`terreno.podemosGuardarSolo`): ni en el de arriba, ni en el suyo;
+//   · en un historial que no creó la barra en este ordenador
+//     (`terreno.podemosGuardarSolo`): ni en el de arriba, ni en uno suyo, ni en
+//     un clon;
 //   · si no hay nada nuevo.
 // Se mira de quién es el historial antes de contar los cambios: sin `.git`
 // propio, `git status` contaría los del proyecto de arriba.
-async function guardarSiToca({ horas, desde, ahora = Date.now() }) {
+async function guardarSiToca({ horas, desde, ahora = Date.now(), sigueSinCopias = false }) {
   if (!horas) return { hecho: 'apagado' };
   if (ahora - desde < horas * 60 * 60 * 1000) return { hecho: 'noToca' };
+  if (sigueSinCopias) return { hecho: 'sinCopias' };
   if (!(await hayGit())) return { hecho: 'sinGit' };
   if (!(await require('./terreno').podemosGuardarSolo())) return { hecho: 'noEsSuyo' };
   if (!(await cambiosSinGuardar())) return { hecho: 'sinCambios' };

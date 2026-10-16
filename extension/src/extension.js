@@ -3586,7 +3586,7 @@ function guardarSolo(panel, salida) {
 
   const reloj = setInterval(async () => {
     try {
-      const hecho = await copias.guardarSiToca({ horas: ajustes.cadaCuantoGuarda(), desde: ultima });
+      const hecho = await copias.guardarSiToca({ horas: ajustes.cadaCuantoGuarda(), desde: ultima, sigueSinCopias: panel.eligioSinCopias() });
       if (hecho.hecho !== 'guardada') return;
       ultima = Date.now();
       if (!hecho.ok) salida.appendLine(`[guardarSolo] ${hecho.mensaje}`);
