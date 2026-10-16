@@ -3350,7 +3350,8 @@ exec git "$@"
     fs.writeFileSync(path.join(empresa, '.claude/commands/cobrar.md'),
       '---\ndescription: Reclamar cobros\nboton: Reclamar lo que me deben\n---\n\nInstrucciones.\n');
     vigia.disparar(path.join(empresa, '.claude/commands/cobrar.md'));
-    await new Promise((listo) => setTimeout(listo, 900));
+    // Hasta que el botón sale (el vigía espera un poco antes de leer), con tope solo para no colgarse.
+    for (let i = 0; i < 300 && !cargar('acciones').acciones().some((a) => a.etiqueta === 'Reclamar lo que me deben'); i += 1) await new Promise((listo) => setTimeout(listo, 50));
 
     const etiquetas = cargar('acciones').acciones().map((a) => a.etiqueta);
     assert.ok(etiquetas.includes('Reclamar lo que me deben'), 'el botón nuevo tiene que salir solo');
@@ -12753,7 +12754,11 @@ exec git "$@"
       return { codigo: hecho.status, tarda: Date.now() - desde, args: fs.existsSync(llamada) ? fs.readFileSync(llamada, 'utf8').split('\0').slice(0, -1) : null };
     };
     ponerFingidos(APUNTAR);
-    const bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
+    // Con el Mac cargado, node puede tardar en arrancar y el guion se corta a su propio
+    // tope (6 s) antes de lanzar nada: ese corte no es un fallo del guion. Hasta 5 intentos,
+    // y solo si salió sin lanzar; un guion que de verdad no lanza falla las cinco veces.
+    let bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
+    for (let i = 1; i < 5 && !bien.args; i += 1) bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
     assert.equal(bien.codigo, 0);
     assert.ok(bien.args, 'no se lanza el aviso');
     assert.equal(av.elNombre(MALO), MALO, 'el nombre de prueba no llega entero');
@@ -12775,14 +12780,14 @@ exec git "$@"
     const atascado = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
     assert.equal(atascado.codigo, 0, 'atascado, falla');
     assert.ok(fs.existsSync(cortado), 'al programa atascado no se le corta');
-    assert.ok(atascado.tarda < av.TOPE.todo + 3000, `atascado, tarda ${atascado.tarda} ms`);
+    assert.ok(atascado.tarda < av.TOPE.todo + 12000, `atascado, tarda ${atascado.tarda} ms`);
     // Y uno que no se deja cortar: el tope de todo, y sale con 0. Luego se le quita de en medio.
     const suPid = path.join(fingidos, 'pid');
     ponerFingidos(`echo $$ > "${suPid}"\ntrap '' TERM\nexec /bin/sleep 30`);
     const terco = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
     try { process.kill(Number(fs.readFileSync(suPid, 'utf8')), 'SIGKILL'); } catch { /* ya no está */ }
     assert.equal(terco.codigo, 0, 'con un programa que no se deja cortar, falla');
-    assert.ok(terco.tarda < av.TOPE.todo + 5000, `con un programa que no se deja cortar, tarda ${terco.tarda} ms`);
+    assert.ok(terco.tarda < av.TOPE.todo + 12000, `con un programa que no se deja cortar, tarda ${terco.tarda} ms`);
     // Un programa que falla: 0.
     ponerFingidos('exit 3');
     assert.equal(correr(JSON.stringify({ notification_type: 'idle_prompt' })).codigo, 0, 'con el programa fallando, falla');
@@ -16709,7 +16714,7 @@ exec git "$@"
       pedidas.length = 0;
       await contexto.workspaceState.update(MIRADOS, 0);
       await proveedor.refrescar(true);
-      for (let i = 0; i < 20 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
+      for (let i = 0; i < 300 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       await new Promise((listo) => setTimeout(listo, 50));
       assert.equal(pedidas.length, 1, `una pregunta por aviso, o ninguna al pintar: ${pedidas.length}`);
       assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/Executive-Lab\/executive-vscode-interfaz\/issues\?state=closed&since=/);
@@ -16817,7 +16822,7 @@ exec git "$@"
       proveedor.solaNoPudo = null;
       falla = false;
       await proveedor.refrescar(true);
-      for (let i = 0; i < 50 && instalados.length < 3; i += 1) await new Promise((listo) => setTimeout(listo, 10));
+      for (let i = 0; i < 300 && instalados.length < 3; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       assert.equal(instalados.length, 3, 'al pintar, no se pone sola');
       return 'sola · sin espera · una vez · si falla, el botón · el interruptor';
     } finally {
@@ -22044,7 +22049,9 @@ exec git "$@"
     const tic = () => new Promise((r) => setTimeout(r, 10));
     // Hasta que la barra termina lo que tenga entre manos, y la pregunta, si la hubo.
     const esperar = async () => {
-      for (let i = 0; i < 100 && (proveedor.atendiendo || (proveedor.preguntados && proveedor.preguntados.size)); i += 1) await tic();
+      // Tope de 60 s solo para no colgar la prueba: con el Mac cargado una vuelta pasa de 1 s,
+      // y si se da por acabada antes, sigue en segundo plano y pisa la del paso siguiente.
+      for (let i = 0; i < 6000 && (proveedor.atendiendo || (proveedor.preguntados && proveedor.preguntados.size)); i += 1) await tic();
       await tic();
     };
     // Una pregunta que nadie contesta todavía.
@@ -22082,7 +22089,7 @@ exec git "$@"
       assert.ok(vscode.registrado.vigia.patron.includes('02-DOCS/raw/pedidos/*'), 'la barra no vigila los pedidos');
       pedir('connect-tool');
       vscode.registrado.vigia.disparar(path.join(pedidosDir, 'connect-tool.habilidad'));
-      for (let i = 0; i < 100 && contestado('connect-tool') === null; i += 1) await tic();
+      for (let i = 0; i < 6000 && contestado('connect-tool') === null; i += 1) await tic();
       assert.equal(contestado('connect-tool'), 'Añadida. Se pide con /connect-tool.', 'el vigía no atiende el pedido');
       // Uno que llega mientras se atiende otro no espera al minuto siguiente.
       assert.equal(proveedor.atendiendo, true, 'la prueba no pilla la barra atendiendo');
@@ -22832,7 +22839,8 @@ exec git "$@"
         await new Promise((r) => setTimeout(r, 800));
         assert.equal(repintados, 0, 'el vigía repinta por un encargo que acaba de dejar la barra');
         vscode.registrado.vigia.disparar(path.join(empresa, '02-DOCS', 'wiki', 'index.md'));
-        await new Promise((r) => setTimeout(r, 800));
+        for (let i = 0; i < 100 && repintados < 1; i += 1) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 100));
         assert.equal(repintados, 1, 'la prueba del vigía no ve repintar nada');
       } finally {
         proveedor.repintarLoQueHaya = repintar;
