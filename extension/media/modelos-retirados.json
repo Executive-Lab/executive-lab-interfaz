@@ -1,0 +1,30 @@
+{
+  "_que": "Los modelos que Codex ya no tiene para quien entra con su cuenta de ChatGPT. Si el config.toml de Codex sigue eligiendo uno, Codex no contesta: la barra quita esa línea y deja copia (decisión 157). Con una clave de la API siguen funcionando. Cuando retiren otro, se añade una fila; `desde` puede ser futura, y hasta ese momento no se toca.",
+  "_comprobado": "2026-10-15",
+  "codex": [
+    {
+      "id": "gpt-5.4",
+      "nombre": "GPT-5.4",
+      "desde": "2026-08-31T00:00:00Z",
+      "fuente": "https://learn.chatgpt.com/docs/changelog (2026-07-31: «On August 31, 2026, GPT-5.4 and GPT-5.4 mini will no longer be available in Codex for users signed in with ChatGPT.»)"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "nombre": "GPT-5.4 mini",
+      "desde": "2026-08-31T00:00:00Z",
+      "fuente": "https://learn.chatgpt.com/docs/changelog (2026-07-31, la misma entrada)"
+    },
+    {
+      "id": "gpt-5.3-codex-spark",
+      "nombre": "GPT-5.3-Codex-Spark",
+      "desde": "2026-09-14T00:00:00Z",
+      "fuente": "https://learn.chatgpt.com/docs/changelog (2026-09-14: «GPT-5.3-Codex-Spark was deprecated on September 14, 2026.»)"
+    },
+    {
+      "id": "gpt-5.5",
+      "nombre": "GPT-5.5",
+      "desde": "2026-10-14T19:00:00Z",
+      "fuente": "https://learn.chatgpt.com/docs/changelog (2026-10-14: «Effective October 14, 2026, at noon PDT (19:00 UTC), GPT-5.5 retires from Codex for users signed in with ChatGPT.»)"
+    }
+  ]
+}
