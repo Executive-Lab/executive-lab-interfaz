@@ -35,3 +35,10 @@ Ver la decisión 170 y la comprobación «las credenciales que no son un .env» 
 ## Next
 
 Decidir los ficheros de acceso de la raíz de una aplicación (apuntado en la 167).
+
+## La revisión (PR #67)
+
+Tres retoques de la revisión de seguridad: la regex de URL con credenciales acotada (de 750 ms a menos de 100 en
+63 KB), la contraseña entre comillas de `.netrc` entera, y las lecturas del inventario por orden de importancia
+(primer nivel, carpetas con nombre de credenciales, resto del segundo nivel; un nombre inequívoco no gasta lectura).
+Una mutación por retoque, todas tumbadas. Detalle en la decisión 170, subsección «La revisión».

@@ -7784,3 +7784,20 @@ tiempo de ejecución. 8 mutaciones (quitar `refresh_token`, quitar el segundo ni
 `paraProteger`, quitar el taparlas de texto, mirar dentro de aplicaciones anidadas, `.ppk`, quitar
 `limpio.etiqueta` de `ruta()` y quitar `RUTA_SEGURA`): 7 tumbadas. Sobrevive quitar solo `limpio.etiqueta`, porque
 `RUTA_SEGURA` ya cubre sola ese caso (dos defensas, la 167 las puso juntas). Ninguna palabra nueva en pantalla: el diccionario no cambia.
+
+### La revisión
+
+La revisión de seguridad de la PR #67 encontró tres cosas, arregladas:
+
+- **Una expresión regular que se disparaba** (`conexiones.secretosDeTexto`, URL con usuario y contraseña): un fichero de
+  63 KB con `http://a:` repetido tardaba 750 ms. Usuario `{1,64}` y contraseña `{1,256}`; con la entrada del
+  informe ahora tarda menos de 100 ms (prueba con tiempo, entrada construida al ejecutar).
+- **`.netrc` con la contraseña entre comillas** (`password "ab cd efghijklmnop"`) solo tapaba `"ab`. Ahora va primero
+  la alternativa con comillas.
+- **El tope de 60 lecturas** se gastaba en el segundo nivel antes de llegar a lo importante. Ahora el orden es: el primer
+  nivel, las subcarpetas con nombre de credenciales (`keys`, `secrets`, `credentials`…) y después el resto del segundo
+  nivel; y un `.json` que su nombre ya identifica (`credentials.json`) no gasta lectura. Prueba: 37 subcarpetas con 2
+  `.json` y credenciales en `zeta/`, `secrets/` y `datos/keys/`, que se siguen viendo.
+
+Una mutación por retoque (quitar las cotas, quitar las comillas, volver al orden de antes, y contar de nuevo los
+nombres inequívocos): las cuatro tumbadas.
