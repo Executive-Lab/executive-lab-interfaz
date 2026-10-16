@@ -7,9 +7,15 @@
 //                                           se queda pendiente, y la barra lo ofrece con su botón)
 //   node aplicar.js <carpeta> --ajena --poner-freno   (ese botón: el freno, con su sí)
 //   node aplicar.js <carpeta> --ajena --poner-bloque  (el otro: el bloque de CLAUDE.md, con su sí)
-//   node aplicar.js <carpeta> --historial-ajeno   (su historial no lo creó la barra, aunque haya dicho
-//                                           que sí a montar encima: nada de lo que decide su equipo
-//                                           se apaga; `--ajena` lo dice también)
+//   node aplicar.js <carpeta> --git <ruta>  (el git con el que mirar de quién es su historial; sin
+//                                           esto, el que haya)
+//
+// De quién es su historial lo mira esto solo, con git (decisión 161): en una
+// carpeta cuyo historial no creó la barra, nada de lo que decide su equipo se
+// apaga, y lo que no se puede leer cuenta como de alguien. `--ajena` y
+// `--historial-ajeno` solo pueden añadir: lo dan por de alguien aunque git diga
+// que no. Con `--historial-ajeno`, la barra lo dice también cuando la persona ha
+// dicho que sí a montar encima, que es tocar sus ficheros y no decidir por su equipo.
 //
 // RSC trata esto como una "own skill": vive en el repo del alumno, funciona
 // para quien clone sin ejecutar nada, y RSC nunca la instala, actualiza ni
@@ -32,15 +38,14 @@ const path = require('node:path');
 const sitios = require('./sitios');
 const noEntra = require('./no-entra-en-git');
 const { comoHabilidad, cuandoDe } = require('./como-habilidad');
+const historialDeLaCarpeta = require('./historial-ajeno');
 
 const [, , destinoBruto, ...banderas] = process.argv;
 const forzar = banderas.includes('--forzar');
 const ajena = banderas.includes('--ajena');
 const ponerFreno = banderas.includes('--poner-freno');
 const ponerBloque = banderas.includes('--poner-bloque');
-// El sí a montar encima es a tocar sus ficheros, no a decidir por su equipo
-// (decisión 161): por eso va aparte de `--ajena`, que con ese sí no se pasa.
-const historialAjeno = ajena || banderas.includes('--historial-ajeno');
+const conQueGit = banderas.includes('--git') ? banderas[banderas.indexOf('--git') + 1] : null;
 
 if (!destinoBruto) {
   console.error('Dime en qué carpeta. Ejemplo:\n  node aplicar.js "~/Documentos/Mi Empresa IA"');
@@ -52,6 +57,18 @@ if (!fs.existsSync(destino)) {
   console.error(`No existe esa carpeta:\n  ${destino}`);
   process.exit(1);
 }
+
+// Su historial, mirado aquí y no solo por quien llama (revisión de la 161): a mano
+// no hay barra que lo diga. Lo mismo que mira la barra (`historial-ajeno.js`), con
+// un git que espera. Si git no se puede usar, la respuesta es de error, y eso
+// cuenta como de alguien.
+function preguntarAGit(args) {
+  const hecho = require('node:child_process').spawnSync(conQueGit || 'git', ['-c', 'core.fsmonitor=false', ...args], {
+    cwd: destino, encoding: 'utf8', windowsHide: true, timeout: 20000,
+  });
+  return { codigo: hecho.error || hecho.status === null ? -1 : hecho.status, salida: hecho.stdout || '' };
+}
+const historialAjeno = ajena || banderas.includes('--historial-ajeno') || historialDeLaCarpeta.esAjenoEsperando(destino, preguntarAGit);
 
 const origen = __dirname;
 const hechos = [];

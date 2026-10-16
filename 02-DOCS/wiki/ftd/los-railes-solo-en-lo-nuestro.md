@@ -30,11 +30,12 @@ alguien era decidir por su equipo (P4). Decisión 161.
   `--historial-ajeno`, y nada si no está `.rsc/`.
 - `arrancar.js` (`ponerLosRailes`): el historial, mirado para todos los caminos.
 - Comentarios de `decidir.js` y `reglas.js`.
+- De la revisión de la PR #54: `historial-ajeno.js` nuevo, en las dos copias, que usan `aplicar.js` y
+  `terreno.js`; `extension.js` (los raíles detrás de «Revisar y arreglar»); y los README.
 
 **Fuera**
 - `.no-knowledge-sync` y `.no-auto-update` (decisión 145): siguen en todas las carpetas, por P9.
 - Un botón para encender lo que apagó una barra de antes en una carpeta de alguien.
-- Que «Revisar y arreglar» ponga los raíles detrás, como el montaje.
 
 ## Checklist
 
@@ -46,6 +47,12 @@ alguien era decidir por su equipo (P4). Decisión 161.
 - [x] 5. Sin `.rsc/`, los raíles no la crean. Reproducido con el `sync` del paquete: antes se perdía lo declarado.
 - [x] 6. Pruebas en `humo.js` (cuatro nuevas y dos del montaje de verdad) y mutaciones a mano.
 - [x] 7. Decisión 161 y este documento.
+- [x] 8. Revisión, 1: `aplicar.js` mira solo de quién es el historial, a mano y sin banderas; lo que no se puede
+  leer, de alguien; las banderas solo añaden. README al día.
+- [x] 9. Revisión, 2: `historialAjeno` ya no falla abierto (rama huérfana, HEAD roto, git que no deja leer), y la
+  barra y los raíles lo deciden con el mismo código.
+- [x] 10. Revisión, 3: los seis caminos que ponen los raíles, probados con su sí y sin él.
+- [x] 11. Revisión, 4: «Revisar y arreglar» pone los raíles detrás, con el botón y solo.
 
 ## Evidence
 
@@ -70,4 +77,3 @@ alguien era decidir por su equipo (P4). Decisión 161.
 
 - Ver en una carpeta de verdad de un equipo que, al abrirla con la barra, su `.rsc.json` no cambia.
 - El botón para encender lo que apagó una barra de antes, en «Lo que tiene apagado».
-- «Revisar y arreglar» con los raíles detrás.

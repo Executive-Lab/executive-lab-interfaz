@@ -6573,13 +6573,41 @@ clon lo rehace. Era decidir por su equipo, y P4 dice que lo suyo no se toca.
 - En una carpeta de alguien, un botón en «Lo que tiene apagado» para encender lo que apagó una barra de antes.
   Se reconoce por lo que dice el fichero, pero solo en el ordenador donde lo dejó: en un clon lo rehízo RSC con
   su texto.
-- Que «Revisar y arreglar» ponga los raíles detrás, como el montaje. Una carpeta de la barra traída a otro
-  ordenador cuyo `.rsc.json` todavía no apuntaba las tres, y arreglada solo con ese botón, las espera hasta la
-  próxima vez que se pongan los raíles. Antes de esta decisión pasaba igual, salvo con los raíles de una
-  versión anterior, y entonces se perdía lo de arriba.
 
 `humo.js`: 433 comprobaciones con `--con-arnes` y main traído (la 0.53.0), 425 sin él. Cuatro son nuevas, y tres de ellas
 corren el `sync` del paquete de verdad. Y dos montajes de verdad lo miran: el de una carpeta vacía y el de un
 proyecto de alguien. 13 mutaciones a mano, las 13 tumbadas. Dos de ellas, corridas además con `--con-arnes`,
 caen también en los montajes de verdad. `contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29),
 el diccionario y `revisar-powershell.js`, en verde.
+
+**Lo que encontró la revisión de la PR #54**, arreglado, cada cosa con su prueba y sus mutaciones:
+
+- **La protección vivía en quien llama.** Los README dicen `node skills/aplicar.js <carpeta>`, y así, sin
+  banderas, en la carpeta de Ana se ponían las tres, y un `sync` las apuntaba en su `.rsc.json`. Ahora
+  `aplicar.js` mira solo de quién es el historial, con git. Si git no se puede usar, la carpeta es de alguien.
+  Las banderas solo pueden añadir: `--ajena` o `--historial-ajeno` la dan por de alguien aunque git diga
+  que no. La barra le pasa su git (`--git`) y, como refuerzo, `--historial-ajeno`. Los README lo dicen.
+- **Una sola verdad para los dos.** Cómo se decide vive en `media/railes/historial-ajeno.js`, y lo usan la
+  barra (`terreno.historialAjeno`, con su git que no bloquea) y los raíles (con uno que espera). Una prueba
+  recorre diez historiales y exige que los dos digan lo mismo.
+- **`historialAjeno` fallaba abierto.** `rev-list` sale con error igual en un historial recién creado que en
+  una rama huérfana de uno con commits, o con un git que no deja leer (`safe.directory`, un HEAD roto), y todo
+  eso se tomaba por nuestro. Ahora solo es «recién creado» si HEAD apunta a una rama que todavía no existe y
+  no hay ninguna otra referencia. Lo demás es de alguien. Afecta también a la rama principal abierta (145) y a
+  lo de la 157. Una carpeta que acaba de crear la barra sigue siendo nuestra: su marca se mira antes, y sin
+  commits también lo es.
+- **Nada probaba los caminos con un sí.** `historialAjeno && !ponerBloque` sobrevivía. Una prueba recorre los
+  seis caminos que ponen los raíles, en una carpeta de alguien y en una de la barra, y mira lo que se le pasa
+  a `aplicar.js`:
+  - los botones del freno y del bloque;
+  - ponerlos al día al abrir;
+  - detrás de «Revisar y arreglar»;
+  - preparar también para otro asistente;
+  - el paso del montaje con su sí a montar encima.
+- **«Revisar y arreglar» pone los raíles detrás**, con el botón y cuando se hace solo al abrir. En una carpeta de
+  la barra traída a otro ordenador, `repair` rehace `.rsc/` sin lo nuestro, y salía el aviso que manda a
+  correr `npx @ericrisco/rsc@latest`. Se reponen como al abrir: solo si la carpeta ya los tiene, porque
+  reponer no es decidir, y si el arreglo no sale, no. Que no salgan no tumba el arreglo: se apunta para «Algo
+  va mal».
+
+PENDIENTE_DE_LOS_NUMEROS

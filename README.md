@@ -101,6 +101,10 @@ node skills/aplicar.js "~/Documentos/Mi Empresa IA"
 
 No pisa nada de lo que haya escrito la persona y se puede repetir las veces que haga falta.
 
+Mira solo, con git, de quién es el historial de esa carpeta. Si no lo creó la barra, no apaga nada
+de lo que decide su equipo (las marcas que RSC apunta en su `.rsc.json`), y si git no se puede usar la
+trata como de alguien (decisión 161).
+
 ---
 
 ## 🤖 Para agentes: instrucciones ejecutables
@@ -206,6 +210,10 @@ Por último, los raíles de Executive Lab (idioma y vocabulario), que viajan den
 ```bash
 node ~/.vscode/extensions/executivelab.arnes-ui-*/media/railes/aplicar.js "<su carpeta>"
 ```
+
+Mira solo, con git, de quién es el historial de esa carpeta. Si no lo creó la barra, no apaga nada
+de lo que decide su equipo (las marcas que RSC apunta en su `.rsc.json`), y si git no se puede usar la
+trata como de alguien (decisión 161).
 
 ### Paso 4 — verificar
 

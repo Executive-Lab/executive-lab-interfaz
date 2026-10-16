@@ -5776,6 +5776,215 @@ exec git "$@"
     }
   });
 
+  // ── Lo que encontró la revisión de la 161 ─────────────────────────────
+
+  const CUATRO_161 = ['.no-audit', '.no-gitmoji', '.no-scope-check', '.no-worktree-cleanup'];
+  const DE_ESTA_MAQUINA_161 = ['.no-scope-check'];
+  const git161 = (carpeta, ...args) => require('node:child_process').execFileSync('git', args, { cwd: carpeta, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const commit161 = (carpeta, asunto) => git161(carpeta, '-c', 'user.name=Ana', '-c', 'user.email=ana@example.com', 'commit', '-q', '--allow-empty', '-m', asunto);
+  // Una carpeta montada, con su primer commit y, si se pide, la marca de la barra.
+  const conHistorial161 = (prefijo, primerAsunto, { marca = false } = {}) => {
+    const carpeta = montada161(prefijo);
+    commit161(carpeta, primerAsunto);
+    if (marca) git161(carpeta, 'config', '--local', 'executivelab.historial', 'nuestro');
+    return carpeta;
+  };
+
+  await comprobar('a mano y sin banderas, los raíles miran solos de quién es el historial, y las banderas solo añaden', () => {
+    // Revisión de la 161, 1. La protección vivía en quien llama: `node aplicar.js
+    // <carpeta>`, como dicen los README, ponía las tres en la carpeta de Ana, y un
+    // `sync` las apuntaba en su `.rsc.json`.
+    const deAna = conHistorial161('railes-a-mano-ana-', 'Lo mío');
+    ponerLosRailes161(deAna);
+    assert.deepEqual(lasMarcas161(deAna), DE_ESTA_MAQUINA_161, `a mano, en la de Ana, se decide por su equipo: ${lasMarcas161(deAna).join(' · ')}`);
+    sincronizar161(deAna);
+    assert.deepEqual(optOutsDe161(deAna), [], 'a mano, en su .rsc.json acaba algo que decidió la barra');
+    for (const [como, carpeta] of [
+      ['por su raíz', conHistorial161('railes-a-mano-raiz-', 'Punto de partida — Contratos')],
+      ['por su marca', conHistorial161('railes-a-mano-marca-', 'Lo mío', { marca: true })],
+    ]) {
+      ponerLosRailes161(carpeta);
+      assert.deepEqual(lasMarcas161(carpeta), CUATRO_161, `en una de la barra (${como}), no se callan`);
+    }
+    // Lo que no se puede leer es de alguien: con un git que no está.
+    const sinGit = conHistorial161('railes-sin-git-', 'Punto de partida — Contratos');
+    ponerLosRailes161(sinGit, '--git', path.join(os.tmpdir(), 'railes-no-hay-git-aqui'));
+    assert.deepEqual(lasMarcas161(sinGit), DE_ESTA_MAQUINA_161, 'sin poder leer su historial, se decide por su equipo');
+    // Y las banderas solo añaden: en una de la barra, con ellas, es de alguien.
+    for (const bandera of ['--historial-ajeno', '--ajena']) {
+      const forzada = conHistorial161('railes-forzada-', 'Punto de partida — Contratos');
+      ponerLosRailes161(forzada, bandera);
+      assert.deepEqual(lasMarcas161(forzada), DE_ESTA_MAQUINA_161, `con ${bandera}, en una de la barra, se decide por su equipo`);
+    }
+    return 'de Ana: solo lo de esta máquina · de la barra, por raíz o por marca: las cuatro · sin git y con bandera: de alguien';
+  });
+
+  await comprobar('la barra y los raíles dicen lo mismo de quién es un historial, y lo que no se puede leer es de alguien', async () => {
+    // Revisión de la 161, 2. `rev-list` sale con error igual en un historial recién
+    // creado que en una rama huérfana de uno con commits, y las dos se tomaban por
+    // nuestras. Lo usan también la rama principal abierta (145) y lo de la 157.
+    const CASOS = [
+      ['sin git', false, (c) => fs.rmSync(path.join(c, '.git'), { recursive: true, force: true })],
+      ['recién creado, sin commits', false, () => {}],
+      ['recién creado por la barra, con su marca', false, (c) => git161(c, 'config', '--local', 'executivelab.historial', 'nuestro')],
+      ['nacido en la barra', false, (c) => commit161(c, 'Punto de partida — Contratos')],
+      ['de alguien, con la marca de la barra', false, (c) => { commit161(c, 'Lo mío'); git161(c, 'config', '--local', 'executivelab.historial', 'nuestro'); }],
+      ['de alguien', true, (c) => commit161(c, 'Lo mío')],
+      ['dos historias juntadas', true, (c) => {
+        commit161(c, 'Punto de partida — Contratos');
+        const rama = git161(c, 'symbolic-ref', '--short', 'HEAD').trim();
+        git161(c, 'checkout', '-q', '--orphan', 'otra');
+        commit161(c, 'Lo mío');
+        git161(c, 'checkout', '-q', rama);
+        git161(c, '-c', 'user.name=Ana', '-c', 'user.email=ana@example.com', 'merge', '-q', '--allow-unrelated-histories', '-m', 'Juntas', 'otra');
+      }],
+      ['una rama huérfana de un historial con commits', true, (c) => { commit161(c, 'Lo mío'); git161(c, 'checkout', '-q', '--orphan', 'huerfana'); }],
+      ['HEAD en un commit que no está', true, (c) => fs.writeFileSync(path.join(c, '.git', 'HEAD'), `${'0123456789'.repeat(4)}\n`)],
+      ['un git que no deja leerlo', true, (c) => { commit161(c, 'Punto de partida — Contratos'); fs.writeFileSync(path.join(c, '.git', 'HEAD'), 'esto no es una cabeza\n'); }],
+    ];
+    const terrenoM = cargar('terreno');
+    const mal = [];
+    try {
+      for (const [como, esperado, preparar] of CASOS) {
+        const carpeta = montada161('railes-de-quien-');
+        preparar(carpeta);
+        vscode.guion.raiz = carpeta;
+        const dice = !(await terrenoM.podemosGuardarElPuntoDePartida());
+        ponerLosRailes161(carpeta);
+        const dicen = lasMarcas161(carpeta).join(' ') === DE_ESTA_MAQUINA_161.join(' ');
+        if (dice !== esperado || dicen !== esperado) mal.push(`${como}: la barra dice ${dice ? 'de alguien' : 'nuestra'}, los raíles ${dicen ? 'de alguien' : 'nuestra'}`);
+      }
+    } finally {
+      vscode.guion.raiz = empresa;
+    }
+    assert.deepEqual(mal, [], mal.join(' · '));
+    return `${CASOS.length} historiales, los dos dicen lo mismo`;
+  });
+
+  await comprobar('cada camino que pone los raíles, también con su sí, les dice que el historial es de alguien', async () => {
+    // Revisión de la 161, 3. `aplicar.js` lo mira solo; esto es el refuerzo, y nada
+    // lo probaba con un sí: `historialAjeno && !ponerBloque` sobrevivía.
+    const proveedor = vscode.registrado.proveedor;
+    const procesosM = cargar('procesos');
+    const arrancarM = cargar('arrancar');
+    const carpeta = conHistorial161('railes-caminos-', 'Lo mío');
+    ponerLosRailes161(carpeta);
+    const antes = { node: procesosM.node, informar: vscode.window.showInformationMessage, enviar: proveedor.enviar, refrescar: proveedor.refrescar };
+    const llamadas = [];
+    procesosM.node = async (args) => {
+      if (String(args[0]).endsWith('aplicar.js')) llamadas.push(args.slice(2));
+      return { codigo: 0, salida: '', error: '' };
+    };
+    vscode.window.showInformationMessage = async (_m, ...resto) => resto.find((b) => b === 'Ajustarlo ahora');
+    proveedor.enviar = () => {};
+    proveedor.refrescar = async () => {};
+    // [cómo, si lo suyo espera a su sí en una de alguien, y en una de la barra]
+    const CAMINOS = [
+      ['el freno, con su botón', [true, true], () => proveedor.ponerElFreno()],
+      ['lo de siempre, con su botón', [true, false], () => proveedor.ponerElBloque()],
+      ['al día, al abrir', [true, false], () => proveedor.ponerLosRailesAlDia(true)],
+      ['detrás de «Revisar y arreglar»', [true, false], () => proveedor.arreglar()],
+      ['preparar también para otro asistente', [true, false], () => arrancarM.prepararTambienPara('codex', { extensionPath: RAIZ })],
+      ['el paso del montaje, con su sí a montar encima', [false, false], () => arrancarM.COMO_SE_HACE.ponerLosRailes({ contexto: { extensionPath: RAIZ }, parte: { estado: 'empezada' } })],
+    ];
+    const mal = [];
+    const recorrer = async (deAlguien) => {
+      for (const [como, ajena, hacer] of CAMINOS) {
+        llamadas.length = 0;
+        await hacer();
+        if (!llamadas.length) { mal.push(`${como}: no pone los raíles`); continue; }
+        const con = (b) => llamadas.every((l) => l.includes(b));
+        if (con('--historial-ajeno') !== deAlguien) mal.push(`${como}: ${deAlguien ? 'no les dice que es de alguien' : 'les dice que es de alguien en una de la barra'}`);
+        if (!con('--git')) mal.push(`${como}: sin el git de la barra`);
+        if (con('--ajena') !== ajena[deAlguien ? 0 : 1]) mal.push(`${como}: lo suyo ${ajena[deAlguien ? 0 : 1] ? 'no espera' : 'espera'} a su sí`);
+      }
+    };
+    vscode.guion.raiz = carpeta;
+    try {
+      await recorrer(true);
+      git161(carpeta, 'config', '--local', 'executivelab.historial', 'nuestro');
+      await recorrer(false);
+    } finally {
+      procesosM.node = antes.node;
+      vscode.window.showInformationMessage = antes.informar;
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      vscode.guion.raiz = empresa;
+    }
+    assert.deepEqual(mal, [], mal.join(' · '));
+    return `${CAMINOS.length} caminos, en una de alguien y en una de la barra`;
+  });
+
+  await comprobar('«Revisar y arreglar» pone los raíles detrás, con el botón y solo, y solo donde ya estaban', async () => {
+    // Revisión de la 161, 4. En una carpeta de la barra traída a otro ordenador,
+    // `.rsc/` es nueva: `repair` rehace lo del arnés y no lo nuestro, y salía el
+    // aviso que manda a correr `npx @ericrisco/rsc@latest`.
+    const proveedor = vscode.registrado.proveedor;
+    const soporteM = cargar('soporte');
+    const terrenoM = cargar('terreno');
+    const proyectoM = cargar('proyecto');
+    const traida = () => {
+      const carpeta = conHistorial161('railes-arreglar-', 'Punto de partida — Contratos');
+      ponerLosRailes161(carpeta);
+      fs.rmSync(path.join(carpeta, '.rsc'), { recursive: true, force: true });
+      fs.mkdirSync(path.join(carpeta, '.rsc'));
+      return carpeta;
+    };
+    const antes = {
+      arreglar: soporteM.arreglar, enviar: proveedor.enviar, refrescar: proveedor.refrescar, vista: proveedor.vista, donde: proveedor.donde,
+      reconocer: terrenoM.reconocer, radiografia: terrenoM.radiografia, version: proyectoM.versionDelCatalogo,
+      confianza: vscode.guion.confianza, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+    };
+    let sale = true;
+    soporteM.arreglar = async () => (sale ? { ok: true, mensaje: 'Arreglado. Vuelve a probar lo que estabas haciendo.' } : { ok: false, mensaje: 'No he podido arreglarlo yo solo.' });
+    proveedor.enviar = () => {};
+    proveedor.refrescar = async () => {};
+    try {
+      // Con el botón: si el arreglo no sale, nada; si sale, los raíles detrás.
+      const conBoton = traida();
+      vscode.guion.raiz = conBoton;
+      sale = false;
+      await proveedor.arreglar();
+      assert.deepEqual(lasMarcas161(conBoton), [], 'con el arreglo fallido, se ponen los raíles');
+      sale = true;
+      await proveedor.arreglar();
+      assert.deepEqual(lasMarcas161(conBoton), CUATRO_161, `detrás del botón, faltan marcas: ${lasMarcas161(conBoton).join(' · ')}`);
+
+      // Solo, al abrir (P9).
+      const sola = traida();
+      vscode.guion.raiz = sola;
+      vscode.guion.confianza = true;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      proyectoM.versionDelCatalogo = () => cargar('rsc').VERSION_DE_RESPALDO;
+      terrenoM.reconocer = async () => ({ arnes: null });
+      terrenoM.radiografia = async () => ({ piezas: [{ nombre: 'Lo que debería estar puesto', estado: 'no', arreglo: { como: 'solo', accion: { tipo: 'arreglar' }, alAbrir: true } }] });
+      proveedor.vista = { visible: true, webview: { postMessage: () => {} } };
+      proveedor.donde = { tipo: 'quieto' };
+      await proveedor.hacerSoloLoQueSePuede();
+      assert.deepEqual(lasMarcas161(sola), CUATRO_161, `detrás del arreglo solo, faltan marcas: ${lasMarcas161(sola).join(' · ')}`);
+
+      // Donde no estaban, no: reponer no es decidir.
+      const sinRailes = montada161('railes-arreglar-sin-');
+      vscode.guion.raiz = sinRailes;
+      await proveedor.arreglar();
+      assert.ok(!fs.existsSync(path.join(sinRailes, '.claude', 'skills', 'executive-lab')), 'arreglar pone los raíles donde no estaban');
+      assert.deepEqual(lasMarcas161(sinRailes), [], 'arreglar calla avisos donde no hay raíles');
+      return 'con el botón y solo, detrás; fallido o sin raíles, nada';
+    } finally {
+      soporteM.arreglar = antes.arreglar;
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      proveedor.vista = antes.vista;
+      proveedor.donde = antes.donde;
+      terrenoM.reconocer = antes.reconocer;
+      terrenoM.radiografia = antes.radiografia;
+      proyectoM.versionDelCatalogo = antes.version;
+      vscode.guion.confianza = antes.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+      vscode.guion.raiz = empresa;
+    }
+  });
+
   // ── Lo que encontró la revisión de F3 ─────────────────────────────────
 
   await comprobar('enganchar el freno no se lleva lo de la persona que comparte su grupo', () => {

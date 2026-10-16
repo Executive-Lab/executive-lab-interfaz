@@ -95,6 +95,10 @@ Y por último, los raíles de Executive Lab (idioma y vocabulario), que van dent
 node <carpeta-de-la-extension>/media/railes/aplicar.js "<su carpeta>"
 ```
 
+Mira solo, con git, de quién es el historial de esa carpeta. Si no lo creó la barra, no apaga nada
+de lo que decide su equipo (las marcas que RSC apunta en su `.rsc.json`), y si git no se puede usar la
+trata como de alguien (decisión 161).
+
 **Lo que no debes hacer:** encender la vista sencilla por tu cuenta. Es un ajuste de carpeta
 (`executiveLab.vistaSencilla`) y lo decide esa persona, desde el botón de la barra o cuando el
 asistente se lo pregunte al terminar. Su editor es suyo.
