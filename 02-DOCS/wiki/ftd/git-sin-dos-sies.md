@@ -62,17 +62,19 @@ esperaba parado: en un Mac, hasta 45 minutos. Decisión 165.
   salidas.
 - [x] 7. Diccionario y decisión 165.
 - [x] 8. Comprobaciones en verde y mutaciones (ver Evidence).
+- [x] 9. Refuerzos de la revisión de seguridad: la huella del instalador de Windows (y carpeta propia), git
+  a medias tras recargar (con su plazo de 15 minutos) y lo contestado que caduca a los 7 días.
 
 ## Evidence
 
-- `node extension/prueba/humo.js`: de 419 a 428. Las nueve nuevas están en la decisión 165. Cambian tres de
+- `node extension/prueba/humo.js`: de 419 a 429 (460 con main traído). Las diez nuevas están en la decisión 165. Cambian tres de
   antes: la de «sin git se pregunta» pasa a ser la de donde no se puede poner solo, y dos que leían el
   código buscaban formas que han cambiado.
 - `extension/prueba/windows.js`: una nueva (git fuera del PATH), que solo corre en la máquina Windows de
   GitHub.
 - `mapeos-codex.js` (29), `contrato.js` (15), `empresas-distintas.js` y `comprobar-diccionario.js`, en
   verde.
-- Mutaciones a mano: 14 hechas, las 14 tumbadas. Las guardas de retomar tras recargar (confianza, carpeta conocida, nada que preguntar, misma rama, nada de nadie, historial solo en carpeta vacía), lo guardado (de otra carpeta no vale; se guarda; se olvida al montar), una sola instalación a la vez, el código 2 de Windows, `/DIR` sin administrador, git buscado por su sitio y su carpeta delante para RSC. Tres sobrevivieron a la primera y se les puso la prueba que las tumba, en las que ya había: la confianza y la carpeta conocida (la prueba de retomar tenía git sin poner, y el «no» venía de git, no de su guarda), lo guardado de otra carpeta, y `git()` buscando donde deja git su instalador en Windows.
+- Mutaciones a mano: 24 hechas, las 24 tumbadas. Las 14 primeras, sobre las guardas de retomar tras recargar, lo guardado, una sola instalación, el código 2, `/DIR` y git por su sitio; tres sobrevivieron a la primera y se les puso la prueba que las tumba (la confianza y la carpeta conocida, que la prueba de retomar tenía git sin poner y el «no» venía de git; lo guardado de otra carpeta; y `git()` buscando donde deja git su instalador). Las 10 de los refuerzos: la huella sin comparar, sin huella, descarga en ruta fija, git a medias que vale (dos formas), relanzar tras recargar, esperar sin plazo, no apuntar cuándo empezó, lo contestado sin caducar y sin fecha que vale. Todas tumbadas por la prueba de los refuerzos.
 
 ## Next
 

@@ -152,6 +152,36 @@ const mismo = (a, b) => path.resolve(String(a).trim()).toLowerCase() === path.re
     return donde;
   });
 
+  // Los avisos del sistema (decisión 162), sin lanzar ninguno: en esta máquina
+  // nadie los vería, y una prueba no enseña avisos de verdad.
+  await comprobar('el enganche de los avisos corre en Git Bash con el relevo, y sale con 0', () => {
+    const al = cargar('ajustes-locales');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-'));
+    fs.mkdirSync(path.join(carpeta, ...al.AVISAR.slice(0, -1)), { recursive: true });
+    fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(carpeta, ...al.AVISAR));
+    // Un tipo que no avisa: si sale con 0, el relevo ha encontrado node y el guion ha corrido.
+    const hecho = cp.spawnSync(bash, ['-c', al.ORDEN_DE_AVISAR], {
+      input: JSON.stringify({ hook_event_name: 'Notification', notification_type: 'auth_success' }),
+      encoding: 'utf8',
+      env: { ...conRelevo, CLAUDE_PROJECT_DIR: carpeta },
+      timeout: 30000,
+    });
+    assert.equal(hecho.status, 0, `${hecho.stdout}${hecho.stderr}`);
+    return 'node del relevo, guion encontrado';
+  });
+
+  await comprobar('el guion de los avisos lo entiende PowerShell 5.1, sin correrlo', async () => {
+    const { pathToFileURL } = require('node:url');
+    const { GUION_DE_WINDOWS } = await import(pathToFileURL(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs')).href);
+    const leer = `$e = $null; [void][System.Management.Automation.Language.Parser]::ParseInput($env:EL_GUION, [ref]$null, [ref]$e); if ($e.Length) { $e | ForEach-Object { $_.Message }; exit 1 }; 'bien'`;
+    const hecho = cp.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', leer], {
+      env: { ...process.env, EL_GUION: GUION_DE_WINDOWS }, encoding: 'utf8', timeout: 60000,
+    });
+    assert.equal(hecho.status, 0, `${hecho.stdout}${hecho.stderr}`);
+    assert.match(hecho.stdout, /bien/);
+    return 'sin errores al leerlo';
+  });
+
   await comprobar('para los guiones en Python, la barra elige py -3', async () => {
     const conexiones = cargar('conexiones');
     const elegido = await conexiones.quePython();

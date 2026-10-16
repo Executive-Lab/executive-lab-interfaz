@@ -19,8 +19,9 @@ alumno que se cae en el paso 2 no llega nunca al 9.
 | 4 | Responde el wizard | Ya no está en el instalador: lo hace el panel al elegir carpeta (decisión 27). ¿Se entienden solas las preguntas? | Por confirmar |
 | 5 | Espera | Unos minutos con una barra de progreso | Aceptable |
 | 6 | Abre el acceso directo | Debería salir su barra, sin barras ni pestañas | Hecho |
-| 7 | **Inicia sesión** | Necesita cuenta de pago. Si no la tiene, aquí se acaba | Avisado en la barra (§19); quién paga sigue abierto |
+| 7 | **Inicia sesión** | Necesita cuenta de pago. Si no la tiene, aquí se acaba | Avisado en la barra el primer día (§19; no salía nunca hasta la decisión 164); quién paga sigue abierto |
 | 7b | **Falta git** | Sin él no se puede preparar ninguna carpeta | Resuelto: el panel lo instala con un botón (decisión 26) |
+| 7c | Termina de preparar la carpeta | Salía una lista técnica de catorce filas | Resuelto: la principal, y la lista solo si algo está roto (decisión 164) |
 | 8 | Primera conversación | El asistente le pregunta; los raíles lo llevan | Hecho |
 | 9 | Conecta una herramienta | Guía paso a paso y campos con su pista | Hecho |
 | 10 | Se atasca | *Algo va mal* → código para el tutor | Hecho, sin probar en real |
@@ -80,6 +81,11 @@ pide iniciar sesión, y ahí se queda parado el que no la tenga.
 
 **Recomendación:** lo segundo se hace en una hora y evita el atasco más tonto. Lo tercero es tuyo.
 
+**Hecho a medias (decisión 164):** la barra no puede saber si hay sesión —vive en el llavero del sistema—, así
+que el primer día, recién montada la carpeta, la tarjeta de arriba es «Abre Claude y entra con tu cuenta ·
+Hace falta una cuenta de pago», con su botón. Existía desde el §19 y no salía nunca. Sigue sin detectar la
+sesión de verdad.
+
 ## 4. Lo que sigue costando dentro, ya instalado
 
 **Buscar ya no habla con el asistente** (hecho el 17-09-2026). La barra indexa la wiki, los botones
@@ -104,13 +110,35 @@ pequeño. Un *«Ayer dejaste X a medias»* arriba del todo valdría más. (Hecho
 por: …», con «Seguir donde lo dejé». Lo que sigue sin decir es si lo de ayer se guardó: eso está en la
 línea de las copias.)
 
-## 5. Lo que ya no cuesta (y por qué)
+## 5. El primer día, después de montar (decisión 164)
+
+Una revisión de producto pintó cada momento del primer día con la barra de mentira y lo montó con RSC 3.0.22
+de verdad. Lo que se encontró, y cómo queda:
+
+- **Al terminar salía «Qué falta por montar»**, catorce filas, porque sin conexiones, sin conocimiento y sin
+  copia fuera contaba como «falta». Ahora se va a la principal; la lista sale solo si algo está roto.
+- **La tarjeta de la cuenta de pago no salía nunca**: contaba como trabajo el punto de partida que guarda la
+  barra. Ahora sale el primer día, delante de todo, y se va con lo primero que se haga.
+- **Sugerencias decía «no veo nada»**: los objetivos del montaje no daban ninguna habilidad. Ahora cada uno
+  tiene la suya en una tabla («Poner orden en mis facturas» → Facturación).
+- **Lo aplazado se mandaba a «Histórico»**, que en la barra sencilla no existe. Ahora las copias y GitHub
+  están en Ayuda › Sugerencias, con su botón. Y «Seguir sin copias» sigue montando: antes se paraba, y la
+  principal sin git solo ofrecía ponerlo.
+- **Las copias solas venían apagadas.** Ahora, cada hora, de fábrica; nunca en el historial de otro ni en una
+  carpeta sin copias.
+- **En Habilidades, lo de la barra era «Tuyo»**, y por eso salía Recordatorios. Ahora va plegado con lo del
+  arnés.
+
+Lo que queda: verlo en un VS Code de verdad, y quién paga la cuenta (§3).
+
+## 6. Lo que ya no cuesta (y por qué)
 
 - **La instalación**: un doble clic, sin Node, sin terminal, sin npm.
 - **Elegir dónde trabajar**: se pregunta, y se puede cambiar.
 - **Las claves**: guía paso a paso, campo por campo, con de dónde sale cada una.
 - **Los ficheros**: no se ven. La wiki se lee dentro, sin markdown ni rutas.
-- **Git**: se llama *Guardar copia de seguridad* y *Volver a como estaba antes*.
+- **Git**: se llama *Guardar en git* y *Ver las copias guardadas*, y desde la decisión 164 guarda solo cada
+  hora, de fábrica.
 - **Cuando se rompe**: un código de seis letras para el tutor, no una pantalla roja.
 - **El editor de quien ya lo usaba**: un interruptor por carpeta. Su VS Code no se entera.
 - **Buscar algo**: se escribe y aparece, sin abrir una conversación ni esperar (§4, primer punto).

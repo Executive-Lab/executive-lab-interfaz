@@ -567,7 +567,8 @@ async function ponerLosRailes(contexto, { ajena = false, ponerFreno = false, pon
 }
 
 // Lo de esta persona en los ajustes de Claude de esta carpeta (decisión 157): que
-// le hable en español y que le pregunte antes de subir a GitHub. Al montar y, en
+// le hable en español, que le pregunte antes de subir a GitHub y, desde la 162, que
+// le avise cuando termina o le necesita. Al montar y, en
 // las carpetas que ya estaban montadas, al abrir. Solo en una carpeta cuyo
 // historial creó la barra, como la rama principal abierta (P4), y que se montó en
 // este ordenador (`terreno.montadaAqui`): en la de alguien, o en un clon, sus
@@ -589,11 +590,11 @@ async function ponerLoDeClaude() {
 }
 
 // «Quitarlo», desde el aviso que lo cuenta: es local y se deshace. Lo quitado no
-// vuelve a ponerse al abrir.
-async function quitarLoDeClaude() {
+// vuelve a ponerse al abrir. `que`: lo que cuenta ese aviso, o todo (decisión 162).
+async function quitarLoDeClaude(que = null) {
   const raiz = proyecto.raiz();
   if (!raiz) return { hecho: 'sinCarpeta' };
-  return ajustesLocales.quitarLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra });
+  return ajustesLocales.quitarLosDeLaBarra({ raiz, estaEnGit: estaEnGitConLaBarra, que });
 }
 
 // Si lo que toca ficheros de esta persona tiene que esperar a su sí (C-4): el
@@ -1147,7 +1148,7 @@ async function elCamino(contexto, salida, { yaConfirmado = false, permisoDado = 
     ...visto,
     git: { ...visto.git, sigueSinCopias: Boolean(loQueDecidio(contexto).get(CLAVE_SIN_GIT)) },
   };
-  const plan = rumbo.elegirRama(parte);
+  let plan = rumbo.elegirRama(parte);
   salida.appendLine(`[arrancar] ${plan.rama}: ${plan.porQue}`); // diccionario: interno
   const memoria = loQueDecidio(contexto);
   let guardadas = lasRespuestas.leer(memoria);
@@ -1190,13 +1191,22 @@ async function elCamino(contexto, salida, { yaConfirmado = false, permisoDado = 
     if ((await confirmarDentroDeOtro(parte)) !== 'seguir') return { ok: false, cancelado: true };
   }
 
+  // «Seguir sin copias» es seguir (decisión 164): se monta ya, sin ellas, con las
+  // preguntas de siempre. Ponerlas queda en Ayuda › Sugerencias, y se dice al
+  // terminar (`sinCopias`).
+  let sinCopias = false;
   if (plan.rama === 'sinGit') {
     // Dicho que estaba y sin verlo: no se vuelve a empezar, que sería un bucle.
     if (yaConfirmado) return noSePusoGit({ mensaje: 'git dice que está, y no lo encuentro' }, salida); // diccionario: interno
-    // Sin poder ponerlo solo, se pregunta como siempre. Si se puede, pulsar era
-    // el sí (decisión 165).
-    if (!parte.git.sePuedeInstalarSolo) return decidirSobreGit(contexto);
-    return prepararMientrasSePoneGit(contexto, parte, salida, guardadas);
+    // Si se puede poner solo, pulsar era el sí (decisión 165).
+    if (parte.git.sePuedeInstalarSolo) return prepararMientrasSePoneGit(contexto, parte, salida, guardadas);
+    // Sin poder ponerlo solo, se pregunta como siempre.
+    const decidido = await decidirSobreGit(contexto, parte);
+    if (!decidido.sigueSinCopias) return decidido;
+    parte.git = { ...parte.git, sigueSinCopias: true };
+    plan = rumbo.elegirRama(parte);
+    salida.appendLine(`[arrancar] sin copias, porque lo eligió: ${plan.rama}`); // diccionario: interno
+    sinCopias = true;
   }
 
   if (plan.rama === 'yaEstaba') {
@@ -1217,7 +1227,7 @@ async function elCamino(contexto, salida, { yaConfirmado = false, permisoDado = 
   const hecho = await hacerLosPasos(plan, parte, respuestas, contexto, salida);
   // Montado, o con un no a montar encima de lo suyo: lo guardado ya no sirve.
   if (guardadas && (hecho.ok || hecho.sinPermiso)) await lasRespuestas.olvidar(memoria);
-  return hecho;
+  return sinCopias ? { ...hecho, sinCopias: true } : hecho;
 }
 
 // ── Git, con un solo sí (decisión 165) ──────────────────────────────────
@@ -1333,6 +1343,8 @@ async function recordarSiSeMontaAqui(plan) {
   return terreno.recordarQueSeMontoAqui();
 }
 
+const SIN_COPIAS_HASTA_QUE_QUIERAS = 'Sigo sin copias. Puedes ponerlas cuando quieras desde Ayuda › Sugerencias.';
+
 // Sin git no hay copias de seguridad. Se explica qué se pierde y se deja
 // elegir: Jose lo quiso así, y hasta ahora esto era un callejón — la pantalla
 // se quedaba sin ofrecer nada.
@@ -1353,7 +1365,9 @@ async function decidirSobreGit(contexto) {
 
   if (elegido === seguir) {
     await loQueDecidio(contexto).update(CLAVE_SIN_GIT, true);
-    return { ok: false, sigueSinCopias: true, mensaje: 'Sigo sin copias. Puedes ponerlo cuando quieras desde Histórico.' };
+    // Decía «desde Histórico», que en la barra sencilla no existe: están en
+    // Sugerencias, con su botón (decisión 164).
+    return { ok: false, sigueSinCopias: true, mensaje: SIN_COPIAS_HASTA_QUE_QUIERAS };
   }
   if (elegido === ponerlo) return { ok: false, faltaGit: true };
   return { ok: false, cancelado: true };
@@ -1671,5 +1685,5 @@ module.exports = {
   prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
   COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
-  COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO,
+  COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO, SIN_COPIAS_HASTA_QUE_QUIERAS,
 };

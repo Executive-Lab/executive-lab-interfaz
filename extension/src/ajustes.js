@@ -73,16 +73,22 @@ function ponerPermiso(cual) {
 
 // En horas. El cero es "no lo hagas".
 const CADA_CUANTO = [
-  { id: 0, nombre: 'Solo cuando yo lo diga', frase: 'Como hasta ahora: se guarda cuando pulsas el botón.' },
+  { id: 0, nombre: 'Solo cuando yo lo diga', frase: 'Se guarda cuando pulsas el botón.' },
   { id: 1, nombre: 'Cada hora', frase: 'Mientras tengas esto abierto y haya algo nuevo que guardar.' },
   { id: 8, nombre: 'Un par de veces al día', frase: 'Suficiente para no perder una mañana de trabajo.' },
 ];
 
 const CLAVE_GUARDADO = 'executiveLab.guardarSolo';
 
+// De fábrica, cada hora (decisión 164): el mismo valor que el `default` del
+// `package.json`, que es el que da el editor de verdad. Aquí también, para que
+// sin ajuste —o con uno que no es de la lista— no se apague sin decirlo. Hay una
+// prueba que exige que los dos digan lo mismo.
+const DE_FABRICA = 1;
+
 const cadaCuantoGuarda = () => {
   const puesto = vscode.workspace.getConfiguration().get(CLAVE_GUARDADO);
-  return CADA_CUANTO.some((c) => c.id === puesto) ? puesto : 0;
+  return CADA_CUANTO.some((c) => c.id === puesto) ? puesto : DE_FABRICA;
 };
 
 async function ponerCadaCuanto(horas) {
@@ -145,5 +151,5 @@ function comoEstamos() {
 }
 
 module.exports = {
-  comoEstamos, ponerPermiso, ponerCadaCuanto, cadaCuantoGuarda, PERMISOS, CADA_CUANTO, CLAVE_GUARDADO,
+  comoEstamos, ponerPermiso, ponerCadaCuanto, cadaCuantoGuarda, PERMISOS, CADA_CUANTO, CLAVE_GUARDADO, DE_FABRICA,
 };

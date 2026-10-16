@@ -488,7 +488,11 @@ const sinNombreQueValga = (etiqueta, frase) => `
     </div>
     <p class="pista">${texto(frase)}</p>`;
 
-const filaDeHabilidad = (c) => (!c.prompt
+// La que está siempre activa (`executive-lab`, de los raíles): un botón que la
+// pide no hace nada, así que se ve sin él, con lo que hace (decisión 164).
+const filaDeHabilidad = (c) => (c.siempre
+  ? sinNombreQueValga(c.nombre, c.frase || '')
+  : !c.prompt
   ? sinNombreQueValga(c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1), 'Su nombre no se puede usar para pedirla. Pídele al asistente que se lo cambie.')
   : filaDeAccion({
   etiqueta: c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1),
@@ -598,7 +602,9 @@ function pantallaSaberes(datos) {
     ${deSerie.length ? `
       <details class="acordeon grupo">
         <summary>Las del arnés<span class="cuantos">${deSerie.length}</span></summary>
-        <p class="detalle">Las monta el arnés para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.</p>
+        <p class="detalle">${deSerie.some((c) => c.deLaBarra)
+          ? 'Las montan el arnés y la barra para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.'
+          : 'Las monta el arnés para funcionar. Están puestas como las demás; van plegadas porque no se piden a menudo.'}</p>
         ${deSerie.map(filaDeHabilidad).join('')}
       </details>` : ''}
 
@@ -1084,7 +1090,9 @@ function pantallaAsistente({ ahora, ajuste = 'automatico', montada = false, cual
           ? (a.mandaTexto
             ? 'Puesto en este ordenador. Los botones le mandan el texto directamente.'
             : 'Puesto en este ordenador. Los botones abren su barra y te dejan el texto copiado, porque no admite que se lo pasen.')
-          : 'No está en este ordenador. Díselo a tu tutor.')}</p>
+          : 'No está en este ordenador.')}</p>
+        ${/* Se pone con un clic, y se vuelve aquí (decisión 166). */''}
+        ${a.instalado ? '' : boton({ etiqueta: `Poner ${a.nombre}`, icono: '⬇️', pequeno: true, accion: { tipo: 'ponerElAsistente', cual: a.id, desde: 'asistente' } })}
         ${a.instalado && a.id !== ahora && !a.delArnes
           ? '<p class="pista">Esta carpeta no se montó para él: al cambiar, la preparo también para él.</p>'
           : ''}
@@ -1242,6 +1250,19 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
     ${version && version.esta ? `
       <hr class="separador">
       <h2>Esta barra</h2>
+      ${loDeLaVersion(version)}` : ''}
+
+  `;
+}
+
+// ── Esta barra: la versión, y lo que se hace con ella ────────────────────
+//
+// Lo enseñan Ayuda y su pantalla, a la que lleva «Barra 0.53.0» de abajo de la
+// principal. Ese botón abría Más ayuda, y lo que prometía la propuesta de la barra
+// sencilla era esto: Actualizar ahora y Probar las versiones nuevas antes
+// (decisión 166).
+function loDeLaVersion(version) {
+  return `
       ${version.nueva && version.puesta === version.nueva ? `
         <p class="detalle">${texto(`Ya está puesta la ${version.nueva}. Recarga la ventana para empezar a usarla: no se pierde nada.`)}</p>
         ${boton({ etiqueta: 'Recargar ahora', icono: '🔄', accion: { tipo: 'recargar' } })}` : (version.nueva ? `
@@ -1260,8 +1281,22 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
         <p class="detalle">Te llegan las versiones de prueba antes que a nadie.</p>
         ${boton({ etiqueta: 'Dejar de probarlas antes', pequeno: true, discreto: true, accion: { tipo: 'probarAntes', cual: false } })}` : `
         ${boton({ etiqueta: 'Probar las versiones nuevas antes', icono: '🧪', pequeno: true, discreto: true, accion: { tipo: 'probarAntes', cual: true } })}
-        <p class="detalle">Te llegan antes que a nadie, para ver si van bien. Alguna puede fallar.</p>`}` : ''}
+        <p class="detalle">Te llegan antes que a nadie, para ver si van bien. Alguna puede fallar.</p>`}`;
+}
 
+function pantallaEstaBarra({ version = null } = {}) {
+  return `
+    ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Esta barra' }])}
+    ${bloqueAviso()}
+    ${volver()}
+
+    <div class="brujula">
+      <h2>Esta barra</h2>
+    </div>
+    ${version && version.esta ? loDeLaVersion(version) : ''}
+
+    <hr class="separador">
+    ${boton({ etiqueta: 'Más ayuda', icono: '🆘', pequeno: true, discreto: true, accion: { tipo: 'verAyuda' } })}
   `;
 }
 
@@ -1816,15 +1851,20 @@ function pantallaSinArnes() {
     // Esperando con lo contestado, también aquí se puede dejar de esperar.
     loQueToca = `<p class="detalle">${texto(PONIENDO_GIT[estado.poniendoGit] || PONIENDO_GIT.solo)}</p>
       ${estado.poniendoGit === 'conLasRespuestas' && estado.esperandoAGit ? boton({ etiqueta: 'Seguir sin copias', icono: '↷', discreto: true, accion: { tipo: 'seguirSinCopias' } }) : ''}`;
-  } else if (estado.faltaGit && !estado.gitAlPreparar) {
+  } else if (estado.faltaGit && !estado.sigueSinCopias && !estado.gitAlPreparar) {
+    // Sin git, lo primero es ponerlo; salvo si ya eligió seguir sin copias
+    // (decisión 164): entonces se prepara sin ellas.
     loQueToca = bloqueFaltaGit();
   }
 
+  // «Lo último» encabezaba también una carpeta vacía, donde no hay nada que
+  // contar (decisión 164): solo sale si ya había algo.
+  const hayAlgo = Boolean(estado.yaEmpezada || estado.aMedioPreparar);
   return `
     ${bloqueAviso()}
     ${lineaDeVarias()}
     <div class="brujula">
-      <h2>Lo último</h2>
+      ${hayAlgo ? '<h2>Lo último</h2>' : ''}
       <p class="donde">${texto(estado.donde)}</p>
       <p class="hiciste">${texto(estado.aviso)}</p>
     </div>
@@ -1875,7 +1915,9 @@ function pantallaPrincipalSencilla() {
   // sale la siguiente. Apagada la pieza, salen todas, como en la completa.
   const recargar = estado.versionPuesta && estado.versionPuesta === estado.hayVersionNueva;
   const enOrden = [
-    estado.faltaGit ? bloqueFaltaGit() : '',
+    // Sin git, arriba; salvo si eligió seguir sin copias: entonces está en
+    // Sugerencias, con su botón, y no tapa lo demás (decisión 164).
+    estado.faltaGit && !estado.sigueSinCopias ? bloqueFaltaGit() : '',
     t.sinAsistente, t.primerPaso, t.sinAjustar,
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
@@ -2016,7 +2058,8 @@ function lineaDeLasCopias() {
 function pieDeLaBarra() {
   return `
     <div class="fila pie">
-      ${estado.versionDeLaBarra ? boton({ etiqueta: `Barra ${estado.versionDeLaBarra}`, pequeno: true, discreto: true, accion: { tipo: 'verAyuda' } }) : ''}
+      ${/* Lleva a lo de la versión, no a Más ayuda (decisión 166). */''}
+      ${estado.versionDeLaBarra ? boton({ etiqueta: `Barra ${estado.versionDeLaBarra}`, pequeno: true, discreto: true, accion: { tipo: 'verEstaBarra' } }) : ''}
       ${boton({ etiqueta: 'Cambiar de proyecto', icono: '📂', pequeno: true, discreto: true, accion: { tipo: 'elegirCarpeta' } })}
     </div>`;
 }
@@ -2119,10 +2162,16 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNo', id: `version:${laNueva}` } })}
     </div>`);
 
+  // Y se pone desde aquí: decía «Díselo a tu tutor», y es una extensión del
+  // editor que la barra ya sabe poner con un clic (decisión 166). El botón va
+  // dentro de la tarjeta: es una cosa, no dos.
+  const ponerlo = (principal) => (estado.ponerElAsistente && estado.ponerElAsistente.accion
+    ? boton({ etiqueta: estado.ponerElAsistente.etiqueta, icono: '⬇️', principal, accion: estado.ponerElAsistente.accion }) : '');
   const sinAsistente = estado.faltaElAsistente && !estado.primerPaso ? `
     <div class="aviso malo">
       <p>Falta ${texto(estado.faltaElAsistente)} en este ordenador, y sin él no puedo hablar con nadie.</p>
-      <p>Díselo a tu tutor: es lo único que falta.</p>
+      <p>Es lo único que falta.</p>
+      ${ponerlo(true)}
     </div>` : '';
 
   // ── Montado, pero sin ajustar a esta barra ────────────────────────────
@@ -2146,13 +2195,13 @@ function lasTarjetas() {
     <div class="conexion">
       <p class="nombre">${texto(estado.primerPaso.instalado
         ? `Abre ${estado.primerPaso.asistente} y entra con tu cuenta`
-        : `Falta instalar ${estado.primerPaso.asistente}`)}</p>
+        : `Falta ${estado.primerPaso.asistente} en este ordenador`)}</p>
       <p class="pista">${texto(estado.primerPaso.instalado
         ? 'Hace falta una cuenta de pago. Sin ella no te va a contestar.'
-        : 'Díselo a tu tutor: falta algo por instalar y sin eso no puede hablar con nadie.')}</p>
+        : 'Sin él no puedo hablar con nadie. Es lo único que falta.')}</p>
       ${estado.primerPaso.instalado
         ? boton({ etiqueta: `Abrir ${estado.primerPaso.asistente}`, icono: '▸', principal: true, accion: { tipo: 'abrirAsistente' } })
-        : ''}
+        : ponerlo(true)}
     </div>
     <hr class="separador">` : '';
 
@@ -3312,10 +3361,16 @@ function pantallaIncidencia({ codigo, fichero, sano, desconocido, hayQueTocarAlg
   // Sin el diagnóstico del arnés no se sabe, y no se dice «He encontrado algo»
   // ni se ofrece arreglar lo que no se ha visto. Y nada de «tu empresa»: esto
   // puede ser un departamento (revisión de F7, m4).
+  //
+  // Lo que se dice y lo que se ofrece salen de lo mismo: si hay algo que el
+  // arreglo puede tocar, se dice que se ha encontrado algo. Antes una carpeta sana
+  // decía «He mirado y está todo bien.» y ofrecía «Arreglarlo ahora» (decisión 166).
+  const arreglable = !faltaGit && ((!sano && !desconocido) || hayQueTocarAlgo);
+  const todoBien = !faltaGit && !arreglable && sano;
   const queDigo = faltaGit
     ? 'Falta una pieza en este ordenador, y sin ella no puedo hacer casi nada.'
-    : (sano ? 'He mirado y está todo bien.'
-      : (desconocido ? 'No he podido revisarlo entero.' : 'He encontrado algo y puedo intentar arreglarlo.'));
+    : (arreglable ? 'He encontrado algo y puedo intentar arreglarlo.'
+      : (sano ? 'He mirado y está todo bien.' : 'No he podido revisarlo entero.'));
 
   return `
     <p class="titulo">Algo va mal</p>
@@ -3324,13 +3379,19 @@ function pantallaIncidencia({ codigo, fichero, sano, desconocido, hayQueTocarAlg
     ${faltaGit ? `<p class="detalle">${texto(comoSeInstalaGit || '')}</p>` : ''}
     <p class="detalle">Si hablas con tu tutor, dale este código:</p>
     <span class="codigo">${texto(codigo)}</span>
-    ${faltaGit
-      ? boton({ etiqueta: 'Ponerla ahora', icono: '⬇️', principal: true, accion: { tipo: 'instalarGit' } })
-      : ((!sano && !desconocido) || hayQueTocarAlgo ? boton({ etiqueta: 'Arreglarlo ahora', icono: '🛠️', principal: true, accion: { tipo: 'arreglar' } }) : '')}
+    ${faltaGit ? boton({ etiqueta: 'Ponerla ahora', icono: '⬇️', principal: true, accion: { tipo: 'instalarGit' } }) : ''}
+    ${arreglable ? boton({ etiqueta: 'Arreglarlo ahora', icono: '🛠️', principal: true, accion: { tipo: 'arreglar' } }) : ''}
+    ${/* Con todo sano, lo que no va no es la carpeta: lo mira el asistente, con
+          este informe delante (decisión 166). */''}
+    ${todoBien ? `
+      <p class="detalle">Si algo no te va, cuéntaselo al asistente: le paso este informe y lo repasa todo.</p>
+      ${boton({ etiqueta: 'Contárselo al asistente', icono: '🩺', principal: true, accion: { tipo: 'resolverIncidencia', cual: 'algoVaMal' } })}` : ''}
     ${fichero ? boton({ etiqueta: 'Enseñar el informe', icono: '📄', accion: { tipo: 'verElInforme', fichero } }) : ''}
     ${/* Y que le llegue a quien hace la barra, con el informe y su código:
-          así Jose y el tutor hablan de lo mismo (decisión 131). */''}
-    ${boton({ etiqueta: 'Contárselo a Executive Lab', icono: '📣', accion: { tipo: 'contarLaIncidencia' } })}
+          así Jose y el tutor hablan de lo mismo (decisión 131). Con todo sano,
+          solo si lo que falla es la barra (decisión 166). */''}
+    ${todoBien ? '<p class="detalle">Si lo que falla es esta barra, cuéntaselo a quien la hace.</p>' : ''}
+    ${boton({ etiqueta: 'Contárselo a Executive Lab', icono: '📣', discreto: todoBien, accion: { tipo: 'contarLaIncidencia' } })}
   `;
 }
 
@@ -3500,7 +3561,7 @@ function atender(data) {
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
-          'seAdapta', 'laUltimaVez']) {
+          'seAdapta', 'sigueSinCopias', 'laUltimaVez']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }
@@ -3541,6 +3602,7 @@ function atender(data) {
     case 'foto': return pintar(pantallaFoto(data));
     case 'fijadas': return pintar(pantallaFijadas(data));
     case 'ayuda': return pintar(pantallaAyuda(data));
+    case 'estaBarra': return pintar(pantallaEstaBarra(data));
     case 'datosDeClientes': return pintar(pantallaDatosDeClientes(data.tabla));
     case 'reglas': return pintar(pantallaReglas(data));
     case 'asistente': return pintar(pantallaAsistente(data));

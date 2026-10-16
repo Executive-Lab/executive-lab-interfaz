@@ -23,6 +23,16 @@
 //     en `ask` o en `deny`, aquí o en sus ajustes de usuario, se respeta. Un
 //     `allow` no cuenta: el `ask` le gana igual, y uno plantado en este fichero
 //     bastaba para que no se pusiera nunca (revisión de seguridad de la 157, B5).
+//   · Un enganche `Notification` (decisión 162) que llama a `avisar.mjs`, de la
+//     habilidad de la casa: un aviso del sistema cuando Claude te pregunta algo
+//     (`permission_prompt`) o ha terminado (`idle_prompt`), para quien se va a
+//     otra ventana mientras trabaja (code.claude.com/docs/en/hooks). Como el
+//     freno, con `node` a secas y la carpeta entre comillas: la forma sin shell
+//     (`args`) pide un `node.exe` de verdad en Windows, y el relevo no lo es. No
+//     se pone si esta persona ya tiene algún enganche `Notification`, aquí, en
+//     los de la carpeta o en los suyos de usuario (ya se avisa a su manera), ni
+//     si alguno apaga todos los enganches, ni si uno no se entiende, ni si el
+//     guion no está todavía en la carpeta: llamaría a un fichero que no hay.
 //
 // Con el cuidado del control remoto (decisión 143, `control-remoto.js`):
 //   · sin tocar nada más del fichero, y entero o nada, con sus permisos;
@@ -56,11 +66,23 @@ const IDIOMA = 'español';
 const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
 const FICHERO = ['.claude', 'settings.local.json'];
 const CONSTANCIA = ['.rsc', 'executive-lab-ajustes-locales.json'];
+// Lo que la barra sabe poner aquí, por su nombre: lo que se puede quitar por separado.
+const LO_QUE_SE_PONE = ['idioma', 'preguntar', 'avisos'];
+
+// Los avisos del sistema (decisión 162). La orden, como la del freno.
+const AVISAR = ['.claude', 'skills', 'executive-lab', 'avisar.mjs'];
+const ORDEN_DE_AVISAR = 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/executive-lab/avisar.mjs" "${CLAUDE_PROJECT_DIR}"';
+// Solo letras, `_` y `|`: Claude lo lee como dos nombres exactos.
+const CUANDO_AVISAR = 'permission_prompt|idle_prompt';
+// Segundos. El guion se corta antes él solo; esto es por si acaso.
+const TOPE_DE_AVISAR = 10;
+const elEngancheDeAvisar = () => ({ matcher: CUANDO_AVISAR, hooks: [{ type: 'command', command: ORDEN_DE_AVISAR, timeout: TOPE_DE_AVISAR }] });
 
 const carpetaDeClaude = (entorno = process.env, casa = os.homedir()) => entorno.CLAUDE_CONFIG_DIR || path.join(casa, '.claude');
 
 const esEnlace = (ruta) => { try { return fs.lstatSync(ruta).isSymbolicLink(); } catch { return false; } };
 const tiene = (datos, clave) => Boolean(datos) && Object.prototype.hasOwnProperty.call(datos, clave);
+const esUnObjeto = (x) => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 // Un objeto; `{}` si no está; null si no se entiende.
 function leer(fichero) {
@@ -94,11 +116,12 @@ function queDice(ajustes, regla) {
 const yaLoDice = (ajustes, regla) => ['deny', 'ask'].includes(queDice(ajustes, regla));
 
 // La huella de lo que dejó la barra, atada a la carpeta donde lo dejó: una
-// constancia traída de otro sitio no casa.
-function laHuella(raiz, { language = null, ask = [] } = {}) {
+// constancia traída de otro sitio no casa. Los avisos solo entran si están, así
+// que una constancia de la 157 sigue casando.
+function laHuella(raiz, { language = null, ask = [], avisos = false } = {}) {
   let donde = raiz;
   try { donde = fs.realpathSync(raiz); } catch { /* la que hay */ }
-  const que = JSON.stringify({ donde, language, ask: [...ask].sort() });
+  const que = JSON.stringify({ donde, language, ask: [...ask].sort(), ...(avisos ? { avisos: true } : {}) });
   return crypto.createHash('sha256').update(que).digest('hex');
 }
 
@@ -109,8 +132,32 @@ function laConstancia(raiz) {
   if (!anotado || typeof anotado.huella !== 'string') return null;
   const ask = Array.isArray(anotado.ask) ? anotado.ask : [];
   if (!ask.every((r) => PREGUNTAR.includes(r)) || ![undefined, IDIOMA].includes(anotado.language)) return null;
-  const nuestro = { language: anotado.language || null, ask };
+  if (![undefined, true].includes(anotado.avisos)) return null;
+  const nuestro = { language: anotado.language || null, ask, avisos: anotado.avisos === true };
   return anotado.huella === laHuella(raiz, nuestro) ? nuestro : null;
+}
+
+// El enganche de los avisos tal como lo deja la barra. Si alguien lo ha cambiado,
+// ya es suyo: ni se quita ni se da por puesto.
+function esElDeAvisar(grupo) {
+  if (!esUnObjeto(grupo) || grupo.matcher !== CUANDO_AVISAR || !Array.isArray(grupo.hooks) || grupo.hooks.length !== 1) return false;
+  if (Object.keys(grupo).length !== 2) return false;
+  const [orden] = grupo.hooks;
+  return esUnObjeto(orden) && Object.keys(orden).length === 3
+    && orden.type === 'command' && orden.command === ORDEN_DE_AVISAR && orden.timeout === TOPE_DE_AVISAR;
+}
+
+// Lo que unos ajustes dicen de los avisos: 'nada', 'algo' (algún enganche
+// `Notification`, o todos apagados) o 'raro' (no se entiende cómo están).
+function queDicenDeAvisar(ajustes) {
+  if (!ajustes) return 'raro';
+  if (ajustes.disableAllHooks === true) return 'algo';
+  if (ajustes.hooks === undefined) return 'nada';
+  if (!esUnObjeto(ajustes.hooks)) return 'raro';
+  const avisos = ajustes.hooks.Notification;
+  if (avisos === undefined) return 'nada';
+  if (!Array.isArray(avisos)) return 'raro';
+  return avisos.length ? 'algo' : 'nada';
 }
 
 // Entero o nada: se escribe al lado y se cambia de golpe, con los permisos que
@@ -143,8 +190,9 @@ function enGitASecas(raiz, relativo) {
   }
 }
 
-// Lo que haría falta poner, sin poner nada: { idioma, preguntar }.
-function loQueFalta({ local, deLaCarpeta, suyos }) {
+// Lo que haría falta poner, sin poner nada: { idioma, preguntar, avisos }.
+// `conGuion`: si `avisar.mjs` ya está en la carpeta.
+function loQueFalta({ local, deLaCarpeta, suyos, conGuion = false }) {
   const idioma = !tiene(local, 'language') && Boolean(deLaCarpeta) && !tiene(deLaCarpeta, 'language')
     && Boolean(suyos) && !tiene(suyos, 'language');
   // Unos permisos con otra forma no se entienden: no se tocan.
@@ -152,7 +200,9 @@ function loQueFalta({ local, deLaCarpeta, suyos }) {
   const seEntienden = permisos === undefined
     || (permisos && typeof permisos === 'object' && !Array.isArray(permisos) && (permisos.ask === undefined || Array.isArray(permisos.ask)));
   const preguntar = seEntienden ? PREGUNTAR.filter((regla) => !yaLoDice(local, regla) && !yaLoDice(suyos, regla)) : [];
-  return { idioma, preguntar };
+  // Los avisos, solo si nadie dice nada de ellos en ninguno de los tres sitios.
+  const avisos = conGuion && [local, deLaCarpeta, suyos].every((ajustes) => queDicenDeAvisar(ajustes) === 'nada');
+  return { idioma, preguntar, avisos };
 }
 
 async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit = enGitASecas } = {}) {
@@ -177,13 +227,22 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   // mano o con «Quitarlo»): se respeta, y no se vuelve a poner en cada apertura
   // (revisión de corrección de la 157, M2). De la constancia solo cuenta lo que
   // tiene su huella.
-  const antes = laConstancia(raiz) || { language: null, ask: [] };
-  const sinQuitar = loQueFalta({ local, deLaCarpeta: leer(path.join(carpeta, 'settings.json')), suyos: leer(path.join(claude, 'settings.json')) });
+  const antes = laConstancia(raiz) || { language: null, ask: [], avisos: false };
+  // El guion, de verdad un fichero de la carpeta: sin él, cada aviso fallaría.
+  const guion = path.join(raiz, ...AVISAR);
+  let conGuion = false;
+  // Y ningún tramo del camino es un enlace: uno en `skills/` daría por bueno un guion de fuera.
+  const tramos = AVISAR.slice(1, -1).map((_, i) => path.join(raiz, ...AVISAR.slice(0, i + 2)));
+  try { conGuion = !tramos.some(esEnlace) && fs.lstatSync(guion).isFile(); } catch { /* todavía no está */ }
+  const sinQuitar = loQueFalta({
+    local, deLaCarpeta: leer(path.join(carpeta, 'settings.json')), suyos: leer(path.join(claude, 'settings.json')), conGuion,
+  });
   const falta = {
     idioma: sinQuitar.idioma && !antes.language,
     preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
+    avisos: sinQuitar.avisos && !antes.avisos,
   };
-  if (!falta.idioma && !falta.preguntar.length) return { hecho: 'yaEstaba', fichero };
+  if (!falta.idioma && !falta.preguntar.length && !falta.avisos) return { hecho: 'yaEstaba', fichero };
 
   try {
     const nuevo = { ...local };
@@ -192,30 +251,45 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
       const permisos = local.permissions || {};
       nuevo.permissions = { ...permisos, ask: [...(permisos.ask || []), ...falta.preguntar] };
     }
+    if (falta.avisos) {
+      const enganches = local.hooks || {};
+      nuevo.hooks = { ...enganches, Notification: [...(enganches.Notification || []), elEngancheDeAvisar()] };
+    }
     escribir(fichero, nuevo);
     // Después del fichero: si no se escribe, no hay constancia. Y con lo de antes,
     // para que lo que se quitó siga contando como quitado.
     const anotado = {
       language: falta.idioma || antes.language ? IDIOMA : null,
       ask: PREGUNTAR.filter((r) => falta.preguntar.includes(r) || antes.ask.includes(r)),
+      avisos: falta.avisos || antes.avisos,
     };
     fs.mkdirSync(path.dirname(constancia), { recursive: true });
     escribir(constancia, {
-      porQue: 'Lo puso la barra de Executive Lab (decisión 157). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
+      porQue: 'Lo puso la barra de Executive Lab (decisiones 157 y 162). Al quitarlo, solo se quita lo que sigue como lo dejó.', // diccionario: interno
       ...(anotado.language ? { language: anotado.language } : {}),
       ask: anotado.ask,
+      ...(anotado.avisos ? { avisos: true } : {}),
       huella: laHuella(raiz, anotado),
     });
   } catch (error) {
     return { hecho: 'fallo', fichero, error: error.message };
   }
-  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar };
+  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: falta.avisos };
 }
+
+// Lo que se puso en una vez, por su nombre, para que «Quitarlo» quite eso y nada más.
+const loQueSePuso = ({ idioma = false, preguntar = [], avisos = false } = {}) => [
+  ...(idioma ? ['idioma'] : []), ...(preguntar.length ? ['preguntar'] : []), ...(avisos ? ['avisos'] : []),
+];
 
 // Solo lo que puso la barra (la constancia, con su huella) y sigue como lo dejó:
 // si después lo cambió, es suyo. Y nada si el fichero está en git. Lo quitado no
 // vuelve: la constancia se queda y dice que la barra ya lo puso una vez.
-async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas } = {}) {
+//
+// `que`: de lo que se pone, qué se quita ('idioma', 'preguntar', 'avisos'). Sin
+// él, todo. El «Quitarlo» de un aviso quita lo que ese aviso cuenta: el de los
+// avisos del sistema no se lleva el español que se puso otro día.
+async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas, que = null } = {}) {
   if (!raiz) return { hecho: 'sinCarpeta' };
   const constancia = path.join(raiz, ...CONSTANCIA);
   const fichero = path.join(raiz, ...FICHERO);
@@ -228,21 +302,33 @@ async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas } = {}) {
   const local = leer(fichero);
   if (!local) return { hecho: 'ilegible', fichero };
 
+  const quitar = new Set(Array.isArray(que) ? que.filter((q) => LO_QUE_SE_PONE.includes(q)) : LO_QUE_SE_PONE);
   const nuevo = { ...local };
   let quitado = false;
-  if (anotado.language && nuevo.language === anotado.language) {
+  if (quitar.has('idioma') && anotado.language && nuevo.language === anotado.language) {
     delete nuevo.language;
     quitado = true;
   }
-  const nuestras = Array.isArray(anotado.ask) ? anotado.ask : [];
+  const nuestras = quitar.has('preguntar') && Array.isArray(anotado.ask) ? anotado.ask : [];
   const permisos = nuevo.permissions;
-  if (permisos && typeof permisos === 'object' && Array.isArray(permisos.ask)) {
+  if (nuestras.length && permisos && typeof permisos === 'object' && Array.isArray(permisos.ask)) {
     const ask = permisos.ask.filter((r) => !nuestras.includes(r));
     if (ask.length !== permisos.ask.length) {
       quitado = true;
       const { ask: _nuestras, ...resto } = permisos;
       nuevo.permissions = ask.length ? { ...resto, ask } : resto;
       if (!Object.keys(nuevo.permissions).length) delete nuevo.permissions;
+    }
+  }
+  // El enganche de los avisos, solo si sigue tal como lo dejó la barra.
+  const enganches = nuevo.hooks;
+  if (quitar.has('avisos') && anotado.avisos && esUnObjeto(enganches) && Array.isArray(enganches.Notification)) {
+    const avisos = enganches.Notification.filter((grupo) => !esElDeAvisar(grupo));
+    if (avisos.length !== enganches.Notification.length) {
+      quitado = true;
+      const { Notification: _nuestro, ...resto } = enganches;
+      nuevo.hooks = avisos.length ? { ...resto, Notification: avisos } : resto;
+      if (!Object.keys(nuevo.hooks).length) delete nuevo.hooks;
     }
   }
   if (quitado) escribir(fichero, nuevo);
@@ -252,16 +338,28 @@ async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas } = {}) {
 }
 
 // La frase de lo que se puso (P9: lo que se hace solo se dice).
-function laFrase({ idioma = false, preguntar = [] } = {}) {
-  const cosas = [idioma ? 'hablándote en español' : null, preguntar.length ? 'preguntándote antes de subir nada a GitHub' : null].filter(Boolean);
-  return cosas.length ? `He dejado a Claude ${cosas.join(' y ')}.` : null;
+function laFrase({ idioma = false, preguntar = [], avisos = false } = {}) {
+  const cosas = [
+    idioma ? 'hablándote en español' : null,
+    preguntar.length ? 'preguntándote antes de subir nada a GitHub' : null,
+    avisos ? 'avisándote cuando termine o te necesite, aunque estés en otra ventana' : null,
+  ].filter(Boolean);
+  if (!cosas.length) return null;
+  const dichas = cosas.length < 2 ? cosas[0] : `${cosas.slice(0, -1).join(', ')} y ${cosas[cosas.length - 1]}`;
+  return `He dejado a Claude ${dichas}.`;
 }
 
-module.exports = { IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, carpetaDeClaude, ponerLosDeLaBarra, quitarLosDeLaBarra, laFrase, queDice, laHuella };
+module.exports = {
+  IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, LO_QUE_SE_PONE, AVISAR, ORDEN_DE_AVISAR, CUANDO_AVISAR,
+  carpetaDeClaude, ponerLosDeLaBarra, quitarLosDeLaBarra, laFrase, loQueSePuso, queDice, laHuella, esElDeAvisar,
+};
 
+// `--quitar` quita todo lo de la barra; con `--solo=avisos` (o `idioma`,
+// `preguntar`, separados por comas), solo eso.
 if (require.main === module) {
   const args = process.argv.slice(2);
   const raiz = path.resolve(args.find((a) => !a.startsWith('--')) || process.cwd());
-  const hacer = args.includes('--quitar') ? () => quitarLosDeLaBarra({ raiz }) : () => ponerLosDeLaBarra({ raiz });
+  const solo = (args.find((a) => a.startsWith('--solo=')) || '').slice('--solo='.length).split(',').filter(Boolean);
+  const hacer = args.includes('--quitar') ? () => quitarLosDeLaBarra({ raiz, que: solo.length ? solo : null }) : () => ponerLosDeLaBarra({ raiz });
   hacer().then((hecho) => console.log(`ajustes de Claude de esta carpeta: ${hecho.hecho}`)); // diccionario: interno
 }
