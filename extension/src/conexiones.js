@@ -106,12 +106,15 @@ function carpetaDe(proveedorId) {
 
 // El README de cada proveedor empieza con "# Nombre". Si sigue siendo el
 // marcador de la plantilla, se usa el nombre de la carpeta.
+//
+// Sin seguir enlaces (decisión 159): lo que se lee de aquí acaba también escrito
+// en la guía en PDF, y un README que fuera un enlace a otro fichero lo metería
+// dentro. Y uno que fuera un enlace a /dev/zero colgaba cada repintado.
 function etiquetaDeProveedor(id, carpeta) {
-  try {
-    const primera = fs.readFileSync(path.join(carpeta, 'README.md'), 'utf8').split('\n')[0] || '';
-    const titulo = primera.replace(/^#\s*/, '').trim();
-    if (titulo && !titulo.includes('<')) return titulo;
-  } catch { /* sin README: caemos al nombre de la carpeta */ }
+  const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
+  const primera = (texto || '').split('\n')[0] || '';
+  const titulo = primera.replace(/^#\s*/, '').trim();
+  if (titulo && !titulo.includes('<')) return titulo;
   return PROVEEDORES[id.toLowerCase()] || humanizar(id);
 }
 
@@ -168,12 +171,9 @@ function leerEnv(fichero) {
 // La tercera columna es lo que el alumno necesita leer justo encima del campo.
 function dondeSeSacaCadaClave(carpeta) {
   const donde = new Map();
-  let texto;
-  try {
-    texto = fs.readFileSync(path.join(carpeta, 'CREDENTIALS.md'), 'utf8');
-  } catch {
-    return donde;
-  }
+  // Sin seguir enlaces, como el README (decisión 159).
+  const texto = leerSiEsUnFichero(path.join(carpeta, 'CREDENTIALS.md'));
+  if (texto === null) return donde;
 
   // La columna se busca por su cabecera («Dónde se saca», «Where to generate»):
   // si el asistente pone el tipo de acceso como tercera columna, no se lee como
@@ -342,36 +342,118 @@ function formaDeLaClave(clave, clases) {
 // sección "Cómo conectarla" del README de la herramienta cuando la investiga.
 // Los pasos técnicos de la plantilla de RSC (copiar el .env, dar permisos) no
 // se enseñan: eso lo hace el panel o el asistente, no el alumno.
-function comoSeConecta(carpeta) {
-  let texto;
-  try {
-    texto = fs.readFileSync(path.join(carpeta, 'README.md'), 'utf8');
-  } catch {
-    return [];
-  }
+// El asistente no siempre titula igual: le decimos "Cómo conectarla" pero
+// escribe "Qué hace falta" o "Antes de empezar" y el contenido es el bueno.
+// Se aceptan los títulos naturales antes que quedarnos sin guía. Pero si está
+// «Cómo conectarla», manda esa: desde la decisión 159 los raíles piden también lo
+// que hace falta antes de empezar, y puede venir en su propia sección, delante.
+const TITULOS = /^(c[oó]mo\s+(se\s+)?conect|qu[eé]\s+(hace\s+falta|necesitas)|antes\s+de\s+empezar|pasos|puesta\s+en\s+marcha)/i;
+const CONECTARLA = /^c[oó]mo\s+(se\s+)?conect/i;
+// Dos líneas que los raíles piden dentro de «Cómo conectarla» y que no son pasos
+// (decisión 159): lo que hace falta antes de empezar, y de dónde salen los pasos.
+const ANTES_DE_EMPEZAR = /^(?:antes\s+de\s+empezar|lo\s+que\s+hace\s+falta|qu[eé]\s+hace\s+falta|hace\s+falta)\s*:\s*(\S.*)$/i;
+const LA_FUENTE = /^(?:fuentes?|fuente\s+oficial|sources?)\s*:\s*(\S.*)$/i;
+// Una línea sin la marca de lista, sin negritas ni comillas invertidas.
+const enLimpio = (linea) => String(linea).trim().replace(/^(?:\d+[.)]|[-*])\s+/, '').replace(/\*\*|__|`/g, '').trim();
+const noEsUnPaso = (linea) => ANTES_DE_EMPEZAR.test(enLimpio(linea)) || LA_FUENTE.test(enLimpio(linea));
 
-  // El asistente no siempre titula igual: le decimos "Cómo conectarla" pero
-  // escribe "Qué hace falta" o "Antes de empezar" y el contenido es el bueno.
-  // Se aceptan los títulos naturales antes que quedarnos sin guía.
-  const TITULOS = /^(c[oó]mo\s+(se\s+)?conect|qu[eé]\s+(hace\s+falta|necesitas)|antes\s+de\s+empezar|pasos|puesta\s+en\s+marcha)/i;
-  const seccion = texto.split(/^##\s+/m).find((t) => TITULOS.test(t));
+function laSeccionDeLosPasos(texto) {
+  const secciones = texto.split(/^##\s+/m);
+  return secciones.find((t) => CONECTARLA.test(t)) || secciones.find((t) => TITULOS.test(t)) || null;
+}
+
+// `tope`: en la barra, ocho pasos; en la guía en PDF, todos los que haya (hasta 30).
+function comoSeConecta(carpeta, tope = 8) {
+  const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
+  if (texto === null) return [];
+  const seccion = laSeccionDeLosPasos(texto);
   if (!seccion) return [];
 
-  const util = (linea) => linea && !/[{<]/.test(linea) && !/\bcp\b|chmod|\.env\b/.test(linea);
+  const util = (linea) => linea && !/[{<]/.test(linea) && !/\bcp\b|chmod|\.env\b/.test(linea) && !noEsUnPaso(linea);
 
   const pasos = seccion.split('\n')
     .map((l) => l.match(/^\s*(?:\d+[.)]|[-*])\s+(.*\S)\s*$/))
     .filter(Boolean)
     .map((m) => m[1].replace(/[`*]/g, '').trim())
     .filter(util);
-  if (pasos.length) return pasos.slice(0, 8);
+  if (pasos.length) return pasos.slice(0, tope);
 
   // Sin lista, los párrafos de esa sección. Son menos cómodos de seguir, pero
   // dicen lo mismo y es mejor que una pantalla muda.
   return seccion.split(/\n\s*\n/).slice(1)
     .map((t) => t.replace(/\s*\n\s*/g, ' ').replace(/[`*]/g, '').trim())
     .filter((t) => util(t) && t.length > 20 && t.length < 400 && !t.startsWith('#') && !t.startsWith('|'))
-    .slice(0, 4);
+    .slice(0, Math.min(tope, 4));
+}
+
+// ── Lo que lee la guía en PDF (decisión 159) ─────────────────────────────
+//
+// Lo que hace falta antes de empezar (una cuenta, ser administrador, un plan),
+// si el asistente lo dejó escrito: en una línea «Antes de empezar: …» dentro de
+// «Cómo conectarla», o en su propia sección. Una lista de frases, o vacía.
+const TITULO_DE_ANTES = /^(antes\s+de\s+empezar|qu[eé]\s+(hace\s+falta|necesitas)|lo\s+que\s+hace\s+falta|requisitos)/i;
+function antesDeEmpezar(carpeta) {
+  const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
+  if (texto === null) return [];
+  const pasos = laSeccionDeLosPasos(texto);
+  const sirve = (t) => t && t.length <= 500 && !/[{<]/.test(t);
+  if (pasos) {
+    const enLinea = pasos.split('\n').map((l) => (enLimpio(l).match(ANTES_DE_EMPEZAR) || [])[1]).filter((t) => sirve(t && t.trim()));
+    if (enLinea.length) return enLinea.map((t) => t.trim()).slice(0, 6);
+  }
+  // Su propia sección, si no es la de los pasos.
+  const suya = texto.split(/^##\s+/m).slice(1).find((t) => TITULO_DE_ANTES.test(t.trim()) && t !== pasos);
+  if (!suya) return [];
+  const cuerpo = suya.split('\n').slice(1);
+  const lista = cuerpo.map((l) => l.match(/^\s*(?:\d+[.)]|[-*])\s+(.*\S)\s*$/)).filter(Boolean).map((m) => enLimpio(m[1])).filter(sirve);
+  if (lista.length) return lista.slice(0, 6);
+  return cuerpo.join('\n').split(/\n\s*\n/).map((t) => enLimpio(t.replace(/\s*\n\s*/g, ' '))).filter((t) => sirve(t) && !t.startsWith('|')).slice(0, 3);
+}
+
+// De dónde salen los pasos: la página oficial que el asistente leyó y el día en
+// que lo comprobó, en una línea «Fuente: <dirección> · comprobado el 15-10-2026».
+// La dirección, solo si va por http o https; el día, si es una fecha de verdad.
+// Null sin dirección.
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function laFecha(texto) {
+  const t = String(texto || '');
+  let anio;
+  let mes;
+  let dia;
+  let m = t.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (m) [anio, mes, dia] = [m[1], m[2], m[3]].map(Number);
+  else if ((m = t.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/))) [dia, mes, anio] = [m[1], m[2], m[3]].map(Number);
+  else if ((m = t.match(/\b(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+|del\s+)?(\d{4})\b/i))) {
+    dia = Number(m[1]);
+    mes = MESES.indexOf(m[2].toLowerCase().replace('setiembre', 'septiembre')) + 1;
+    anio = Number(m[3]);
+  }
+  if (!anio || !mes || !dia || anio < 2000 || anio > 2100) return null;
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) return null;
+  return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+const UNA_DIRECCION = /https?:\/\/[^\s<>()"'«»[\]]{1,500}/;
+function deDondeSale(carpeta) {
+  const texto = leerSiEsUnFichero(path.join(carpeta, 'README.md'));
+  if (texto === null) return null;
+  for (const linea of texto.split('\n')) {
+    if (linea.length > 1000) continue;
+    const resto = (enLimpio(linea).match(LA_FUENTE) || [])[1];
+    if (!resto) continue;
+    const direccion = (resto.match(UNA_DIRECCION) || [])[0];
+    if (!direccion) continue;
+    return { url: direccion.replace(/[.,;:]+$/, ''), fecha: laFecha(resto.replace(UNA_DIRECCION, ' ')) };
+  }
+  return null;
+}
+
+// Todo lo que la guía en PDF lee del README de una conexión. Null si no está.
+function laGuia(proveedorId) {
+  const carpeta = carpetaDe(proveedorId);
+  if (!carpeta) return null;
+  return { pasos: comoSeConecta(carpeta, 30), antes: antesDeEmpezar(carpeta), fuente: deDondeSale(carpeta) };
 }
 
 // Lo que el asistente dejó escrito para su informático (decisión 156), en una
@@ -398,10 +480,9 @@ function dondeSeConsigue(carpeta) {
     ['CREDENTIALS.md', /^-?\s*URL:\s*(https?:\/\/\S+)/m],
     ['.env.example', /Generate at:\s*(https?:\/\/\S+)/],
   ]) {
-    try {
-      const url = (fs.readFileSync(path.join(carpeta, fichero), 'utf8').match(patron) || [])[1];
-      if (url && !url.includes('...')) return url;
-    } catch { /* siguiente */ }
+    // Sin seguir enlaces, como el README (decisión 159).
+    const url = ((leerSiEsUnFichero(path.join(carpeta, fichero)) || '').match(patron) || [])[1];
+    if (url && !url.includes('...')) return url;
   }
   return null;
 }
@@ -1237,3 +1318,5 @@ const tienePrueba = (proveedorId) => {
 module.exports = { huella, tienePrueba, proveedores, claves, escribir, probar, scripts, loQueSePuedeMirar, ejecutar, etiquetaDeClave, enmascarar, leerEnv, taparClaves, valoresDeClaves, quePython };
 // Decisión 156: la clase de acceso, lo que pedirle a su informático y el fichero de acceso.
 Object.assign(module.exports, { comoSeEntra, clasesQueNombra, leerLasClases, paraTuInformatico, ponerFicheroDeAcceso, elQueBusca, NOMBRE_SECRETO, CABE_UN_FICHERO_DE_ACCESO });
+// Decisión 159: lo que lee la guía en PDF.
+Object.assign(module.exports, { laGuia, laFecha });

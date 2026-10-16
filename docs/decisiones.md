@@ -5959,3 +5959,138 @@ tiene otra persona.
 Queda fuera: lo que parece una clave se mira con una regla (mayúsculas, minúsculas y cifras revueltas,
 o una ristra hexadecimal larga). Una clave de solo minúsculas que no esté en esta carpeta pasaría, y
 un identificador revuelto que no lo es se taparía.
+
+## 159. La guía para sacar la clave, en PDF
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `la-guia-de-cada-clave`
+
+Jose: *«tiene que quedar claro la guía de cómo sacar la API key para cada conexión. Lo ideal es que te dé un
+PDF o alguna guía muy bien establecida de cómo sacarla y dónde meterla»*. Es lo que más cuesta en clase. La
+guía de un paso cada vez (decisión 146) va en la barra, al lado de los campos. Ahora, además, sale en papel:
+para tenerla al lado del ordenador o pasársela a un compañero.
+
+- **«La guía, en PDF»**, en la pantalla de cada conexión, al lado de «Pídeselo a tu informático». La escribe
+  la barra, sin instalar nada y sin red, la abre con el programa de siempre y lo dice en una frase (P9): «Te
+  he abierto la guía, y la tienes en Resultados (out), dentro de Documentos: «Guía para sacar la clave de
+  Holded.pdf».». La segunda no pisa la primera: lleva «(2)».
+- **Sin pasos no hay PDF vacío (P1).** El botón pasa a ser «Que el asistente prepare la guía», y le pide los
+  pasos de la documentación oficial, con su página y su fecha. Si se pulsa el del PDF con la pantalla vieja,
+  se dice y sale el mismo botón. El texto lo arma la extensión, que es quien tiene los datos (P6).
+- **Lo que lleva, en este orden:**
+  - el título, «Cómo sacar la clave de Holded y dónde ponerla»;
+  - debajo, en pequeño, que lo de arriba lo preparó el asistente y lo demás lo pone la barra. Lo del README
+    no habla con la voz de la barra;
+  - **Antes de empezar**: lo que hace falta (una cuenta, ser administrador, un plan), si el disco lo dice;
+  - **Los pasos**: los de «Cómo conectarla», numerados, y la página donde se hace, como enlace. En el PDF
+    salen todos, hasta 30; la barra sigue enseñando 8;
+  - **Qué dato es cada cosa**: cada clave por su nombre en la barra, con dónde se saca según su
+    CREDENTIALS.md. Nunca un valor;
+  - **Dónde ponerla**, igual para todas y según la clase de acceso (decisión 156): «Abre la barra de
+    Executive Lab → Conexiones (tools) → Holded → pega cada dato en su casilla → Guardar. Se prueba sola y te
+    dice si funciona.». Con usuario y contraseña, con un fichero («suéltalo encima de la barra»), entrando
+    con tu cuenta («pulsa «Entrar»») o con una dirección, lo suyo. «Se prueba sola» solo si trae prueba;
+  - **Si no puedes sacarla tú**: «Pídeselo a tu informático»;
+  - **Por seguridad**: la parte fija de la 156, dicha a quien la saca. Va en `informatico.js`, al lado de la
+    del informático, para que se revisen juntas;
+  - **De dónde sale**: «Comprobado el 15 de octubre de 2026 en <la página>. Esto cambia: si algo no cuadra,
+    mira lo que dice esa página.». Sin fecha, o sin fuente, «Pídele al asistente que compruebe estos pasos
+    en la página oficial.».
+- **Dónde se guarda, y por qué ahí:** en `01-TOOLS/<herramienta>/out/`.
+  - Es donde va lo que produce cada conexión (convención de RSC, `salidas.js`). Sale en Documentos, en
+    Resultados (out), en el grupo de su conexión, para abrirla o llevársela, como la foto del cerebro
+    (decisión 151).
+  - El `.gitignore` de la plantilla de RSC deja `out/` fuera de las copias, y está bien así: se vuelve a
+    hacer con un clic, y la de mañana dice lo de mañana. La foto del cerebro entra porque no se puede repetir.
+  - Si una conexión hecha a mano no deja `out/` fuera, entra en git sin que pase nada: no lleva ningún valor
+    de ninguna clave (hay prueba). Pesa unos pocos KB, nada que ver con la 147.
+- **Ningún valor de clave.** Todo lo que viene del disco pasa por el mismo tapado que el mensaje del
+  informático (`informatico.sinClaves`), trozo a trozo y otra vez sobre todo el documento. También el nombre
+  de la herramienta, que va en el título y en el nombre del fichero.
+- **Sin seguir enlaces.** Se escribe solo dentro de la carpeta de trabajo: si `out/` es un enlace a otro
+  sitio, no se escribe (como la foto, `foto.quedaDentro`). Un enlace que cuelga con su nombre cuenta como
+  ocupado, y se escribe con `wx`. Y los lectores del README y de CREDENTIALS.md de siempre (el nombre, los
+  pasos, dónde se saca cada clave y la página) pasan a no seguir enlaces, como los de la 156. Lo que leen
+  ahora acaba escrito en un fichero que se lleva, y un README que fuera un enlace a /dev/zero colgaba cada
+  repintado.
+- **El aviso no se lo come el vigía.** Escribir en `01-TOOLS/` despierta al vigía, que repintaba la conexión
+  sin el aviso a los 600 ms. Un aviso con `seQueda` se repinta con ella hasta que se va a otra cosa. Solo lo
+  lleva este: los demás avisos de la conexión siguen como estaban.
+
+**El PDF, a mano** (`extension/src/pdf.js`, sin `vscode` y sin dependencias). Es un PDF 1.4 de texto: el
+catálogo, las páginas y Helvetica y Helvetica-Bold, dos de las catorce que trae todo lector, con
+`WinAnsiEncoding`. Lleva los textos de cada página y la tabla `xref` con el byte donde empieza cada objeto.
+
+- Caben á é í ó ú ñ ü ¿ ¡ « » € —. Lo demás se cambia por algo que se lee: las flechas por «›», una «ő» por
+  «o», un dibujo por nada y lo que no tiene nada parecido por «?». Dentro de un texto del PDF, los
+  paréntesis y la barra van escapados y lo que no es ASCII, en octal. El fichero es ASCII de punta a punta, y
+  ningún texto lo rompe.
+- Las líneas se parten por el ancho de verdad de cada letra, con las tablas de Adobe para esas dos fuentes.
+  Varias páginas, con su pie («Executive Lab · 16 de octubre de 2026 · página 1 de 2»), y un título nunca
+  se queda solo al final de una página.
+- Los enlaces son anotaciones `/URI`, solo los de https y sin usuario ni clave dentro. El texto que se ve es
+  la dirección misma.
+
+**El raíl** (`SKILL.md`, §2 a, en las dos copias, que siguen idénticas): los pasos salen de la
+documentación oficial, la de hoy, con los nombres exactos de los menús y los botones. Delante va una línea
+`Antes de empezar: …` y detrás `Fuente: <dirección> · comprobado el 15-10-2026`, que es lo que lee la
+barra (también vale `2026-10-15` o «15 de octubre de 2026»). Y no se escribe un paso que no se haya
+comprobado. «Conectar algo nuevo» también lo pide. Los pasos siguen saliendo de «Cómo conectarla» aunque
+haya una sección «Antes de empezar» delante. Esas dos líneas no cuentan como pasos, ni en la barra ni en el
+PDF.
+
+**Las pruebas**: `humo.js` pasa de 401 a 403.
+
+- *El PDF a mano*: la tabla de saltos al byte, `/Size`, `/Count` y `/Length`, las fuentes con WinAnsi, cada
+  sustitución de letra, los anchos, partir sin pasarse ni perder nada, setenta pasos en varias páginas sin
+  salirse de los márgenes, el pie, ningún título huérfano con cualquier cantidad de relleno delante, y solo
+  el enlace de https.
+- *La guía*:
+  - dónde se escribe, que se abre y lo que se dice;
+  - que el aviso se queda con el vigía y se va al cambiar de paso;
+  - las siete secciones en su orden, con el texto de cada una, los acentos en WinAnsi, los dos enlaces y el
+    pie;
+  - ninguna clave sembrada en el `.env`, en el README y en CREDENTIALS.md, ni tal cual, ni codificada en una
+    dirección, en base64, en hexadecimal o en UTF-16;
+  - la segunda con «(2)», sin tocar la primera, y `out/` fuera de git con la plantilla;
+  - `out/` como enlace a otro sitio, un enlace que cuelga con su nombre y un README que es un enlace;
+  - la fuente con y sin fecha, una fecha que no existe y sin fuente;
+  - «Antes de empezar» en línea o en su sección;
+  - hasta 30 pasos;
+  - las cinco clases de acceso, y una clave con un fichero;
+  - sin pasos, en el panel y al pulsar;
+  - y el ejemplo de los raíles, tal cual, en las dos copias.
+
+**Mutaciones a mano: 51, las 51 tumbadas.** Cada una cambia una cosa y corre las pruebas de la guía:
+
+- 20 en el PDF: anchos, tabla, `/Count`, `/Length`, escapes, octal, sustituciones, NFC, enlaces http y sin
+  comprobar, líneas que se pasan, títulos huérfanos, margen, pie, WinAnsi, numeración y título;
+- 7 en los lectores;
+- 13 en la guía;
+- 5 en la extensión;
+- 2 en el panel;
+- 2 en la seguridad;
+- 2 en los raíles.
+
+Una sobrevivió a la primera pasada: la fuente escrita como un punto de la lista salía como paso, y nada lo
+miraba. Se cerró con su prueba.
+
+**Comprobado fuera de la barra**, solo leyendo el PDF que hacen las pruebas en una carpeta temporal, con lo
+que ya había en este Mac y sin red:
+
+- poppler (`pdftotext`, `pdfinfo`, `pdffonts`), `mutool clean` y Ghostscript lo leen sin un aviso;
+- `pypdf` en modo estricto lee el título, las páginas y los dos enlaces;
+- el PDFKit del sistema lee el texto con sus acentos, y Vista Rápida lo pinta con sus negritas;
+- las dos tablas de anchos, las 256 posiciones, son las de los AFM de Adobe que trae `reportlab`.
+
+**Lo que no hace, todavía:**
+
+- **Los enlaces del PDF se abren sin preguntar.** En la barra, una página que no es nuestra se pregunta antes
+  (revisión de la 153). En el PDF no se puede: solo van los de https, y se ve la dirección entera.
+- **Los pasos que enseña la barra no se tapan.** Si el asistente pegó una clave en el README, la guía de un
+  paso cada vez la enseña (eso ya era así). El PDF no la lleva.
+- **Sin pasos, hay dos botones parecidos**: «Explícame cómo conectarla» (146) y «Que el asistente prepare la
+  guía». Se han dejado los dos: uno es para que te lo explique ahora y el otro, para que lo deje escrito.
+- **«Antes de empezar»** ya era, en la barra completa, el nombre de `proposals/`. En el PDF es una sección de
+  un documento, y el diccionario lo dice.
+- **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
+  Windows, y el nombre con tilde en Windows.

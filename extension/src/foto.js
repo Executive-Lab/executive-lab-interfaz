@@ -576,4 +576,6 @@ module.exports = {
   guardar,
   lasFotos,
   donde,
+  // La guía en PDF de cada conexión mira lo mismo antes de escribir (decisión 159).
+  quedaDentro,
 };

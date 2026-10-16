@@ -152,22 +152,41 @@ Sigue el protocolo de `harness`: `cp -r 01-TOOLS/_TEMPLATE 01-TOOLS/<NOMBRE>` y 
 escríbelas pensando en quien las va a leer:
 
 **a) Los pasos, en el `README.md`, bajo `## Cómo conectarla`.** Salen numerados encima de los campos,
-y el alumno los va siguiendo con la web del proveedor abierta al lado. Investiga la herramienta de
-verdad antes de escribirlos — dónde se entra, qué menú, cómo se llama el botón — y escríbelos como
-se los dirías por teléfono:
+y el alumno los va siguiendo con la web del proveedor abierta al lado. **Sácalos de la documentación
+oficial de la herramienta**, la de hoy (su ayuda o su página para desarrolladores), y no de memoria:
+dónde se entra, qué menú, cómo se llama el botón, **con los nombres exactos** que va a ver en
+pantalla. Escríbelos como se los dirías por teléfono:
 
 ```markdown
 ## Cómo conectarla
+
+Antes de empezar: una cuenta de Holded con permisos de administrador.
 
 1. Entra en app.holded.com con el usuario y la contraseña de la empresa.
 2. Arriba a la derecha, pulsa tu nombre y luego "Configuración".
 3. En el menú de la izquierda, baja hasta "Desarrolladores" y entra en "API".
 4. Pulsa "Crear clave nueva" y ponle de nombre "Executive Lab".
 5. Cópiala entera antes de cerrar la ventana: no se puede volver a ver.
+
+Fuente: https://developers.holded.com/ · comprobado el 15-10-2026
 ```
 
 Nada de `cp .env.example .env` ni permisos de fichero: eso lo hace el panel. Y si un paso solo se
 puede hacer una vez (una clave que no se vuelve a enseñar), **dilo en el paso**, que es donde se lee.
+
+- **`Antes de empezar:`**, en una línea delante de los pasos y no como un paso: lo que hace falta
+  tener (una cuenta de empresa, ser administrador, un plan de pago). Si no hace falta nada, no la
+  escribas.
+- **`Fuente: <dirección> · comprobado el <día>`**, en una línea detrás de los pasos y no como un paso:
+  la página oficial donde lo has leído (no la de su panel) y el día, como `15-10-2026`. Cada vez que
+  corrijas un paso, pon el día de hoy.
+- **No escribas un paso que no hayas comprobado.** Si no encuentras la página oficial, o no dice
+  dónde está algo, no lo rellenes de memoria: escribe hasta donde llegues y díselo. Un paso inventado
+  le cuesta la tarde.
+
+Con esto, la barra hace *La guía, en PDF*: lo que hace falta, los pasos, qué dato es cada cosa (de la
+tabla de abajo), dónde ponerlo y de dónde sale, con su fecha. Si no hay pasos, el botón te pide que
+la prepares.
 
 **b) Dónde se saca cada clave, en la tabla de `CREDENTIALS.md`.** La tercera columna sale pegada a su
 campo, que es donde hace falta — una guía al principio de la pantalla ya se ha olvidado al llegar
