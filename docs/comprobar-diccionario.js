@@ -262,6 +262,8 @@ function rotulosDelManifiesto(base = raiz) {
   for (const [clave, ajuste] of Object.entries((aporta.configuration || {}).properties || {})) {
     if (ajuste.description) rotulos.push({ donde: clave, texto: ajuste.description });
     for (const suya of ajuste.enumDescriptions || []) rotulos.push({ donde: clave, texto: suya });
+    // Y el rótulo de cada valor, que sale en la lista en vez del valor (decisión 158).
+    for (const suya of ajuste.enumItemLabels || []) rotulos.push({ donde: clave, texto: suya });
   }
   return rotulos;
 }

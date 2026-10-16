@@ -92,9 +92,11 @@ function losDelArnes() {
 // todo tira de esta función, por este orden:
 //
 //   1. el que se eligió en esta carpeta, si el arnés está montado para él;
-//   2. el primero declarado que esté instalado;
-//   3. el primero declarado, aunque no esté, para poder decir qué falta;
-//   4. sin nada declarado, el que esté instalado, y si no, Claude.
+//   2. el que pide el ajuste, igual (decisión 158);
+//   3. el que apuntó la barra al prepararla para el otro, igual (decisión 158);
+//   4. el primero declarado que esté instalado;
+//   5. el primero declarado, aunque no esté, para poder decir qué falta;
+//   6. sin nada declarado, el que esté instalado, y si no, Claude.
 //
 // Hablar con uno para el que no está montado el arnés sería hablar sin sus
 // habilidades, así que lo declarado va antes que lo instalado.
@@ -106,20 +108,59 @@ const CLAVE_DE_LA_ELECCION = 'executiveLab.conQuien';
 let estado = null;
 const saberDondeGuardar = (workspaceState) => { estado = workspaceState || null; };
 
-function laEleccion() {
+// Y lo que apunta la barra sola, que no es una elección: al preparar la carpeta
+// también para el otro, el asistente con el que ya se hablaba (decisión 158). Va
+// aparte para que un cambio del ajuste mande sobre él; lo elegido no.
+const CLAVE_DEL_APUNTE = 'executiveLab.conQuienPorDefecto';
+
+function leer(clave) {
   try {
-    return estado ? estado.get(CLAVE_DE_LA_ELECCION) || null : null;
+    return estado ? estado.get(clave) || null : null;
   } catch {
     return null;
   }
 }
 
+const laEleccion = () => leer(CLAVE_DE_LA_ELECCION);
+
+// ── El ajuste, para todo el editor (decisión 158) ───────────────────────
+//
+// `executiveLab.asistente` dice con cuál se trabaja en todas las carpetas:
+//
+//   · `automatico`, el de siempre: si hay uno puesto, ese; con los dos, se
+//     pregunta al montar;
+//   · `claude` o `codex`: se monta para ese sin preguntar, y en una carpeta
+//     montada para los dos es con el que se habla;
+//   · `losDos`: se monta para los dos, y una carpeta montada para uno se
+//     prepara sola también para el otro (`extension.js`).
+//
+// Lo que se eligió en una carpeta manda en esa carpeta: el ajuste va detrás.
+// Se lee cada vez, para que cambiarlo con la barra abierta se note sin recargar.
+const AJUSTE = 'executiveLab.asistente';
+const VALORES_DEL_AJUSTE = ['automatico', 'claude', 'codex', 'losDos'];
+
+function elAjuste() {
+  try {
+    const valor = vscode.workspace.getConfiguration().get(AJUSTE);
+    return VALORES_DEL_AJUSTE.includes(valor) ? valor : 'automatico';
+  } catch {
+    return 'automatico';
+  }
+}
+
 function conQuien() {
   const declarados = losDelArnes();
+  // Montado aquí, y que siga en el ordenador: si no, los botones acababan en
+  // «pégalo en su caja» para una caja que no hay (revisión de F5, m1).
+  const sePuede = (a) => Boolean(a) && declarados.some((d) => d.id === a.id) && estaInstalado(a);
   const elegido = porId(laEleccion());
-  // Y si sigue en el ordenador: si no, los botones acababan en «pégalo en su
-  // caja» para una caja que no hay (revisión de F5, m1).
-  if (elegido && declarados.some((a) => a.id === elegido.id) && estaInstalado(elegido)) return elegido;
+  if (sePuede(elegido)) return elegido;
+  // Lo que pide el ajuste, si esta carpeta está montada para él (decisión 158).
+  const delAjuste = porId(elAjuste());
+  if (sePuede(delAjuste)) return delAjuste;
+  // Lo que apuntó la barra sola, que no es elegir: va detrás del ajuste.
+  const apuntado = porId(leer(CLAVE_DEL_APUNTE));
+  if (sePuede(apuntado)) return apuntado;
   return declarados.find(estaInstalado) || declarados[0] || ASISTENTES.find(estaInstalado) || ASISTENTES[0];
 }
 
@@ -133,6 +174,8 @@ function comoEstamos() {
   const targets = (proyecto.declaracion() || {}).targets;
   return {
     ahora: ahora ? ahora.id : null,
+    // Lo que dice el ajuste de todo el editor, para decirlo en una línea (decisión 158).
+    ajuste: elAjuste(),
     // Si la carpeta está montada, aunque sea para uno que la barra no ofrece: ahí
     // el de ahora no tiene nada, y se dice (revisión de F5, m4).
     montada: Array.isArray(targets) && targets.length > 0,
@@ -148,6 +191,20 @@ function comoEstamos() {
       mandaTexto: a.envio.length > 0,
     })),
   };
+}
+
+// Seguir con el de antes en esta carpeta, sin montar nada. Al prepararla también
+// para el otro por el ajuste de los dos, RSC lo pone delante en `targets`, y los
+// botones cambiarían de asistente sin que nadie lo pidiera (decisión 158). Se
+// apunta aparte de lo elegido: si después se cambia el ajuste, manda el ajuste.
+async function seguirCon(id) {
+  if (!estado || !porId(id)) return false;
+  try {
+    await estado.update(CLAVE_DEL_APUNTE, id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Cambiar con cuál se habla (E1).
@@ -225,4 +282,4 @@ async function elegir(id, { montar } = {}) {
   return { ok: true, mensaje: `Hecho. A partir de ahora los botones hablan con ${cual.nombre}.${conOtroNombre}${sinFrenos}` };
 }
 
-module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, porId, comoEstamos, elegir };
+module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, porId, comoEstamos, elegir, AJUSTE, VALORES_DEL_AJUSTE, elAjuste, seguirCon };

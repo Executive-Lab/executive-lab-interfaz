@@ -61,7 +61,7 @@ const solo = require('./solo');
 // P9: la carpeta que este ordenador ya conoce, los botones que corren el arnés o
 // tocan sus copias, y lo que se dice si se pulsan mientras la barra arregla sola.
 const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
-const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'aprenderCapacidad']);
+const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'prepararTambien', 'aprenderCapacidad']);
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // En una carpeta que va por delante, lo que escribe con el arnés espera a que la
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
@@ -405,6 +405,152 @@ ${cabecera}
     await this.repintarLoQueHaya();
     this.soltarElAviso();
     return hechas;
+  }
+
+  // ── Los dos asistentes, por el ajuste (decisión 158) ────────────────────
+  //
+  // Con «Los dos» en los ajustes, una carpeta montada para uno se prepara sola
+  // también para el otro: es de este ordenador y se deshace (P9). Con las guardas
+  // de lo que se hace solo —confianza, una carpeta que este ordenador conoce y un
+  // arnés que no va por delante— y esperando a que nada más esté corriendo el
+  // arnés. Lo que tocaría algo suyo no se hace solo (P4): se deja a un clic. Sin
+  // el otro en el ordenador, se ofrece ponerlo. Y los botones siguen hablando con
+  // el de antes: preparar no es cambiar de asistente.
+  //
+  // Una sola a la vez: la del arranque y la de cambiar el ajuste podían correr
+  // juntas y preparar dos veces. La segunda se queda con la que ya está en marcha.
+  prepararParaLosDos() {
+    if (!this.preparando) this.preparando = this.prepararParaLosDosYa().finally(() => { this.preparando = null; });
+    return this.preparando;
+  }
+
+  // Para cuáles falta prepararla ahora mismo, con las guardas de lo que se hace
+  // solo. Vacío si no toca.
+  faltaParaLosDos() {
+    if (asistentes.elAjuste() !== 'losDos') return [];
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz()) return [];
+    const declarados = (proyecto.declaracion() || {}).targets;
+    // Sin montar no hay nada que preparar: el montaje ya va para los dos.
+    if (!Array.isArray(declarados) || !declarados.length) return [];
+    const faltan = asistentes.ASISTENTES.filter((a) => !declarados.includes(a.id));
+    if (!faltan.length) return [];
+    if (!this.carpetaConocida()) {
+      this.salida.appendLine('[losDos] carpeta que este ordenador no conoce todavía: espera a un clic'); // diccionario: interno
+      return [];
+    }
+    if (rsc.vaPorDelante()) {
+      this.salida.appendLine('[losDos] carpeta de un arnés más nuevo que el de la clase: no se toca sola'); // diccionario: interno
+      return [];
+    }
+    return faltan;
+  }
+
+  async prepararParaLosDosYa() {
+    const faltan = this.faltaParaLosDos();
+    for (const otro of faltan.filter((a) => !asistentes.estaInstalado(a))) {
+      const poner = `Poner ${otro.nombre}`;
+      this.unaVez(`poner:${otro.id}`, async () => {
+        const quiere = await vscode.window.showInformationMessage(`En los ajustes elegiste los dos asistentes, y ${otro.nombre} no está en este ordenador. ¿Lo pongo?`, poner);
+        if (quiere !== poner || !(await arrancar.ponerElAsistente(otro))) return;
+        // Después de la que esté en marcha, que no lo contaba.
+        await this.preparando;
+        await this.prepararParaLosDos();
+      });
+    }
+    if (!faltan.some(asistentes.estaInstalado)) return [];
+
+    const vueltas = this.vueltasDeEspera === undefined ? 360 : this.vueltasDeEspera; // tres minutos
+    for (let i = 0; i < vueltas && this.conElArnes(); i += 1) await new Promise((r) => setTimeout(r, 500));
+    if (this.conElArnes()) {
+      this.salida.appendLine('[losDos] el arnés sigue ocupado: se deja para otra vez'); // diccionario: interno
+      return [];
+    }
+    // Mientras esperaba ha podido cambiar todo: el ajuste, la confianza, lo
+    // montado o la carpeta. Se mira otra vez.
+    const listos = this.faltaParaLosDos().filter(asistentes.estaInstalado);
+    if (!listos.length) return [];
+    const conQuienAntes = asistentes.conQuien();
+    const hechos = [];
+    this.arreglandoSolo = true;
+    try {
+      for (const otro of listos) {
+        let hecho;
+        try {
+          hecho = await arrancar.prepararTambienPara(otro.id, this.contexto, { sinNadieDelante: true });
+        } catch (error) {
+          hecho = { ok: false, detalle: error.message };
+        }
+        this.salida.appendLine(`[losDos] ${otro.id}: ${hecho.ok ? 'preparada' : (hecho.esperaASuBoton ? 'espera a su sí' : 'no')}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
+        if (hecho.ok) hechos.push(otro);
+        else if (hecho.esperaASuBoton) {
+          const preparar = `Prepararla también para ${otro.nombre}`;
+          this.unaVez(`si:${otro.id}`, async () => {
+            const quiere = await vscode.window.showInformationMessage(`En los ajustes elegiste los dos asistentes. Para preparar esta carpeta también para ${otro.nombre} tengo que tocar cosas tuyas.`, preparar);
+            if (quiere === preparar) await this.manejar({ tipo: 'prepararTambien', cual: otro.id });
+          });
+        } else {
+          // Nunca un fallo callado (P3): lo que dijo el arnés ya va en el registro.
+          this.unaVez(`fallo:${otro.id}`, () => vscode.window.showWarningMessage(`No he podido preparar esta carpeta también para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`));
+        }
+      }
+      if (hechos.length && asistentes.conQuien().id !== conQuienAntes.id) await asistentes.seguirCon(conQuienAntes.id);
+    } finally {
+      this.arreglandoSolo = false;
+    }
+    if (!hechos.length) return [];
+
+    vigilarOtraVez();
+    this.dejarElAviso(`He preparado esta carpeta también para ${hechos.map((a) => a.nombre).join(' y ')}, como pide el ajuste de los dos asistentes.`);
+    await this.repintarSinMover();
+    this.soltarElAviso();
+    return hechos.map((a) => a.id);
+  }
+
+  // Lo que la barra no hizo sola porque tocaba algo suyo, con su botón: se le
+  // enseña qué se toca, como al montar (decisión 158). Tampoco cambia con quién
+  // se habla.
+  async prepararTambien(cual) {
+    const otro = asistentes.porId(cual);
+    const declarados = (proyecto.declaracion() || {}).targets;
+    if (!otro || !Array.isArray(declarados) || !declarados.length || declarados.includes(cual)) return undefined;
+    const conQuienAntes = asistentes.conQuien();
+    const hecho = await arrancar.prepararTambienPara(cual, this.contexto);
+    this.salida.appendLine(`[losDos] ${cual}, con su botón: ${hecho.ok ? 'preparada' : (hecho.cancelado ? 'sin su sí' : 'no')}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
+    if (hecho.porDelante) return vscode.window.showWarningMessage(POR_DELANTE);
+    if (hecho.cancelado) return vscode.window.showInformationMessage('No he tocado nada. Te lo vuelvo a proponer la próxima vez que abras esta carpeta.');
+    if (!hecho.ok) return vscode.window.showWarningMessage(hecho.mensaje || `No he podido prepararla para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    if (asistentes.conQuien().id !== conQuienAntes.id) await asistentes.seguirCon(conQuienAntes.id);
+    vigilarOtraVez();
+    await this.repintarSinMover();
+    const conOtroNombre = (hecho.renombrados || [])
+      .map((r) => ` Tu ${r.que === 'habilidad' ? 'habilidad' : r.que} «${r.id}» ahora se llama «${r.ahora}».`)
+      .join('');
+    return vscode.window.showInformationMessage(`He preparado esta carpeta también para ${otro.nombre}.${conOtroNombre}`);
+  }
+
+  // Una oferta por carpeta y por sesión: cerrarla es un «ahora no» hasta que se
+  // vuelva a abrir, o hasta que cambie el ajuste.
+  unaVez(clave, ofrecer) {
+    if (!this.ofrecidos) this.ofrecidos = new Set();
+    const llave = `${proyecto.raiz()}:${clave}`;
+    if (this.ofrecidos.has(llave)) return;
+    this.ofrecidos.add(llave);
+    Promise.resolve().then(ofrecer).catch((error) => this.salida.appendLine(`[losDos] ${error.message}`)); // diccionario: interno
+  }
+
+  // El ajuste del asistente, cambiado con la barra abierta (decisión 158): se nota
+  // sin recargar. El vigía mira lo del de ahora, se repinta lo que tiene delante
+  // sin sacarle de ahí, y con «Los dos» se prepara la carpeta para el que falte.
+  async alCambiarElAjuste() {
+    this.ofrecidos = new Set();
+    vigilarOtraVez();
+    await this.repintarSinMover();
+    return this.prepararParaLosDos();
+  }
+
+  // Lo que tiene delante, también si es «Tu asistente», que dice el ajuste.
+  async repintarSinMover() {
+    return this.donde.pantalla === 'asistente' ? this.verAsistente() : this.repintarLoQueHaya();
   }
 
   // Lo de esta persona en los ajustes de Claude (decisión 157), en las carpetas que
@@ -1069,6 +1215,8 @@ ${cabecera}
       ponerPermiso: () => this.cambiarAjuste(ajustes.ponerPermiso, mensaje.cual),
       ponerCadaCuanto: () => this.cambiarAjuste(ajustes.ponerCadaCuanto, mensaje.cual),
       elegirAsistente: () => this.elegirAsistente(mensaje.cual),
+      prepararTambien: () => this.prepararTambien(mensaje.cual),
+      abrirElAjuste: () => vscode.commands.executeCommand('workbench.action.openSettings', asistentes.AJUSTE),
       verDiario: () => this.verDiario(),
       verSesion: () => this.verSesion(mensaje.fichero),
       verTrato: () => this.verTrato(),
@@ -2439,7 +2587,8 @@ ${cabecera}
   }
 
   async verAsistente(avisoLocal = null) {
-    this.donde = { tipo: 'quieto' };
+    // Quieta para el vigía; el ajuste, al cambiar, sí la repinta (decisión 158).
+    this.donde = { tipo: 'quieto', pantalla: 'asistente' };
     this.enviar({ tipo: 'asistente', ...asistentes.comoEstamos(), aviso: avisoLocal });
   }
 
@@ -3532,6 +3681,13 @@ function activate(contexto) {
 
   vigilarElArnes(contexto, panel);
 
+  // El ajuste del asistente, cambiado con la barra abierta, se nota sin recargar
+  // (decisión 158). Devuelve la promesa solo para que la prueba la pueda esperar.
+  contexto.subscriptions.push(vscode.workspace.onDidChangeConfiguration((cambio) => {
+    if (!cambio || typeof cambio.affectsConfiguration !== 'function' || !cambio.affectsConfiguration(asistentes.AJUSTE)) return undefined;
+    return panel.alCambiarElAjuste().catch((e) => salida.appendLine(`[asistente] ${e.message}`)); // diccionario: interno
+  }));
+
   // La barra de actividad está oculta por el disfraz, así que si no forzamos
   // nuestra vista el alumno se encuentra el explorador de ficheros delante.
   vscode.commands.executeCommand('executiveLab.panel.focus');
@@ -3568,6 +3724,8 @@ function activate(contexto) {
     await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y lo demás que se puede hacer solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
+    // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).
+    await panel.prepararParaLosDos().catch((e) => salida.appendLine(`[losDos] ${e.message}`)); // diccionario: interno
     // Lo que se ha dicho por el camino sale una vez, junto (decisión 157).
     panel.soltarElAviso();
   }, 3000);

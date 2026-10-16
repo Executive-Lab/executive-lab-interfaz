@@ -6229,6 +6229,87 @@ esta decisión. 53 mutaciones más a mano, las 53 tumbadas: 21 de seguridad, 22 
 la revisión dejó vivos (los otros dos van entre los de corrección). Dos sobrevivieron al principio y cayeron al
 reforzar sus pruebas. `contrato.js`, `empresas-distintas.js`, `mapeos-codex.js` y el diccionario, en verde.
 
+## 158. Con qué asistente, en los ajustes
+
+**Fecha:** 15 de octubre de 2026 · **Estado:** implementado
+
+Jose: *«¿meterías en ajustes si se usa Claude Code, Codex o ambas en la extensión?»*. Sí, y uno solo:
+**`executiveLab.asistente`**, en los ajustes del editor, con cuatro valores. Cada uno lleva su rótulo y una
+frase debajo.
+
+- **Automático**, de fábrica: como hasta ahora. Con uno puesto en el ordenador, ese; con los dos, se pregunta
+  al preparar la carpeta.
+- **Claude** o **Codex**: se prepara para ese sin preguntar. Si no está en el ordenador, se ofrece ponerlo,
+  como cuando no hay ninguno (A9), o seguir con el que hay. En una carpeta montada para los dos, y sin nada
+  elegido en ella, los botones le hablan a ese.
+- **Los dos**: se prepara con `--target claude,codex`, que RSC acepta así; `contrato.js` lo monta de verdad
+  con la 3.0.22, y con los raíles cada uno tiene sus habilidades con botón (`.claude/skills` y
+  `.agents/skills`). Si uno de los dos no se puede poner, se sigue con el que sí está, y se dice. En una
+  carpeta montada para uno, la barra la prepara sola también para el otro (`prepararTambienPara`) y lo
+  dice en una frase. Sin el otro en el ordenador, se ofrece ponerlo.
+
+Lo que se eligió en una carpeta, en «Tu asistente», sigue mandando en ella. `conQuien` mira primero eso,
+después el ajuste, después lo que apuntó la barra sola (abajo) y después lo declarado. El ajuste y el
+apunte solo cuentan si la carpeta está montada para él y está en el ordenador: hablar con uno sin montar
+es hablar sin sus habilidades.
+
+**Lo que se hace solo, con las guardas de P9.** Preparar para el otro es de este ordenador y se deshace.
+Se hace solo con la carpeta de confianza, en una que este ordenador ya conoce y con un arnés que no va
+por delante. Si el arnés está ocupado, espera, y al terminar de esperar lo vuelve a mirar todo: el
+ajuste, la confianza y lo montado han podido cambiar. Se prepara una sola vez a la vez: la del arranque y
+la de cambiar el ajuste son la misma. Lo que tocaría algo suyo no se hace solo (P4): un nombre
+que choca, o sus ficheros en una carpeta cuyo historial no creó la barra. Entonces sale un aviso con
+«Prepararla también para Codex», que enseña qué se toca, como al montar. Cada oferta sale una vez por
+carpeta y por sesión, y otra vez si se cambia el ajuste. Si falla, se dice, con el código para el tutor.
+
+**Preparar no es cambiar de asistente.** RSC ordena `targets`, así que al sumar Claude a una carpeta de
+Codex los botones habrían pasado a Claude sin que nadie lo pidiera. La barra apunta el de antes
+(`seguirCon`), y lo apunta aparte de lo elegido (`executiveLab.conQuienPorDefecto`): no es una elección.
+Si después se pone Claude en el ajuste, manda el ajuste; lo que elija la persona en «Tu asistente», sí
+manda sobre él.
+
+**En caliente.** Al cambiar el ajuste con la barra abierta, se repinta lo que se tiene delante, también
+«Tu asistente», que sigue quieta para el vigía. El vigía pasa a mirar lo del asistente de ahora. Con
+«Los dos», se prepara la carpeta.
+
+**En la barra sencilla no hay pantalla nueva.** El ajuste del editor basta. «Tu asistente» lo dice en una
+línea, dice que lo elegido ahí manda en esa carpeta, y «Cambiar el ajuste» lo abre
+(`workbench.action.openSettings`). El comprobador del diccionario mira también los rótulos de cada valor
+(`enumItemLabels`).
+
+Lo que se decidió por el camino:
+
+- **Para todo el editor (`application`)**, como `probarAntes` y `actualizarSola`. Una carpeta traída de
+  fuera no lo puede poner por su cuenta, y lo de cada carpeta ya tiene su sitio.
+- **«Seguir con Claude» al montar** cuando falta el del ajuste. Cerrar la pregunta sigue siendo no montar,
+  como sin ninguno.
+- **Con Claude o Codex en el ajuste, nada se prepara solo.** Una carpeta montada solo para el otro sigue
+  hablando con el otro; «Tu asistente» ofrece cambiar. Solo «Los dos» pide tener los dos.
+- **Cerrar la oferta de poner el que falta** vale hasta volver a abrir la carpeta o cambiar el ajuste.
+
+**La revisión adversaria** (16-10-2026) encontró dos fallos medios y uno bajo, arreglados con su prueba:
+
+- **El apunte de la barra mandaba sobre el ajuste.** Se guardaba como si lo hubiera elegido la persona:
+  en una carpeta de Codex preparada también para Claude, poner Claude en el ajuste no cambiaba nada. Ahora
+  va en su clave, detrás del ajuste.
+- **Tras esperar al arnés no se volvía a mirar nada.** Si el ajuste cambiaba durante la espera, preparaba
+  igual; y el arranque y el cambio del ajuste podían correr juntos y preparar dos veces (reproducido: dos
+  `sync --target claude`). Ahora se mira otra vez al terminar de esperar, y la segunda llamada se queda
+  con la que está en marcha.
+- **Con «Los dos» y ninguno puesto, si Codex no se podía poner, no se montaba nada** aunque Claude ya
+  estaba. Ahora se sigue con Claude y se dice.
+
+Y cuatro mutantes que sobrevivían caen ahora: el arnés ocupado una vuelta y libre a la siguiente, la barra
+ocupada mientras corre el arnés (se mira desde dentro), una carpeta sin nada declarado y la oferta en otra
+carpeta.
+
+Pruebas: en `humo.js`, siete nuevas y una ampliada (el diccionario). Cubren cada valor al montar y en una
+carpeta montada, lo elegido en la carpeta, el cambio en caliente, sin el otro en el ordenador, las guardas
+y lo suyo a un clic. Una más en `mapeos-codex.js`, y otra en `contrato.js`, que monta para los dos con el
+RSC de dentro y mira los botones de cada uno. Mutaciones a mano: 57, cada una en una copia del árbol
+(45 de la primera vuelta y 12 de la revisión), y las 57 tumbadas por la comprobación que les toca; la
+copia sin mutar pasa entera.
+
 ## 159. La guía para sacar la clave, en PDF
 
 **Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `la-guia-de-cada-clave`
@@ -6307,8 +6388,8 @@ comprobado. «Conectar algo nuevo» también lo pide. Los pasos siguen saliendo 
 haya una sección «Antes de empezar» delante. Esas dos líneas no cuentan como pasos, ni en la barra ni en el
 PDF.
 
-**Las pruebas**: dos comprobaciones nuevas en `humo.js`, que con main traído (la 157, los recordatorios
-ordenados y los encargos limpios) pasa de 410 a 412.
+**Las pruebas**: dos comprobaciones nuevas en `humo.js`, que con main traído (la 157, la 158, los
+recordatorios ordenados y los encargos limpios) pasa de 417 a 419.
 
 - *El PDF a mano*: la tabla de saltos al byte, `/Size`, `/Count` y `/Length`, las fuentes con WinAnsi, cada
   sustitución de letra, los anchos, partir sin pasarse ni perder nada, setenta pasos en varias páginas sin

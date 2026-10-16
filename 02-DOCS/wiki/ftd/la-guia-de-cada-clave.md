@@ -60,18 +60,18 @@ Decisión 159, sobre las pantallas de la 156 (clases de acceso y «Pídeselo a t
 - [x] 4. La seguridad para quien la saca, el tapado y el raíl en las dos copias — 6 mutaciones, las 6
   tumbadas.
 - [x] 5. Revisión de seguridad y de corrección: lo confirmado, arreglado con su prueba (decisión 159).
-- [x] 6. Main traído (la 157, los recordatorios ordenados y los encargos limpios): lo que se le pide al
-  asistente pasa por `limpio.etiqueta`.
+- [x] 6. Main traído (la 157, la 158, los recordatorios ordenados y los encargos limpios): lo que se le
+  pide al asistente pasa por `limpio.etiqueta`.
 - [x] 7. Diccionario, decisión 159 y todas las comprobaciones en verde.
 
 ## Evidence
 
-- `node extension/prueba/humo.js`: 412 comprobaciones con main traído (eran 410). Las dos nuevas:
+- `node extension/prueba/humo.js`: 419 comprobaciones con main traído (eran 417). Las dos nuevas:
   - «el PDF a mano: tabla de saltos exacta, acentos en WinAnsi, líneas por su ancho, varias páginas, títulos
     no huérfanos y enlaces solo https»;
   - «la guía para sacar la clave, en PDF: cada sección del disco o de la barra, ningún valor de clave, no pisa
     ni sigue enlaces, y sin pasos se le pide al asistente».
-- `mapeos-codex.js`, `contrato.js` (14), `empresas-distintas.js` y `comprobar-diccionario.js`, en verde.
+- `mapeos-codex.js` (29), `contrato.js` (15), `empresas-distintas.js` y `comprobar-diccionario.js`, en verde.
 - Mutaciones: 84, las 84 tumbadas: 51 de la primera pasada y 33 de las revisiones. En la primera sobrevivió
   una (la fuente como punto de la lista), y la revisión de corrección encontró siete más que pasaban. Todas
   cerradas con su prueba.

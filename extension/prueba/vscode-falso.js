@@ -11,6 +11,9 @@ const registrado = {
   abiertos: [],
   barraEstado: [],
   portapapeles: null,
+  // Quién escucha los cambios de ajustes, para poder cambiar uno con la barra
+  // abierta (decisión 158).
+  alCambiarAjustes: [],
 };
 
 // Lo que las pruebas pueden cambiar antes de llamar.
@@ -116,7 +119,7 @@ module.exports = {
       const nombre = (p) => p.split(/[\\/]/).filter(Boolean).pop();
       return [guion.raiz, ...guion.otrasRaices].map((p, index) => ({ uri: uri(p), name: nombre(p), index }));
     },
-    onDidChangeConfiguration: () => ({ dispose() {} }),
+    onDidChangeConfiguration: (oyente) => { registrado.alCambiarAjustes.push(oyente); return { dispose() {} }; },
     createFileSystemWatcher: (patron) => {
       const oyentes = { crear: null, cambiar: null, borrar: null };
       registrado.vigia = {
