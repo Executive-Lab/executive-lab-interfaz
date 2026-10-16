@@ -7771,3 +7771,35 @@ ponen, no todas.
 El diálogo del `.dmg` y la página del `.exe` no se han visto con una persona delante: se comprueba
 que la app compila (`osacompile`), el texto y el paso de lo elegido. La extensión de Codex en las
 máquinas de GitHub se ve en `el-dmg`.
+
+
+## 169. Todo lo de RSC tiene nombre, también los automatismos
+
+**Qué había.** `nombres.json` nombra 5 guardianes y 18 automatismos, y `reglas.js` los monta. Pero ninguna
+prueba comparaba esa tabla con lo que trae el paquete: un enganche o un interruptor nuevo de una versión
+futura de RSC habría salido sin nombre sin que nadie se enterase. Y la prueba de comandos miraba los 20 fijos
+por expresión regular, cuando el manifiesto trae 53.
+
+**Qué se vio al repasarlo (RSC 3.0.22).** Los 13 enganches que la barra enseña y los 19 interruptores
+(`PROJECT_OPT_OUTS` y `MACHINE_OPT_OUTS`, 15 y 4) ya tenían nombre: no hizo falta nombrar nada nuevo en
+pantalla. Los otros 10 `targets/*.mjs` son fontanería: ayudantes de otro enganche o cosas que solo actúan en
+un caso que la barra no tiene.
+
+**Qué se decide.**
+
+- **Lo que no se enseña consta, con su porqué**: `noSeEnsena` en `nombres.json`, un `.mjs` por línea. Los
+  diez: `clone-bootstrap`, `copy-rules`, `deepseek-bridge`, `hook-once`, `sello`, `session-memory-adapter`,
+  `session-memory-core`, `shell-unwrap`, `team-safe-start` y `trunk-policy`.
+- **Una prueba lee el paquete instalado** y falla si un `targets/*.mjs` no está nombrado (porque una pieza de
+  `reglas.js` lo monta y tiene fila) ni consta en `noSeEnsena`; si un interruptor no lo apaga ninguna pieza
+  con nombre; si una fila de la tabla no tiene pieza; o si algo de `noSeEnsena` ya no existe o va sin porqué.
+  Cuando RSC traiga un enganche nuevo, hay que decidir por escrito: se enseña (fila y pieza) o es fontanería
+  (una línea).
+- **La prueba de comandos exige los 53 del manifiesto**, cada uno con nombre por la tabla o por un patrón.
+
+**Cómo se probó que cae.** Quitar `branch-guard` de la tabla; un `.mjs` falso en `targets/`; un comando de
+más en el manifiesto; y, dentro de la prueba, seis mutaciones sobre los datos (guardián, automatismo, `.mjs`
+nuevo, interruptor nuevo, una fila de `noSeEnsena` quitada y otra que ya no existe). Todas caen.
+
+**Lo que no hace.** Un `.mjs` que RSC pase a enseñarse en pantalla (por ejemplo un sello activable) sigue
+pidiendo a mano su pieza en `reglas.js`: la prueba obliga a decidirlo, no a hacerlo.

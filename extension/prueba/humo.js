@@ -4368,6 +4368,15 @@ exec git "$@"
     const sinNombre = [...fijos].filter((id) => !nombres.loQueTraduce('comandos').includes(id));
     assert.deepEqual(sinNombre, [], 'un comando de RSC sin nombre en español');
 
+    // Y no solo los fijos: el manifiesto trae TODOS los comandos (53 en la 3.0.22: los
+    // 20 fijos y los de cada habilidad por lenguaje), y cada uno tiene que casar con
+    // un nombre, por la tabla o por un patrón (decisión 169). Antes se miraban diez
+    // a mano y un comando nuevo salía humanizado sin que nadie lo viera.
+    const delManifiesto = JSON.parse(fs.readFileSync(path.join(paquete, 'manifest.json'), 'utf8')).commands;
+    assert.ok(delManifiesto.length >= 53, 'el manifiesto trae al menos los 53 comandos de la 3.0.22');
+    const sinNombreDelManifiesto = delManifiesto.map((c) => c.id).filter((id) => !nombres.comoSeLlama('comandos', id).deFuera);
+    assert.deepEqual(sinNombreDelManifiesto, [], `comandos del manifiesto sin nombre ni patrón: ${sinNombreDelManifiesto.join(', ')}`);
+
     const suelo = fs.readFileSync(path.join(paquete, 'scripts', 'lib', 'default-skill-floor.js'), 'utf8');
     for (const id of [...suelo.matchAll(/'([a-z-]+)'/g)].map((m) => m[1])) {
       assert.ok(nombres.loQueTraduce('habilidades').includes(id), `${id} está en el suelo de RSC y no tiene nombre`);
@@ -6968,6 +6977,65 @@ exec git "$@"
     }
     for (const id of ['bro', 'eli5', 'show-me']) assert.ok(!enElCatalogo.has(id), `${id} ya no se puede instalar y se ofrece`);
     return `${manifiesto.skills.length} habilidades: ${catalogo.length} en el catálogo y ${fontaneria.size} de fontanería`;
+  });
+
+  await comprobar('cada enganche y cada interruptor del paquete tiene nombre, o consta que no se enseña', async () => {
+    // Decisión 169. La tabla (`nombres.json`) nombra los guardianes y los automatismos, pero
+    // ninguna prueba la comparaba con lo que trae RSC: un enganche nuevo de una versión futura
+    // habría salido sin nombre sin que nadie se enterase. Se lee del paquete instalado cada
+    // `targets/*.mjs` y cada interruptor de `opt-outs.js`; cada uno tiene que estar nombrado
+    // (porque alguna pieza de `reglas.js` lo monta o lo apaga, y esa pieza tiene fila) o constar
+    // en `noSeEnsena` con su porqué. Y lo que consta como «no se enseña» tiene que seguir existiendo.
+    const paquete = path.join(RAIZ, 'media', 'harness', 'node_modules', '@ericrisco', 'rsc');
+    if (!fs.existsSync(path.join(paquete, 'targets'))) return 'SALTADA';
+    const { GUARDIANES, AUTOMATISMOS } = cargar('reglas');
+    const tabla = JSON.parse(fs.readFileSync(path.join(RAIZ, 'media', 'nombres.json'), 'utf8'));
+    const optOuts = await import(require('node:url').pathToFileURL(path.join(paquete, 'targets', 'opt-outs.js')).href);
+
+    const huecos = ({ ficheros, interruptores, nombrados, noSeEnsena }) => {
+      const piezas = [...GUARDIANES, ...AUTOMATISMOS];
+      const tieneFila = (p) => Boolean(nombrados.guardianes[p.id] || nombrados.automatismos[p.id]);
+      const problemas = [];
+      for (const f of ficheros) {
+        const base = f.replace(/\.mjs$/, '');
+        const nombrado = piezas.some((p) => p.fichero === f && tieneFila(p));
+        if (!nombrado && !noSeEnsena[base]) problemas.push(`${f}: ni nombrado ni en «no se enseña»`);
+        if (nombrado && noSeEnsena[base]) problemas.push(`${f}: nombrado y también en «no se enseña»`);
+      }
+      for (const i of interruptores) {
+        const pieza = piezas.find((p) => p.interruptor === `.no-${i}`);
+        if (!pieza) problemas.push(`interruptor ${i}: ninguna pieza de reglas.js lo apaga`);
+        else if (!tieneFila(pieza)) problemas.push(`interruptor ${i}: la pieza ${pieza.id} no tiene nombre`);
+      }
+      for (const base of Object.keys(noSeEnsena)) {
+        if (!ficheros.includes(`${base}.mjs`)) problemas.push(`${base}: consta como «no se enseña» y el paquete ya no lo trae`);
+        if (!String(noSeEnsena[base]).trim()) problemas.push(`${base}: «no se enseña» sin su porqué`);
+      }
+      return problemas;
+    };
+
+    const ficheros = fs.readdirSync(path.join(paquete, 'targets')).filter((f) => f.endsWith('.mjs'));
+    const interruptores = [...optOuts.PROJECT_OPT_OUTS, ...optOuts.MACHINE_OPT_OUTS];
+    const real = { ficheros, interruptores, nombrados: { guardianes: tabla.guardianes, automatismos: tabla.automatismos }, noSeEnsena: tabla.noSeEnsena };
+    assert.deepEqual(huecos(real), [], 'lo de RSC sin nombre en la tabla');
+    assert.ok(ficheros.length >= 20 && interruptores.length >= 15, 'la prueba está mirando algo');
+
+    // Y la prueba cae de verdad: tres mutaciones sobre los datos, cada una con su motivo.
+    const sin = (monton, id) => ({ ...real.nombrados, [monton]: Object.fromEntries(Object.entries(real.nombrados[monton]).filter(([k]) => k !== id)) });
+    assert.match(huecos({ ...real, nombrados: sin('guardianes', 'branch-guard') }).join('|'), /branch-guard\.mjs: ni nombrado/, 'quitar un guardián de la tabla');
+    assert.match(huecos({ ...real, nombrados: sin('automatismos', 'ftd-close') }).join('|'), /interruptor ftd-close: la pieza ftd-close no tiene nombre/, 'quitar un automatismo');
+    assert.match(huecos({ ...real, ficheros: [...ficheros, 'enganche-nuevo.mjs'] }).join('|'), /enganche-nuevo\.mjs: ni nombrado/, 'un .mjs que RSC trajera de nuevas');
+    assert.match(huecos({ ...real, interruptores: [...interruptores, 'interruptor-nuevo'] }).join('|'), /interruptor-nuevo: ninguna pieza/, 'un interruptor nuevo');
+    const sinSello = { ...real.noSeEnsena }; delete sinSello.sello;
+    assert.match(huecos({ ...real, noSeEnsena: sinSello }).join('|'), /sello\.mjs: ni nombrado/, 'quitar uno de «no se enseña»');
+    assert.match(huecos({ ...real, noSeEnsena: { ...real.noSeEnsena, fantasma: 'ya no existe' } }).join('|'), /fantasma: consta/, 'uno de «no se enseña» que ya no existe');
+
+    // Y lo nombrado en la tabla tiene su pieza: una fila sin pieza no se enseña nunca.
+    for (const [monton, piezas] of [['guardianes', GUARDIANES], ['automatismos', AUTOMATISMOS]]) {
+      for (const id of Object.keys(tabla[monton])) assert.ok(piezas.some((p) => p.id === id), `${monton}/${id}: fila sin pieza en reglas.js`);
+      for (const p of piezas) assert.ok(tabla[monton][p.id] && tabla[monton][p.id].nombre, `${monton}/${p.id}: pieza sin nombre`);
+    }
+    return `${ficheros.length} enganches y ${interruptores.length} interruptores: ${ficheros.length - Object.keys(tabla.noSeEnsena).length} nombrados y ${Object.keys(tabla.noSeEnsena).length} de fontanería`;
   });
 
   await comprobar('lo que el arnés hace solo se nombra, y lo apagado se dice en español', () => {

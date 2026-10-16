@@ -495,5 +495,30 @@
       "nombre": "Trabajo aparte con otra conversación",
       "queHace": "Si otra conversación trabaja en la misma carpeta, lo nuevo va a una copia aparte para no pisarla."
     }
+  },
+  "_noSeEnsena": [
+    "Los ficheros de `targets/*.mjs` del arnés que la barra NO enseña, cada uno con su porqué.",
+    "",
+    "Son piezas internas: ayudantes de otro enganche, o cosas que solo actúan en un caso",
+    "que la barra no tiene (un clon, DeepSeek). Nadie las pide ni las apaga por su nombre,",
+    "y una pantalla que las nombrara solo añadiría ruido. Decisión 169.",
+    "",
+    "La prueba «todo lo de RSC tiene nombre» lee del paquete cada `.mjs` y cada interruptor",
+    "(`PROJECT_OPT_OUTS` y `MACHINE_OPT_OUTS`): si no está nombrado arriba ni aquí, falla.",
+    "Así, un enganche nuevo de una versión futura no sale sin nombre sin que nadie se entere:",
+    "hay que decidir, por escrito, si se enseña (fila en guardianes o automatismos, y su pieza",
+    "en `reglas.js`) o si es fontanería (una línea aquí, con su porqué)."
+  ],
+  "noSeEnsena": {
+    "clone-bootstrap": "Solo trabaja en un clon, donde reconstruye `.rsc/`. La barra monta `.rsc/` ella misma y no tiene interruptor.",
+    "copy-rules": "La lectura de las frases prohibidas: la usa `copy-guard`, que es lo que se enseña.",
+    "deepseek-bridge": "El puente de DeepSeek, que es de la máquina y no del proyecto. La barra solo monta Claude Code y Codex.",
+    "hook-once": "Evita que un mismo aviso salga dos veces si el arnés está en dos sitios. No decide nada.",
+    "sello": "El sello de revisión: lo aplica `ship-guard` (que sí se enseña) y solo si el proyecto lo activa; no trae interruptor `.no-*`.",
+    "session-memory-adapter": "La traducción de `session-memory` a cada asistente. La pieza que se enseña es la memoria.",
+    "session-memory-core": "El motor de `session-memory`. La pieza que se enseña es la memoria.",
+    "shell-unwrap": "Lo que usan los guardianes para leer qué ejecuta de verdad una orden. No decide nada.",
+    "team-safe-start": "Lo que hace `session-start` al empezar en un proyecto de equipo (rescatar copias, mover carpetas). Va dentro de la brújula al empezar.",
+    "trunk-policy": "Cómo decide `branch-guard` si lo principal está cerrado. La pieza que se enseña es el freno."
   }
 }
