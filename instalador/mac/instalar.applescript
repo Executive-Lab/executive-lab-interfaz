@@ -25,12 +25,23 @@ on run
 
 Tarda unos minutos, hace falta internet y no te voy a pedir ninguna contraseña." with title "Executive Lab" buttons {"Ahora no", "Empezar"} default button "Empezar" with icon note
 		if button returned of result is "Ahora no" then return
+
+		-- Con qué asistente (decisión 168), la misma pregunta y las mismas
+		-- palabras que el instalador de Windows. Claude por defecto.
+		display dialog "¿Con cuál vas a trabajar?
+
+Los dos hacen lo mismo aquí. Si en clase te han dicho uno, elige ese. Si no lo sabes, deja Claude." with title "Tu asistente" buttons {"Claude", "Codex", "Los dos"} default button "Claude" with icon note
+		set elegido to button returned of result
 	on error number -128
 		return
 	end try
 
+	set elAsistente to "claude"
+	if elegido is "Codex" then set elAsistente to "codex"
+	if elegido is "Los dos" then set elAsistente to "losDos"
+
 	set progreso to do shell script "mktemp /tmp/executive-lab-progreso.XXXXXX"
-	set elPid to do shell script "/bin/sh " & quoted form of elArranque & " --progreso " & quoted form of progreso & " >/dev/null 2>&1 & echo $!"
+	set elPid to do shell script "/bin/sh " & quoted form of elArranque & " --progreso " & quoted form of progreso & " --asistente " & elAsistente & " >/dev/null 2>&1 & echo $!"
 
 	set progress total steps to TOTAL
 	set progress completed steps to 0

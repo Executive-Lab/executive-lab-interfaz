@@ -38,6 +38,7 @@ const comun = (nombre) => {
 };
 
 const git = comun('git');
+const loDelEditor = comun('ajustes-del-editor');
 
 const AQUI = __dirname;
 const CARGA = path.join(AQUI, 'carga');
@@ -53,6 +54,17 @@ const SECO = process.argv.includes('--seco');
 // El Dock no vive en la carpeta personal, así que al probar contra una de
 // mentira hay que decirle que no lo toque.
 const SIN_DOCK = process.argv.includes('--sin-dock');
+
+// Con qué asistente: `claude`, `codex` o `losDos` (decisión 168). Lo pasa la app
+// con lo que eligió la persona; sin nada, o con algo que no se entiende, Claude,
+// que es lo que se ponía hasta ahora. La extensión de cada uno, la misma tabla
+// que usa el .exe (`preparar.js`).
+const EXTENSION_DEL_ASISTENTE = { claude: 'anthropic.claude-code', codex: 'openai.chatgpt' };
+function asistentesDe(valor) {
+  const elegidos = loDelEditor.asistentesDe(valor);
+  return elegidos.length ? elegidos : ['claude'];
+}
+const ASISTENTES = asistentesDe(argumento('asistente', 'claude'));
 
 // ------------------------------------------------------------------ recado
 
@@ -182,13 +194,16 @@ function elEditor() {
   return destino;
 }
 
-// 3. Las dos extensiones: la del asistente y la nuestra.
+// 3. Las extensiones: la del asistente (o las de los dos) y la nuestra.
 function lasPiezasDelAsistente(editor) {
   contar('Poniendo el asistente');
   const cli = path.join(editor, DENTRO_DEL_EDITOR);
   if (!SECO && !fs.existsSync(cli)) throw new Error('el editor no trae su línea de comandos');
 
-  let bien = correr(cli, ['--install-extension', 'anthropic.claude-code', '--force'], { timeout: 300000 }).codigo === 0;
+  let bien = true;
+  for (const cual of ASISTENTES) {
+    bien = correr(cli, ['--install-extension', EXTENSION_DEL_ASISTENTE[cual], '--force'], { timeout: 300000 }).codigo === 0 && bien;
+  }
 
   const vsix = path.join(APP, 'executive-lab.vsix');
   if (fs.existsSync(vsix) || SECO) {
@@ -225,7 +240,7 @@ async function asegurarGit() {
 
 // 5. Lo que se deja puesto en los ajustes de usuario del editor (decisión
 // 163): lo de todo el editor —la confianza, las actualizaciones, la bienvenida—
-// y lo de Claude, que es el asistente que se pone aquí. Qué es cada cosa, y por
+// y lo del asistente que esa persona ha elegido (decisión 168). Qué es cada cosa, y por
 // qué, en `comun/ajustes-del-editor.js`. Lo que esa persona ya tenía decidido no
 // se pisa, y queda constancia al lado para que desinstalar quite solo lo
 // nuestro. El resto del disfraz va en la carpeta y lo pone el panel.
@@ -240,7 +255,7 @@ async function losAjustesDelEditor() {
     try {
       const hecho = await comun('ajustes-del-editor').ponerEnElFichero({
         fichero: path.join(CASA, 'Library', 'Application Support', 'Code', 'User', 'settings.json'),
-        asistentes: ['claude'],
+        asistentes: ASISTENTES,
         anotar,
       });
       anotar(`Ajustes del editor: ${hecho.hecho}${hecho.puestas.length ? ` (${hecho.puestas.join(', ')})` : ''}${hecho.respetadas.length ? `; ya los había decidido esa persona: ${hecho.respetadas.join(', ')}` : ''}.`);
@@ -249,8 +264,9 @@ async function losAjustesDelEditor() {
     }
   }
 
-  // El control remoto de Claude, para todas las sesiones (decisión 143).
-  if (!SECO) {
+  // El control remoto de Claude, para todas las sesiones (decisión 143). Solo
+  // si se ha puesto Claude, que es el que lo tiene.
+  if (!SECO && ASISTENTES.includes('claude')) {
     try {
       const { hecho } = comun('control-remoto').ponerElControlRemoto();
       anotar(`Control remoto: ${hecho}.`);
@@ -370,7 +386,7 @@ function alDock(app) {
 // --------------------------------------------------------------------- main
 
 async function main() {
-  anotar(`Executive Lab · macOS ${os.release()} · ${process.arch} · node ${process.version}`);
+  anotar(`Executive Lab · macOS ${os.release()} · ${process.arch} · node ${process.version} · asistentes: ${ASISTENTES.join(', ')}`);
 
   copiarLasHerramientas();
   const editor = elEditor();
@@ -384,7 +400,12 @@ async function main() {
   terminar(true, acceso);
 }
 
-main().catch((error) => {
-  anotar(`ERROR ${error && error.stack ? error.stack : error}`);
-  terminar(false, error && error.message ? error.message : String(error));
-});
+// Se puede cargar sin instalar nada, para probar lo que decide (`humo.js`).
+module.exports = { asistentesDe, EXTENSION_DEL_ASISTENTE };
+
+if (require.main === module) {
+  main().catch((error) => {
+    anotar(`ERROR ${error && error.stack ? error.stack : error}`);
+    terminar(false, error && error.message ? error.message : String(error));
+  });
+}
