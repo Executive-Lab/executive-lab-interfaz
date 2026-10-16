@@ -52,7 +52,7 @@ function candidatos(carpetaDeLaExtension) {
   // dentro: nadie fija «Brújula» arriba. El texto que manda cada una es el que
   // decide `saberes.js`: con Claude, `/la-habilidad`, que es lo que la dispara.
   const sabe = saberes.queSabe(carpetaDeLaExtension);
-  const habilidades = [...sabe.suyas, ...sabe.sabe, ...sabe.otras].map((h) => ({
+  const habilidades = [...sabe.suyas, ...sabe.sabe, ...sabe.otras].filter((h) => h.prompt).map((h) => ({
     id: idDeHabilidad(h),
     etiqueta: h.nombre.charAt(0).toUpperCase() + h.nombre.slice(1),
     icono: '✨',

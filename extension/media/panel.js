@@ -480,7 +480,17 @@ const ORIGEN = {
   catalogo: 'Del catálogo.',
   aqui: 'Instalada aquí, fuera del catálogo.',
 };
-const filaDeHabilidad = (c) => filaDeAccion({
+// Una con un nombre que no se puede usar para pedirla —lo escribió quien hizo la
+// carpeta, y no es un nombre—: se ve, pero sin botón (revisión de la PR #48).
+const sinNombreQueValga = (etiqueta, frase) => `
+    <div class="fila">
+      <p class="nombre">${texto(etiqueta)}</p>
+    </div>
+    <p class="pista">${texto(frase)}</p>`;
+
+const filaDeHabilidad = (c) => (!c.prompt
+  ? sinNombreQueValga(c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1), 'Su nombre no se puede usar para pedirla. Pídele al asistente que se lo cambie.')
+  : filaDeAccion({
   etiqueta: c.nombre.charAt(0).toUpperCase() + c.nombre.slice(1),
   icono: '✨',
   queHace: c.frase,
@@ -488,7 +498,7 @@ const filaDeHabilidad = (c) => filaDeAccion({
   nombreReal: c.prompt && c.prompt.startsWith('/') ? c.prompt : c.id,
   seEscribe: Boolean(c.prompt && c.prompt.startsWith('/')),
   dentro: ORIGEN[c.origen] ? `<p>${ORIGEN[c.origen]}</p>` : '',
-});
+}));
 
 // Una del catálogo que todavía no está: se pulsa y se añade (`rsc add`).
 const filaDelCatalogo = (c) => filaDeAccion({
@@ -734,14 +744,16 @@ function pantallaReglas({
 // arriba —son los mismos que se pueden fijar en Acciones rápidas— y detrás los
 // que están escritos y nadie ha marcado, y los que trae el arnés.
 function pantallaComandos({ comandos = [] }) {
-  const fila = (c) => filaDeAccion({
-    etiqueta: c.etiqueta,
-    icono: c.icono || '▸',
-    queHace: c.queHace,
-    accion: { tipo: 'pedir', prompt: c.prompt },
-    nombreReal: c.prompt,
-    seEscribe: true,
-  });
+  const fila = (c) => (!c.prompt
+    ? sinNombreQueValga(c.etiqueta, 'Su nombre no se puede usar para pedirlo. Pídele al asistente que se lo cambie.')
+    : filaDeAccion({
+      etiqueta: c.etiqueta,
+      icono: c.icono || '▸',
+      queHace: c.queHace,
+      accion: { tipo: 'pedir', prompt: c.prompt },
+      nombreReal: c.prompt,
+      seEscribe: true,
+    }));
 
   const mios = comandos.filter((c) => !c.delArnes);
   const delArnes = comandos.filter((c) => c.delArnes);
@@ -883,7 +895,9 @@ function pantallaAgentes({ agentes = [] }) {
     </div>
 
     ${agentes.length
-      ? agentes.map((a) => filaDeAccion({
+      ? agentes.map((a) => (!a.prompt
+        ? sinNombreQueValga(a.nombre.charAt(0).toUpperCase() + a.nombre.slice(1), 'Su nombre no se puede usar para lanzarlo. Pídele al asistente que se lo cambie.')
+        : filaDeAccion({
         etiqueta: a.nombre.charAt(0).toUpperCase() + a.nombre.slice(1),
         icono: '🤖',
         queHace: a.queHace,
@@ -892,7 +906,7 @@ function pantallaAgentes({ agentes = [] }) {
         // El encargo entero va detrás de la (i): interesa una vez, y antes
         // competía con el botón que de verdad se pulsa.
         dentro: boton({ etiqueta: 'Ver sus instrucciones', icono: '📄', pequeno: true, discreto: true, accion: { tipo: 'verAgente', fichero: a.fichero } }),
-      })).join('')
+      }))).join('')
       : nada('Todavía no hay ninguno.')}
 
     <hr class="separador">

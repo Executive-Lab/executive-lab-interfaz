@@ -339,10 +339,11 @@ línea exacta para que la mande, porque las pide él.
   la barra te prepara el encargo; no la des por creada hasta que él te lo confirme.
   - Con **Claude**, en su nube (`/schedule`), funciona con el ordenador apagado, pero trabaja con una
     **copia de lo subido a GitHub**: pide la carpeta en GitHub («Subir a GitHub»), un plan de pago de
-    Claude, y va como mucho una vez cada hora. El `.env` y `keys/` no viajan, así que **una habilidad
-    que use una conexión de esta carpeta no funciona allí**. Entonces, la **app de escritorio de
-    Claude** (tareas programadas): trabaja con esta carpeta, con el ordenador encendido y la app
-    abierta. **Nunca le propongas copiar claves a la nube.**
+    Claude, y va como mucho una vez cada hora. Lo subido viaja entero, documentos incluidos: en privado
+    y sin datos de clientes. El `.env` y `keys/` no viajan, así que **una habilidad que use una conexión
+    de esta carpeta no funciona allí**. Ante la duda, escritorio: si la carpeta tiene alguna conexión,
+    la **app de escritorio de Claude** (tareas programadas), que trabaja con esta carpeta, con el
+    ordenador encendido y la app abierta. **Nunca le propongas copiar claves a la nube.**
   - Con **Codex**, las tareas programadas son de ChatGPT, y desde el editor no se gestionan: la app de
     escritorio trabaja con esta carpeta (ordenador encendido y app abierta); la web, sin ella. Dile los
     pasos que hace él en ChatGPT y espera a que te confirme que está creada.

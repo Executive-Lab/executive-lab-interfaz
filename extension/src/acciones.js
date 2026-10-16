@@ -34,8 +34,11 @@ function habilidadesConBoton() {
     const campos = frontmatter.leer(path.join(carpeta, entrada.name, 'SKILL.md'));
     const etiqueta = typeof campos.boton === 'string' ? campos.boton.trim() : '';
     if (!etiqueta) continue;
+    // Sin un nombre que se pueda pedir no es un botón: se ve en Habilidades, sin él.
+    const comoSePide = donde.elBoton(entrada.name);
+    if (!comoSePide.prompt) continue;
     halladas.push({
-      ...donde.elBoton(entrada.name),
+      ...comoSePide,
       etiqueta,
       icono: typeof campos.icono === 'string' && campos.icono ? campos.icono : '▸',
       grupo: ORDEN_DE_GRUPOS.includes(campos.grupo) ? campos.grupo : 'aprendido',
@@ -62,7 +65,7 @@ function acciones() {
     // Cada asistente los escribe a su manera: `.prompt.md` en Copilot, y en
     // Cline se piden con su `.md` detrás (E3).
     const comando = donde.elComando(fichero);
-    if (!comando || yaEstan.has(comando.nombre)) continue;
+    if (!comando || !comando.prompt || yaEstan.has(comando.nombre)) continue;
 
     const campos = frontmatter.leer(path.join(carpeta, fichero));
     const etiqueta = typeof campos.boton === 'string' ? campos.boton.trim() : '';

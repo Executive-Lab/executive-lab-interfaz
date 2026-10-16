@@ -100,14 +100,21 @@ function escribirSinEnlaces(fichero, contenido, raiz = destino) {
   return true;
 }
 
+// Si la ha copiado entera. Lo que no, no se da por puesto (revisión de la PR #48).
 function copiarCarpeta(desde, hasta) {
+  let entera = true;
   for (const entrada of fs.readdirSync(desde, { withFileTypes: true })) {
     const a = path.join(desde, entrada.name);
     const b = path.join(hasta, entrada.name);
-    if (entrada.isDirectory()) copiarCarpeta(a, b);
-    else escribirSinEnlaces(b, fs.readFileSync(a));
+    const hecho = entrada.isDirectory() ? copiarCarpeta(a, b) : escribirSinEnlaces(b, fs.readFileSync(a));
+    entera = entera && hecho;
   }
+  return entera;
 }
+
+// Para quién quedó puesta la habilidad. Sin ella no se apunta a su `siempre.md`
+// ni se engancha su freno: se apuntaría a algo que no está.
+const habilidadPuesta = new Set();
 
 // 0. Para qué asistentes se montó esta carpeta: para todos los declarados (E2).
 //
@@ -143,8 +150,12 @@ const comoSeEscribe = (partes) => partes.join('/');
 // hay ninguno que leer, nunca. Así que se dice, en vez de dejarlos en una
 // carpeta muerta. La barra ya sabe explicar ese hueco (`donde.puedeTenerBotones`).
 function ponerLaHabilidadYLosComandos(quien, suyo) {
-  copiarCarpeta(path.join(origen, 'executive-lab'), en(...suyo.habilidades, 'executive-lab'));
-  hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/`);
+  if (copiarCarpeta(path.join(origen, 'executive-lab'), en(...suyo.habilidades, 'executive-lab'))) {
+    habilidadPuesta.add(quien);
+    hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/`);
+  } else {
+    hechos.push(`${comoSeEscribe(suyo.habilidades)}/executive-lab/ va por un enlace a otro sitio: no la pongo`);
+  }
   // Con Claude y con Codex, los botones son habilidades (decisión 141).
   if (suyo.botones) {
     ponerLosBotonesComoHabilidades(quien, suyo);
@@ -270,6 +281,7 @@ function ponerElTrozo(fichero, trozo, { desde: DESDE_AQUI = DESDE, entre = ENTRE
 const yaNombrados = new Map();
 
 function nombrarLaHabilidad(quien, suyo) {
+  if (!habilidadPuesta.has(quien)) return `${quien}: la habilidad no está puesta, y no apunto a ella`;
   if (!suyo.siempre) return `${quien} encuentra la habilidad solo`;
   const partes = sitios.dondeVaLoDeSiempre(quien, destino) || suyo.siempre.fichero;
   const suFichero = comoSeEscribe(partes);
@@ -388,6 +400,7 @@ function esDeAlguien(fichero) {
 
 function ponerLoDeSiempre(quien, suyo) {
   if (quien !== 'claude') return null;
+  if (!habilidadPuesta.has(quien)) return 'CLAUDE.md (sin el bloque: la habilidad no está puesta, y no apunto a lo que no hay)';
   const fichero = en('CLAUDE.md');
   const antes = fs.existsSync(fichero) ? fs.readFileSync(fichero, 'utf8') : null;
   const viejo = antes && antes.match(ENTRE_MARCAS);
@@ -480,6 +493,8 @@ hechos.push(callarLosAvisos());
 // ofrece con su botón, que es `--poner-freno`.
 function engancharElFreno(quien, suyo) {
   if (!suyo.frenos || !suyo.ajustes) return `sin freno: ${quien} no tiene dónde engancharlo`;
+  // El freno vive en la habilidad: sin ella, cada orden llamaría a un fichero que no está.
+  if (!habilidadPuesta.has(quien)) return 'sin freno: la habilidad no está puesta';
   const ORDEN_DEL_FRENO = 'node "${CLAUDE_PROJECT_DIR}/' + comoSeEscribe(suyo.habilidades) + '/executive-lab/freno.mjs" "${CLAUDE_PROJECT_DIR}"';
   const ENTRADA_DEL_FRENO = { matcher: 'Bash', hooks: [{ type: 'command', command: ORDEN_DEL_FRENO }] };
   const fichero = en(...suyo.ajustes);

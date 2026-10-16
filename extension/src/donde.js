@@ -105,7 +105,8 @@ const elBoton = (nombre) => {
   const campos = carpeta ? require('./frontmatter').leer(path.join(carpeta, nombre, 'SKILL.md')) : {};
   const declarado = typeof campos.name === 'string' ? campos.name.trim() : '';
   const invocacion = require('./limpio').invocacion(paraQuien() === 'codex' ? declarado : '', nombre);
-  return { nombre, prompt: `${susSitios().botonSePideCon || '/'}${invocacion}` };
+  // Sin un nombre que valga, no hay botón: `prompt` va a null.
+  return { nombre, prompt: invocacion ? `${susSitios().botonSePideCon || '/'}${invocacion}` : null };
 };
 const acabaUnComando = () => susSitios().comandoAcabaEn || '.md';
 // De un fichero de la carpeta de comandos, el comando y cómo se pide; o null si
@@ -114,7 +115,9 @@ const elComando = (fichero) => {
   const ext = acabaUnComando();
   if (!fichero.endsWith(ext) || fichero.length === ext.length) return null;
   const nombre = fichero.slice(0, -ext.length);
-  return { nombre, prompt: `/${nombre}${susSitios().comandoSePideCon || ''}` };
+  // Un comando se pide por el nombre de su fichero: si no es un nombre de verdad,
+  // no se pide (revisión de la PR #48).
+  return { nombre, prompt: require('./limpio').invocable(nombre) ? `/${nombre}${susSitios().comandoSePideCon || ''}` : null };
 };
 const ficheroDelComando = (nombre) => {
   const carpeta = carpetaDeComandos();

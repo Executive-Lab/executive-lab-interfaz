@@ -15,7 +15,6 @@ const path = require('node:path');
 const proyecto = require('./proyecto');
 const acciones = require('./acciones');
 const cuando = require('./cuando');
-const frontmatter = require('./frontmatter');
 
 const esHabilidad = (b) => Boolean(b.fichero && b.fichero.endsWith('SKILL.md'));
 
@@ -152,47 +151,27 @@ function ponerCuando(nombre, cron) {
   return { ok: true, boton, enPalabras: cron ? cuando.enPalabras(cron) : null };
 }
 
-// ── Si usa conexiones ──────────────────────────────────────────────────
+// ── Si esta carpeta tiene conexiones ─────────────────────────────────────
 //
 // Las rutinas de Claude en la nube trabajan con una copia de lo subido a GitHub:
-// el `.env` y `keys/` no viajan, así que una habilidad que use una conexión de
-// esta carpeta no funciona allí. Se decide con reglas, leyendo el disco (P5): que
-// su `SKILL.md` nombre `01-TOOLS/`, una de las conexiones de la carpeta o una
-// variable de sus `.env`. Ante la duda, sí: lo peor de equivocarse hacia ese
-// lado es proponer la app de escritorio, que también funciona.
-function usaConexiones(boton) {
-  let texto;
-  try {
-    texto = frontmatter.leerHasta(boton.fichero);
-  } catch {
-    return false;
-  }
-  if (/01-TOOLS/.test(texto)) return true;
+// el `.env` y `keys/` no viajan. Adivinar leyendo la habilidad si usa una
+// conexión se engañaba —«Sube el informe a Google Drive» con la carpeta
+// GOOGLE_DRIVE, una habilidad que remite a otro fichero, «lee el .env»—. Jose,
+// en la revisión de la PR #48: ante la duda, escritorio. La nube solo se ofrece
+// si la carpeta no tiene ninguna conexión: ninguna carpeta en `01-TOOLS/` salvo
+// la plantilla, y ninguna clave en un `.env` ni fichero de acceso (lo que ya
+// encuentra `sueltas.js`). Si no se puede mirar, también escritorio.
+function tieneConexiones() {
   const base = proyecto.ruta('01-TOOLS');
-  const conexiones = [];
   try {
-    for (const e of fs.readdirSync(base, { withFileTypes: true })) {
-      if (!e.isDirectory() || e.name.startsWith('_') || e.name.startsWith('.')) continue;
-      conexiones.push(e.name);
-      // Y como la llama su README: «# Google Drive», en una carpeta GOOGLE_DRIVE.
-      try {
-        const titulo = frontmatter.leerHasta(path.join(base, e.name, 'README.md'), 512).split('\n')[0].replace(/^#\s*/, '').trim();
-        if (titulo && !titulo.includes('<')) conexiones.push(titulo);
-      } catch { /* sin README */ }
-    }
-  } catch { /* sin conexiones */ }
-  const variables = new Set();
-  const deUnEnv = (fichero) => {
-    let crudo = '';
-    try { crudo = frontmatter.leerHasta(fichero); } catch { return; }
-    // Solo los nombres, nunca los valores.
-    for (const m of crudo.matchAll(/^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]{2,})[ \t]*=/gm)) variables.add(m[1]);
-  };
-  for (const c of conexiones) for (const f of ['.env', '.env.example']) deUnEnv(path.join(base, c, f));
-  for (const f of ['.env', '.env.example']) deUnEnv(proyecto.ruta(f));
-  const comoPalabra = (nombre, banderas) => new RegExp(`(^|[^\\p{L}\\p{N}_])${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}_])`, banderas);
-  if (conexiones.some((c) => c.length >= 3 && comoPalabra(c, 'iu').test(texto))) return true;
-  return [...variables].some((v) => comoPalabra(v, 'u').test(texto));
+    if (fs.readdirSync(base, { withFileTypes: true }).some((e) => (e.isDirectory() || e.isSymbolicLink()) && e.name !== '_TEMPLATE')) return true;
+  } catch { /* sin 01-TOOLS */ }
+  try {
+    const { claves, ficheros } = require('./sueltas').paraProteger();
+    return claves.length > 0 || ficheros.length > 0;
+  } catch {
+    return true;
+  }
 }
 
-module.exports = { disponibles, conHorario, hayAlgo, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando, dentroDeLaCarpeta, puedeCambiar, puedeQuitar, usaConexiones };
+module.exports = { disponibles, conHorario, hayAlgo, losQueHay, losQueTocan, costumbres, conCuando, ponerCuando, dentroDeLaCarpeta, puedeCambiar, puedeQuitar, tieneConexiones };

@@ -77,7 +77,10 @@ const CREAR_RECORDATORIO = 'Quiero un recordatorio con botón en esta carpeta: q
 // - Claude, en su nube (https://code.claude.com/docs/en/routines): trabaja con una
 //   copia de lo subido a GitHub, pide un plan de pago y va como mucho una vez por
 //   hora. El `.env` y `keys/` no viajan: lo que usa conexiones no funciona allí,
-//   y nunca se propone copiar claves a la nube.
+//   y nunca se propone copiar claves a la nube. Lo que se sube viaja entero,
+//   documentos incluidos: en privado y sin datos de clientes. Y como adivinar
+//   si una habilidad usa una conexión se engaña, con alguna en la carpeta, la
+//   app de escritorio (ante la duda, escritorio: revisión de la PR #48).
 // - Claude, en su app de escritorio (https://code.claude.com/docs/en/desktop-scheduled-tasks):
 //   trabaja con esta carpeta, con el ordenador encendido y la app abierta.
 // - ChatGPT (https://learn.chatgpt.com/docs/automations): sus tareas programadas
@@ -89,7 +92,7 @@ const DONDE = {
     guia: 'https://code.claude.com/docs/en/routines',
   },
   escritorio: {
-    descripcion: 'Usa tus conexiones: tarea programada en la app de escritorio de Claude',
+    descripcion: 'Esta carpeta tiene conexiones: tarea programada en la app de escritorio de Claude',
     guia: 'https://code.claude.com/docs/en/desktop-scheduled-tasks',
   },
   chatgpt: {
@@ -115,10 +118,10 @@ function queSeHagaSola({ quien, etiqueta, invocacion, enPalabras = null, conCone
   const habilidad = `Que use la habilidad que aquí se pide con ${invocacion}: léela para conservar sus instrucciones.`;
   const sinAviso = enPalabras ? ' Cuando esté creada, quita su horario de la habilidad para que la barra no me lo recuerde también.' : '';
   if (donde.id === 'nube') {
-    return `${inicio} Con una rutina de Claude en la nube, que funciona aunque tenga el ordenador apagado. Antes de crearla, cuéntame lo que hace falta: un plan de pago de Claude y esta carpeta subida a GitHub, con la habilidad dentro, porque la rutina trabaja con una copia de lo que hay allí y lo que solo está en este ordenador no lo ve. Va como mucho una vez cada hora. ${habilidad} Si para hacerla hicieran falta claves de acceso, no las copies a la nube: dímelo y la preparamos en la app de escritorio de Claude. La guía: ${donde.guia}. Créala tú si puedes desde aquí; si no, dime los pasos que hago yo en Claude y te confirmo cuando esté creada.${sinAviso}`;
+    return `${inicio} Con una rutina de Claude en la nube, que funciona aunque tenga el ordenador apagado. Antes de crearla, cuéntame lo que hace falta: un plan de pago de Claude y esta carpeta subida a GitHub en privado y sin datos de clientes, con la habilidad dentro, porque la rutina trabaja con una copia de lo que hay allí, documentos incluidos, y lo que solo está en este ordenador no lo ve. Va como mucho una vez cada hora. ${habilidad} Si para hacerla hicieran falta claves de acceso, no las copies a la nube: dímelo y la preparamos en la app de escritorio de Claude. La guía: ${donde.guia}. Créala tú si puedes desde aquí; si no, dime los pasos que hago yo en Claude y te confirmo cuando esté creada.${sinAviso}`;
   }
   if (donde.id === 'escritorio') {
-    return `${inicio} Usa conexiones de esta carpeta, y sus claves no salen de este ordenador, así que en la nube de Claude no funcionaría: prepárala como tarea programada de la app de escritorio de Claude, que trabaja con esta carpeta mientras el ordenador está encendido y la app abierta. ${habilidad} No copies claves a ningún otro sitio. La guía: ${donde.guia}. Dime los pasos que hago yo en la app de escritorio de Claude y te confirmo cuando esté creada.${sinAviso}`;
+    return `${inicio} Esta carpeta tiene conexiones, y sus claves no salen de este ordenador: en la nube de Claude no estarían. Prepárala como tarea programada de la app de escritorio de Claude, que trabaja con esta carpeta mientras el ordenador está encendido y la app abierta. ${habilidad} No copies claves a ningún otro sitio. La guía: ${donde.guia}. Dime los pasos que hago yo en la app de escritorio de Claude y te confirmo cuando esté creada.${sinAviso}`;
   }
   return `${inicio} Con una tarea programada de ChatGPT. Desde el editor no se gestionan: se crean en ChatGPT. Como la habilidad está en esta carpeta, tiene que ser en la app de escritorio de ChatGPT, con el ordenador encendido y la app abierta: las de la web no ven esta carpeta. ${habilidad} No copies claves a ningún otro sitio. La guía: ${donde.guia}.${sinAviso} Dime los pasos que hago yo en ChatGPT y te confirmo cuando esté creada.`;
 }

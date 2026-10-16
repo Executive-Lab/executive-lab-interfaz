@@ -96,6 +96,7 @@ function queHay() {
     // Con Codex se pide por su `name`, pero solo si es un nombre de verdad: lo
     // escribe quien hizo la carpeta, y entra en el encargo (revisión adversaria
     // de la 154). Si no, por el del fichero, limpio.
+    // Y si ninguno de los dos vale, no se lanza desde la barra: se ve, sin botón.
     const invocacion = limpio.invocacion(donde.paraQuien() === 'codex' ? humano(campos.name) : '', id);
 
     // Lo que diga su fichero manda, con una condición: que esté en español.
@@ -123,7 +124,7 @@ function queHay() {
       // Cómo se le pide al asistente que lo lance: por su identificador, que
       // es lo que él tiene en su carpeta. «Quiero que cobros atrasados haga lo
       // suyo» no nombraba nada que el asistente pudiera buscar.
-      prompt: `Usa el agente «${invocacion}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.`,
+      prompt: invocacion ? `Usa el agente «${invocacion}» para esto y déjale hacer su encargo. Pregúntame lo que te falte.` : null,
     };
   });
 }

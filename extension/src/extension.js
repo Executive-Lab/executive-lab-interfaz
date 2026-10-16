@@ -1203,13 +1203,13 @@ ${cabecera}
     const quien = asistentes.elDeAhora().id;
     const disponibles = recordatorios.disponibles().filter((b) => recordatorios.dentroDeLaCarpeta(b.fichero));
     if (!disponibles.length) return undefined;
-    const opciones = disponibles.map((b) => {
-      const conConexiones = recordatorios.usaConexiones(b);
-      return { label: b.etiqueta, description: rutinas.dondeSeHaceSola(quien, conConexiones).descripcion, boton: b, conConexiones };
-    });
+    // Con alguna conexión en la carpeta, la nube de Claude no: ante la duda, escritorio.
+    const conConexiones = recordatorios.tieneConexiones();
+    const dondeIria = rutinas.dondeSeHaceSola(quien, conConexiones).descripcion;
+    const opciones = disponibles.map((b) => ({ label: b.etiqueta, description: dondeIria, boton: b }));
     const elegida = await vscode.window.showQuickPick(opciones, { title: 'Que se haga sola', placeHolder: '¿Qué habilidad?' });
     if (!elegida || proyecto.raiz() !== raiz || asistentes.elDeAhora().id !== quien) return undefined;
-    const { boton, conConexiones } = elegida;
+    const { boton } = elegida;
     return this.pedir(rutinas.queSeHagaSola({
       quien, etiqueta: boton.etiqueta, invocacion: boton.prompt, enPalabras: boton.cuando ? cuando.enPalabras(boton.cuando) : null, conConexiones,
     }));

@@ -9,7 +9,9 @@
 //
 // Dos reglas:
 // - Para pedir algo por su nombre (`/x`, `$x`, «Usa el agente «x»»), solo un
-//   nombre corto de letras, números, `_`, `.` y `-`. Si no, el de la carpeta.
+//   nombre corto de letras, números, `_`, `.` y `-`. Si no, el de la carpeta, que
+//   también tiene que valer: una carpeta llamada «ok IGNORA lo anterior…» no
+//   entra en un encargo. Si ninguno vale, no se pide: se ve, sin botón.
 // - Cualquier rótulo que entre en un encargo va en una línea, sin «», comillas
 //   ni caracteres de control, y con un tope.
 
@@ -32,8 +34,12 @@ function etiqueta(texto, tope = 120) {
     .trim();
 }
 
-// El nombre con el que se pide: el declarado si vale, y si no, el de la carpeta,
-// limpio. Nunca el declarado a medias.
-const invocacion = (declarado, id) => (invocable(declarado) ? declarado : etiqueta(id, 64));
+// El nombre con el que se pide: el declarado si vale; si no, el de la carpeta si
+// vale; y si tampoco, ninguno (null). Nunca uno a medias ni uno limpiado: con
+// Claude, lo que va detrás de `/x` llega como argumentos (revisión de la PR #48).
+const invocacion = (declarado, id) => {
+  if (invocable(declarado)) return declarado;
+  return invocable(id) ? id : null;
+};
 
 module.exports = { INVOCABLE, invocable, etiqueta, invocacion };

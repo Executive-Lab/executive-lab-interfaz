@@ -14740,36 +14740,43 @@ exec git "$@"
       assert.match(deCodex, /Dime los pasos que hago yo en ChatGPT y te confirmo cuando esté creada\.$/, 'no termina pidiéndole los pasos');
       assert.doesNotMatch(deCodex, /comprueba|Codex también/i);
 
-      // Con Claude: en su nube, con la verdad; y si usa conexiones, en su app de escritorio.
-      poner('01-TOOLS/FACTURAS/.env.example', 'FACTURAS_API_KEY=\n');
-      poner('01-TOOLS/FACTURAS/README.md', '# Facturas Online\n');
-      const cobros = poner('.agents/skills/cobros/SKILL.md', '---\nname: cobros\nmetadata:\n  boton: Revisar cobros\n---\nLee FACTURAS_API_KEY y revisa los cobros.\n');
-      const usa = (texto) => { fs.writeFileSync(cobros, `---\nname: cobros\nmetadata:\n  boton: Revisar cobros\n---\n${texto}\n`); return rec.usaConexiones({ fichero: cobros }); };
-      assert.equal(usa('Lee FACTURAS_API_KEY y revisa los cobros.'), true, 'una variable de su .env no cuenta');
-      assert.equal(usa('Ejecuta el guion de 01-TOOLS/otra/listar.py.'), true, '01-TOOLS no cuenta');
-      assert.equal(usa('Mira en facturas los cobros del mes.'), true, 'el nombre de una conexión no cuenta');
-      assert.equal(usa('Abre Facturas Online y repasa.'), true, 'el nombre que le da su README no cuenta');
-      assert.equal(usa('Resume lo que he escrito esta semana.'), false, 'sin conexiones, se da por que las usa');
-      assert.equal(usa('Revisa las FACTURAS_API_KEYS antiguas.'), false, 'una palabra que empieza como una variable cuenta');
-      usa('Lee FACTURAS_API_KEY y revisa los cobros.');
+      // Con Claude: en su nube solo si la carpeta no tiene ninguna conexión; si tiene
+      // alguna, la app de escritorio, diga lo que diga la habilidad (revisión de la PR #48:
+      // ante la duda, escritorio).
+      poner('.agents/skills/cobros/SKILL.md', '---\nname: cobros\nmetadata:\n  boton: Revisar cobros\n---\nSube el informe a Google Drive.\n');
+      assert.equal(rec.tieneConexiones(), false, 'sin nada, dice que tiene conexiones');
+      poner('01-TOOLS/_TEMPLATE/README.md', '# Plantilla\n');
+      assert.equal(rec.tieneConexiones(), false, 'la plantilla cuenta como una conexión');
+      poner('.env', '# sin nada todavía\n');
+      assert.equal(rec.tieneConexiones(), false, 'un .env sin claves cuenta');
+      fs.writeFileSync(path.join(carpeta, '.env'), 'GDRIVE_TOKEN=ya29.a0AfB_byC7xQ2mN9kLp4rT8vW1zY3\n');
+      assert.equal(rec.tieneConexiones(), true, 'una clave en el .env no cuenta');
+      fs.rmSync(path.join(carpeta, '.env'));
+      poner('01-TOOLS/GOOGLE_DRIVE/README.md', '# Conexión con Drive\n');
+      assert.equal(rec.tieneConexiones(), true, 'una conexión en 01-TOOLS no cuenta');
+      fs.rmSync(path.join(carpeta, '01-TOOLS/GOOGLE_DRIVE'), { recursive: true });
       asistentesM.elDeAhora = () => ({ ...antes.elDeAhora(), id: 'claude', nombre: 'Claude' });
       try {
+        vscode.guion.respuestas = ['Resumen semanal'];
+        await proveedor.manejar({ tipo: 'queSeHagaSola' });
+        assert.ok(vscode.registrado.quickPick.every((o) => /nube de Claude/.test(o.description)), 'sin conexiones, no se ofrece la nube');
+        const enLaNube = peticiones.at(-1);
+        for (const verdad of [/rutina de Claude en la nube/, /copia de lo que hay allí, documentos incluidos/, /plan de pago de Claude/, /subida a GitHub en privado y sin datos de clientes/,
+          /como mucho una vez cada hora/, /no las copies a la nube/])
+          assert.match(enLaNube, verdad);
+        assert.doesNotMatch(enLaNube, /ChatGPT|Codex/);
+        // Con una conexión, todas a la app de escritorio, aunque la habilidad no la nombre.
+        poner('01-TOOLS/GOOGLE_DRIVE/README.md', '# Conexión con Drive\n');
         vscode.guion.respuestas = ['Revisar cobros'];
         await proveedor.manejar({ tipo: 'queSeHagaSola' });
-        assert.match(vscode.registrado.quickPick.find((o) => o.label === 'Revisar cobros').description, /app de escritorio de Claude/);
-        assert.match(vscode.registrado.quickPick.find((o) => o.label === 'Resumen semanal').description, /nube de Claude/);
+        assert.ok(vscode.registrado.quickPick.every((o) => /app de escritorio de Claude/.test(o.description)), 'con una conexión, se ofrece la nube');
         const conClaves = peticiones.at(-1);
         assert.match(conClaves, /tarea programada de la app de escritorio de Claude/);
         assert.match(conClaves, /ordenador está encendido y la app abierta/);
-        assert.match(conClaves, /en la nube de Claude no funcionaría/);
+        assert.match(conClaves, /Esta carpeta tiene conexiones/);
         assert.match(conClaves, /No copies claves a ningún otro sitio\./);
         assert.match(conClaves, /Dime los pasos que hago yo en la app de escritorio de Claude y te confirmo cuando esté creada\./);
-        vscode.guion.respuestas = ['Resumen semanal'];
-        await proveedor.manejar({ tipo: 'queSeHagaSola' });
-        const enLaNube = peticiones.at(-1);
-        for (const verdad of [/rutina de Claude en la nube/, /copia de lo que hay allí/, /plan de pago de Claude/, /subida a GitHub/, /como mucho una vez cada hora/, /no las copies a la nube/])
-          assert.match(enLaNube, verdad);
-        assert.doesNotMatch(enLaNube, /ChatGPT|Codex/);
+        assert.doesNotMatch(conClaves, /Con una rutina de Claude en la nube/);
         assert.equal(pintar(ultima()).includes('te preparo el encargo para'), true);
       } finally { asistentesM.elDeAhora = antes.elDeAhora; }
       // Lo que viene de la carpeta entra limpio en el encargo (revisión adversaria de la 155).

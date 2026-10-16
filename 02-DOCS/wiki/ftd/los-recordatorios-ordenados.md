@@ -52,6 +52,9 @@ esto, y está arreglado».
 - [x] 8. Pruebas para cada mutante de la lista.
 - [x] 9-12. Seguridad de la 154: nombres, enlaces, TOML y topes.
 - [x] Documentación: 154, 155, diccionario y este documento.
+- [x] La revisión de la PR #48: la nube solo sin ninguna conexión (ante la duda, escritorio); sin un nombre
+  que valga, sin botón; los raíles no dicen «puesto» ni apuntan a lo que no escribieron; la nube, en privado
+  y sin datos de clientes.
 
 ## Evidence
 
