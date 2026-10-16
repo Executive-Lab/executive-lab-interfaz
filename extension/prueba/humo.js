@@ -4593,7 +4593,9 @@ exec git "$@"
     // Antes solo salía al pulsar "Subir a GitHub", que es el peor momento: ya
     // quieres guardar y te toca crearte una cuenta.
     const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
-    const wizard = fuente.slice(fuente.indexOf('async arrancar()'), fuente.indexOf('async ponerLaCara()'));
+    // Lo de después de montar va aparte del montaje desde la decisión 165.
+    const wizard = fuente.slice(fuente.indexOf('async despuesDeMontar('), fuente.indexOf('async ponerLaCara()'));
+    assert.ok(fuente.indexOf('async despuesDeMontar(') > 0, 'no encuentro lo de después de montar');
     assert.match(wizard, /github\.estado\(\)/, 'el wizard mira si hay cuenta');
     assert.match(wizard, /Más tarde/, 'y se puede decir que no');
     return 'se ofrece y se puede rechazar';
@@ -9415,21 +9417,30 @@ exec git "$@"
   // Se falsea la respuesta en vez de desinstalar git: `guardar.hayGit` la
   // recuerda, así que hay que olvidarla antes y después o las pruebas que
   // vengan detrás heredan la mentira.
-  const sinGit = async (hacer) => {
+  //
+  // Y el instalador también se finge: desde la decisión 165, sin git, preparar la
+  // carpeta lo pone, y en un ordenador sin git de verdad lanzaría el del sistema.
+  const sinGit = async (hacer, { sePuede = true } = {}) => {
     const gitMod = cargar('git');
     const copias = cargar('guardar');
-    const antes = gitMod.hay;
+    const antes = { hay: gitMod.hay, instalar: gitMod.instalar, sePuede: gitMod.sePuedeInstalarSolo };
     gitMod.hay = async () => false;
+    gitMod.instalar = async () => ({ ok: false, mensaje: 'de prueba: no se instala nada' });
+    gitMod.sePuedeInstalarSolo = () => sePuede;
     copias.olvidarSiHayGit();
     try {
       return await hacer();
     } finally {
-      gitMod.hay = antes;
+      gitMod.hay = antes.hay;
+      gitMod.instalar = antes.instalar;
+      gitMod.sePuedeInstalarSolo = antes.sePuede;
       copias.olvidarSiHayGit();
     }
   };
 
-  await comprobar('sin git, la carpeta vacía no ofrece prepararse: ofrece ponerlo', async () => {
+  // Desde la decisión 165 la pantalla ofrece prepararla igual, y pulsar lo pone:
+  // lo mira «sin git, la pantalla ofrece Preparar…». Aquí, que se sabe y se dice.
+  await comprobar('sin git, la carpeta vacía lo dice antes de ofrecer nada, y qué pasará al pulsar', async () => {
     const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'carpeta-sin-git-'));
     vscode.guion.raiz = vacia;
     const estado = await sinGit(() => brujula.estado({ fresco: true }));
@@ -9441,10 +9452,13 @@ exec git "$@"
     return estado.comoSeInstalaGit.slice(0, 46);
   });
 
-  await comprobar('sin git se pregunta qué hacer, y no se escribe nada', async () => {
+  await comprobar('sin git, y sin poder ponerlo solo, se pregunta qué hacer, y no se escribe nada', async () => {
     // Antes esto era un callejón: sin git la barra no ofrecía nada y se
     // quedaba muerta. Jose: «preguntárselo a la persona». Lo que no cambia es
     // que no se escribe ni se pregunta nada más hasta que conteste.
+    //
+    // Desde la decisión 165, solo donde la barra no puede ponerlo sola: donde
+    // puede, pulsar Preparar ya es el sí (lo prueba «sin git, Preparar es el sí»).
     const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'sin-git-'));
     vscode.guion.raiz = vacia;
     vscode.registrado.quickPick = null;
@@ -9458,7 +9472,7 @@ exec git "$@"
 
     // Si elige ponerlo, se devuelve `faltaGit` y la pantalla enseña el botón.
     vscode.guion.eleccion = 'Ponerlo primero';
-    const poner = await sinGit(() => cargar('arrancar').arrancar(contexto, { appendLine() {} }));
+    const poner = await sinGit(() => cargar('arrancar').arrancar(contexto, { appendLine() {} }), { sePuede: false });
     assert.equal(poner.faltaGit, true);
     assert.equal(poner.cancelado, undefined);
     assert.equal(vscode.registrado.quickPick, null, 'no se pregunta nada más antes');
@@ -9474,7 +9488,7 @@ exec git "$@"
     vscode.window.showQuickPick = async (_opciones, ajustes = {}) => { preguntado = preguntado || ajustes.placeHolder; return undefined; };
     let seguir;
     try {
-      seguir = await sinGit(() => cargar('arrancar').arrancar(contexto, { appendLine() {} }));
+      seguir = await sinGit(() => cargar('arrancar').arrancar(contexto, { appendLine() {} }), { sePuede: false });
     } finally {
       vscode.window.showQuickPick = elegir;
     }
@@ -9566,7 +9580,7 @@ exec git "$@"
       vacia = otra; // `poner` escribe en `vacia`
       try {
         vscode.registrado.mensajes.length = 0;
-        const { hecho: ahora } = await sinGit(() => conRespuestas({ 'Falta una pieza para poder guardar': 'Seguir sin copias' }, () => cargar('arrancar').arrancar(contextoOtro, { appendLine() {} })));
+        const { hecho: ahora } = await sinGit(() => conRespuestas({ 'Falta una pieza para poder guardar': 'Seguir sin copias' }, () => cargar('arrancar').arrancar(contextoOtro, { appendLine() {} })), { sePuede: false });
         assert.equal(ahora.ok, true, `elegido en el momento, no monta: ${ahora.mensaje}`);
         assert.equal(ahora.sinCopias, true, 'el montaje no dice que fue sin copias');
         assert.equal(ahora.rama, 'desdeCero', `elegido en el momento, no monta desde cero: ${ahora.rama}`);
@@ -9582,6 +9596,783 @@ exec git "$@"
       rscM.correr = antes;
       vscode.guion.raiz = empresa;
     }
+  });
+
+  // ── Git, con un solo sí (decisión 165) ─────────────────────────────────
+  //
+  // Sin git, pulsar «Preparar esta carpeta» es el sí de ponerlo: se pone
+  // mientras se pregunta, y en cuanto aparece se monta con las respuestas. Git
+  // se finge: `hay` dice lo que diga la prueba, e `instalar` hace lo que ella
+  // quiera sin lanzar nada. El historial y el punto de partida sí los hace el
+  // git de verdad, en una carpeta temporal y con una configuración aparte.
+  const memoriaDeCarpeta = () => {
+    const datos = new Map();
+    return {
+      datos,
+      get: (k) => datos.get(k),
+      update: async (k, v) => { if (v === undefined) datos.delete(k); else datos.set(k, v); },
+    };
+  };
+  const conGitFingido = async (instalar, hacer, { sePuede = true, puesto = false } = {}) => {
+    const gitMod = cargar('git');
+    const copias = cargar('guardar');
+    const antes = { hay: gitMod.hay, instalar: gitMod.instalar, sePuede: gitMod.sePuedeInstalarSolo };
+    const git = { puesto, eventos: [], veces: 0 };
+    gitMod.hay = async () => git.puesto;
+    gitMod.sePuedeInstalarSolo = () => sePuede;
+    gitMod.instalar = (avisar = () => {}) => {
+      git.veces += 1;
+      git.eventos.push('empieza');
+      return Promise.resolve(instalar(git, avisar));
+    };
+    copias.olvidarSiHayGit();
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'git-un-si-casa-'));
+    fs.writeFileSync(path.join(casa, '.gitconfig'), '');
+    const antesGit = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
+    try {
+      return await hacer(git);
+    } finally {
+      gitMod.hay = antes.hay;
+      gitMod.instalar = antes.instalar;
+      gitMod.sePuedeInstalarSolo = antes.sePuede;
+      copias.olvidarSiHayGit();
+      if (antesGit === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = antesGit;
+    }
+  };
+  // Un instalador que acaba bien al rato, otro que acaba mal, y uno que no se
+  // puede llamar.
+  const queAcabaBien = (git) => new Promise((listo) => {
+    setTimeout(() => { git.puesto = true; git.eventos.push('termina'); listo({ ok: true }); }, 30);
+  });
+  const queAcaba = (como) => (git) => new Promise((listo) => {
+    setTimeout(() => { git.eventos.push('termina'); listo({ ok: false, mensaje: 'de prueba', ...como }); }, 10);
+  });
+  const queNoSeLlama = () => { throw new Error('se ha puesto a instalar git sin nadie delante'); };
+  // Un RSC fingido que deja en el disco lo que dejaría el de verdad (como en
+  // «con seguir sin copias…»), y apunta cuándo monta.
+  const rscQueMonta = (carpeta, eventos) => {
+    const HUELLA = '6'.repeat(64);
+    const poner = (rel, txt) => {
+      fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, rel), txt);
+    };
+    return async (args) => {
+      if (args[0] !== 'onboard') return { codigo: 0, salida: '' };
+      if (!args.includes('--accept-plan')) {
+        return { codigo: 0, salida: `Plan id: ${HUELLA}\nAccept exactly this plan: npx @ericrisco/rsc@2.0.5 onboard --target claude --accept-plan ${HUELLA}` };
+      }
+      eventos.push('monta');
+      poner('.rsc.json', JSON.stringify({ version: 1, catalogVersion: '2.0.5', targets: ['claude'], skills: ['bro'], ownSkills: [], onboarding: { acceptedPlanId: HUELLA, plan: { record: { projectKind: 'operations', goal: 'x', technicalLevel: 'non-technical', accompaniment: 'L3', targets: ['claude'] } } } }));
+      poner('.rsc/session-start.mjs', '//');
+      poner('.claude/skills/bro/SKILL.md', '#');
+      for (const fichero of PLANTILLA_ENTERA) poner(`01-TOOLS/_TEMPLATE/${fichero}`, '#');
+      poner('02-DOCS/wiki/harness/user-profile.md', '---\ntechnical_level: non-technical\n---\n');
+      return { codigo: 0, salida: `RSC_ONBOARDING_READY ${HUELLA}` };
+    };
+  };
+  // Prepara la carpeta como al pulsar el botón, con todo contestado, y apunta en
+  // `git.eventos` cada pregunta en su momento. Devuelve lo hecho, lo que se vio,
+  // lo que se dijo mientras esperaba y las preguntas, en orden.
+  const prepararSinGit = async (carpeta, memoria, git, opciones = {}, contesta = {}) => {
+    const esperas = [];
+    vscode.guion.raiz = carpeta;
+    const { hecho, vistas } = await conRespuestas(contesta, async () => {
+      const elegir = vscode.window.showQuickPick;
+      const escribir = vscode.window.showInputBox;
+      vscode.window.showQuickPick = (o, a = {}) => { git.eventos.push(`pregunta: ${a.placeHolder}`); return elegir(o, a); };
+      vscode.window.showInputBox = (a = {}) => { git.eventos.push(`pregunta: ${a.prompt}`); return escribir(a); };
+      try {
+        return await cargar('arrancar').arrancar({ extensionPath: RAIZ, workspaceState: memoria }, { appendLine() {} },
+          { alEsperar: (que, boton) => esperas.push(boton ? `${que} [${boton.etiqueta}→${boton.accion.tipo}]` : que), ...opciones });
+      } finally {
+        vscode.window.showQuickPick = elegir;
+        vscode.window.showInputBox = escribir;
+      }
+    });
+    return { hecho, vistas, esperas, preguntas: vistas.filter((v) => !v.aviso).map((v) => v.pregunta) };
+  };
+  const lasSalidas = (hecho) => (hecho.botones || []).map((b) => `${b.etiqueta}→${b.accion.tipo}`);
+
+  await comprobar('sin git, Preparar es el sí: git se pone mientras pregunta, y en cuanto está se monta solo', async () => {
+    const arrancarM = cargar('arrancar');
+    const rscM = cargar('rsc');
+    const antes = rscM.correr;
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-un-si-'));
+    const memoria = memoriaDeCarpeta();
+    try {
+      return await conGitFingido(queAcabaBien, async (git) => {
+        rscM.correr = rscQueMonta(vacia, git.eventos);
+        const { hecho, vistas, esperas, preguntas } = await prepararSinGit(vacia, memoria, git);
+        const orden = git.eventos.join(' · ');
+
+        assert.equal(hecho.ok, true, `no ha montado: ${hecho.mensaje}`);
+        assert.equal(hecho.rama, 'desdeCero');
+        // Un solo sí: ni «Ponerlo primero» ni otro aviso sobre git.
+        const avisos = vistas.filter((v) => v.aviso).map((v) => v.pregunta);
+        assert.ok(!avisos.some((a) => /pieza|git/i.test(a)), `pide otro sí: ${avisos.join(' | ')}`);
+        assert.equal(git.veces, 1, `git se ha puesto ${git.veces} veces`);
+        // Mientras: la primera pregunta sale con git ya poniéndose, y antes de que acabe.
+        const primera = git.eventos.findIndex((e) => e.startsWith('pregunta: '));
+        assert.ok(git.eventos.indexOf('empieza') >= 0 && git.eventos.indexOf('empieza') < primera, `pregunta antes de poner git: ${orden}`);
+        assert.ok(primera >= 0 && primera < git.eventos.indexOf('termina'), `espera a git para preguntar: ${orden}`);
+        // Y monta en cuanto está, sin otro clic.
+        assert.ok(git.eventos.indexOf('termina') < git.eventos.indexOf('monta'), `monta antes de que git esté, o no monta: ${orden}`);
+        // Cada pregunta, una vez: al volver con git puesto no se repiten.
+        assert.ok(preguntas.length >= 6, `pocas preguntas: ${preguntas.join(' · ')}`);
+        assert.equal(new Set(preguntas).size, preguntas.length, `se repite alguna: ${preguntas.join(' · ')}`);
+        // Mientras espera, lo dice.
+        assert.ok(esperas.includes(`${arrancarM.ESPERANDO_A_GIT} [Seguir sin copias→seguirSinCopias]`), `no dice que espera a git, con su salida: ${esperas.join(' | ')}`);
+        // Con copias: el historial y el punto de partida.
+        const { execFileSync } = require('node:child_process');
+        assert.ok(fs.existsSync(path.join(vacia, '.git')), 'sin historial');
+        assert.match(execFileSync('git', ['log', '--format=%s'], { cwd: vacia, encoding: 'utf8' }), /Punto de partida/);
+        // Y lo guardado, olvidado.
+        assert.equal(memoria.get(cargar('respuestas').CLAVE), undefined, 'las respuestas siguen guardadas después de montar');
+        return `${preguntas.length} preguntas con git poniéndose, y montado sin otro clic`;
+      });
+    } finally {
+      rscM.correr = antes;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('si git falla o tarda, se dice en una frase con su salida, y lo contestado no se vuelve a preguntar', async () => {
+    const rscM = cargar('rsc');
+    const respuestasM = cargar('respuestas');
+    const antes = rscM.correr;
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-que-falla-'));
+    const memoria = memoriaDeCarpeta();
+    const eventos = [];
+    rscM.correr = rscQueMonta(vacia, eventos);
+    const intento = (como) => conGitFingido(como === 'bien' ? queAcabaBien : queAcaba(como), (git) => prepararSinGit(vacia, memoria, git));
+    try {
+      // Sin red: se dice, con sus dos salidas, y lo contestado queda guardado.
+      const sinRed = await intento({ sinDescargar: true });
+      assert.equal(sinRed.hecho.gitNoSePuso, true);
+      assert.equal(sinRed.hecho.mensaje, 'No he podido descargar git: mira que haya conexión y pulsa «Volver a intentarlo».');
+      assert.deepEqual(lasSalidas(sinRed.hecho), ['Volver a intentarlo→arrancar', 'Seguir sin copias→seguirSinCopias']);
+      assert.ok(sinRed.preguntas.length >= 6, 'no se ha preguntado mientras');
+      const guardado = memoria.get(respuestasM.CLAVE);
+      assert.ok(guardado && guardado.rama === 'desdeCero' && guardado.respuestas.kind && guardado.respuestas.objetivo, `no guarda lo contestado: ${JSON.stringify(guardado)}`);
+      assert.ok(!fs.existsSync(path.join(vacia, '.rsc.json')) && !fs.existsSync(path.join(vacia, '.git')), 'ha montado sin git');
+      assert.deepEqual(eventos, [], 'ha llegado a montar');
+
+      // La pantalla lo sabe: «Terminar de prepararla», sin prometer preguntas.
+      respuestasM.saberDondeGuardar(memoria);
+      const enPantalla = await conGitFingido(queNoSeLlama, () => brujula.estado({ fresco: true }));
+      assert.equal(enPantalla.esperandoAGit, true, 'la pantalla no sabe que hay respuestas guardadas');
+      assert.equal(enPantalla.aviso, 'Ya me has contestado lo que hacía falta. Al pulsar pongo git y la termino de preparar.');
+      assert.equal(enPantalla.donde, 'Tu espacio está a medio preparar');
+
+      // Tarda: se dice, y al volver no se pregunta nada.
+      const tarda = await intento({ tarda: true });
+      assert.equal(tarda.hecho.mensaje, 'Poner git está tardando mucho: cuando acabe, pulsa «Terminar de prepararla» y sigo con tus respuestas.');
+      assert.deepEqual(lasSalidas(tarda.hecho), ['Terminar de prepararla→arrancar', 'Seguir sin copias→seguirSinCopias']);
+      assert.deepEqual(tarda.preguntas, [], `vuelve a preguntar: ${tarda.preguntas.join(' · ')}`);
+
+      // Windows dijo que no: se dice por qué. Y cualquier otro fallo.
+      const sinPermiso = await intento({ sinPermiso: true });
+      assert.equal(sinPermiso.hecho.mensaje, 'No se ha puesto git porque Windows necesitaba tu permiso: pulsa «Volver a intentarlo» y dile que sí.');
+      const otro = await intento({});
+      assert.equal(otro.hecho.mensaje, 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.');
+      assert.deepEqual(lasSalidas(otro.hecho), ['Volver a intentarlo→arrancar', 'Seguir sin copias→seguirSinCopias']);
+      assert.deepEqual([...sinPermiso.preguntas, ...otro.preguntas], [], 'vuelve a preguntar');
+
+      // Un instalador que dice que sí y un git que no aparece: se dice, y no se
+      // vuelve a empezar, que sería un bucle.
+      const mentira = await conGitFingido(() => ({ ok: true }), async (git) => ({ ...(await prepararSinGit(vacia, memoria, git)), git }));
+      assert.equal(mentira.hecho.gitNoSePuso, true, JSON.stringify(mentira.hecho));
+      assert.equal(mentira.hecho.mensaje, 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.');
+      assert.equal(mentira.git.veces, 1, `git se ha puesto ${mentira.git.veces} veces`);
+
+      // Y a la siguiente, bien: monta con lo guardado, sin preguntar, y lo olvida.
+      const bien = await intento('bien');
+      assert.equal(bien.hecho.ok, true, bien.hecho.mensaje);
+      assert.deepEqual(bien.preguntas, [], `vuelve a preguntar: ${bien.preguntas.join(' · ')}`);
+      assert.equal(memoria.get(respuestasM.CLAVE), undefined, 'lo guardado no se olvida al montar');
+      return 'sin red, tarda, sin permiso, otro y uno que no aparece: una frase y su salida; luego, montado sin preguntar';
+    } finally {
+      rscM.correr = antes;
+      respuestasM.saberDondeGuardar(contexto.workspaceState);
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('encima de otro montaje y sin git: el permiso se pide antes de ponerlo, y una sola vez', async () => {
+    const rscM = cargar('rsc');
+    const respuestasM = cargar('respuestas');
+    const antes = rscM.correr;
+    const conOtro = () => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'git-otro-montaje-'));
+      fs.writeFileSync(path.join(r, 'CLAUDE.md'), '# Mis reglas\n\nNo toques la carpeta de facturas.\n');
+      return r;
+    };
+    const PERMISO = 'Aquí ya tienes un asistente montado a mano';
+    try {
+      // Sin su sí, ni git ni preguntas.
+      const sinSi = conOtro();
+      vscode.guion.raiz = sinSi;
+      assert.equal(cargar('terreno').mirarYClasificar().estado, 'otroArnes', 'la prueba no parte de otro montaje');
+      const memoria = memoriaDeCarpeta();
+      rscM.correr = rscQueMonta(sinSi, []);
+      const no = await conGitFingido(queNoSeLlama, async (git) => ({ ...(await prepararSinGit(sinSi, memoria, git)), git }));
+      assert.equal(no.hecho.sinPermiso, true, JSON.stringify(no.hecho));
+      assert.equal(no.git.veces, 0, 'pone git antes de que diga que sí a montar encima de lo suyo');
+      assert.deepEqual(no.preguntas, []);
+      assert.equal(memoria.get(respuestasM.CLAVE), undefined);
+
+      // Con su sí: git mientras pregunta, y el permiso no se vuelve a pedir.
+      const conSi = conOtro();
+      const eventos = [];
+      rscM.correr = rscQueMonta(conSi, eventos);
+      const si = await conGitFingido(queAcabaBien, async (git) => ({ ...(await prepararSinGit(conSi, memoriaDeCarpeta(), git, {}, {
+        [PERMISO]: 'Sí, móntalo encima', 'Aquí ya hay cosas tuyas': 'Sí, móntalo encima',
+      })), git }));
+      assert.equal(si.hecho.ok, true, si.hecho.mensaje || JSON.stringify(si.hecho));
+      assert.equal(si.vistas.filter((v) => v.aviso && v.pregunta.startsWith(PERMISO)).length, 1, 'el permiso se pide dos veces, o ninguna');
+      assert.equal(si.git.veces, 1);
+      assert.deepEqual(eventos, ['monta']);
+      return 'sin su sí, nada; con él, una vez';
+    } finally {
+      rscM.correr = antes;
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('con lo contestado guardado y sin git, «Seguir sin copias» monta sin preguntar', async () => {
+    const arrancarM = cargar('arrancar');
+    const rscM = cargar('rsc');
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { correr: rscM.correr, arrancar: proveedor.arrancar, conocida: contexto.workspaceState.get('executiveLab.carpetaConocida') };
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-sin-copias-'));
+    const memoria = memoriaDeCarpeta();
+    const eventos = [];
+    rscM.correr = rscQueMonta(vacia, eventos);
+    try {
+      await conGitFingido(queAcaba({}), (git) => prepararSinGit(vacia, memoria, git));
+      assert.ok(memoria.get(cargar('respuestas').CLAVE), 'no hay nada guardado de lo que partir');
+      // Lo que hace el botón: apuntar que sigue sin copias, y preparar.
+      await memoria.update(arrancarM.CLAVE_SIN_GIT, true);
+      const { hecho, preguntas, git } = await conGitFingido(queNoSeLlama, async (g) => ({ ...(await prepararSinGit(vacia, memoria, g)), git: g }));
+      assert.equal(hecho.ok, true, hecho.mensaje);
+      assert.deepEqual(preguntas, [], `vuelve a preguntar: ${preguntas.join(' · ')}`);
+      assert.equal(git.veces, 0, 'intenta poner git después de elegir seguir sin él');
+      assert.deepEqual(eventos, ['monta']);
+      assert.ok(!fs.existsSync(path.join(vacia, '.git')), 'hay un historial sin git');
+      assert.equal(memoria.get(cargar('respuestas').CLAVE), undefined, 'lo guardado no se olvida al montar');
+
+      // Mientras espera a git con lo contestado, también: deja de esperar y monta
+      // ya. En un Mac al que se le dijo que no al diálogo de Apple, git no llega.
+      assert.equal(arrancarM.dejarDeEsperarAGit(), false, 'deja de esperar sin que nada espere');
+      const otra = fs.mkdtempSync(path.join(os.tmpdir(), 'git-deja-de-esperar-'));
+      const suya = memoriaDeCarpeta();
+      const sus = [];
+      rscM.correr = rscQueMonta(otra, sus);
+      let dejada = null;
+      const nuncaAcaba = () => new Promise(() => {});
+      const esperando = await conGitFingido(nuncaAcaba, async (g) => {
+        vscode.guion.raiz = otra;
+        const { hecho: h, vistas } = await conRespuestas({}, () => arrancarM.arrancar({ extensionPath: RAIZ, workspaceState: suya }, { appendLine() {} }, {
+          alEsperar: (que, boton) => {
+            if (que === arrancarM.ESPERANDO_A_GIT && boton) setImmediate(() => { dejada = arrancarM.dejarDeEsperarAGit(); });
+          },
+        }));
+        return { hecho: h, vistas, g };
+      });
+      assert.equal(dejada, true, 'no había nada esperando a git');
+      assert.equal(esperando.hecho.ok, true, esperando.hecho.mensaje || JSON.stringify(esperando.hecho));
+      assert.deepEqual(sus, ['monta']);
+      assert.ok(!fs.existsSync(path.join(otra, '.git')), 'hay un historial sin git');
+      assert.equal(suya.get(arrancarM.CLAVE_SIN_GIT), true, 'no queda apuntado que sigue sin copias');
+      assert.equal(suya.get(cargar('respuestas').CLAVE), undefined);
+      const preguntadas = esperando.vistas.filter((v) => !v.aviso).map((v) => v.pregunta);
+      assert.equal(new Set(preguntadas).size, preguntadas.length, `se repite alguna: ${preguntadas.join(' · ')}`);
+
+      // Y el botón de la barra lo apunta: deja de esperar si algo espera, y si no, prepara.
+      const llamadas = [];
+      proveedor.arrancar = async () => { llamadas.push(contexto.workspaceState.get(arrancarM.CLAVE_SIN_GIT)); };
+      await proveedor.manejar({ tipo: 'seguirSinCopias' });
+      assert.deepEqual(llamadas, [true], 'el botón no apunta que sigue sin copias antes de preparar');
+      const dejar = arrancarM.dejarDeEsperarAGit;
+      arrancarM.dejarDeEsperarAGit = () => true;
+      try {
+        await proveedor.manejar({ tipo: 'seguirSinCopias' });
+      } finally {
+        arrancarM.dejarDeEsperarAGit = dejar;
+      }
+      assert.deepEqual(llamadas, [true], 'con algo esperando, prepara otra vez');
+      return 'montado sin git, sin preguntar ni intentar ponerlo; también mientras espera';
+    } finally {
+      rscM.correr = antes.correr;
+      proveedor.arrancar = antes.arrancar;
+      await contexto.workspaceState.update(arrancarM.CLAVE_SIN_GIT, undefined);
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('si se recarga a mitad, al volver se termina solo con lo contestado, y si no se puede, con un clic', async () => {
+    const arrancarM = cargar('arrancar');
+    const rumbo = cargar('rumbo');
+    const respuestasM = cargar('respuestas');
+
+    // Cuándo se puede terminar solo: lo contestado basta, la carpeta sigue igual
+    // y no es de nadie, ni delicada, ni de dentro de otro proyecto.
+    const plan = rumbo.elegirRama(PARTE_VACIA);
+    const todas = {
+      asistente: 'claude', kind: 'operations', alcance: 'tarea', personas: 'solo-yo',
+      objetivo: 'Poner orden en mis facturas', nivel: 'non-technical', nombres: { arnes: 'Facturas', empresa: null }, web: null,
+    };
+    const guardadas = { rama: 'desdeCero', respuestas: todas };
+    const sinUna = (campo) => Object.fromEntries(Object.entries(todas).filter(([k]) => k !== campo));
+    const solo = (p, g, parte = PARTE_VACIA) => arrancarM.sePuedeSinNadie(p, parte, g);
+    assert.equal(solo(plan, guardadas), true, 'con todo contestado no se termina solo');
+    assert.equal(solo(plan, null), false, 'una carpeta vacía se monta sola sin que nadie conteste');
+    assert.equal(solo(plan, { ...guardadas, rama: 'encimaDeLoQueHay' }), false, 'la carpeta ha cambiado y se monta igual');
+    for (const campo of ['objetivo', 'kind', 'nivel', 'nombres', 'alcance', 'personas', 'asistente', 'web']) {
+      assert.equal(solo(plan, { ...guardadas, respuestas: sinUna(campo) }), false, `sin «${campo}» se monta solo`);
+    }
+    assert.equal(solo(plan, { ...guardadas, respuestas: { ...todas, kind: 'software' } }), false, 'sin qué va a construir se monta solo');
+    assert.equal(solo(plan, { ...guardadas, respuestas: { ...todas, kind: 'software', tamano: 'small' } }), true);
+    assert.equal(solo(plan, guardadas, { ...PARTE_VACIA, carpeta: { ...PARTE_VACIA.carpeta, delicada: 'documentos' } }), false, 'Documentos entera, sola');
+    assert.equal(solo(plan, guardadas, { ...PARTE_VACIA, dentroDeOtro: { nombre: 'otro' } }), false, 'dentro de otro proyecto, sola');
+    const otroArnes = rumbo.elegirRama({ ...PARTE_VACIA, estado: 'otroArnes' });
+    assert.equal(solo(otroArnes, { rama: 'otroArnes', respuestas: todas }), false, 'encima de otro montaje, sola');
+    const deAlguien = rumbo.elegirRama({ ...PARTE_VACIA, estado: 'empezada', carpeta: { vacia: false, cuantos: 2, parece: null } });
+    assert.equal(solo(deAlguien, { rama: deAlguien.rama, respuestas: todas }), false, 'encima de lo de alguien, sola');
+    // El historial, sin nadie, solo en una carpeta vacía: en una a medias, no.
+    const aMedias = { ...PARTE_VACIA, estado: 'aMedias', suelo: { faltan: ['02-DOCS'] } };
+    const sinHistorial = rumbo.elegirRama({ ...aMedias, git: { hay: true, repositorio: false } });
+    assert.ok(sinHistorial.pasos.some((p) => p.id === 'ponerGit'), 'la prueba no parte de una a medias sin historial');
+    assert.equal(solo(sinHistorial, { rama: 'completar', respuestas: todas }), false, 'sin nadie, crea el historial de una carpeta que no está vacía');
+    const conHistorial = rumbo.elegirRama({ ...aMedias, git: { hay: true, repositorio: true } });
+    assert.equal(solo(conHistorial, { rama: 'completar', respuestas: todas }), true, 'una a medias con historial no se termina sola');
+
+    // De verdad: se contesta, git falla, se recarga, y al volver git ya está.
+    const rscM = cargar('rsc');
+    const antes = rscM.correr;
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-recarga-'));
+    const memoria = memoriaDeCarpeta();
+    const eventos = [];
+    rscM.correr = rscQueMonta(vacia, eventos);
+    try {
+      await conGitFingido(queAcaba({ tarda: true }), (git) => prepararSinGit(vacia, memoria, git));
+      // Sin git todavía, sin nadie no se pone a instalar nada.
+      const todaviaNo = await conGitFingido(queNoSeLlama, async (git) => ({ ...(await prepararSinGit(vacia, memoria, git, { sinNadieDelante: true })), git }));
+      assert.equal(todaviaNo.hecho.esperaASuBoton, true, 'sin git, sin nadie, no espera a su botón');
+      assert.equal(todaviaNo.git.veces, 0);
+      // Con git ya puesto: se termina solo, sin una ventana ni una pregunta.
+      const retomada = await conGitFingido(queNoSeLlama, (git) => prepararSinGit(vacia, memoria, git, { sinNadieDelante: true }), { puesto: true });
+      assert.equal(retomada.hecho.ok, true, retomada.hecho.mensaje || JSON.stringify(retomada.hecho));
+      assert.deepEqual(retomada.vistas, [], `ha abierto algo sin nadie delante: ${retomada.vistas.map((v) => v.pregunta).join(' · ')}`);
+      assert.deepEqual(eventos, ['monta']);
+      assert.ok(fs.existsSync(path.join(vacia, '.git')), 'sin historial: su sí a las copias ya estaba dado');
+      assert.equal(memoria.get(respuestasM.CLAVE), undefined, 'lo guardado no se olvida');
+    } finally {
+      rscM.correr = antes;
+      vscode.guion.raiz = empresa;
+    }
+
+    // Quién lo hace al abrir: la barra, con confianza, en una carpeta conocida,
+    // con algo guardado y git puesto. Y mientras monta, el arnés está ocupado.
+    const proveedor = vscode.registrado.proveedor;
+    const otra = fs.mkdtempSync(path.join(os.tmpdir(), 'git-al-abrir-'));
+    const previo = {
+      montar: proveedor.montar, despues: proveedor.despuesDeMontar, confianza: vscode.guion.confianza,
+      conocida: contexto.workspaceState.get('executiveLab.carpetaConocida'),
+    };
+    const llamadas = [];
+    proveedor.montar = async (o) => { llamadas.push({ montar: o, ocupado: proveedor.conElArnes() }); return { ok: true }; };
+    proveedor.despuesDeMontar = async (h, o) => { llamadas.push({ despues: o }); };
+    vscode.guion.raiz = otra;
+    try {
+      await respuestasM.guardar(guardadas, contexto.workspaceState);
+      await conGitFingido(queNoSeLlama, async (git) => {
+        // Con git puesto: cada «no» de abajo ha de ser por su propia guarda, no
+        // por la de git (mutación: quitar la confianza o la carpeta conocida).
+        git.puesto = true;
+        vscode.guion.confianza = false;
+        await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+        assert.equal(await proveedor.retomarLaPreparacion(), null, 'sin confianza');
+        vscode.guion.confianza = true;
+        await contexto.workspaceState.update('executiveLab.carpetaConocida', undefined);
+        assert.equal(await proveedor.retomarLaPreparacion(), null, 'en una carpeta que este ordenador no conoce');
+        await contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+        git.puesto = false;
+        assert.equal(await proveedor.retomarLaPreparacion(), null, 'sin git');
+        git.puesto = true;
+        // Lo guardado es de una carpeta: en otra, no vale (mutación: no mirar la raíz).
+        vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'git-otra-carpeta-'));
+        assert.equal(respuestasM.leer(contexto.workspaceState), null, 'lo guardado de una carpeta vale en otra');
+        assert.equal(await proveedor.retomarLaPreparacion(), null, 'retoma en otra carpeta lo guardado en esta');
+        vscode.guion.raiz = otra;
+        assert.ok(respuestasM.leer(contexto.workspaceState), 'en su carpeta, sí se lee');
+        await proveedor.retomarLaPreparacion();
+      });
+      assert.deepEqual(llamadas, [{ montar: { sinNadieDelante: true }, ocupado: true }, { despues: { sinNadieDelante: true } }], JSON.stringify(llamadas));
+      assert.equal(proveedor.conElArnes(), false, 'el arnés se queda ocupado');
+      await respuestasM.olvidar(contexto.workspaceState);
+      llamadas.length = 0;
+      assert.equal(await conGitFingido(queNoSeLlama, () => proveedor.retomarLaPreparacion(), { puesto: true }), null, 'sin nada guardado');
+      assert.deepEqual(llamadas, []);
+      // Y la barra lo mira al abrir, lo último.
+      const ext = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
+      const activar = ext.slice(ext.indexOf('function activate('));
+      assert.ok(activar.indexOf('panel.retomarLaPreparacion()') > activar.indexOf('panel.soltarElAviso();'), 'al abrir no se retoma lo que esperaba a git');
+      return 'solo con todo contestado y la carpeta igual; sin nadie y sin git, nada';
+    } finally {
+      await respuestasM.olvidar(contexto.workspaceState);
+      proveedor.montar = previo.montar;
+      proveedor.despuesDeMontar = previo.despues;
+      vscode.guion.confianza = previo.confianza;
+      await contexto.workspaceState.update('executiveLab.carpetaConocida', previo.conocida);
+      vscode.guion.raiz = empresa;
+    }
+  });
+
+  await comprobar('sin git, la pantalla ofrece Preparar con la línea que dice que pone git; con lo contestado, Terminar de prepararla', async () => {
+    const gitBarra = cargar('git');
+    const { montarPanel } = require('./panel-falso');
+    const AL = gitBarra.AL_PREPARAR;
+    assert.match(AL, /^Al pulsar pongo también git, para tus copias\. Mientras se pone, te hago las preguntas\.$/);
+    const base = { sinArnes: true, listo: false, hiciste: null, donde: 'Aquí todavía no hay nada', aviso: 'x', faltaGit: true, comoSeInstalaGit: 'Lo de siempre' };
+    const pinta = (estado) => montarPanel().mandar({ tipo: 'estado', estado });
+
+    const puede = pinta({ ...base, gitAlPreparar: AL });
+    assert.match(puede, /Preparar esta carpeta/, 'sin git no se ofrece preparar');
+    assert.ok(puede.includes(AL), 'no dice que pulsar también pone git');
+    assert.doesNotMatch(puede, /Ponerla ahora/, 'sale el botón de ponerla aparte: dos síes');
+    const noPuede = pinta({ ...base, gitAlPreparar: null });
+    assert.match(noPuede, /Ponerla ahora/, 'sin poder ponerla sola, falta su botón');
+    assert.doesNotMatch(noPuede, /Preparar esta carpeta/, 'ofrece un montaje que no puede salir');
+
+    const contestado = pinta({ ...base, gitAlPreparar: AL, esperandoAGit: true });
+    assert.match(contestado, /Terminar de prepararla/);
+    assert.match(contestado, /Tus respuestas están guardadas: no te las vuelvo a preguntar\./);
+    assert.match(contestado, /Seguir sin copias/);
+    assert.match(contestado, /seguirSinCopias/);
+    assert.ok(!contestado.includes(AL), 'promete preguntas que ya se hicieron');
+    const yaConGit = pinta({ ...base, faltaGit: false, esperandoAGit: true });
+    assert.match(yaConGit, /Terminar de prepararla/);
+    assert.doesNotMatch(yaConGit, /Seguir sin copias/, 'con git, ofrece seguir sin copias');
+    const deAlguien = pinta({ ...base, faltaGit: false, esperandoAGit: true, yaEmpezada: { cuantos: 2, parece: null, conHistorial: false, sinGuardar: 0, claves: 0 } });
+    assert.match(deAlguien, /Terminar de prepararla/);
+
+    const poniendo = pinta({ ...base, gitAlPreparar: AL, poniendoGit: 'conLasRespuestas' });
+    assert.match(poniendo, /Estoy poniendo git\. En cuanto esté, preparo la carpeta con tus respuestas\./);
+    assert.doesNotMatch(poniendo, /Preparar esta carpeta|Terminar de prepararla/, 'mientras se pone, ofrece volver a pulsar');
+    assert.doesNotMatch(poniendo, /Seguir sin copias/, 'sin nada contestado, ofrece seguir sin copias');
+    assert.match(pinta({ ...base, gitAlPreparar: AL, poniendoGit: 'conLasRespuestas', esperandoAGit: true }), /seguirSinCopias/, 'esperando con lo contestado, no se puede dejar de esperar');
+    const espera = montarPanel().mandar({ tipo: 'esperando', que: cargar('arrancar').ESPERANDO_A_GIT, boton: { etiqueta: 'Seguir sin copias', accion: { tipo: 'seguirSinCopias' } } });
+    assert.match(espera, /Estoy poniendo git/);
+    assert.match(espera, /seguirSinCopias/, 'la espera pierde su salida');
+    assert.match(espera, /Volver/);
+    assert.match(pinta({ ...base, gitAlPreparar: AL, poniendoGit: 'solo' }), /Estoy poniendo git\. En cuanto esté, puedes preparar la carpeta\./);
+    assert.equal(cargar('arrancar').ESPERANDO_A_GIT, 'Estoy poniendo git. En cuanto esté, preparo la carpeta con tus respuestas.');
+
+    // El aviso de git que no se ha puesto, con sus dos salidas.
+    const panel = montarPanel();
+    panel.mandar({ tipo: 'estado', estado: { ...base, gitAlPreparar: AL, esperandoAGit: true } });
+    const conAviso = panel.mandar({
+      tipo: 'aviso', texto: 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.', malo: true,
+      botones: [{ etiqueta: 'Volver a intentarlo', accion: { tipo: 'arrancar' } }, { etiqueta: 'Seguir sin copias', accion: { tipo: 'seguirSinCopias' } }],
+    });
+    assert.match(conAviso, /Volver a intentarlo/, 'el aviso pierde su salida');
+
+    // La brújula: la línea, solo si se puede poner solo; y quién sigue mientras se pone.
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-pantalla-'));
+    vscode.guion.raiz = vacia;
+    const antesPoniendo = gitBarra.seEstaPoniendo;
+    try {
+      const conLinea = await conGitFingido(queNoSeLlama, () => brujula.estado({ fresco: true }));
+      assert.equal(conLinea.gitAlPreparar, AL);
+      assert.equal(conLinea.poniendoGit, null);
+      assert.equal(conLinea.esperandoAGit, false);
+      const sinLinea = await conGitFingido(queNoSeLlama, () => brujula.estado({ fresco: true }), { sePuede: false });
+      assert.equal(sinLinea.gitAlPreparar, null, 'promete ponerlo donde no se puede');
+      gitBarra.seEstaPoniendo = () => true;
+      const mientras = await conGitFingido(queNoSeLlama, () => brujula.estado({ fresco: true }));
+      assert.equal(mientras.poniendoGit, 'solo', 'promete preparar con unas respuestas que nadie espera');
+      const conGitYa = await conGitFingido(queNoSeLlama, () => brujula.estado({ fresco: true }), { puesto: true });
+      assert.equal(conGitYa.poniendoGit, null);
+      assert.equal(conGitYa.gitAlPreparar, null);
+    } finally {
+      gitBarra.seEstaPoniendo = antesPoniendo;
+      vscode.guion.raiz = empresa;
+    }
+    return 'Preparar con su línea, Terminar de prepararla, mientras se pone y el aviso con dos salidas';
+  });
+
+  await comprobar('git se pone una sola vez a la vez, y «Ponerla ahora» termina lo que esperaba a git', async () => {
+    const gitBarra = cargar('git');
+    const comun = require(cargar('entorno').moduloComun('git'));
+    const antesComun = comun.instalar;
+    let veces = 0;
+    let soltar = null;
+    comun.instalar = () => { veces += 1; return new Promise((r) => { soltar = r; }); };
+    try {
+      const una = gitBarra.instalar();
+      const otra = gitBarra.instalar();
+      assert.equal(una, otra, 'dos instaladores a la vez');
+      assert.equal(gitBarra.seEstaPoniendo(), true);
+      await new Promise((r) => setImmediate(r));
+      soltar({ ok: true });
+      assert.deepEqual(await una, { ok: true });
+      assert.equal(veces, 1);
+      assert.equal(gitBarra.seEstaPoniendo(), false, 'se queda poniéndose para siempre');
+      comun.instalar = () => { throw new Error('roto por dentro'); };
+      const roto = await gitBarra.instalar();
+      assert.equal(roto.ok, false);
+      assert.equal(roto.mensaje, 'No he podido poner git. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+      assert.equal(roto.detalle, 'roto por dentro', 'el motivo no viaja (P3)');
+    } finally {
+      comun.instalar = antesComun;
+    }
+
+    // «Ponerla ahora»: con lo contestado guardado termina de preparar; si no, lo dice.
+    const proveedor = vscode.registrado.proveedor;
+    const respuestasM = cargar('respuestas');
+    const previo = { arrancar: proveedor.arrancar, enviar: proveedor.enviar, refrescar: proveedor.refrescar, instalar: gitBarra.instalar, sePuede: gitBarra.sePuedeInstalarSolo };
+    const pasos = [];
+    proveedor.arrancar = async () => { pasos.push('arrancar'); };
+    proveedor.enviar = (m) => { if (m.tipo === 'aviso') pasos.push(m.texto); };
+    proveedor.refrescar = async () => {};
+    gitBarra.instalar = async () => ({ ok: true });
+    gitBarra.sePuedeInstalarSolo = () => true;
+    const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'git-ponerla-ahora-'));
+    try {
+      vscode.guion.raiz = vacia;
+      await respuestasM.guardar({ rama: 'desdeCero', respuestas: { kind: 'operations' } }, contexto.workspaceState);
+      await proveedor.instalarGit();
+      assert.deepEqual(pasos, ['arrancar'], `no termina lo que esperaba a git: ${pasos.join(' | ')}`);
+      await respuestasM.olvidar(contexto.workspaceState);
+      pasos.length = 0;
+      await proveedor.instalarGit();
+      assert.deepEqual(pasos, ['Ya está. Puedes preparar la carpeta.']);
+      vscode.guion.raiz = empresa;
+      pasos.length = 0;
+      await proveedor.instalarGit();
+      assert.deepEqual(pasos, ['Ya está puesto git.'], 'en una carpeta ya montada dice que se puede preparar');
+    } finally {
+      await respuestasM.olvidar(contexto.workspaceState);
+      Object.assign(proveedor, { arrancar: previo.arrancar, enviar: previo.enviar, refrescar: previo.refrescar });
+      gitBarra.instalar = previo.instalar;
+      gitBarra.sePuedeInstalarSolo = previo.sePuede;
+      vscode.guion.raiz = empresa;
+    }
+    return 'una vez, con su motivo si falla; y «Ponerla ahora» sigue con lo contestado';
+  });
+
+  await comprobar('la barra cuenta la espera a git y, si no se pone, da sus dos salidas', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const arrancarM = cargar('arrancar');
+    const gitBarra = cargar('git');
+    const previo = {
+      arrancar: arrancarM.arrancar, enviar: proveedor.enviar, refrescar: proveedor.refrescar,
+      repintar: proveedor.repintarLoQueHaya, seEsta: gitBarra.seEstaPoniendo, instalar: gitBarra.instalar,
+    };
+    const enviados = [];
+    const pintadas = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    proveedor.refrescar = async (fresco) => { pintadas.push(fresco ? 'fresca' : 'principal'); };
+    proveedor.repintarLoQueHaya = async () => { pintadas.push('lo que haya'); };
+    const SALIDAS = [{ etiqueta: 'Volver a intentarlo', accion: { tipo: 'arrancar' } }, { etiqueta: 'Seguir sin copias', accion: { tipo: 'seguirSinCopias' } }];
+    try {
+      // La espera, contada en el panel; y git que no se pone, con sus dos salidas.
+      arrancarM.arrancar = async (_c, _s, opciones) => {
+        opciones.alEsperar(arrancarM.ESPERANDO_A_GIT, SALIDAS[1]);
+        return { ok: false, gitNoSePuso: true, mensaje: 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.', botones: SALIDAS };
+      };
+      await proveedor.arrancar();
+      assert.deepEqual(enviados, [
+        { tipo: 'esperando', que: arrancarM.ESPERANDO_A_GIT, boton: SALIDAS[1] },
+        { tipo: 'aviso', texto: 'No he podido poner git: pulsa «Volver a intentarlo», o sigue sin copias.', malo: true, botones: SALIDAS },
+      ]);
+      assert.deepEqual(pintadas, ['fresca']);
+
+      // Sola, si queda algo que pide su sí, no dice nada: se queda en su botón.
+      enviados.length = 0;
+      pintadas.length = 0;
+      arrancarM.arrancar = async () => ({ ok: false, esperaASuBoton: true });
+      await proveedor.arrancar({ sinNadieDelante: true });
+      assert.deepEqual(enviados, [], 'dice algo sin nadie delante');
+      assert.deepEqual(pintadas, ['lo que haya']);
+      arrancarM.arrancar = async () => ({ ok: false, enMarcha: true });
+      await proveedor.arrancar({ sinNadieDelante: true });
+      assert.deepEqual(enviados, [], 'sola, dice que está ocupada');
+
+      // Deja las preguntas a medias con git poniéndose: la pantalla lo dice, y se
+      // pone al día cuando acaba.
+      let soltar = null;
+      gitBarra.seEstaPoniendo = () => true;
+      gitBarra.instalar = () => new Promise((r) => { soltar = r; });
+      arrancarM.arrancar = async () => ({ ok: false, cancelado: true });
+      pintadas.length = 0;
+      await proveedor.arrancar();
+      assert.deepEqual(pintadas, ['fresca'], 'no se ve que git se está poniendo');
+      soltar({ ok: true });
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(pintadas, ['fresca', 'lo que haya'], 'cuando git acaba, la pantalla sigue igual');
+      return 'la espera contada, dos salidas, y callada sin nadie';
+    } finally {
+      arrancarM.arrancar = previo.arrancar;
+      Object.assign(proveedor, { enviar: previo.enviar, refrescar: previo.refrescar, repintarLoQueHaya: previo.repintar });
+      gitBarra.seEstaPoniendo = previo.seEsta;
+      gitBarra.instalar = previo.instalar;
+    }
+  });
+
+  await comprobar('en Windows, git dice la verdad: pide permiso con administrador, y sin serlo va a la carpeta del usuario', async () => {
+    // Su instalador lleva `PrivilegesRequired=none` y nada que deje pedir
+    // `/CURRENTUSER`: con una cuenta de administrador, Windows pregunta. Y para
+    // quien no lo es, la carpeta de su usuario, que es la que él mismo elige a mano.
+    const comun = require(cargar('entorno').moduloComun('git'));
+    assert.deepEqual(comun.comoSeLanza({ administrador: true }), comun.EN_SILENCIO);
+    assert.deepEqual(
+      comun.comoSeLanza({ administrador: false, entorno: { LOCALAPPDATA: 'C:\\Users\\Ana Pérez\\AppData\\Local' } }),
+      [...comun.EN_SILENCIO, '/DIR=C:\\Users\\Ana Pérez\\AppData\\Local\\Programs\\Git'],
+    );
+    assert.deepEqual(
+      comun.gitsDeWindows({ ProgramFiles: 'D:\\Programas', LOCALAPPDATA: 'C:\\Users\\ana\\AppData\\Local' }),
+      ['D:\\Programas\\Git\\cmd\\git.exe', 'C:\\Users\\ana\\AppData\\Local\\Programs\\Git\\cmd\\git.exe'],
+    );
+    assert.equal(comun.esDelGrupoDeAdministradores({ ok: true, salida: '"BUILTIN\\Administradores","Alias","S-1-5-32-544","Grupo usado solo para denegar"' }), true);
+    assert.equal(comun.esDelGrupoDeAdministradores({ ok: true, salida: '"BUILTIN\\Usuarios","Alias","S-1-5-32-545","Grupo obligatorio"' }), false);
+    assert.equal(comun.esDelGrupoDeAdministradores({ ok: false, salida: '' }), true, 'sin saberlo, cambia lo que se hacía');
+    assert.equal(comun.trasElInstalador({ codigo: comun.LE_DIJO_QUE_NO }, false), 'sinPermiso');
+    assert.equal(comun.trasElInstalador({ codigo: 0 }, false), 'esperar');
+    assert.equal(comun.trasElInstalador({ codigo: 1 }, false), 'esperar');
+    assert.equal(comun.trasElInstalador({ codigo: comun.LE_DIJO_QUE_NO }, true), 'listo');
+    assert.equal((await comun.correr(process.execPath, ['-e', 'process.exit(2)'])).codigo, 2, 'el código de salida no llega');
+    assert.equal((await comun.correr(process.execPath, ['-e', ''])).codigo, 0);
+    const fuente = fs.readFileSync(path.join(RAIZ, '..', 'instalador', 'comun', 'git.js'), 'utf8');
+    assert.doesNotMatch(fuente, /no te va a pedir nada/, 'promete que Windows no pregunta');
+    assert.ok(fuente.includes("if (ES_WINDOWS) return 'La descargo y la instalo yo. Tarda un par de minutos, y si Windows te pide permiso, dile que sí.';"));
+    assert.ok(fuente.includes('correr(instalador, comoSeLanza({ administrador: await esAdministrador() }), ESPERA_WINDOWS)'), 'se lanza sin mirar si es administrador');
+
+    // La barra: un git recién puesto no está en su PATH, así que se busca por su
+    // sitio y su carpeta va delante para lo que RSC llama por su nombre.
+    const entorno = cargar('entorno');
+    const base = { PATH: '/usr/bin' };
+    const conSuGit = entorno.entornoConHerramientas(base, { windows: true, suGit: () => '/opt/git-de-prueba/cmd/git.exe' });
+    assert.ok(conSuGit.PATH.split(path.delimiter).includes('/opt/git-de-prueba/cmd'), `RSC no encontraría git: ${conSuGit.PATH}`);
+    assert.ok(conSuGit.PATH.endsWith('/usr/bin'), 'se pierde el PATH de siempre');
+    assert.ok(!entorno.entornoConHerramientas(base, { windows: false, suGit: () => '/opt/git-de-prueba/cmd/git.exe' }).PATH.includes('git-de-prueba'), 'fuera de Windows también');
+    assert.ok(!entorno.entornoConHerramientas(base, { windows: true, suGit: () => 'git.exe' }).PATH.includes('git.exe'));
+    assert.equal(entorno.GITS_DE_WINDOWS().length, 2, 'la barra no ve dónde lo deja su instalador');
+    // Y que `git()` los mira en Windows (no se puede correr en este sistema, así que se lee).
+    const delEntorno = fs.readFileSync(path.join(RAIZ, 'src', 'entorno.js'), 'utf8');
+    assert.ok(delEntorno.includes('...(ES_WINDOWS ? GITS_DE_WINDOWS() : []),'), 'git() no busca donde lo deja el instalador de Windows');
+    return 'administrador: pregunta; sin serlo: su carpeta; y la barra lo encuentra sin reiniciar';
+  });
+
+  // ── Refuerzos de la 165: el instalador comprobado, git entero y lo contestado que caduca ──
+  await comprobar('el instalador de git se comprueba antes de ejecutarlo, git a medias no vale y lo contestado caduca', async () => {
+    const crypto = require('node:crypto');
+    const comun = require(cargar('entorno').moduloComun('git'));
+
+    // 1. La huella (sha256) con la que da GitHub. Sin ella o con otra, no se ejecuta.
+    const contenido = Buffer.from('un instalador de mentira');
+    const huella = `sha256:${crypto.createHash('sha256').update(contenido).digest('hex')}`;
+    const traerCon = (digest) => async (url) => (/api\.github\.com/.test(url)
+      ? { ok: true, json: async () => ({ assets: [{ name: 'Git-2.99.0-64-bit.exe', browser_download_url: 'https://x/Git-2.99.0-64-bit.exe', ...(digest === undefined ? {} : { digest }) }] }) }
+      : { ok: true, arrayBuffer: async () => contenido });
+    const bueno = await comun.bajarElInstalador(traerCon(huella));
+    assert.ok(bueno && fs.readFileSync(bueno).equals(contenido), 'con su huella, se baja');
+    assert.notEqual(path.dirname(bueno), os.tmpdir(), 'se baja a una ruta fija de %TEMP%');
+    assert.match(path.basename(path.dirname(bueno)), /^git-/, 'carpeta nueva propia');
+    assert.equal(await comun.bajarElInstalador(traerCon(`sha256:${'0'.repeat(64)}`)), null, 'se ejecutaría un instalador con otra huella');
+    assert.equal(await comun.bajarElInstalador(traerCon(undefined)), null, 'se ejecutaría un instalador sin huella');
+    assert.equal(await comun.bajarElInstalador(traerCon(null)), null, 'una huella nula vale');
+    assert.equal(await comun.bajarElInstalador(traerCon('sha1:abc')), null, 'otra clase de huella vale');
+    fs.rmSync(path.dirname(bueno), { recursive: true, force: true });
+
+    // 2. Git entero en Windows: `cmd\git.exe` solo no basta.
+    const env = { ProgramFiles: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\ana\\AppData\\Local' };
+    const cmd = 'C:\\Program Files\\Git\\cmd\\git.exe';
+    const mingw = 'C:\\Program Files\\Git\\mingw64\\bin\\git.exe';
+    const con = (...hay) => (donde) => hay.includes(donde);
+    // Lo que hay dentro de una carpeta, sacado de las mismas rutas.
+    const dentroDe = (...hay) => (carpeta) => [...new Set(hay.filter((p) => p.startsWith(`${carpeta}\\`)).map((p) => p.slice(carpeta.length + 1).split('\\')[0]))];
+    const buscar = (...hay) => comun.buscarGitDeWindows(env, con(...hay), dentroDe(...hay));
+    assert.deepEqual(buscar(), { completo: null, aMedias: false });
+    assert.deepEqual(buscar(cmd), { completo: null, aMedias: true }, 'git a medias vale');
+    assert.deepEqual(buscar(cmd, mingw), { completo: cmd, aMedias: false });
+    // La carpeta del git de verdad cambia con la versión: la 2.56 no se daba nunca por puesta.
+    assert.deepEqual(buscar(cmd, 'C:\\Program Files\\Git\\ucrt64\\bin\\git.exe'), { completo: cmd, aMedias: false }, 'solo vale mingw64');
+    assert.deepEqual(buscar(cmd, 'C:\\Program Files\\Git\\bin\\git.exe'), { completo: null, aMedias: true }, 'el lanzador de bin\\ cuenta como git entero');
+    const fuenteComun = fs.readFileSync(path.join(RAIZ, '..', 'instalador', 'comun', 'git.js'), 'utf8');
+    assert.ok(/if \(buscado\.aMedias\) return false;/.test(fuenteComun), 'hay() da por bueno un git a medias');
+
+    // 3. Tras recargar a mitad de la instalación: se espera, no se lanza otra.
+    const gitBarra = cargar('git');
+    const respuestasM = cargar('respuestas');
+    const memoria = contexto.workspaceState;
+    const antes = { instalar: comun.instalar, hay: comun.hay, cada: gitBarra.espera.cada };
+    let lanzadas = 0;
+    let puesto = false;
+    comun.instalar = async () => { lanzadas += 1; return { ok: true }; };
+    comun.hay = async () => puesto;
+    gitBarra.espera.cada = 5;
+    try {
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - 60 * 1000);
+      const espera = gitBarra.instalar();
+      assert.equal(gitBarra.seEstaPoniendo(), true);
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(lanzadas, 0, 'lanza otra instalación encima de la que sigue');
+      puesto = true;
+      assert.deepEqual(await espera, { ok: true });
+      assert.equal(lanzadas, 0);
+      assert.equal(respuestasM.cuandoEmpezoGit(), null, 'se queda apuntada');
+
+      // Con el plazo cumplido, sin git, se dice que tarda (y sus dos salidas son de quien llama).
+      puesto = false;
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - gitBarra.QUINCE_MINUTOS + 30);
+      const tarda = await Promise.race([gitBarra.instalar(), new Promise((r) => setTimeout(() => r({ colgada: true }), 2000))]);
+      assert.ok(!tarda.colgada, 'espera sin plazo');
+      assert.equal(tarda.ok, false);
+      assert.equal(tarda.tarda, true, 'espera para siempre');
+      assert.equal(lanzadas, 0);
+
+      // Pasados los 15 minutos de un intento anterior, se vuelve a lanzar.
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - gitBarra.QUINCE_MINUTOS - 1000);
+      assert.deepEqual(await gitBarra.instalar(), { ok: true });
+      assert.equal(lanzadas, 1, 'no vuelve a intentarlo pasado el plazo');
+      assert.equal(respuestasM.cuandoEmpezoGit(), null, 'no se borra al acabar');
+
+      // Y al empezar una, se apunta cuándo.
+      let apuntado = null;
+      comun.instalar = async () => { apuntado = respuestasM.cuandoEmpezoGit(); return { ok: true }; };
+      await gitBarra.instalar();
+      assert.ok(apuntado && Date.now() - apuntado < 5000, 'no apunta cuándo empezó');
+    } finally {
+      Object.assign(comun, { instalar: antes.instalar, hay: antes.hay });
+      gitBarra.espera.cada = antes.cada;
+      await memoria.update(respuestasM.CLAVE_GIT, undefined);
+    }
+
+    // 4. Lo contestado caduca a los 7 días, o si no dice cuándo.
+    const raiz = vscode.guion.raiz;
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'git-caduca-'));
+    vscode.guion.raiz = carpeta;
+    try {
+      const hace = (dias) => new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+      const base = { raiz: carpeta, rama: 'desdeCero', respuestas: { kind: 'operations' } };
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: hace(6) });
+      assert.ok(respuestasM.leer(memoria), 'a los 6 días ya no vale');
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: hace(8) });
+      assert.equal(respuestasM.leer(memoria), null, 'a los 8 días sigue valiendo');
+      await memoria.update(respuestasM.CLAVE, base);
+      assert.equal(respuestasM.leer(memoria), null, 'sin fecha vale');
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: 'ayer' });
+      assert.equal(respuestasM.leer(memoria), null, 'una fecha que no se lee vale');
+    } finally {
+      vscode.guion.raiz = raiz;
+      await respuestasM.olvidar(memoria);
+    }
+    return 'huella del instalador, git entero, la instalación anterior y lo contestado, con su plazo';
   });
 
   // ── Una carpeta que ya era de alguien ──────────────────────────────────
@@ -19785,7 +20576,7 @@ exec git "$@"
     const copia = fs.mkdtempSync(path.join(os.tmpdir(), 'despacho-'));
     fs.cpSync(empresa, copia, { recursive: true });
     vscode.guion.raiz = copia;
-    const FINGIDOS = ['arrancar', 'arreglar', 'instalarGit', 'subirCopia', 'conectarGitHub', 'aprenderCapacidad', 'ponerLaCara',
+    const FINGIDOS = ['arrancar', 'seguirSinCopias', 'arreglar', 'instalarGit', 'subirCopia', 'conectarGitHub', 'aprenderCapacidad', 'ponerLaCara',
       'elegirCarpeta', 'arreglarElRelevo', 'pedir', 'mandarElAviso', 'ponerLaNueva'];
     const antes = {};
     for (const nombre of FINGIDOS) {

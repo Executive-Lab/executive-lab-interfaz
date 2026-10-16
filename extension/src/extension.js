@@ -63,11 +63,11 @@ const solo = require('./solo');
 // P9: la carpeta que este ordenador ya conoce, los botones que corren el arnés o
 // tocan sus copias, y lo que se dice si se pulsan mientras la barra arregla sola.
 const CLAVE_CONOCIDA = 'executiveLab.carpetaConocida';
-const LOS_DEL_ARNES = new Set(['arrancar', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'prepararTambien', 'aprenderCapacidad']);
+const LOS_DEL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'ponerCopias', 'ponerElFreno', 'ponerElBloque', 'elegirAsistente', 'prepararTambien', 'aprenderCapacidad']);
 const OCUPADA = 'Estoy arreglando esta carpeta. Pulsa otra vez en un momento.';
 // En una carpeta que va por delante, lo que escribe con el arnés espera a que la
 // barra se ponga al día (P7, decisión 145; `rsc.correr`). Mientras, el asistente.
-const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacidad']);
+const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'seguirSinCopias', 'arreglar', 'aprenderCapacidad']);
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
@@ -92,6 +92,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
@@ -1235,6 +1236,7 @@ ${cabecera}
       verElInforme: () => this.verElInforme(mensaje.fichero),
       arreglar: () => this.arreglar(),
       arrancar: () => this.arrancar(),
+      seguirSinCopias: () => this.seguirSinCopias(),
       instalarGit: () => this.instalarGit(),
       ponerCopias: () => this.ponerCopias(),
       arreglarElRelevo: () => this.arreglarElRelevo(),
@@ -3412,12 +3414,54 @@ ${cabecera}
     copias.olvidarSiHayGit();
 
     if (!hecho.ok) {
-      this.salida.appendLine(`[instalarGit] ${hecho.mensaje}`);
+      this.salida.appendLine(`[instalarGit] ${hecho.mensaje}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`);
       return this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: true });
     }
 
+    // Si ya pulsó «Preparar esta carpeta» y contestó, se termina con lo
+    // contestado: era lo que esperaba a git (decisión 165).
+    if (lasRespuestas.leer(this.contexto.workspaceState)) return this.arrancar();
     await this.refrescar(true);
-    return this.enviar({ tipo: 'aviso', texto: 'Ya está. Puedes preparar la carpeta.' });
+    // Con la carpeta ya montada, no hay nada que preparar: decía que sí.
+    return this.enviar({ tipo: 'aviso', texto: proyecto.existe('.rsc.json') ? 'Ya está puesto git.' : 'Ya está. Puedes preparar la carpeta.' });
+  }
+
+  // «Seguir sin copias», con las respuestas guardadas y sin git (decisión 165):
+  // para quien no puede ponerlo —un portátil de empresa que no deja instalar—,
+  // que si no se quedaría pulsando «Volver a intentarlo» para siempre. Se apunta
+  // como la elección de antes (B3) y se monta con lo contestado.
+  async seguirSinCopias() {
+    if (this.contexto.workspaceState) await this.contexto.workspaceState.update(arrancar.CLAVE_SIN_GIT, true);
+    // Si está esperando a git con lo contestado, deja de esperar y monta con ello.
+    if (arrancar.dejarDeEsperarAGit()) return undefined;
+    return this.arrancar();
+  }
+
+  // Lo que esperaba a git, al volver a abrir la carpeta (decisión 165): si se
+  // recargó la ventana a mitad, o git acabó con la barra cerrada. Si git ya está
+  // y lo contestado basta, se termina solo, como lo que se hace solo al abrir
+  // (P9): con confianza y en una carpeta que este ordenador conoce. Si no, la
+  // pantalla ofrece «Terminar de prepararla», con un clic y sin preguntas.
+  async retomarLaPreparacion() {
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz() || !this.carpetaConocida()) return null;
+    if (!lasRespuestas.leer(this.contexto.workspaceState)) return null;
+    copias.olvidarSiHayGit();
+    if (!(await git.hay())) return null;
+    if (this.conElArnes()) {
+      this.salida.appendLine('[retomar] el arnés está ocupado: se queda en su botón'); // diccionario: interno
+      return null;
+    }
+    // Mientras monta, los botones que corren el arnés esperan, como con lo que
+    // se hace solo (ver `manejar`).
+    this.arreglandoSolo = true;
+    let hecho;
+    try {
+      hecho = await this.montar({ sinNadieDelante: true });
+    } finally {
+      this.arreglandoSolo = false;
+    }
+    this.salida.appendLine(`[retomar] ${hecho.ok ? 'terminada con lo contestado' : (hecho.esperaASuBoton ? 'espera a su botón' : 'no ha salido')}`); // diccionario: interno
+    return this.despuesDeMontar(hecho, { sinNadieDelante: true });
   }
 
   // Si en esta carpeta se eligió seguir sin copias. Es la misma clave que
@@ -3493,18 +3537,51 @@ ${cabecera}
     return this.refrescar(true);
   }
 
-  async arrancar() {
-    const hecho = await arrancar.arrancar(this.contexto, this.salida);
-    if (hecho.enMarcha) return this.enviar({ tipo: 'aviso', texto: OCUPADA });
+  // El montaje, y aparte lo que se hace y se dice después: así quien monta solo
+  // puede tener el arnés por ocupado mientras monta, y no mientras espera a que
+  // conteste lo de la vista sencilla o GitHub (decisión 165).
+  async arrancar(opciones = {}) {
+    return this.despuesDeMontar(await this.montar(opciones), opciones);
+  }
+
+  montar({ sinNadieDelante = false } = {}) {
+    return arrancar.arrancar(this.contexto, this.salida, {
+      sinNadieDelante,
+      // Esperando a git con las respuestas ya dadas, la barra lo dice y cuenta el
+      // tiempo, en vez de quedarse como estaba (decisión 165).
+      // Con su salida, si la tiene: seguir sin copias en vez de esperar.
+      alEsperar: (que, boton = null) => this.enviar({ tipo: 'esperando', que, ...(boton ? { boton } : {}) }),
+    });
+  }
+
+  async despuesDeMontar(hecho, { sinNadieDelante = false } = {}) {
+    if (hecho.enMarcha) return sinNadieDelante ? undefined : this.enviar({ tipo: 'aviso', texto: OCUPADA });
+    // Solo, y quedaba algo que pide su sí: se queda en su botón, sin decir nada.
+    if (hecho.esperaASuBoton) return this.repintarLoQueHaya();
+
+    // git no ha quedado puesto: una frase y su salida (P1). Lo contestado está
+    // guardado, y la pantalla lo dice.
+    if (hecho.gitNoSePuso) {
+      this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: true, botones: hecho.botones || [] });
+      return this.refrescar(true);
+    }
 
     if (hecho.cancelado) {
+      // Dejó las preguntas a medias con git poniéndose: ese sí ya lo dio, y git
+      // sigue. Cuando acabe, la pantalla se pone al día (decisión 165).
+      const poniendoGit = git.seEstaPoniendo();
+      if (poniendoGit) {
+        git.instalar().then(() => { copias.olvidarSiHayGit(); return this.repintarLoQueHaya(); })
+          .catch((error) => this.salida.appendLine(`[arrancar] ${error.message}`)); // diccionario: interno
+      }
       // Dijo que no a montar el arnés sobre lo que ya tenía. La barra funciona
       // sobre el arnés, así que no se instala nada — y se dice, en vez de
       // dejar la pantalla igual y que parezca que no ha pasado nada.
       if (hecho.sinPermiso) {
         this.enviar({ tipo: 'aviso', texto: 'No he tocado nada. Cuando quieras, el botón sigue aquí.' });
       }
-      return this.refrescar();
+      // Fresca si git se está poniendo: la pantalla lo dice en vez del botón.
+      return this.refrescar(poniendoGit);
     }
 
     // Falta git y ha dicho que lo pone: no es un error que mirar, es un botón
@@ -3919,6 +3996,8 @@ function activate(contexto) {
   asistentes.saberDondeGuardar(contexto.workspaceState);
   // Y dónde se apunta que la barra montó aquí esta carpeta (decisión 157).
   terreno.saberDondeRecordar(contexto.workspaceState);
+  // Y lo contestado al preparar que espera a git (decisión 165).
+  lasRespuestas.saberDondeGuardar(contexto.workspaceState);
   buscador.saberDondeEstamos(contexto.extensionPath);
 
   // El relevo de Node, antes de que se abra el chat del asistente: así su
@@ -4049,6 +4128,9 @@ function activate(contexto) {
     await panel.prepararParaLosDos().catch((e) => salida.appendLine(`[losDos] ${e.message}`)); // diccionario: interno
     // Lo que se ha dicho por el camino sale una vez, junto (decisión 157).
     panel.soltarElAviso();
+    // Y lo que esperaba a git, si ya está: se termina con lo contestado
+    // (decisión 165). Lo último, porque al terminar pregunta lo de siempre.
+    await panel.retomarLaPreparacion().catch((e) => salida.appendLine(`[retomar] ${e.message}`)); // diccionario: interno
   }, 3000);
 }
 
