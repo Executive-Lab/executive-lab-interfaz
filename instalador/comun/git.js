@@ -21,6 +21,7 @@
 // verdad. Así que no distribuimos ninguno: se lanza el instalador oficial de
 // cada sistema, que además está firmado por quien lo hace y no por nosotros.
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -143,8 +144,22 @@ async function hayEnMac(opciones = {}) {
 // En Windows y en Linux preguntar es gratis: no hay ningún señuelo que disparar.
 // En Windows, además, se mira dónde lo deja su instalador: recién puesto, por su
 // nombre no se ve (`gitsDeWindows`).
+// Un git de Windows a medias —el instalador copia `cmd\\git.exe` antes que el
+// resto— se ve por su sitio pero no sirve: solo vale con `mingw64\\bin\\git.exe`
+// al lado. `existe` es para la prueba.
+function buscarGitDeWindows(entorno = process.env, existe = fs.existsSync) {
+  const puestos = gitsDeWindows(entorno).filter((donde) => existe(donde));
+  const completo = puestos.find((donde) => existe(path.win32.join(path.win32.dirname(path.win32.dirname(donde)), 'mingw64', 'bin', 'git.exe')));
+  return { completo: completo || null, aMedias: !completo && puestos.length > 0 };
+}
+
 async function hayEnElResto(opciones = {}) {
-  const porSuSitio = ES_WINDOWS ? gitsDeWindows().find((donde) => fs.existsSync(donde)) : null;
+  let porSuSitio = null;
+  if (ES_WINDOWS && !opciones.git) {
+    const buscado = buscarGitDeWindows();
+    if (buscado.aMedias) return false;
+    porSuSitio = buscado.completo;
+  }
   const cual = opciones.git || porSuSitio || (ES_WINDOWS ? 'git.exe' : 'git');
   return (await correr(cual, ['--version'])).ok;
 }
@@ -178,18 +193,27 @@ async function instalarEnMac(opciones, avisar) {
   return esperarA(ESPERA_MAC, opciones, avisar);
 }
 
-async function bajarElInstalador() {
-  const respuesta = await fetch(ULTIMO_DE_WINDOWS, { headers: { Accept: 'application/vnd.github+json' } });
+// Se ejecuta con permisos de administrador, así que antes de lanzarlo se
+// comprueba su huella (sha256) con la que da GitHub para ese fichero. Sin huella
+// o con otra distinta, no se ejecuta (falla cerrado). Se baja a una carpeta
+// nueva, no a una ruta fija de %TEMP% que otro programa pudiera haber preparado.
+// `traer` es para la prueba.
+async function bajarElInstalador(traer = fetch) {
+  const respuesta = await traer(ULTIMO_DE_WINDOWS, { headers: { Accept: 'application/vnd.github+json' } });
   if (!respuesta.ok) return null;
 
   const cual = ((await respuesta.json()).assets || []).find((a) => ES_EL_INSTALADOR.test(a.name));
-  if (!cual) return null;
+  const esperada = cual && /^sha256:([0-9a-f]{64})$/i.exec(String(cual.digest || ''));
+  if (!esperada) return null;
 
-  const datos = await fetch(cual.browser_download_url);
+  const datos = await traer(cual.browser_download_url);
   if (!datos.ok) return null;
 
-  const fichero = path.join(os.tmpdir(), cual.name);
-  fs.writeFileSync(fichero, Buffer.from(await datos.arrayBuffer()));
+  const contenido = Buffer.from(await datos.arrayBuffer());
+  if (crypto.createHash('sha256').update(contenido).digest('hex') !== esperada[1].toLowerCase()) return null;
+
+  const fichero = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'git-')), cual.name);
+  fs.writeFileSync(fichero, contenido);
   return fichero;
 }
 
@@ -247,5 +271,5 @@ const sePuedeInstalarSolo = () => ES_WINDOWS || ES_MAC;
 module.exports = {
   hay, instalar, comoSeInstala, sePuedeInstalarSolo, GITS_DE_MAC,
   // Lo de Windows, también para las pruebas, que corren en un Mac (decisión 165).
-  gitsDeWindows, comoSeLanza, esDelGrupoDeAdministradores, trasElInstalador, correr, EN_SILENCIO, LE_DIJO_QUE_NO, ADMINISTRADORES,
+  gitsDeWindows, buscarGitDeWindows, bajarElInstalador, comoSeLanza, esDelGrupoDeAdministradores, trasElInstalador, correr, EN_SILENCIO, LE_DIJO_QUE_NO, ADMINISTRADORES,
 };

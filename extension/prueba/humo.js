@@ -10056,6 +10056,107 @@ exec git "$@"
     return 'administrador: pregunta; sin serlo: su carpeta; y la barra lo encuentra sin reiniciar';
   });
 
+  // ── Refuerzos de la 165: el instalador comprobado, git entero y lo contestado que caduca ──
+  await comprobar('el instalador de git se comprueba antes de ejecutarlo, git a medias no vale y lo contestado caduca', async () => {
+    const crypto = require('node:crypto');
+    const comun = require(cargar('entorno').moduloComun('git'));
+
+    // 1. La huella (sha256) con la que da GitHub. Sin ella o con otra, no se ejecuta.
+    const contenido = Buffer.from('un instalador de mentira');
+    const huella = `sha256:${crypto.createHash('sha256').update(contenido).digest('hex')}`;
+    const traerCon = (digest) => async (url) => (/api\.github\.com/.test(url)
+      ? { ok: true, json: async () => ({ assets: [{ name: 'Git-2.99.0-64-bit.exe', browser_download_url: 'https://x/Git-2.99.0-64-bit.exe', ...(digest === undefined ? {} : { digest }) }] }) }
+      : { ok: true, arrayBuffer: async () => contenido });
+    const bueno = await comun.bajarElInstalador(traerCon(huella));
+    assert.ok(bueno && fs.readFileSync(bueno).equals(contenido), 'con su huella, se baja');
+    assert.notEqual(path.dirname(bueno), os.tmpdir(), 'se baja a una ruta fija de %TEMP%');
+    assert.match(path.basename(path.dirname(bueno)), /^git-/, 'carpeta nueva propia');
+    assert.equal(await comun.bajarElInstalador(traerCon(`sha256:${'0'.repeat(64)}`)), null, 'se ejecutaría un instalador con otra huella');
+    assert.equal(await comun.bajarElInstalador(traerCon(undefined)), null, 'se ejecutaría un instalador sin huella');
+    assert.equal(await comun.bajarElInstalador(traerCon(null)), null, 'una huella nula vale');
+    assert.equal(await comun.bajarElInstalador(traerCon('sha1:abc')), null, 'otra clase de huella vale');
+    fs.rmSync(path.dirname(bueno), { recursive: true, force: true });
+
+    // 2. Git entero en Windows: `cmd\git.exe` solo no basta.
+    const env = { ProgramFiles: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\ana\\AppData\\Local' };
+    const cmd = 'C:\\Program Files\\Git\\cmd\\git.exe';
+    const mingw = 'C:\\Program Files\\Git\\mingw64\\bin\\git.exe';
+    const con = (...hay) => (donde) => hay.includes(donde);
+    assert.deepEqual(comun.buscarGitDeWindows(env, con()), { completo: null, aMedias: false });
+    assert.deepEqual(comun.buscarGitDeWindows(env, con(cmd)), { completo: null, aMedias: true }, 'git a medias vale');
+    assert.deepEqual(comun.buscarGitDeWindows(env, con(cmd, mingw)), { completo: cmd, aMedias: false });
+    const fuenteComun = fs.readFileSync(path.join(RAIZ, '..', 'instalador', 'comun', 'git.js'), 'utf8');
+    assert.ok(/if \(buscado\.aMedias\) return false;/.test(fuenteComun), 'hay() da por bueno un git a medias');
+
+    // 3. Tras recargar a mitad de la instalación: se espera, no se lanza otra.
+    const gitBarra = cargar('git');
+    const respuestasM = cargar('respuestas');
+    const memoria = contexto.workspaceState;
+    const antes = { instalar: comun.instalar, hay: comun.hay, cada: gitBarra.espera.cada };
+    let lanzadas = 0;
+    let puesto = false;
+    comun.instalar = async () => { lanzadas += 1; return { ok: true }; };
+    comun.hay = async () => puesto;
+    gitBarra.espera.cada = 5;
+    try {
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - 60 * 1000);
+      const espera = gitBarra.instalar();
+      assert.equal(gitBarra.seEstaPoniendo(), true);
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(lanzadas, 0, 'lanza otra instalación encima de la que sigue');
+      puesto = true;
+      assert.deepEqual(await espera, { ok: true });
+      assert.equal(lanzadas, 0);
+      assert.equal(respuestasM.cuandoEmpezoGit(), null, 'se queda apuntada');
+
+      // Con el plazo cumplido, sin git, se dice que tarda (y sus dos salidas son de quien llama).
+      puesto = false;
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - gitBarra.QUINCE_MINUTOS + 30);
+      const tarda = await Promise.race([gitBarra.instalar(), new Promise((r) => setTimeout(() => r({ colgada: true }), 2000))]);
+      assert.ok(!tarda.colgada, 'espera sin plazo');
+      assert.equal(tarda.ok, false);
+      assert.equal(tarda.tarda, true, 'espera para siempre');
+      assert.equal(lanzadas, 0);
+
+      // Pasados los 15 minutos de un intento anterior, se vuelve a lanzar.
+      await memoria.update(respuestasM.CLAVE_GIT, Date.now() - gitBarra.QUINCE_MINUTOS - 1000);
+      assert.deepEqual(await gitBarra.instalar(), { ok: true });
+      assert.equal(lanzadas, 1, 'no vuelve a intentarlo pasado el plazo');
+      assert.equal(respuestasM.cuandoEmpezoGit(), null, 'no se borra al acabar');
+
+      // Y al empezar una, se apunta cuándo.
+      let apuntado = null;
+      comun.instalar = async () => { apuntado = respuestasM.cuandoEmpezoGit(); return { ok: true }; };
+      await gitBarra.instalar();
+      assert.ok(apuntado && Date.now() - apuntado < 5000, 'no apunta cuándo empezó');
+    } finally {
+      Object.assign(comun, { instalar: antes.instalar, hay: antes.hay });
+      gitBarra.espera.cada = antes.cada;
+      await memoria.update(respuestasM.CLAVE_GIT, undefined);
+    }
+
+    // 4. Lo contestado caduca a los 7 días, o si no dice cuándo.
+    const raiz = vscode.guion.raiz;
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'git-caduca-'));
+    vscode.guion.raiz = carpeta;
+    try {
+      const hace = (dias) => new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+      const base = { raiz: carpeta, rama: 'desdeCero', respuestas: { kind: 'operations' } };
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: hace(6) });
+      assert.ok(respuestasM.leer(memoria), 'a los 6 días ya no vale');
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: hace(8) });
+      assert.equal(respuestasM.leer(memoria), null, 'a los 8 días sigue valiendo');
+      await memoria.update(respuestasM.CLAVE, base);
+      assert.equal(respuestasM.leer(memoria), null, 'sin fecha vale');
+      await memoria.update(respuestasM.CLAVE, { ...base, cuando: 'ayer' });
+      assert.equal(respuestasM.leer(memoria), null, 'una fecha que no se lee vale');
+    } finally {
+      vscode.guion.raiz = raiz;
+      await respuestasM.olvidar(memoria);
+    }
+    return 'huella del instalador, git entero, la instalación anterior y lo contestado, con su plazo';
+  });
+
   // ── Una carpeta que ya era de alguien ──────────────────────────────────
   //
   // Un RSC fingido que contesta como el de verdad en una carpeta así (medido

@@ -7,6 +7,7 @@
 // módulo compartido no aparece.
 
 const entorno = require('./entorno');
+const respuestas = require('./respuestas');
 
 // Se busca una vez y se recuerda, como historial.js: si no está, no va a estar
 // más tarde.
@@ -51,13 +52,42 @@ function instalar(avisar = () => {}) {
     return Promise.resolve({ ok: false, mensaje: aMano });
   }
   if (!enCurso) {
-    enCurso = Promise.resolve()
-      .then(() => m.instalar(comoLlamar(), avisar))
+    const anterior = respuestas.cuandoEmpezoGit();
+    enCurso = (anterior && Date.now() - anterior < QUINCE_MINUTOS
+      ? esperarALaAnterior(anterior, avisar)
+      : empezar(m, avisar))
       // Lo que falle por dentro se cuenta como un fallo, con su motivo (P3).
       .catch((error) => ({ ok: false, mensaje: NO_HE_PODIDO, detalle: error.message }))
-      .finally(() => { enCurso = null; });
+      .finally(() => { enCurso = null; return respuestas.olvidarQueEmpezoGit(); });
   }
   return enCurso;
+}
+
+// Una instalación que empezó antes de recargar la ventana y puede seguir en
+// marcha (Windows copia git en varios pasos): no se lanza otra encima. Se espera
+// a que git esté entero, como si siguiera en marcha, hasta cumplirse el plazo.
+const QUINCE_MINUTOS = 15 * 60 * 1000;
+const espera = { cada: 5000 };
+
+function esperarALaAnterior(desde, avisar) {
+  avisar('Git se está poniendo todavía. Espero a que acabe.');
+  return new Promise((resolver) => {
+    const mirar = async () => {
+      try {
+        if (await hay()) return resolver({ ok: true });
+        if (Date.now() - desde >= QUINCE_MINUTOS) {
+          return resolver({ ok: false, tarda: true, mensaje: 'Se está haciendo muy largo. Déjalo terminar y vuelve a abrir esto dentro de un rato.' });
+        }
+      } catch { /* se vuelve a mirar */ }
+      setTimeout(mirar, espera.cada);
+    };
+    mirar();
+  });
+}
+
+async function empezar(m, avisar) {
+  await respuestas.apuntarQueEmpezoGit();
+  return m.instalar(comoLlamar(), avisar);
 }
 
 const seEstaPoniendo = () => Boolean(enCurso);
@@ -77,4 +107,4 @@ function sePuedeInstalarSolo() {
 // Sin poder ponerlo solo no hay línea: sale lo de siempre, con su botón.
 const AL_PREPARAR = 'Al pulsar pongo también git, para tus copias. Mientras se pone, te hago las preguntas.';
 
-module.exports = { hay, instalar, seEstaPoniendo, comoSeInstala, sePuedeInstalarSolo, AL_PREPARAR };
+module.exports = { hay, instalar, seEstaPoniendo, espera, QUINCE_MINUTOS, comoSeInstala, sePuedeInstalarSolo, AL_PREPARAR };
