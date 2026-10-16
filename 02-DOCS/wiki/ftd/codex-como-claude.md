@@ -59,3 +59,12 @@ ninguna de las dos cosas: el aviso estaba «propuesto», y su `AGENTS.md` solo m
 
 - Lo de los puntos 7 y 8.
 - Si cambia `avisar.mjs`, poner al día la copia de `~/.codex/executive-lab/`.
+
+## La revisión
+
+- Una carpeta `executive-lab` con un guion o cosas que no constan como nuestras no se pisa (`carpetaAjena`), y
+  un fallo a mitad deshace solo lo escrito por esa pasada. Temporales con aleatorio. El `node` pide la 18.
+- Tras traer `main` (168 a 170): `humo.js` 482, con `--con-arnes` 490, `mapeos-codex.js` 30, `contrato.js` 15, y
+  `empresas-distintas.js`, diccionario y `revisar-powershell.js` en verde. Mutaciones de la revisión: 6, 5
+  tumbadas y una equivalente (borrar el guion en el `catch`, que ya no se alcanza con uno ajeno).
+

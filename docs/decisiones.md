@@ -8020,3 +8020,28 @@ volver a ofrecer. Ahora la prueba mira el estado.
 - Que un Codex que ya estaba abierto no ve el `config.toml` nuevo hasta que se abre una conversación nueva
   (lo normal con su configuración, sin comprobar aquí).
 - Que, con el trozo nuevo, Codex contesta en español sin leer `siempre.md`.
+
+### La revisión
+
+La revisión de seguridad de la PR dejó dos retoques.
+
+- **Una carpeta que no es nuestra no se pisa.** Si `<codex>/executive-lab/avisar.mjs` existe, o la carpeta
+  tiene algo dentro, y no hay constancia que case, no se ofrece (`carpetaAjena`) y no se toca nada. Solo se
+  ignoran los temporales nuestros que quedaron de una pasada cortada. Una constancia plantada o traída de otra
+  carpeta cae aquí: antes se ofrecía y se escribía encima. Y un fallo a mitad deshace solo lo que escribió
+  esa pasada: el guion, la constancia y la copia del `config.toml`, cada uno solo si lo escribió ella. La
+  prueba encontró un fallo propio: la variable de la copia se rellenaba antes de copiar, y si la copia ya
+  existía (de otro), el `catch` la borraba. Ahora solo cuenta cuando se ha copiado.
+- **Los temporales llevan un aleatorio** (`avisar.mjs.executive-lab-<pid>-<hex>`): uno viejo ya no hace
+  fallar la pasada de ahora.
+- **El `node` pide la versión 18 o más** (`dice`). El guion lleva un `await` de arriba y un Node viejo no lo
+  lee: cuenta como que no hay `node` de verdad. Con una 16, una 17 y una «v8» de mentira, no; con la 18.0.0 y
+  la 24, sí.
+
+Pruebas: la del módulo suma estos casos, y tras traer `main` (168, 169 y 170) la batería entera, una vez:
+`humo.js` 482, `humo.js --con-arnes` 490, `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js`, el
+diccionario y `revisar-powershell.js`, en verde. Mutaciones de la revisión: 6, 5 tumbadas (la carpeta ajena, el
+temporal fijo, el temporal viejo contado como ajeno, la copia ajena borrada y el Node 16). La sexta, borrar el
+guion en el `catch` aunque no lo escribiera esta pasada, no cae: con la carpeta ajena ya cerrada, ahí no hay
+forma de llegar con un guion que no sea nuestro, salvo una carrera con otro proceso. Se deja la guarda.
+
