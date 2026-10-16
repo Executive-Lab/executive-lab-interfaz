@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Deja las piezas puestas. Nada más.
 //
-//   node preparar.js --asistente claude
+//   node preparar.js --asistente claude   (o codex, o losDos)
 //   node preparar.js --sin-editor        (para probar sin tocar el VS Code de quien prueba)
 //
 // ── El reparto ───────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const git = require('./git');
-const { escribirAjustes } = require('./ajustes');
+const loDelEditor = require('./ajustes-del-editor');
 const { ponerElControlRemoto } = require('./control-remoto');
 
 const APP = __dirname;
@@ -116,10 +116,19 @@ function code() {
 
 const EXTENSION_DEL_ASISTENTE = { claude: 'anthropic.claude-code', codex: 'openai.chatgpt' };
 
+// Con qué asistentes: el elegido, o los dos. Lo que no se entiende, Claude, que
+// es lo que se instalaba hasta ahora.
+function asistentesDe(asistente) {
+  const elegidos = loDelEditor.asistentesDe(asistente);
+  return elegidos.length ? elegidos : ['claude'];
+}
+
 function vestirElEditor(asistente) {
   const cli = code();
-  const suya = EXTENSION_DEL_ASISTENTE[asistente] || EXTENSION_DEL_ASISTENTE.claude;
-  let bien = correrCmd(cli, ['--install-extension', suya, '--force']).codigo === 0;
+  let bien = true;
+  for (const cual of asistentesDe(asistente)) {
+    bien = correrCmd(cli, ['--install-extension', EXTENSION_DEL_ASISTENTE[cual], '--force']).codigo === 0 && bien;
+  }
 
   const vsix = path.join(APP, 'executive-lab.vsix');
   if (fs.existsSync(vsix)) bien = correrCmd(cli, ['--install-extension', vsix, '--force']).codigo === 0 && bien;
@@ -129,47 +138,32 @@ function vestirElEditor(asistente) {
   return bien;
 }
 
-// Las que VS Code declara de ámbito de programa: no admiten vivir en una
-// carpeta, así que van a los ajustes del editor. Son pocas y no cambian el
-// aspecto de nada: confianza del workspace, actualizaciones, telemetría.
+// Lo que se deja puesto en los ajustes de usuario del editor (decisión 163): lo
+// de todo el editor —la confianza, las actualizaciones, la bienvenida— y lo del
+// asistente elegido. Qué es cada cosa, y por qué, en `ajustes-del-editor.js`.
+// Lo que esa persona ya tenía decidido no se pisa, y queda constancia al lado
+// para que desinstalar quite solo lo nuestro.
 //
 // El resto del disfraz —todo lo que se ve— lo escribe la extensión en el
 // .vscode/settings.json de cada carpeta, cuando esa persona lo enciende. Aquí
 // no se escribe porque aquí todavía no hay ninguna carpeta.
-const SOLO_DEL_EDITOR = [
-  'security.workspace.trust.enabled',
-  'update.mode',
-  'update.showReleaseNotes',
-  'telemetry.telemetryLevel',
-  'extensions.ignoreRecommendations',
-];
-
-function ajustesDelEditor() {
-  const plantilla = path.join(APP, 'disfraz.json');
-  if (!fs.existsSync(plantilla)) {
-    anotar('AVISO: no encuentro disfraz.json; los ajustes de programa se quedan como estaban.');
-    return;
-  }
-
+async function ajustesDelEditor(asistente, { fichero = loDelEditor.ficheroDeUsuario() } = {}) {
   // --sin-editor también se los salta: si no, "probar sin tocar el VS Code de
   // quien prueba" le apagaba las actualizaciones y la telemetría de verdad.
   if (process.argv.includes('--sin-editor')) {
     anotar('Ajustes del editor: omitidos (--sin-editor).');
-    return;
+    return null;
   }
 
-  const disfraz = JSON.parse(fs.readFileSync(plantilla, 'utf8'));
-  const usuario = ES_WINDOWS
-    ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Code', 'User')
-    : process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User')
-      : path.join(os.homedir(), '.config', 'Code', 'User');
-
-  const delEditor = {};
-  for (const clave of SOLO_DEL_EDITOR) {
-    if (clave in disfraz) delEditor[clave] = disfraz[clave];
+  try {
+    const hecho = await loDelEditor.ponerEnElFichero({ fichero, asistentes: asistentesDe(asistente), anotar });
+    const dicho = { puesto: 'puestos', nada: 'no faltaba nada', ilegible: 'AVISO: no los entiendo; no los toco' }[hecho.hecho] || hecho.hecho;
+    anotar(`Ajustes del editor: ${dicho}${hecho.puestas.length ? ` (${hecho.puestas.join(', ')})` : ''}${hecho.respetadas.length ? `; ya los había decidido esa persona: ${hecho.respetadas.join(', ')}` : ''}.`);
+    return hecho;
+  } catch (error) {
+    anotar(`AVISO: los ajustes del editor no se han podido poner (${error.message}).`);
+    return null;
   }
-  escribirAjustes(path.join(usuario, 'settings.json'), delEditor, 'los ajustes del editor', anotar);
 }
 
 // El control remoto de Claude, para todas las sesiones (decisión 143): en sus
@@ -177,7 +171,7 @@ function ajustesDelEditor() {
 // Claude, que es el que lo tiene; y no con --sin-editor, que es probar sin tocar
 // los ajustes de verdad de quien prueba.
 function controlRemoto(asistente) {
-  if (asistente !== 'claude') return;
+  if (!asistentesDe(asistente).includes('claude')) return;
   if (process.argv.includes('--sin-editor')) {
     anotar('Control remoto: omitido (--sin-editor).');
     return;
@@ -201,7 +195,7 @@ async function main() {
   if (process.argv.includes('--sin-editor')) anotar('Extensiones: omitidas (--sin-editor).');
   else bien = vestirElEditor(asistente) && bien;
 
-  ajustesDelEditor();
+  await ajustesDelEditor(asistente);
   controlRemoto(asistente);
 
   anotar(bien
@@ -220,10 +214,16 @@ async function main() {
   process.exit(bien ? 0 : 1);
 }
 
-main().catch((error) => {
-  anotar(`ERROR sin recoger: ${error && error.stack ? error.stack : error}`);
-  try {
-    fs.writeFileSync(path.join(os.tmpdir(), 'executive-lab-instalacion.log'), `${registro.join('\n')}\n`);
-  } catch { /* si ni eso se puede, queda el código de salida */ }
-  process.exit(1);
-});
+// Se puede cargar sin instalar nada, para probar sus pasos sueltos en una
+// carpeta de mentira (`humo.js`).
+module.exports = { ajustesDelEditor, controlRemoto, asistentesDe, registro };
+
+if (require.main === module) {
+  main().catch((error) => {
+    anotar(`ERROR sin recoger: ${error && error.stack ? error.stack : error}`);
+    try {
+      fs.writeFileSync(path.join(os.tmpdir(), 'executive-lab-instalacion.log'), `${registro.join('\n')}\n`);
+    } catch { /* si ni eso se puede, queda el código de salida */ }
+    process.exit(1);
+  });
+}

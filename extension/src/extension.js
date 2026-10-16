@@ -92,6 +92,7 @@ const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
+const loDelEditor = require('./lo-del-editor');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
 
@@ -619,6 +620,18 @@ ${cabecera}
     const frase = retirados.laFrase(hechos);
     if (frase) vscode.window.showInformationMessage(frase);
     return hechos;
+  }
+
+  // Lo del asistente que deja el instalador en los ajustes de usuario, si falta
+  // (decisión 163): para quien solo instaló la barra. Es de esta persona y no de
+  // la carpeta, así que no espera a la confianza, como el control remoto. Una
+  // vez por ordenador, sin pisar lo suyo, y se dice en una frase si cambió algo.
+  async ponerLoDelEditor() {
+    const hecho = await loDelEditor.ponerLoQueFalta(this.contexto, this.salida);
+    if (!hecho) return null;
+    this.salida.appendLine(`[editor] ${hecho.hecho}${hecho.puestas.length ? `: ${hecho.puestas.join(', ')}` : ''}${hecho.respetadas.length ? ` · suyas: ${hecho.respetadas.join(', ')}` : ''}`); // diccionario: interno
+    this.dejarElAviso(loDelEditor.laFrase(hecho.puestas));
+    return hecho;
   }
 
   // Repinta lo que el alumno tenga delante. Lo llama el vigía del arnés.
@@ -4126,6 +4139,8 @@ function activate(contexto) {
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
     // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).
     await panel.prepararParaLosDos().catch((e) => salida.appendLine(`[losDos] ${e.message}`)); // diccionario: interno
+    // Lo del asistente que deja el instalador, si falta (decisión 163).
+    await panel.ponerLoDelEditor().catch((e) => salida.appendLine(`[editor] ${e.message}`)); // diccionario: interno
     // Lo que se ha dicho por el camino sale una vez, junto (decisión 157).
     panel.soltarElAviso();
     // Y lo que esperaba a git, si ya está: se termina con lo contestado

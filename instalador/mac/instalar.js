@@ -37,7 +37,6 @@ const comun = (nombre) => {
   throw new Error(`no encuentro ${nombre}.js`);
 };
 
-const { escribirAjustes } = comun('ajustes');
 const git = comun('git');
 
 const AQUI = __dirname;
@@ -224,29 +223,30 @@ async function asegurarGit() {
   anotar(hecho.ok ? 'git: instalado.' : `AVISO: git no ha quedado puesto (${hecho.mensaje}). Lo ofrecerá el panel.`);
 }
 
-// 5. Las cinco claves de ámbito de programa, que son las únicas que VS Code no
-// admite por carpeta. El resto del disfraz va en la carpeta y lo pone el panel.
+// 5. Lo que se deja puesto en los ajustes de usuario del editor (decisión
+// 163): lo de todo el editor —la confianza, las actualizaciones, la bienvenida—
+// y lo de Claude, que es el asistente que se pone aquí. Qué es cada cosa, y por
+// qué, en `comun/ajustes-del-editor.js`. Lo que esa persona ya tenía decidido no
+// se pisa, y queda constancia al lado para que desinstalar quite solo lo
+// nuestro. El resto del disfraz va en la carpeta y lo pone el panel.
 //
 // Ya no se crea ninguna carpeta de trabajo: la elige esa persona la primera vez
 // que abre el programa, y el panel la prepara. Antes se creaba aquí una
 // `Documentos/Mi Empresa IA` a ciegas, sin saber si iba a usarla.
-function losAjustesDelEditor() {
+async function losAjustesDelEditor() {
   contar('Dejando el editor a punto');
 
-  const plantilla = path.join(CARGA, 'disfraz.json');
-  if (fs.existsSync(plantilla) && !SECO) {
-    const disfraz = JSON.parse(fs.readFileSync(plantilla, 'utf8'));
-    const soloDelEditor = [
-      'security.workspace.trust.enabled',
-      'update.mode',
-      'update.showReleaseNotes',
-      'telemetry.telemetryLevel',
-      'extensions.ignoreRecommendations',
-    ];
-    const claves = {};
-    for (const clave of soloDelEditor) if (clave in disfraz) claves[clave] = disfraz[clave];
-    escribirAjustes(path.join(CASA, 'Library', 'Application Support', 'Code', 'User', 'settings.json'),
-      claves, 'los ajustes del editor', anotar);
+  if (!SECO) {
+    try {
+      const hecho = await comun('ajustes-del-editor').ponerEnElFichero({
+        fichero: path.join(CASA, 'Library', 'Application Support', 'Code', 'User', 'settings.json'),
+        asistentes: ['claude'],
+        anotar,
+      });
+      anotar(`Ajustes del editor: ${hecho.hecho}${hecho.puestas.length ? ` (${hecho.puestas.join(', ')})` : ''}${hecho.respetadas.length ? `; ya los había decidido esa persona: ${hecho.respetadas.join(', ')}` : ''}.`);
+    } catch (error) {
+      anotar(`AVISO: los ajustes del editor no se han podido poner (${error.message}).`);
+    }
   }
 
   // El control remoto de Claude, para todas las sesiones (decisión 143).
@@ -376,7 +376,7 @@ async function main() {
   const editor = elEditor();
   lasPiezasDelAsistente(editor);
   await asegurarGit();
-  losAjustesDelEditor();
+  await losAjustesDelEditor();
   const acceso = elAccesoDirecto(editor);
   alDock(acceso);
 

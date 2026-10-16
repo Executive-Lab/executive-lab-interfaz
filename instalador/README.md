@@ -10,7 +10,7 @@ Desde la decisión 27, el instalador **no monta ningún arnés y no crea ninguna
 
 | | Qué hace |
 |---|---|
-| **El instalador** | El editor, Node, git y las dos extensiones. Un acceso directo que abre el editor. Se acaba ahí |
+| **El instalador** | El editor, Node, git y las dos extensiones. Los ajustes del editor y del asistente, puestos. Un acceso directo que abre el editor. Se acaba ahí |
 | **El panel** | Elegir carpeta → las preguntas → montar RSC → raíles, nombres, enganches, primera copia |
 
 ### Qué hace, en orden
@@ -20,14 +20,42 @@ Desde la decisión 27, el instalador **no monta ningún arnés y no crea ninguna
 2. Instala VS Code en silencio, por usuario, **sin pedir administrador**.
 3. Deja Node dentro de su carpeta y lo pone en el PATH del usuario: los enganches del arnés lo
    llaman por nombre desde el editor, y esa persona no tiene nada en el sistema.
-4. Ejecuta `comun/preparar.js`, que ahora son dos pasos:
+4. Ejecuta `comun/preparar.js`:
    - **asegurar git**, con el instalador oficial del sistema si no está (decisión 26)
    - instalar la extensión del asistente y la nuestra
-   - y los cinco ajustes de ámbito de programa, que son los únicos que VS Code no admite por carpeta
+   - **dejarlo todo puesto** en los ajustes de usuario del editor (decisión 163, abajo)
+   - y el control remoto de Claude, en los suyos (decisión 143)
 5. Deja un acceso directo **Executive Lab** con icono propio que **abre el editor, sin carpeta**.
 
 No imprime nada para quien lo instala: escribe `instalacion.log` junto a la app. Quien enseña la
 barra de progreso es el instalador.
+
+### Lo que deja puesto en el editor (decisión 163)
+
+Jose: *«que el instalador instale y configure todo para que el usuario no tenga que hacer mierdas»*. Lo
+hace `comun/ajustes-del-editor.js`, el mismo módulo en los dos instaladores y en la barra. La tabla de
+lo investigado, con sus fuentes y lo que no se pone, está en la decisión 163.
+
+| Qué | Quién lo pone | Por qué |
+|---|---|---|
+| La confianza apagada (`security.workspace.trust.enabled`) | El instalador | Claude y Codex no arrancan en modo restringido |
+| Sin actualizaciones del editor, sin notas de versión, sin telemetría, sin recomendaciones | El instalador | Nada que salga de repente |
+| Sin la bienvenida del editor (`workbench.startupEditor`) | El instalador | El acceso directo abre el editor sin carpeta |
+| Sin la guía de una extensión al ponerla (`workbench.welcomePage.walkthroughs.openOnInstall`) | El instalador | Se abría al poner Claude o Codex |
+| El enlace de Claude sin preguntar (`extensions.confirmedUriHandlerExtensionIds`) | El instalador, con Claude | Cada botón de la barra le habla por ahí |
+| La vista enfocada de Claude y sin su lista de primeros pasos | El instalador, y la barra si falta | Es de programa: en la carpeta no se ponía |
+| Codex abierto al arrancar (`chatgpt.openOnStartup`) | El instalador, y la barra si falta | Solo si Codex es el único |
+
+- **Lo que ya tenía decidido no se pisa**, con comentarios o sin ellos. Cada clave se mira una vez por
+  ordenador: si la quita, no vuelve.
+- **Queda constancia** al lado de sus ajustes, en `.executive-lab-ajustes.json`: lo que pusimos, con su
+  valor, y lo que era suyo. Desinstalar quita solo eso y solo si sigue igual: el `[UninstallRun]` de Inno,
+  `windows/desinstalar.ps1` y `mac/desinstalar.command`, con `node ajustes-del-editor.js --quitar`.
+- **La barra solo pone lo del asistente**, para quien solo instaló la barra. Lo de todo el editor lo pone
+  solo el instalador: en el ordenador de quien usa el editor para otras cosas le cambiaría todas las
+  ventanas (decisiones 15 y 71).
+- El de Windows pregunta por Claude o Codex; `preparar.js` admite también `--asistente losDos`. El de
+  macOS pone Claude.
 
 Antes esto montaba también un arnés en `Documentos/Mi Empresa IA`, con seis preguntas dentro del
 instalador. Eran las mismas seis que hace el panel, mantenidas por duplicado —y las de Windows se
@@ -46,8 +74,8 @@ la monta; lo único que hay que dejar a mano son los binarios de terceros:
 El icono de Windows es nuestro y se versiona (`windows/executivelab.ico`); `preparar-carga.sh` lo copia a
 la carga. El instalador del editor ya no viaja: se descarga al instalar, si hace falta.
 
-El resto lo montan los scripts: `preparar.js`, `git.js`, `ajustes.js`, `disfraz.json` y el `.vsix`
-(que empaquetan si hace falta). **Ya no viajan** el arnés, los raíles ni MinGit: los dos primeros van
+El resto lo montan los scripts: `preparar.js`, `git.js`, `ajustes.js`, `ajustes-del-editor.js`,
+`control-remoto.js`, `disfraz.json` y el `.vsix` (que empaquetan si hace falta). **Ya no viajan** el arnés, los raíles ni MinGit: los dos primeros van
 dentro del `.vsix`, que es quien los usa, y git lo instala su propio instalador (decisión 26).
 
 ```bash
@@ -106,7 +134,7 @@ aviso de privacidad del propio Instalador nada más empezar (decisión 21 en
 ```bash
 ./mac/construir.sh                  # carga + app + .dmg  (103 MB)
 ./mac/firmar.sh                     # firma, notariza y grapa
-./mac/probar.sh                     # 14 comprobaciones
+./mac/probar.sh                     # 15 comprobaciones
 ./mac/desinstalar.command           # lo quita todo y deja el Mac como estaba
 ```
 

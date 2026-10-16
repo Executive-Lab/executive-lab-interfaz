@@ -120,7 +120,7 @@ fi
 rm -rf "$CARGA/harness" "$CARGA/skills" "$CARGA/git"
 
 # --- Lo nuestro. Solo lo que el instalador usa de verdad.
-for modulo in preparar.js git.js ajustes.js control-remoto.js; do
+for modulo in preparar.js git.js ajustes.js ajustes-del-editor.js control-remoto.js; do
   cp "$RAIZ/instalador/comun/$modulo" "$CARGA/$modulo"
 done
 cp "$RAIZ/extension/media/disfraz.json" "$CARGA/disfraz.json"

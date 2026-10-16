@@ -135,6 +135,43 @@ async function run() {
     return 'por carpeta, no global';
   });
 
+  // Decisión 163. Lo que la vista sencilla escribe en la carpeta lo admite la
+  // carpeta, y lo de todo el editor que pone el instalador no cabe en ella: por
+  // eso va en los ajustes de usuario. Así estaba la vista enfocada de Claude,
+  // que el editor rechazaba en la carpeta sin que nadie lo viera.
+  await comprobar('cada ajuste va donde el editor lo admite', async () => {
+    const fs = require('node:fs');
+    const raiz = vscode.extensions.getExtension(ID).extensionPath;
+    const disfraz = JSON.parse(fs.readFileSync(path.join(raiz, 'media', 'disfraz.json'), 'utf8'));
+    const config = vscode.workspace.getConfiguration();
+    const enLaCarpeta = [];
+    for (const [clave, valor] of Object.entries(disfraz)) {
+      // Las de Claude y Codex: sus extensiones no están en este editor.
+      if (/^(claudeCode|chatgpt)\./.test(clave)) continue;
+      const antes = (config.inspect(clave) || {}).workspaceValue;
+      await config.update(clave, valor, vscode.ConfigurationTarget.Workspace);
+      await config.update(clave, antes, vscode.ConfigurationTarget.Workspace);
+      enLaCarpeta.push(clave);
+    }
+    const DE_TODO_EL_EDITOR = {
+      'security.workspace.trust.enabled': false,
+      'update.mode': 'none',
+      'workbench.welcomePage.walkthroughs.openOnInstall': false,
+      'extensions.confirmedUriHandlerExtensionIds': ['anthropic.claude-code'],
+      'window.menuBarVisibility': 'hidden',
+    };
+    const caben = [];
+    for (const [clave, valor] of Object.entries(DE_TODO_EL_EDITOR)) {
+      try {
+        await config.update(clave, valor, vscode.ConfigurationTarget.Workspace);
+        caben.push(clave);
+        await config.update(clave, undefined, vscode.ConfigurationTarget.Workspace);
+      } catch { /* no cabe en una carpeta: es lo que se espera */ }
+    }
+    assert.deepEqual(caben, [], 'el editor deja poner en una carpeta lo que va en los de usuario porque no cabe');
+    return `${enLaCarpeta.length} en la carpeta · ${Object.keys(DE_TODO_EL_EDITOR).length} solo para todo el editor`;
+  });
+
   // El relevo de Node (C2, T032 (2)). `correr.js` arranca el editor con un
   // PATH sin ningún `node`, como el ordenador de un alumno. Lo que solo se
   // puede medir aquí: que el relevo que pone la barra al abrirse va el primero

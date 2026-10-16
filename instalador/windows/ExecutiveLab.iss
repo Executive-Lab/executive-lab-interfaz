@@ -55,6 +55,7 @@ Source: "carga\runtime\*";   DestDir: "{app}\runtime";  Flags: recursesubdirs ig
 Source: "carga\preparar.js"; DestDir: "{app}";          Flags: ignoreversion
 Source: "carga\git.js";      DestDir: "{app}";          Flags: ignoreversion
 Source: "carga\ajustes.js";  DestDir: "{app}";          Flags: ignoreversion
+Source: "carga\ajustes-del-editor.js"; DestDir: "{app}"; Flags: ignoreversion
 Source: "carga\control-remoto.js"; DestDir: "{app}";   Flags: ignoreversion
 Source: "carga\executive-lab.vsix"; DestDir: "{app}";   Flags: ignoreversion
 Source: "carga\executivelab.ico";   DestDir: "{app}";   Flags: ignoreversion
@@ -89,6 +90,11 @@ Filename: "{app}\runtime\node.exe"; \
 Filename: "{app}\runtime\node.exe"; \
   Parameters: """{app}\control-remoto.js"" --quitar"; \
   RunOnceId: "QuitarControlRemoto"; Flags: runhidden waituntilterminated
+; Y lo que puso en los ajustes del editor (decisión 163): solo lo que dice su
+; constancia, y solo si sigue con el valor que dejó.
+Filename: "{app}\runtime\node.exe"; \
+  Parameters: """{app}\ajustes-del-editor.js"" --quitar"; \
+  RunOnceId: "QuitarAjustesDelEditor"; Flags: runhidden waituntilterminated
 
 [Icons]
 ; Abre el editor, sin carpeta: la elige esa persona la primera vez, y el panel

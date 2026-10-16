@@ -3,9 +3,10 @@
 // Dos capas, y la distinción importa:
 //
 //   · La BASE va a los ajustes de usuario. La escribe el instalador antes del
-//     primer arranque y la extensión la repasa. Ahí viven las cosas que solo
-//     se pueden fijar para todo el programa: la confianza del workspace, las
-//     actualizaciones, la telemetría, el zoom.
+//     primer arranque, desde `instalador/comun/ajustes-del-editor.js`, y no
+//     vive en `disfraz.json` (decisión 163). Ahí van las cosas que solo se
+//     pueden fijar para todo el programa: la confianza del workspace, las
+//     actualizaciones, la telemetría, la vista enfocada de Claude.
 //
 //   · El INTERRUPTOR es por ventana. "Ver el editor completo" escribe, en el
 //     .vscode/settings.json de la carpeta abierta, los valores de fábrica de
@@ -34,6 +35,9 @@ const VERSION = 2;
 // La extensión no las toca nunca. En la máquina de quien desarrolla —o de
 // cualquiera que use VS Code para otras cosas— cambiarlas le altera todas las
 // ventanas, que es justo lo que no queremos.
+//
+// Ya no están en `disfraz.json`: viven con el instalador (decisión 163). La
+// lista se queda de guarda, por si alguien las vuelve a poner aquí.
 const SOLO_DEL_INSTALADOR = [
   'security.workspace.trust.enabled',
   'update.mode',
@@ -53,7 +57,16 @@ const SOLO_DEL_INSTALADOR = [
 // lo que esa persona tenga puesto, que es lo correcto.
 //
 // Las de ámbito de programa no entran: la extensión no las escribe nunca.
-const clavesDeLaCarpeta = (contexto) => Object.keys(ajustes(contexto)).filter((c) => !SOLO_DEL_INSTALADOR.includes(c));
+//
+// Y sí entra lo que la vista sencilla escribía en la carpeta y ahora va en los
+// ajustes de usuario (decisión 163): una carpeta de antes lo puede tener, y si
+// no se quita de aquí se queda escrito para siempre (lo que pasó con el zoom,
+// decisión 71).
+const YA_NO_VAN_EN_LA_CARPETA = ['claudeCode.hideOnboarding'];
+const clavesDeLaCarpeta = (contexto) => [
+  ...Object.keys(ajustes(contexto)).filter((c) => !SOLO_DEL_INSTALADOR.includes(c)),
+  ...YA_NO_VAN_EN_LA_CARPETA,
+];
 
 function ajustes(contexto) {
   const base = JSON.parse(fs.readFileSync(path.join(contexto.extensionPath, 'media', 'disfraz.json'), 'utf8'));
@@ -131,8 +144,14 @@ async function aplicar(contexto, salida, { forzar = false } = {}) {
 
   const todos = ajustes(contexto);
   const primeraVez = antes.version !== VERSION || forzar;
-  const claves = primeraVez ? Object.keys(todos) : (antes.pendientes || []);
-  if (!claves.length) return { primeraVez: false, aplicadas: 0, pendientes: [] };
+  // Las pendientes de antes que ya no son del disfraz se olvidan: la vista
+  // enfocada de Claude, por ejemplo, se quedaba pendiente en cada arranque
+  // porque en la carpeta no cabe (decisión 163).
+  const claves = primeraVez ? Object.keys(todos) : (antes.pendientes || []).filter((c) => c in todos);
+  if (!claves.length) {
+    if ((antes.pendientes || []).length) await contexto.globalState.update(CLAVE_ESTADO, { ...antes, pendientes: [] });
+    return { primeraVez: false, aplicadas: 0, pendientes: [] };
+  }
 
   // El disfraz va a los ajustes de ESTA carpeta, no a los de VS Code entero:
   // así una ventana con la empresa del alumno está disfrazada y otra con
@@ -182,8 +201,13 @@ async function quitar(contexto, salida) {
 
   // El interruptor va el primero: si se queda encendido, el siguiente arranque
   // vuelve a poner todo lo que acabamos de quitar.
-  for (const clave of [CLAVE_INTERRUPTOR, ...Object.keys(ajustes(contexto))]) {
+  //
+  // Lo que ya no va en la carpeta (decisión 163) se quita solo de ella: en los
+  // ajustes de usuario lo pone el instalador, y lo quita al desinstalar.
+  const deLaCarpeta = new Set(YA_NO_VAN_EN_LA_CARPETA);
+  for (const clave of [CLAVE_INTERRUPTOR, ...Object.keys(ajustes(contexto)), ...YA_NO_VAN_EN_LA_CARPETA]) {
     for (const ambito of [vscode.ConfigurationTarget.Workspace, vscode.ConfigurationTarget.Global]) {
+      if (deLaCarpeta.has(clave) && ambito !== vscode.ConfigurationTarget.Workspace) continue;
       try {
         const visto = configuracion.inspect(clave);
         const hay = ambito === vscode.ConfigurationTarget.Workspace

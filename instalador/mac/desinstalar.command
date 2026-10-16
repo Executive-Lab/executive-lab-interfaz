@@ -7,8 +7,9 @@
 #   ./desinstalar.command --deja-claude   # no toca la extensión del asistente
 #
 # Es el espejo de instalador/windows/desinstalar.ps1. La regla es la misma: de
-# los ajustes del editor solo se quita una clave si tiene EXACTAMENTE el valor
-# que puso el disfraz. Si esa persona la había tocado, se queda como la tenga.
+# los ajustes del editor solo se quita lo que la instalación dejó apuntado en su
+# constancia, y solo si sigue con el valor que dejó (decisión 163). Si esa
+# persona lo había tocado, se queda como lo tenga.
 
 set -uo pipefail
 
@@ -69,11 +70,36 @@ else
   nada "no encuentro el editor; me salto sus piezas"
 fi
 
-# ───────────────────────────────────────────── 2. el disfraz de los ajustes
+# ──────────────────────────────── 2. lo que puse en los ajustes del editor
 
-paso "El aspecto del editor"
+# Lo que puso la instalación (decisión 163): solo lo que dice su constancia, y
+# solo si sigue con el valor que dejó. Lo que ya tenías decidido no se toca.
+paso "Lo que puse en los ajustes del editor"
 NODE="$(elNode)"
-if [ -z "$NODE" ] || [ ! -f "$AJUSTES" ]; then
+CONSTANCIA="$(dirname "$AJUSTES")/.executive-lab-ajustes.json"
+MODULO="$APP/ajustes-del-editor.js"
+[ -f "$MODULO" ] || MODULO="$(cd "$(dirname "$0")" && pwd)/../comun/ajustes-del-editor.js"
+HABIA_CONSTANCIA=0
+if [ -f "$CONSTANCIA" ]; then
+  HABIA_CONSTANCIA=1
+  if [ -n "$NODE" ] && [ -f "$MODULO" ]; then
+    "$NODE" "$MODULO" --quitar --ajustes "$AJUSTES" | sed 's/^/  · /'
+  else
+    nada "no encuentro con qué quitarlo; lo que puse está apuntado en $CONSTANCIA"
+  fi
+else
+  nada "no hay constancia: es una instalación de antes, va en el paso siguiente"
+fi
+
+# ───────────────────────────────────────────── 3. el disfraz de los ajustes
+
+# Las instalaciones de antes no dejaban constancia: se limpia como entonces, por
+# el valor. Con constancia ya está hecho arriba, y por el valor se llevaría algo
+# tuyo que casualmente valga lo mismo (decisión 71).
+paso "El aspecto del editor"
+if [ "$HABIA_CONSTANCIA" = "1" ]; then
+  nada "ya está: lo de esta instalación se ha quitado arriba"
+elif [ -z "$NODE" ] || [ ! -f "$AJUSTES" ]; then
   nada "sin ajustes que limpiar"
 else
   DISFRAZ="$APP/disfraz.json"
@@ -104,7 +130,7 @@ else
   fi
 fi
 
-# ─────────────────────────────────────────── 3. el acceso directo y el Dock
+# ─────────────────────────────────────────── 4. el acceso directo y el Dock
 
 paso "El acceso directo"
 if [ -d "$ACCESO" ]; then
@@ -138,7 +164,7 @@ else
   nada "no estaba"
 fi
 
-# ──────────────────────────────────────────── 4. el arranque del shell
+# ──────────────────────────────────────────── 5. el arranque del shell
 
 paso "El arranque"
 for fichero in "$CASA/.zprofile" "$CASA/.bash_profile"; do
@@ -148,7 +174,7 @@ for fichero in "$CASA/.zprofile" "$CASA/.bash_profile"; do
   fi
 done
 
-# ─────────────────────────────────────────────────── 5. las herramientas
+# ─────────────────────────────────────────────────── 6. las herramientas
 
 paso "El control remoto de Claude"
 # Si lo puso la instalación y sigue puesto (decisión 143). Antes de quitar las
@@ -166,7 +192,7 @@ else
   nada "no estaban"
 fi
 
-# ───────────────────────────────────────────── 6. las carpetas de trabajo
+# ───────────────────────────────────────────── 7. las carpetas de trabajo
 
 paso "Tus carpetas de trabajo"
 ENCONTRADAS=0
@@ -186,7 +212,7 @@ for documentos in "$CASA/Documentos" "$CASA/Documents"; do
 done
 [ "$ENCONTRADAS" = "0" ] && nada "no he encontrado ninguna"
 
-# ───────────────────────────────────────────────────────── 7. el editor
+# ───────────────────────────────────────────────────────── 8. el editor
 
 paso "El editor"
 if [ -d "$EDITOR_PROPIO" ]; then
