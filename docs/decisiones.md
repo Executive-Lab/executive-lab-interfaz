@@ -7729,6 +7729,81 @@ vale», la raíz de una aplicación y los asistentes). Para la prueba de `git`, 
 
 
 
+## 168. Los instaladores, con los dos asistentes y comprobados
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · FTD `los-instaladores-con-los-dos`
+
+Lo de la 163 dejaba tres cosas cojas: el `.dmg` ponía siempre Claude, el `.exe` no ofrecía «Los dos»
+aunque `preparar.js` ya lo admitía, y las pruebas de los instaladores miraban 4 claves de las que se
+ponen, no todas.
+
+- **El `.dmg` pregunta con qué asistente**, en un diálogo de Apple con tres botones: Claude (por
+  defecto), Codex, Los dos. Las mismas palabras que la página del `.exe`. La app se lo pasa a
+  `arrancar.sh` y este a `instalar.js` con `--asistente claude|codex|losDos`; sin nada, o con algo
+  que no se entiende, Claude. De ahí salen las extensiones que se ponen (`anthropic.claude-code` y,
+  si toca, `openai.chatgpt`) y los asistentes con los que se llama a `ajustes-del-editor.js`. El
+  control remoto de Claude solo se pone si se ha elegido Claude.
+- **El `.exe` ofrece «Los dos»** como tercera opción, y le manda `losDos` a `preparar.js`. En
+  silencio se elige con `/ASISTENTE=codex` o `/ASISTENTE=losDos`.
+- **`probar.sh` y `probar.ps1` comprueban todo lo que se pone**: cada clave de los ajustes de
+  usuario con su valor y su apunte en la constancia (la tabla va escrita a mano en los dos, no
+  sacada del módulo, para que un valor cambiado en el módulo les salte); con Claude, su
+  `extensions.confirmedUriHandlerExtensionIds`, `claudeCode.focusView` y `claudeCode.hideOnboarding`;
+  con Codex solo, `chatgpt.openOnStartup`; `remoteControlAtStartup: true` en el `settings.json` de
+  Claude con su marca (respetando `CLAUDE_CONFIG_DIR`); y que la extensión de cada asistente elegido
+  está puesta. Con `--asistente` (Mac) y `-Asistente` (Windows) se dice con cuál se instaló. Son 10
+  claves con Claude o con los dos y 8 con Codex solo (11 distintas en total).
+- **El CI**: la máquina del Mac instala y comprueba con **los dos** (poner una extensión más sale
+  barato y prueba también Codex); la de Windows sigue con Claude, así que los dos caminos quedan
+  cubiertos.
+- **Idioma de Codex: no se pone.** Se leyó el 16-10-2026 la página de ajustes de la extensión
+  (developers.openai.com/codex/ide/settings, que redirige a learn.chatgpt.com/docs/developer-settings)
+  y el `package.json` de `openai.chatgpt` 26.51007.21434. `chatgpt.localeOverride` es una cadena libre
+  (`string | null`, de programa) con la descripción *«Preferred language for the Codex UI. Leave empty
+  to auto detect.»*; ni la página ni el manifiesto traen una lista de valores, ni dicen si se entiende
+  `es` o `es-ES`. Un valor sin documentar podría dejar la ventana en blanco o en inglés sin que nada
+  lo avise, así que queda como estaba (propuesto desde la 163). Cuando OpenAI publique los valores,
+  basta una clave más en `ajustes-del-editor.js`, con su constancia, como las otras.
+- **Nada de `~/.codex/config.toml` de usuario**: la barra lo gestiona por carpeta.
+
+### Lo que no se ha podido ver
+
+El diálogo del `.dmg` y la página del `.exe` no se han visto con una persona delante: se comprueba
+que la app compila (`osacompile`), el texto y el paso de lo elegido. La extensión de Codex en las
+máquinas de GitHub se ve en `el-dmg`.
+
+
+## 169. Todo lo de RSC tiene nombre, también los automatismos
+
+**Qué había.** `nombres.json` nombra 5 guardianes y 18 automatismos, y `reglas.js` los monta. Pero ninguna
+prueba comparaba esa tabla con lo que trae el paquete: un enganche o un interruptor nuevo de una versión
+futura de RSC habría salido sin nombre sin que nadie se enterase. Y la prueba de comandos miraba los 20 fijos
+por expresión regular, cuando el manifiesto trae 53.
+
+**Qué se vio al repasarlo (RSC 3.0.22).** Los 13 enganches que la barra enseña y los 19 interruptores
+(`PROJECT_OPT_OUTS` y `MACHINE_OPT_OUTS`, 15 y 4) ya tenían nombre: no hizo falta nombrar nada nuevo en
+pantalla. Los otros 10 `targets/*.mjs` son fontanería: ayudantes de otro enganche o cosas que solo actúan en
+un caso que la barra no tiene.
+
+**Qué se decide.**
+
+- **Lo que no se enseña consta, con su porqué**: `noSeEnsena` en `nombres.json`, un `.mjs` por línea. Los
+  diez: `clone-bootstrap`, `copy-rules`, `deepseek-bridge`, `hook-once`, `sello`, `session-memory-adapter`,
+  `session-memory-core`, `shell-unwrap`, `team-safe-start` y `trunk-policy`.
+- **Una prueba lee el paquete instalado** y falla si un `targets/*.mjs` no está nombrado (porque una pieza de
+  `reglas.js` lo monta y tiene fila) ni consta en `noSeEnsena`; si un interruptor no lo apaga ninguna pieza
+  con nombre; si una fila de la tabla no tiene pieza; o si algo de `noSeEnsena` ya no existe o va sin porqué.
+  Cuando RSC traiga un enganche nuevo, hay que decidir por escrito: se enseña (fila y pieza) o es fontanería
+  (una línea).
+- **La prueba de comandos exige los 53 del manifiesto**, cada uno con nombre por la tabla o por un patrón.
+
+**Cómo se probó que cae.** Quitar `branch-guard` de la tabla; un `.mjs` falso en `targets/`; un comando de
+más en el manifiesto; y, dentro de la prueba, seis mutaciones sobre los datos (guardián, automatismo, `.mjs`
+nuevo, interruptor nuevo, una fila de `noSeEnsena` quitada y otra que ya no existe). Todas caen.
+
+**Lo que no hace.** Un `.mjs` que RSC pase a enseñarse en pantalla (por ejemplo un sello activable) sigue
+pidiendo a mano su pieza en `reglas.js`: la prueba obliga a decidirlo, no a hacerlo.
+
 ## 170. Las credenciales que no son un .env
 
 **Fecha:** 16 de octubre de 2026 · **Estado:** decidido
