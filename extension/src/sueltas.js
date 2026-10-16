@@ -206,12 +206,15 @@ function buscar({ conLasDeLasApps = false } = {}) {
 // OJO con las dos carpetas que se llaman igual: un `keys/` en la raíz es
 // desorden; el `keys/` de dentro de una herramienta es su casa, y lo que hay
 // ahí NO está fuera de sitio. Es lo único que se puede leer mal de aquí.
-const POR_NOMBRE = /\.(pem|p8|p12|pfx|key|keystore|jks)$/i;
+const POR_NOMBRE = /\.(pem|p8|p12|pfx|key|keystore|jks|ppk)$/i;
 const SIN_EXTENSION = /^(id_rsa|id_ed25519|id_ecdsa|id_dsa)$/i;
 // Un `.json` que no hace falta abrir: su nombre ya lo dice.
 const JSON_INEQUIVOCO = /^(credentials|client_secret.*|.*service[-_]?account.*|token|serviceAccountKey|firebase-adminsdk.*)\.json$/i;
 // Y lo que hay que ver dentro de cualquier otro `.json` para que cuente.
-const DENTRO_DE_UNA_CREDENCIAL = /"(type"\s*:\s*"service_account|private_key"|client_secret")/;
+// `refresh_token` es lo que deja un inicio de sesión de OAuth (`token.json`, o el
+// `authorized_user` de gcloud): sirve para sacar accesos nuevos sin volver a
+// pedir nada, así que es una credencial entera (decisión 170).
+const DENTRO_DE_UNA_CREDENCIAL = /"(type"\s*:\s*"service_account|private_key"|client_secret"|refresh_token")/;
 const TOPE_JSON = 64 * 1024;
 
 // De un `.json` que cuenta salen DOS campos, los dos públicos: qué es y de
@@ -295,6 +298,7 @@ function nombraA(texto, id) {
 // entradas por carpeta, y tantas lecturas en total.
 const TOPE_POR_CARPETA = 300;
 const TOPE_DE_LECTURAS = 60;
+const TOPE_DE_SUBCARPETAS = 40;
 
 function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = false } = {}) {
   const raiz = proyecto.raiz();
@@ -359,6 +363,21 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
   for (const carpeta of [...new Set([...primerNivel, ...CARPETAS, 'keys'])]) {
     if (!conLasDeLasApps && esUnaApp(carpeta)) continue;
     mirarCarpeta(carpeta);
+    // Y un nivel más (decisión 170): `datos/google/cuenta.json` es donde la gente
+    // guarda una cuenta de servicio, y no mirarlo la dejaba en las copias. Con
+    // tope, que esto corre en cada repintado, y sin entrar en las carpetas que el
+    // inventario nunca mira ni en las que son una aplicación.
+    let hijas = [];
+    try {
+      hijas = fs.readdirSync(proyecto.ruta(carpeta), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !NO_SE_MIRA.has(e.name))
+        .map((e) => e.name).slice(0, TOPE_DE_SUBCARPETAS);
+    } catch { /* sin permiso: se mira lo demás */ }
+    for (const hija of hijas) {
+      const relativa = path.posix.join(carpeta, hija);
+      if (!conLasDeLasApps && esUnaApp(relativa)) continue;
+      mirarCarpeta(relativa);
+    }
   }
 
   // Dentro de cada herramienta, lo que esté FUERA de su `keys/`. Lo que hay en
@@ -375,8 +394,25 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
 function paraProteger() {
   return {
     claves: buscar({ conLasDeLasApps: true }),
-    ficheros: ficherosDeAcceso(herramientas(), { conLasDeLasApps: true }),
+    ficheros: [...ficherosDeAcceso(herramientas(), { conLasDeLasApps: true }), ...ficherosDelSistema()],
   };
+}
+
+// Los que las herramientas del propio sistema leen de un sitio fijo: `.netrc`,
+// `.pgpass`, `.git-credentials`, `.htpasswd` y `.aws/credentials`. Son
+// credenciales, así que no entran en una copia ni se enseñan sus valores; pero
+// **no son desorden y no se mueven** (decisión 170): llevarlos a `keys/` dejaría
+// a `git`, `psql` o `aws` sin encontrarlos. Se avisa de ellos y nada más.
+const DEL_SISTEMA = ['.netrc', '.pgpass', '.git-credentials', '.htpasswd', '.aws/credentials'];
+function ficherosDelSistema() {
+  const raiz = proyecto.raiz();
+  if (!raiz) return [];
+  return DEL_SISTEMA.filter((donde) => {
+    try { return fs.lstatSync(path.join(raiz, ...donde.split('/'))).isFile(); } catch { return false; }
+  }).map((donde) => ({
+    donde, nombre: path.posix.basename(donde), clase: 'del sistema', queEs: 'Un fichero de acceso que lee el sistema',
+    herramienta: null, existe: false, por: 'sin dueño',
+  }));
 }
 
 // Si una herramienta tiene ya su fichero de acceso puesto donde toca. Es lo

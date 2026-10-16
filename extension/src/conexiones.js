@@ -1293,6 +1293,27 @@ function cuerpoDeUnaClave(texto) {
   return lineas;
 }
 
+// Los que no son JSON ni PEM (decisión 170): la clave de un `.ppk` de PuTTY, la
+// contraseña de un `.netrc`, de un `.pgpass`, de un `.htpasswd` o de un
+// `.git-credentials`, y las claves de `.aws/credentials`. Solo valores; el nombre
+// del fichero no sale de aquí.
+function secretosDeTexto(texto, nombre) {
+  const valores = [];
+  for (const m of String(texto).matchAll(/Private-Lines:\s*\d+\s*\n([\s\S]*?)(?:\nPrivate-MAC|$)/g)) {
+    for (const linea of m[1].split(/\r?\n/)) if (linea.trim().length >= 16) valores.push(linea.trim());
+  }
+  for (const m of String(texto).matchAll(/\bpassword\s+(\S+)/g)) valores.push(m[1]);
+  for (const m of String(texto).matchAll(/\b[a-z][a-z0-9+.-]{1,20}:\/\/[^:/\s@]+:([^@\s]+)@/gi)) valores.push(m[1]);
+  for (const m of String(texto).matchAll(/\baws_(?:secret_access_key|session_token)\s*=\s*(\S+)/gi)) valores.push(m[1]);
+  if (/^\.(pgpass|htpasswd)$/i.test(nombre)) {
+    for (const linea of String(texto).split(/\r?\n/)) {
+      const resto = nombre.toLowerCase() === '.pgpass' ? linea.split(':').slice(4).join(':') : linea.split(':').slice(1).join(':');
+      if (resto.trim()) valores.push(resto.trim());
+    }
+  }
+  return valores;
+}
+
 function secretosDeUnFichero(fichero) {
   let texto;
   try {
@@ -1301,7 +1322,7 @@ function secretosDeUnFichero(fichero) {
   } catch {
     return [];
   }
-  const secretos = [...cuerpoDeUnaClave(texto)];
+  const secretos = [...cuerpoDeUnaClave(texto), ...secretosDeTexto(texto, path.basename(fichero))];
   try {
     const datos = JSON.parse(texto);
     const recorrer = (cosa) => {
