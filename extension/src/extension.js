@@ -90,6 +90,7 @@ const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
 const retirados = require('./retirados');
 const lasRespuestas = require('./respuestas');
+const porDondeIbas = require('./por-donde-ibas');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -376,6 +377,7 @@ ${cabecera}
         arreglar: async () => {
           const { ok, detalle } = await soporte.arreglar();
           if (detalle) this.salida.appendLine(detalle);
+          if (ok) await this.losRailesDetras();
           return ok;
         },
         // Sin git no se instala nada solo: eso abre el instalador del sistema. Y con
@@ -659,6 +661,8 @@ ${cabecera}
       costumbrePuesta: await this.ponerLasCostumbres(),
       // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
       datosDeClientes: this.laTarjetaDeLosDatos(),
+      // La primera vez de cada día, dónde lo dejó la última vez (decisión 160).
+      laUltimaVez: await this.laUltimaVezQueToca(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -1110,6 +1114,8 @@ ${cabecera}
       cuandoCaduca: () => this.apuntarCuandoCaduca(mensaje.proveedor, mensaje.en, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
+      seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt, mensaje.dia),
+      ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(mensaje.dia),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
       verRecordatorios: () => this.verRecordatorios(),
       crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
@@ -1153,7 +1159,7 @@ ${cabecera}
       cambiarArticulo: () => this.pedir(`Quiero cambiar lo que sabes sobre «${unRotulo(mensaje.titulo)}». Ábrelo, enséñame qué dice y pregúntame qué hay que corregir.`),
       anadirDocumentos: () => this.anadirDocumentos(mensaje.desde),
       soltarDocumentos: () => this.soltarDocumentos(mensaje.ficheros, mensaje.para),
-      abrirPanelCompleto: () => cerebro.abrirPanel(),
+      abrirPanelCompleto: () => this.abrirPanelCompleto(mensaje.desde),
       verDocumentos: () => this.verDocumentos(),
       verLaFoto: () => this.verLaFoto(mensaje.desde),
       guardarLaFoto: () => this.guardarLaFoto(mensaje.png),
@@ -1497,8 +1503,21 @@ ${cabecera}
     const uno = recordatorios.losQueHay().find((r) => r.nombre === nombre);
     await this.marcarHecho(nombre);
     if (!uno) return this.actualizarRecordatorios();
-    await this.pedir(uno.prompt);
+    await this.pedir(await this.elEncargoDe(uno));
     return this.actualizarRecordatorios();
+  }
+
+  // El de «Seguir donde lo dejé», con por dónde ibas si se sabe: es lo que dice
+  // su tarjeta (revisión de la PR #55, decisión 160).
+  async elEncargoDe(uno) {
+    if (uno.nombre !== 'seguir') return uno.prompt;
+    try {
+      const { ibasPor } = await brujula.estado();
+      return (ibasPor && ibasPor.accion && ibasPor.accion.prompt) || uno.prompt;
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return uno.prompt;
+    }
   }
 
   async dejarElRecordatorio(nombre) {
@@ -1577,7 +1596,10 @@ ${cabecera}
   }
 
   verConexion(proveedor, aviso = null) {
-    const datos = conexiones.claves(proveedor);
+    // Lo que escribió el asistente (los pasos, de dónde se saca cada clave y el
+    // nombre), tapado como en el PDF: con ello arma el panel lo que «No lo
+    // encuentro» le pasa al asistente.
+    const datos = informatico.conexionALaVista(conexiones.claves(proveedor));
     if (!datos) return this.verConexiones();
     // Un aviso con `seQueda` sobrevive al repintado del vigía: el de la guía en PDF
     // se escribe en `01-TOOLS/`, y sin esto se borraba al momento (decisión 159).
@@ -2075,8 +2097,17 @@ ${cabecera}
       sueltos,
       herramientas: salidas.loQueHaProducido(),
       fotos: foto.lasFotos(proyecto.ruta(...LAS_FOTOS), proyecto.raiz()),
+      // El panel completo de RSC, junto a la foto, solo si está (arreglos sueltos de la tanda).
+      hayPanel: cerebro.hayPanel(),
       aviso,
     });
+  }
+
+  // El panel completo se abre en el navegador. Si ya no está, o ahora es un
+  // enlace, se repinta donde estaba, sin el botón: solo sale lo que se tiene.
+  abrirPanelCompleto(desde) {
+    if (cerebro.abrirPanel()) return undefined;
+    return desde === 'documentos' ? this.verDocumentos() : this.verCerebro();
   }
 
   // ── La foto del cerebro (decisión 151, punto 11 de la 142) ──────────────
@@ -2272,6 +2303,33 @@ ${cabecera}
       this.salida.appendLine(`[clientes] ${error.message}`); // diccionario: interno
       return null;
     }
+  }
+
+  // ── La última vez (decisión 160) ──────────────────────────────────────
+  //
+  // La primera vez de cada día, en una carpeta con algo hecho, por dónde iba. Lo
+  // que sabe la brújula, que se acaba de calcular y está recordado: no cuesta otro
+  // proceso. Si falla, la barra sigue igual, y queda apuntado.
+  async laUltimaVezQueToca() {
+    try {
+      return await porDondeIbas.laDeHoy(this.almacen(), await brujula.estado());
+    } catch (error) {
+      this.salida.appendLine(`[la última vez] ${error.stack || error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // Sus dos botones la quitan hasta el día siguiente al de la tarjeta, que viaja
+  // con ellos. «Seguir donde lo dejé» lleva el encargo que armó la extensión (P6).
+  async seguirDondeLoDeje(prompt, dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    await this.pedir(prompt);
+    return this.refrescar(true);
+  }
+
+  async ahoraNoLaUltimaVez(dia) {
+    await porDondeIbas.hastaManana(this.almacen(), dia);
+    return this.refrescar(true);
   }
 
   // La tarjeta: hasta que se lee o se pulsa «Entendido», y solo si ya entran datos
@@ -3089,8 +3147,24 @@ ${cabecera}
     this.enviar({ tipo: 'esperando', que: 'Arreglándolo…' });
     const { ok, mensaje, detalle } = await soporte.arreglar();
     if (detalle) this.salida.appendLine(detalle);
+    if (ok) await this.losRailesDetras();
     this.enviar({ tipo: 'aviso', texto: mensaje, malo: !ok });
     await this.refrescar(true);
+  }
+
+  // Detrás de «Revisar y arreglar», como en el montaje (decisión 161). `repair`
+  // rehace lo del arnés y no lo nuestro: en una carpeta traída de otro ordenador,
+  // `.rsc/` es nueva y le faltan las marcas de los raíles, también la que calla el
+  // aviso que manda a correr `npx @ericrisco/rsc@latest`. Se reponen como al
+  // abrir: solo si la carpeta ya los tiene, porque reponer no es decidir; y en una
+  // carpeta de alguien, lo que toca sus ficheros sigue esperando a su sí (C-4). Que
+  // no salga no tumba el arreglo: se apunta para «Algo va mal» (P3).
+  async losRailesDetras() {
+    if (!terreno.comoEstanLosRailes().habilidadPropia) return null;
+    const ajena = !(await terreno.podemosGuardarElPuntoDePartida());
+    const ok = await arrancar.ponerLosRailes(this.contexto, { ajena }).catch(() => false);
+    this.salida.appendLine(`[railes] detrás de arreglar: ${ok}${ajena ? ' (historial de alguien: lo suyo, pendiente)' : ''}`); // diccionario: interno
+    return ok;
   }
 
   // La pieza que falta es git, y sin ella no se monta nada (git.js dice por
