@@ -86,4 +86,4 @@ alguien era decidir por su equipo (P4). Decisión 161.
 ## Next
 
 - Ver en una carpeta de verdad de un equipo que, al abrirla con la barra, su `.rsc.json` no cambia.
-- El botón para encender lo que apagó una barra de antes, en «Lo que tiene apagado».
+- El botón para encender lo que apagó una barra de antes. Hecho en la 177.

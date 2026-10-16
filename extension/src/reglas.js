@@ -255,6 +255,19 @@ const INTERRUPTORES = {
     },
     botones: { encendido: ['wiki-dejar'], apagado: ['wiki-compartir'] },
   },
+  // La memoria entre conversaciones (decisión 176): `memory on|off`. No es una marca de
+  // `.rsc/`: RSC la apunta en `.rsc.json` (`memory: false`) y rehace los enganches de
+  // cada asistente (Claude en `.claude/settings.local.json`, Codex en `.codex/hooks.json`).
+  memoria: {
+    nombre: 'Recordar entre conversaciones',
+    cuando: () => hayMemoria(),
+    estado: () => (memoriaApagada() ? 'apagado' : 'encendido'),
+    dice: {
+      encendido: 'El asistente se acuerda de lo que hicisteis la última vez y sigue por ahí.',
+      apagado: 'El asistente empieza cada conversación de cero.',
+    },
+    botones: { encendido: ['memoria-dejar'], apagado: ['memoria-recordar'] },
+  },
 };
 
 // Cada botón: su orden, lo que cambia al pulsarlo y cómo tiene que quedar la
@@ -265,15 +278,28 @@ const BOTONES = {
   'aparte-apagar': { cual: 'aparte', etiqueta: 'Apagar el trabajo aparte', args: ['isolation', 'off'], llega: 'apagado', queCambia: 'Si lo apagas, todas las conversaciones trabajan en esta misma carpeta.' },
   'aparte-encender': { cual: 'aparte', etiqueta: 'Encender el trabajo aparte', args: ['isolation', 'on'], llega: 'encendido', queCambia: 'Si lo enciendes, con otra conversación en marcha lo nuevo se hace en una copia aparte.' },
   'wiki-dejar': { cual: 'wiki', etiqueta: 'Dejar de compartir el conocimiento', args: ['knowledge-sync', 'off'], llega: 'apagado', queCambia: 'Si lo dejas, cada uno trabaja con lo suyo.' },
+  'memoria-dejar': { cual: 'memoria', etiqueta: 'Dejar de recordar entre conversaciones', args: ['memory', 'off'], llega: 'apagado', queCambia: 'Si lo dejas, el asistente empieza cada conversación de cero.' },
+  'memoria-recordar': { cual: 'memoria', etiqueta: 'Recordar entre conversaciones', args: ['memory', 'on'], llega: 'encendido', queCambia: 'Si lo enciendes, el asistente se acordará de lo que hicisteis la última vez.' },
   'wiki-compartir': { cual: 'wiki', etiqueta: 'Compartir el conocimiento', args: ['knowledge-sync', 'on'], llega: 'encendido', queCambia: 'Si lo compartes, las conexiones y lo que sabe de tu empresa se suben solos y se traen los de los demás.' },
 };
 
 const hayArnesDeLaTres = () => donde.puedeTenerFrenos() && hayEnRsc('trunk-policy.mjs');
 
+// La memoria la monta RSC para Claude y para Codex (`targets/memory.js`), así que se
+// ofrece en cuanto la carpeta es de uno de los dos y el arnés trae su pieza: no hace
+// falta que haya frenos. Con otro asistente, o con una carpeta sin la pieza (la 2),
+// no hay nada que mover.
+const hayMemoria = () => {
+  const dec = proyecto.declaracion() || {};
+  const quienes = Array.isArray(dec.targets) && dec.targets.length ? dec.targets : [asistentes.conQuien().id];
+  return quienes.some((t) => t === 'claude' || t === 'codex')
+    && (hayEnRsc('session-memory.mjs') || hayEnRsc('trunk-policy.mjs') || memoriaApagada());
+};
+const aplica = (i) => (i.cuando ? i.cuando() : hayArnesDeLaTres());
+
 // Lo que enseña la pantalla: cómo está cada uno, y los botones que tocan.
 function losInterruptores() {
-  if (!hayArnesDeLaTres()) return [];
-  return Object.entries(INTERRUPTORES).map(([cual, i]) => {
+  return Object.entries(INTERRUPTORES).filter(([, i]) => aplica(i)).map(([cual, i]) => {
     const estado = i.estado();
     return {
       cual,
@@ -288,7 +314,7 @@ function losInterruptores() {
 
 // El botón que se ha pulsado, si es uno nuestro y hay algo que cambiar aquí. Una
 // cadena y nada más: `__proto__` o un array no son un nombre.
-const elBoton = (id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOTONES, id) && hayArnesDeLaTres() ? BOTONES[id] : null);
+const elBoton = (id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOTONES, id) && aplica(INTERRUPTORES[BOTONES[id].cual]) ? BOTONES[id] : null);
 const estadoDe = (cual) => INTERRUPTORES[cual].estado();
 
 // El freno ante órdenes peligrosas puede venir de dos sitios (C1): el de RSC,

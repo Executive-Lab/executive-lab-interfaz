@@ -93,6 +93,8 @@ const relevo = require('./relevo');
 const clientes = require('./clientes');
 const sitio = require('./sitio');
 const ajustesLocales = require('./ajustes-locales');
+const deAlguien = require('./de-alguien');
+const procesos = require('./procesos');
 const retirados = require('./retirados');
 const avisoDeCodex = require('./aviso-de-codex');
 const enganchesDeCodex = require('./enganches-de-codex');
@@ -1434,6 +1436,10 @@ ${cabecera}
       ponerCopias: () => this.ponerCopias(),
       arreglarElRelevo: () => this.arreglarElRelevo(),
       ponerElFreno: () => this.ponerElFreno(),
+      ponerLoDeClaudeAqui: () => this.ponerLoDeClaudeAqui(),
+      arreglarCodexAqui: () => this.arreglarCodexAqui(),
+      volverAEncender: () => this.volverAEncender(),
+      noOfrecerMas: () => this.noOfrecerMas(mensaje.cual),
       ponerElBloque: () => this.ponerElBloque(),
       conectarGitHub: () => this.conectarGitHub(),
       verCopiaFuera: () => this.verCopiaFuera(),
@@ -3753,6 +3759,85 @@ ${cabecera}
     return this.enviar(ok
       ? { tipo: 'aviso', texto: 'Ya está. Cierra la conversación con Claude y ábrela otra vez para que lo coja.' }
       : { tipo: 'aviso', texto: 'No he podido ponerlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+  }
+
+  // ── En una carpeta de alguien, con su botón (decisión 177) ───────────────
+  //
+  // Lo que la barra no hace sola en una carpeta que no montó ella se ofrece en
+  // «Qué falta por montar», cada cosa con su «Ahora no». El clic es el sí; no hay
+  // más preguntas. Qué se ofrece y cómo se hace: `de-alguien.js`.
+  async desdeSuBoton(que, hacer, { dicho, fallo }) {
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz()) {
+      return this.enviar({ tipo: 'aviso', texto: 'Esta carpeta no es de confianza: no he tocado nada.', malo: true });
+    }
+    // Un botón viejo no vale: se mira otra vez, justo antes de actuar, si todavía se
+    // ofrece (la carpeta pudo pasar a ser de la barra, o ya estar hecho, o rechazado).
+    let oferta = null;
+    try { oferta = (await terreno.laOfertaDeAlguien())[que]; } catch { /* se trata como que ya no */ }
+    if (!oferta) {
+      this.salida.appendLine(`[deAlguien] ${que}: ya no se ofrece, no se toca nada`); // diccionario: interno
+      await this.verRadiografia();
+      return this.enviar({ tipo: 'aviso', texto: 'Esto ya no hace falta, o ya no se puede hacer aquí. No he tocado nada.' });
+    }
+    let hecho;
+    try { hecho = await hacer(); } catch (error) { hecho = { ok: false, detalle: error.message }; }
+    this.salida.appendLine(`[deAlguien] ${que}: ${hecho.detalle}`); // diccionario: interno
+    await this.verRadiografia();
+    return this.enviar(hecho.ok
+      ? { tipo: 'aviso', texto: dicho(hecho), ...(hecho.boton ? { boton: hecho.boton } : {}) }
+      : { tipo: 'aviso', texto: fallo, malo: true });
+  }
+
+  async ponerLoDeClaudeAqui() {
+    return this.desdeSuBoton('claude', async () => {
+      const hecho = await deAlguien.ponerLoDeClaude({
+        raiz: proyecto.raiz(), estaEnGit: arrancar.estaEnGitConLaBarra, git: procesos.git,
+      });
+      return {
+        ok: hecho.hecho === 'puesto',
+        detalle: `${hecho.hecho}${hecho.fuera ? ` · fuera de git: ${hecho.fuera}` : ''}${hecho.error ? ` (${hecho.error})` : ''}`, // diccionario: interno
+        boton: quitarSoloEsto(ajustesLocales.loQueSePuso(hecho)),
+        frase: ajustesLocales.laFrase(hecho),
+      };
+    }, {
+      dicho: (hecho) => hecho.frase,
+      fallo: 'No he podido ponerlo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
+    });
+  }
+
+  async arreglarCodexAqui() {
+    return this.desdeSuBoton('codex', async () => {
+      const { hechos, sinFuera } = await deAlguien.arreglarCodex({ raiz: proyecto.raiz(), git: procesos.git });
+      for (const h of hechos) {
+        this.salida.appendLine(`[codex] ${h.hecho} ${h.fichero}${h.copia ? ` · copia en ${h.copia}` : ''}${h.error ? ` (${h.error})` : ''}`); // diccionario: interno
+      }
+      // La copia lleva el fichero entero: si no ha quedado fuera de git, se dice dónde está.
+      const copia = sinFuera.length ? ` He dejado una copia del fichero en ${sinFuera.join(', ')}.` : '';
+      return { ok: hechos.some((h) => h.hecho === 'arreglado'), detalle: hechos.map((h) => h.hecho).join(','), frase: `${retirados.laFrase(hechos)}${copia}` };
+    }, {
+      dicho: (hecho) => hecho.frase,
+      fallo: 'No he podido arreglarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.',
+    });
+  }
+
+  async volverAEncender() {
+    return this.desdeSuBoton('marcas', async () => {
+      const hecho = deAlguien.volverAEncender(proyecto.raiz());
+      return { ok: hecho.hecho === 'encendido', detalle: `${hecho.hecho} ${hecho.quitadas.join(',')}` }; // diccionario: interno
+    }, {
+      dicho: () => 'Hecho. Lo que apagó una versión anterior de la barra vuelve a funcionar.',
+      fallo: 'No había nada de la barra que encender: lo demás lo apagó alguien de aquí, y lo dejo como está.',
+    });
+  }
+
+  // «Ahora no»: en esta carpeta no se vuelve a ofrecer, si se ha podido apuntar.
+  async noOfrecerMas(cual) {
+    const hecho = await deAlguien.rechazar(this.almacen(), proyecto.raiz(), cual);
+    this.salida.appendLine(`[deAlguien] ahora no, ${cual}: ${hecho}`); // diccionario: interno
+    await this.verRadiografia();
+    return this.enviar(hecho
+      ? { tipo: 'aviso', texto: 'Vale, no te lo vuelvo a proponer en esta carpeta.' }
+      : { tipo: 'aviso', texto: 'No he podido apuntar que no lo quieres, así que te lo volveré a proponer. No he tocado nada.', malo: true });
   }
 
   // El botón del bloque de `CLAUDE.md` pendiente (C-4). Toca un fichero suyo,

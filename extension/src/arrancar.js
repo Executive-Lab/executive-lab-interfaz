@@ -1679,7 +1679,7 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 }
 
 module.exports = {
-  ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
+  estaEnGitConLaBarra, ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
   arrancar, estaEnMarcha, dejarDeEsperarAGit, sePuedeSinNadie, sePuedeRetomar, faltanPorContestar, RAMAS_SIN_NADIE, RAMAS_QUE_SE_RETOMAN, momento, ESPERANDO_A_GIT, CLAVE_SIN_GIT, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
