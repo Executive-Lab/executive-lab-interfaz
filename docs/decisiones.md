@@ -6493,3 +6493,66 @@ que ya había en este Mac y sin red:
   un documento, y el diccionario lo dice.
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
+
+## 161. Los raíles solo apagan en lo nuestro
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho
+
+Lo encontró la revisión de la 157. Los raíles (`CALLAR` en `aplicar.js`) ponían `.rsc/.no-audit`,
+`.no-worktree-cleanup` y `.no-gitmoji` en todas las carpetas, también en las de un equipo que no creó la
+barra. RSC los apunta en su `.rsc.json` como `optOuts` la próxima vez que escribe, eso viaja en git y cada
+clon lo rehace. Era decidir por su equipo, y P4 dice que lo suyo no se toca.
+
+- **Lo del equipo, solo en lo nuestro.** Para RSC, `audit`, `gitmoji` y `worktree-cleanup` son decisiones del
+  proyecto (`PROJECT_OPT_OUTS`, `targets/opt-outs.js`). Los raíles las ponen solo en las carpetas cuyo
+  historial creó la barra, como la rama principal abierta de la 145 (`podemosGuardarElPuntoDePartida`, que
+  mira `historialAjeno`). En una carpeta de alguien vale lo que su `.rsc.json` declare, y eso lo rehace RSC.
+  - No pide además la marca de este ordenador, como lo de la 157. Estas viajan en `.rsc.json`: un clon de una
+    carpeta de la barra ya las trae declaradas, y RSC las rehace. Y una carpeta preparada para parecer nuestra
+    puede declararlas igual en su `.rsc.json`: pedir la marca no cerraría nada.
+  - El sí a montar encima no cuenta. Es a tocar sus ficheros (el bloque de `CLAUDE.md`, el freno, el
+    `.gitignore`), no a decidir cómo trabaja su equipo. Con ese sí, `ajena` llega a falso, así que el historial
+    se mira aparte. Lo hace `ponerLosRailes` (`arrancar.js`), por donde pasan los cinco caminos que ponen los
+    raíles, y se lo dice a `aplicar.js` con `--historial-ajeno`. `--ajena` lo dice también.
+- **Lo de esta máquina, en todas.** `.no-scope-check` calla el aviso de los dos sitios del arnés, que manda a
+  correr `npx @ericrisco/rsc@latest` en una terminal. Para RSC es de cada máquina (`MACHINE_OPT_OUTS`): no lo
+  apunta en `.rsc.json` y no viaja. Es de esta persona en su ordenador, y se queda.
+- **Ninguna hace falta para que la barra funcione.** Comprobado en el paquete:
+  - `.no-audit` calla un aviso al empezar la conversación, cada 14 días, que pide correr `rsc audit`
+    (`session-start.mjs`). No para nada.
+  - `.no-worktree-cleanup` calla el aviso de recoger los worktrees cuyo trabajo ya está en la rama principal, y
+    apaga la recogida tras un merge, que solo quita los seguros (`worktree-reaper.mjs`). La barra no usa
+    worktrees.
+  - `.no-gitmoji` apaga el guardián que deniega un `git commit -m` sin gitmoji. Es un enganche antes de cada
+    orden del asistente, y solo mira esas. Las copias de la barra («Guardar en git», el punto de partida, las
+    automáticas) las hace su propio git (`historial.js`) y no pasan por él. Con un equipo que no lo apagó, el
+    asistente escribe como pide ese equipo, y el guardián le dice cómo.
+  - `doctor` no cuenta una de menos como algo roto: `optOutsNotApplied` no toca `healthy`.
+- **Lo que ya está no se quita.** Una barra de antes las dejó también en carpetas de alguien, y RSC ya las
+  apuntó en su `.rsc.json`, quizá ya subido a su equipo. Quitarlas encendería otra vez el guardián de gitmoji
+  de un día para otro, y RSC volvería a cambiar su `.rsc.json` sin preguntar: dos veces decidir por ellos. Así
+  no se pierde nada, y no hay nada que avisar. Siguen saliendo en «Lo que tiene apagado».
+- **Y un hallazgo de paso, arreglado: los raíles ya no crean `.rsc/`.** RSC rehace lo que declara `.rsc.json`
+  solo si `.rsc/` no está (`fromScratch`, `install-apply.js`). Si está, da por buenas las marcas que encuentra.
+  Los raíles la creaban con sus cuatro.
+  - Reproducido con el paquete: en una carpeta con `knowledge-sync`, `trunk-guard` y `auto-update` declarados
+    y sin `.rsc/`, los raíles y luego `sync` dejaban en `.rsc.json` `audit`, `gitmoji` y `worktree-cleanup`, y
+    nada más.
+  - Pasaba en un clon de una carpeta de la barra con los raíles de una versión anterior, porque se reponen al
+    abrir, antes de traer nada. Se encendían la wiki compartida y la actualización sola (P9), la rama
+    principal se podía cerrar, y en ese ordenador no se ponía el nivel de quien programa (`tier`).
+  - Ahora, sin `.rsc/`, los raíles no la adelantan. En el montaje van detrás de lo que hace RSC, así que llegan
+    igual.
+- Lo que la 145 apaga en todas las carpetas, `.no-knowledge-sync` y `.no-auto-update`, sigue igual. También
+  acaba en su `.rsc.json`, pero por otra razón, escrita allí: sacan cosas del ordenador, o lo cambian, sin
+  preguntar (P9).
+
+**Lo que se propone y no se construye:**
+- En una carpeta de alguien, un botón en «Lo que tiene apagado» para encender lo que apagó una barra de antes.
+  Se reconoce por lo que dice el fichero, pero solo en el ordenador donde lo dejó: en un clon lo rehízo RSC con
+  su texto.
+- Que «Revisar y arreglar» ponga los raíles detrás, como el montaje. Una carpeta de la barra traída a otro
+  ordenador cuyo `.rsc.json` todavía no apuntaba las tres, y arreglada solo con ese botón, las espera hasta la
+  próxima vez que se pongan los raíles. Antes de esta decisión pasaba igual, salvo con los raíles de una
+  versión anterior, y entonces se perdía lo de arriba.
+

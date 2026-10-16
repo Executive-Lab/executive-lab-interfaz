@@ -7,6 +7,9 @@
 //                                           se queda pendiente, y la barra lo ofrece con su botón)
 //   node aplicar.js <carpeta> --ajena --poner-freno   (ese botón: el freno, con su sí)
 //   node aplicar.js <carpeta> --ajena --poner-bloque  (el otro: el bloque de CLAUDE.md, con su sí)
+//   node aplicar.js <carpeta> --historial-ajeno   (su historial no lo creó la barra, aunque haya dicho
+//                                           que sí a montar encima: nada de lo que decide su equipo
+//                                           se apaga; `--ajena` lo dice también)
 //
 // RSC trata esto como una "own skill": vive en el repo del alumno, funciona
 // para quien clone sin ejecutar nada, y RSC nunca la instala, actualiza ni
@@ -35,6 +38,9 @@ const forzar = banderas.includes('--forzar');
 const ajena = banderas.includes('--ajena');
 const ponerFreno = banderas.includes('--poner-freno');
 const ponerBloque = banderas.includes('--poner-bloque');
+// El sí a montar encima es a tocar sus ficheros, no a decidir por su equipo
+// (decisión 161): por eso va aparte de `--ajena`, que con ese sí no se pasa.
+const historialAjeno = ajena || banderas.includes('--historial-ajeno');
 
 if (!destinoBruto) {
   console.error('Dime en qué carpeta. Ejemplo:\n  node aplicar.js "~/Documentos/Mi Empresa IA"');
@@ -455,22 +461,55 @@ function ponerLoDeSiempre(quien, suyo) {
 // en este repositorio y Jose lo apagó en las de alumno el 25-09-2026. Se pone
 // siempre, no solo cuando el plan lo trae: `repair` lo monta aunque el plan no
 // lo pida (C6), y entonces el interruptor ya tiene que estar.
+//
+// ── Solo en lo nuestro (decisión 161) ──
+//
+// Tres de los cuatro son, para RSC, decisiones del equipo (`PROJECT_OPT_OUTS`,
+// `targets/opt-outs.js`): los apunta en `.rsc.json` como `optOuts` la próxima vez
+// que escribe, viajan en git y un clon los rehace. Ponerlos en una carpeta cuyo
+// historial no creó la barra era decidir por su equipo (P4). Ahí vale lo que su
+// `.rsc.json` ya declare, y eso lo rehace RSC. El de los dos sitios del arnés
+// (`scope-check`) es de esta máquina: no se apunta ni viaja, y va en todas.
+//
+// Ninguno hace falta para que la barra funcione: sus copias las guarda con su
+// propio git, y el guardián de gitmoji solo mira las órdenes del asistente.
+//
+// Lo que ya está no se quita, sea de quien sea. Una barra de antes los dejó
+// también en carpetas de alguien, y RSC ya los apuntó en su `.rsc.json`: quitarlos
+// volvería a encender el guardián de gitmoji de un día para otro, y cambiaría otra
+// vez su `.rsc.json` sin preguntar.
+//
+// Y `.rsc/` no se crea. Si no está, RSC todavía no ha montado en este ordenador,
+// y al hacerlo la construye con lo que declara `.rsc.json`, pero solo si no la
+// encuentra (`fromScratch`, `install-apply.js`). Creada antes con estas cuatro
+// dentro, RSC daba por buenas las marcas que había y perdía las demás que el
+// equipo había apagado: en un clon, la wiki compartida y la actualización sola
+// se encendían. Los raíles van detrás de lo que hace RSC, así que llegan igual.
+const DEL_EQUIPO = 'del equipo';
+const DE_ESTA_MAQUINA = 'de esta máquina';
 const CALLAR = [
-  ['no-audit', 'la revisión de habilidades es herramienta de quien mantiene esto, no del alumno'],
-  ['no-worktree-cleanup', 'un alumno no tiene worktrees, y el aviso lleva dos comandos'],
-  ['no-scope-check', 'hablar de "scopes" a quien lleva las facturas no significa nada'],
-  ['no-gitmoji', 'aquí se guarda en español y en frase: el guardián de gitmoji denegaría cada copia'],
+  ['no-audit', 'la revisión de habilidades es herramienta de quien mantiene esto, no del alumno', DEL_EQUIPO],
+  ['no-worktree-cleanup', 'un alumno no tiene worktrees, y el aviso lleva dos comandos', DEL_EQUIPO],
+  ['no-scope-check', 'hablar de "scopes" a quien lleva las facturas no significa nada', DE_ESTA_MAQUINA],
+  ['no-gitmoji', 'aquí se guarda en español y en frase: el guardián de gitmoji denegaría cada copia', DEL_EQUIPO],
 ];
 
 function callarLosAvisos() {
   const carpeta = en('.rsc');
+  if (!fs.existsSync(carpeta)) return '.rsc/ (todavía no está: la construye el arnés con lo que declara la carpeta, y no la adelanto)';
   const puestos = [];
-  for (const [nombre, porque] of CALLAR) {
+  const suyos = [];
+  for (const [nombre, porque, de] of CALLAR) {
+    if (historialAjeno && de === DEL_EQUIPO) {
+      suyos.push(nombre);
+      continue;
+    }
     const fichero = path.join(carpeta, `.${nombre}`);
     if (fs.existsSync(fichero)) continue;
     if (escribirSinEnlaces(fichero, `${porque}\n`)) puestos.push(nombre);
   }
-  return puestos.length ? `.rsc/ (callados: ${puestos.join(', ')})` : '.rsc/ (los avisos ya estaban callados)';
+  const loSuyo = suyos.length ? `; ${suyos.join(', ')}: lo decide su equipo en .rsc.json` : '';
+  return puestos.length ? `.rsc/ (callados: ${puestos.join(', ')}${loSuyo})` : `.rsc/ (los avisos ya estaban callados${loSuyo})`;
 }
 
 hechos.push(callarLosAvisos());
