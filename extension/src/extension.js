@@ -83,6 +83,8 @@ const entorno = require('./entorno');
 const relevo = require('./relevo');
 const clientes = require('./clientes');
 const sitio = require('./sitio');
+const ajustesLocales = require('./ajustes-locales');
+const retirados = require('./retirados');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -90,6 +92,10 @@ const sitio = require('./sitio');
 // Qué se le dice a esa persona cuando el arranque NO ha montado nada nuevo.
 // Cada rama hizo una cosa distinta y decir «ya está listo» en las cuatro sería
 // no decir nada.
+// El botón que va con lo que la barra dejó en los ajustes de Claude (decisión 157):
+// es local y se deshace, y lo quitado no vuelve.
+const QUITAR_LO_DE_CLAUDE = { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude' } };
+
 const LO_QUE_SE_HIZO = {
   traer: 'Ya tienes aquí lo que este proyecto traía puesto.',
   completar: 'He terminado de prepararlo. Ya está entero.',
@@ -291,6 +297,16 @@ ${cabecera}
     this.enviar(aviso);
   }
 
+  // Lo que se hizo solo al abrir, en una sola frase aunque lo hagan dos sitios: el
+  // segundo se suma al primero si todavía no ha salido, en vez de taparlo.
+  // Con su botón, si lo trae: el primero que llegue.
+  dejarElAviso(texto, boton = null) {
+    if (!texto) return;
+    const antes = this.avisoPendiente && this.avisoPendiente.tipo === 'aviso' ? this.avisoPendiente : null;
+    const elBoton = (antes && antes.boton) || boton;
+    this.avisoPendiente = { tipo: 'aviso', texto: antes ? `${antes.texto} ${texto}` : texto, ...(elBoton ? { boton: elBoton } : {}) };
+  }
+
   // Una carpeta que este ordenador ya conoce: alguien ha pulsado aquí un botón
   // que corre el arnés. Va en el estado del editor para esta carpeta, que un
   // repositorio no puede traer escrito.
@@ -379,7 +395,7 @@ ${cabecera}
 
     // Lo que trae o arregla el arnés lo lee Claude al empezar una conversación.
     const frase = solo.laFrase(hechas, donde.paraQuien() === 'claude' && hechas.length > 0);
-    if (frase) this.avisoPendiente = { tipo: 'aviso', texto: frase };
+    this.dejarElAviso(frase);
     // Sin sacar a nadie de donde está: se repinta lo que tenga delante, y la
     // frase sale cuando esté en la principal.
     await this.repintarLoQueHaya();
@@ -480,10 +496,7 @@ ${cabecera}
     if (!hechos.length) return [];
 
     vigilarOtraVez();
-    const frase = `He preparado esta carpeta también para ${hechos.map((a) => a.nombre).join(' y ')}, como pide el ajuste de los dos asistentes.`;
-    this.avisoPendiente = this.avisoPendiente
-      ? { ...this.avisoPendiente, texto: `${this.avisoPendiente.texto} ${frase}` }
-      : { tipo: 'aviso', texto: frase };
+    this.dejarElAviso(`He preparado esta carpeta también para ${hechos.map((a) => a.nombre).join(' y ')}, como pide el ajuste de los dos asistentes.`);
     await this.repintarSinMover();
     this.soltarElAviso();
     return hechos.map((a) => a.id);
@@ -534,6 +547,52 @@ ${cabecera}
   // Lo que tiene delante, también si es «Tu asistente», que dice el ajuste.
   async repintarSinMover() {
     return this.donde.pantalla === 'asistente' ? this.verAsistente() : this.repintarLoQueHaya();
+  }
+
+  // Lo de esta persona en los ajustes de Claude (decisión 157), en las carpetas que
+  // ya estaban montadas: en las nuevas lo pone el montaje. Como lo que se hace
+  // solo (P9): con confianza, en una carpeta que este ordenador ya conoce, y se
+  // dice en una frase. Qué carpeta y qué se pone, en `arrancar.ponerLoDeClaude`.
+  async ponerLoDeClaudeAlAbrir() {
+    if (vscode.workspace.isTrusted === false || !proyecto.raiz() || !this.carpetaConocida()) return null;
+    const hecho = await arrancar.ponerLoDeClaude();
+    this.salida.appendLine(`[claude] ajustes de esta carpeta: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
+    if (hecho.hecho !== 'puesto') return hecho;
+    // Se deja, y sale una sola vez al final de lo que se hace al abrir, junto con
+    // lo demás: soltarla ya hacía que la siguiente frase la tapara (revisión de
+    // corrección de la 157, B5).
+    this.dejarElAviso(ajustesLocales.laFrase(hecho), QUITAR_LO_DE_CLAUDE);
+    return hecho;
+  }
+
+  // «Quitarlo» (decisión 157): solo lo que puso la barra, y no vuelve a ponerse.
+  async quitarLoDeClaude() {
+    const hecho = await arrancar.quitarLoDeClaude();
+    this.salida.appendLine(`[claude] quitar lo de esta carpeta: ${hecho.hecho}`); // diccionario: interno
+    const bien = ['quitado', 'yaNoEstaba'].includes(hecho.hecho);
+    return this.enviar(bien
+      ? { tipo: 'aviso', texto: 'Quitado. No lo vuelvo a poner.' }
+      : { tipo: 'aviso', texto: 'No he podido quitarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+  }
+
+  // Codex con una versión retirada (decisión 157), arreglado solo si la persona
+  // usa Codex: lo tiene en el editor o la carpeta está montada para él. El suyo de
+  // usuario, como el control remoto, al abrir; el de la carpeta, como lo demás que
+  // se hace solo: con confianza, en una carpeta conocida y que la barra montó en
+  // este ordenador (P4). Se dice con un aviso del editor, que sale aunque no se vea
+  // la barra.
+  async arreglarCodex() {
+    const codex = asistentes.porId('codex');
+    if (!asistentes.estaInstalado(codex) && !asistentes.losDelArnes().includes(codex)) return [];
+    const laCarpeta = vscode.workspace.isTrusted !== false && Boolean(proyecto.raiz()) && this.carpetaConocida()
+      && await terreno.montadaAqui();
+    const hechos = retirados.arreglar({ raiz: laCarpeta ? proyecto.raiz() : null });
+    for (const h of hechos) {
+      this.salida.appendLine(`[codex] ${h.hecho} ${h.fichero}${h.copia ? ` · copia en ${h.copia}` : ''}${h.error ? ` (${h.error})` : ''}`); // diccionario: interno
+    }
+    const frase = retirados.laFrase(hechos);
+    if (frase) vscode.window.showInformationMessage(frase);
+    return hechos;
   }
 
   // Repinta lo que el alumno tenga delante. Lo llama el vigía del arnés.
@@ -1129,6 +1188,7 @@ ${cabecera}
       abrirReglas: () => this.abrirReglas(mensaje.cual),
       abrirRevision: () => this.abrirRevision(mensaje.fichero),
       ponerLosRailesAlDia: () => this.ponerLosRailesAlDia(),
+      quitarLoDeClaude: () => this.quitarLoDeClaude(),
       verAsistente: () => this.verAsistente(),
       verComoTrabaja: () => this.verComoTrabaja(),
       verFijadas: () => this.verFijadas(),
@@ -3069,6 +3129,8 @@ ${cabecera}
     }
     // Lo que salió mal y hay que decir, aunque lo demás esté montado (B10).
     for (const pega of hecho.pegas || []) this.enviar({ tipo: 'aviso', texto: pega, malo: true });
+    // Y lo que se hizo solo, una vez y con su «Quitarlo» (decisión 157).
+    const dichos = (hecho.dichos || []).filter(Boolean);
     if (hecho.encargos && hecho.encargos.length) {
       this.salida.appendLine(`[arrancar] falta que el asistente haga: ${hecho.encargos.join(', ')}`); // diccionario: interno
     }
@@ -3082,7 +3144,11 @@ ${cabecera}
     const reciénMontado = ['desdeCero', 'encimaDeLoQueHay', 'otroArnes'].includes(hecho.rama);
 
     if (!reciénMontado) {
-      this.enviar({ tipo: 'aviso', texto: LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje });
+      this.enviar({
+        tipo: 'aviso',
+        texto: [LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje, ...dichos].join(' '),
+        ...(dichos.length ? { boton: QUITAR_LO_DE_CLAUDE } : {}),
+      });
       await this.siFaltaAlgoDecirlo(true);
       await puente.enviar('He puesto al día el arnés de esta carpeta. Mira qué hay montado y cuéntame en dos líneas por dónde seguimos.');
       return undefined;
@@ -3096,6 +3162,8 @@ ${cabecera}
       'No, déjala como está',
     );
     if (sencilla === 'Sí, más sencillo') await this.modoSencillo();
+    // Sale al pintar la principal, aquí abajo.
+    for (const dicho of dichos) this.dejarElAviso(dicho, QUITAR_LO_DE_CLAUDE);
     await this.refrescar(true);
     // La lista de lo que falta se deja para el final, después de GitHub: si
     // saliera ahora, la pregunta de la cuenta le caería encima.
@@ -3429,6 +3497,8 @@ function activate(contexto) {
   avisos.dondeSinArnes(contexto.globalStorageUri && contexto.globalStorageUri.fsPath);
   // Con qué asistente se habla en esta carpeta, elegido aquí (E1).
   asistentes.saberDondeGuardar(contexto.workspaceState);
+  // Y dónde se apunta que la barra montó aquí esta carpeta (decisión 157).
+  terreno.saberDondeRecordar(contexto.workspaceState);
   buscador.saberDondeEstamos(contexto.extensionPath);
 
   // El relevo de Node, antes de que se abra el chat del asistente: así su
@@ -3549,10 +3619,16 @@ function activate(contexto) {
       salida.appendLine('[railes] los de esta carpeta son de una versión anterior: se reponen'); // diccionario: interno
       await panel.ponerLosRailesAlDia(true).catch((e) => salida.appendLine(`[railes] ${e.message}`)); // diccionario: interno
     }
+    // Lo de esta persona en los ajustes de Claude, y Codex con una versión que ya
+    // no existe (decisión 157).
+    await panel.ponerLoDeClaudeAlAbrir().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
+    await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y lo demás que se puede hacer solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
     // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).
     await panel.prepararParaLosDos().catch((e) => salida.appendLine(`[losDos] ${e.message}`)); // diccionario: interno
+    // Lo que se ha dicho por el camino sale una vez, junto (decisión 157).
+    panel.soltarElAviso();
   }, 3000);
 }
 
