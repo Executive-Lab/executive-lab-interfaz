@@ -1856,7 +1856,12 @@ function pantallaPrincipalSencilla() {
     t.elRecordatorio,
     recargar ? t.versionNueva : '',
     t.losDatos,
-    t.loNuevo, t.laCostumbre, t.loQueParece, t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
+    t.loNuevo, t.laCostumbre, t.loQueParece,
+    // Lo de la última vez, al empezar el día (decisión 160): detrás de lo que impide
+    // trabajar, de lo que toca a esta hora, de los datos de clientes y de lo que
+    // acaba de pasar, que sale una vez; delante del consejo y de las ideas.
+    t.laUltimaVez,
+    t.elConsejo, t.elAvisoQueEspera, t.loQueContaste,
     recargar ? '' : t.versionNueva,
     t.laIdea,
   ].filter(Boolean);
@@ -1940,14 +1945,24 @@ function grupoAccionesSencillo() {
   });
 }
 
+// Por dónde ibas, si hay algo en marcha (decisión 160). La frase y el encargo los
+// arma la extensión, que es quien lee el disco: aquí se pintan tal cual (P6).
+const porDondeIbas = () => {
+  const ibas = estado && estado.ibasPor;
+  return ibas && ibas.texto && ibas.accion ? ibas : null;
+};
+
 // Ayuda, para cuando no se sabe ni qué escribir. Lo demás de Ayuda sigue entero
 // detrás de «Más ayuda».
 function grupoAyudaSencillo() {
+  // Sin nada en marcha, «Seguir donde lo dejé» se queda como estaba (P1).
+  const ibas = porDondeIbas();
   return grupo({
     id: 'sencilla:ayuda',
     etiqueta: 'Ayuda',
     dentro: `
-      ${boton({ etiqueta: 'Seguir donde lo dejé', icono: '↩️', pequeno: true, accion: { tipo: 'pedir', prompt: 'Sigue donde lo dejamos la última vez: mira lo último que hicimos, dime en qué punto estamos y qué sería lo siguiente.' } })}
+      ${boton({ etiqueta: 'Seguir donde lo dejé', icono: '↩️', pequeno: true, accion: ibas ? ibas.accion : { tipo: 'pedir', prompt: 'Sigue donde lo dejamos la última vez: mira lo último que hicimos, dime en qué punto estamos y qué sería lo siguiente.' } })}
+      ${ibas ? `<p class="pista ibas-por">${texto(ibas.texto)}</p>` : ''}
       ${boton({ etiqueta: 'Conversación nueva', icono: '💬', pequeno: true, accion: { tipo: 'conversacionNueva' } })}
       ${boton({ etiqueta: 'Dime qué hago ahora', icono: '🧭', pequeno: true, accion: { tipo: 'pedir', prompt: 'Mira cómo está esto y dime qué hago ahora: qué tengo a medias, qué sería lo siguiente y por qué. Dame dos o tres opciones concretas, no una lista larga.' } })}
       ${boton({ etiqueta: 'Pedir ayuda en el foro', icono: '🙋', pequeno: true, accion: { tipo: 'pedirAyudaEnElForo' } })}
@@ -2185,9 +2200,12 @@ function lasTarjetas() {
   // salir de su ordenador o costar algo, y ni Claude ni Codex dejan mandarlo
   // por él. «Ahora no» lo deja hasta la próxima vez que toque.
   const r = estado.recordatorio;
+  // Si lo que toca es «Seguir donde lo dejé», también dice por dónde ibas (decisión 160).
+  const ibas = r && r.nombre === 'seguir' ? porDondeIbas() : null;
   const elRecordatorio = !r ? '' : `
     <div class="consejo">
       <p class="que">${texto(`Toca: ${r.etiqueta} (${r.enPalabras}).`)}</p>
+      ${ibas ? `<p class="detalle ibas-por">${texto(ibas.texto)}</p>` : ''}
       ${boton({ etiqueta: 'Hacerlo ahora', icono: '▸', principal: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } })}
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNoRecordatorio', nombre: r.nombre } })}
     </div>`;
@@ -2235,7 +2253,17 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Entendido', discreto: true, accion: { tipo: 'entendidoLoDeLosDatos' } })}
     </div>`;
 
-  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos };
+  // La primera vez de cada día, dónde lo dejó (decisión 160). Las acciones, tal
+  // cual vienen (P6); las dos la quitan hasta mañana.
+  const u = estado.laUltimaVez;
+  const laUltimaVez = !(u && u.texto && u.accion && u.ahoraNo) ? '' : `
+    <div class="consejo">
+      <p class="que ibas-por">${texto(u.texto)}</p>
+      ${boton({ etiqueta: 'Seguir donde lo dejé', icono: '↩️', principal: true, accion: u.accion })}
+      ${boton({ etiqueta: 'Ahora no', discreto: true, accion: u.ahoraNo })}
+    </div>`;
+
+  return { versionNueva, sinAsistente, sinAjustar, primerPaso, elConsejo, elAvisoQueEspera, loNuevo, loQueContaste, documentos, elRecordatorio, laCostumbre, loQueParece, laIdea, losDatos, laUltimaVez };
 }
 
 function accionesRapidas(descubiertos) {
@@ -3448,7 +3476,7 @@ function atender(data) {
       if (estado) {
         for (const campo of ['consejo', 'hayVersionNueva', 'versionPuesta', 'versionDePrueba', 'hayProyectos', 'hayAgentes', 'hayRecordatorios', 'avisoParaExecutiveLab', 'arreglado', 'queTrae',
           'barraCompleta', 'piezas', 'comandos', 'habilidades', 'copias', 'versionDeLaBarra', 'recordatorio', 'costumbrePuesta', 'datosDeClientes',
-          'seAdapta', 'sigueSinCopias']) {
+          'seAdapta', 'sigueSinCopias', 'laUltimaVez']) {
           if (data[campo] !== undefined) estado[campo] = data[campo];
         }
       }

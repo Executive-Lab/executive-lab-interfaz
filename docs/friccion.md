@@ -105,9 +105,10 @@ recibir un fichero soltado encima, que no está claro.)
 decir qué está haciendo y cuánto lleva.
 
 **El que llega al día siguiente.** Abre y no sabe si lo de ayer se guardó. La brújula lo dice, pero en
-pequeño. Un *«Ayer dejaste X a medias»* arriba del todo valdría más. (Sin hacer. Lo que sí hay ahora
-es una tarjeta que avisa de lo que se ha quedado a medias: documentos sin leer, una conexión sin
-terminar, días sin guardar copia.)
+pequeño. Un *«Ayer dejaste X a medias»* arriba del todo valdría más. (Hecho el 16-10-2026, decisión
+160: la primera vez de cada día, en una carpeta con algo hecho, la tarjeta dice «La última vez ibas
+por: …», con «Seguir donde lo dejé». Lo que sigue sin decir es si lo de ayer se guardó: eso está en la
+línea de las copias.)
 
 ## 5. El primer día, después de montar (decisión 164)
 
