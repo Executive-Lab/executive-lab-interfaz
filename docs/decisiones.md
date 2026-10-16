@@ -8134,6 +8134,219 @@ vuelta. Quince mutaciones a mano (la orden de cada botón, la confianza, la carp
 marcha, el «sí» que no cambia nada, la carpeta por delante, el nombre del panel, la salida del fallo, la
 precedencia de las marcas, el Codex y la 2, el botón y el texto del equipo): las quince tumbadas.
 
+## 173. Deshacer con RSC: quitar una habilidad y volver a la copia
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **FTD** `02-DOCS/wiki/ftd/deshacer-con-rsc.md`
+
+Hasta hoy la barra no dejaba quitar una habilidad ni un agente que se había añadido, ni volver a lo que había
+antes de montar. RSC 3.0.22 trae los dos subcomandos; la barra solo los leía (`laCopiaDelMontaje`, `ideas.js`).
+Se leyó qué hacen de verdad (`scripts/rsc.js`, `install-apply.js`, `lib/backups.js`) y se probaron con una
+carpeta montada.
+
+### Lo que hacen los subcomandos
+- **`uninstall <id…> [--dry-run] [--target <a,b>]`** quita una habilidad o un agente del catálogo. Borra los
+  ficheros de la habilidad y los agentes que ya no pide nadie; quita el id de `skills` y `agents` de `.rsc.json` y
+  del estado de cada asistente (`.rsc-state.json`), de modo que `sync` no la vuelve a poner; deja una copia del
+  estado anterior en `.rsc/backups/` (operación `uninstall`). **No pregunta nada y no sincroniza.** Con un id que
+  no conoce sale con 1 y dice «unknown skill or agent». Un agente que una habilidad puesta todavía necesita sale
+  bien, se quita del apunte y **el fichero se queda**. Lo que RSC equipa siempre (`orient`, `suggest`, `unslop`,
+  `ftd`, `connect-tool`) lo vuelve a poner `sync`.
+- **`backups`** lista las copias; **`restore <id|latest> [--dry-run]`** devuelve el contenido de una. Por cada
+  ruta que la copia recogió: si existía, la sustituye por lo guardado; si no existía, la **borra**. **No pregunta, no
+  guarda lo de ahora antes y no sincroniza.** `--dry-run` imprime las rutas, una por línea y con dos espacios delante.
+  Restaurar la copia del montaje (`onboarding-transaction`) deja la carpeta como antes de montar el arnés: vuelve lo
+  suyo que se tocó, y se quita lo que el arnés puso en esos sitios (también `.rsc.json`).
+
+### Lo que se hace
+1. **«Quitarla»** en la (i) de cada habilidad **instalada del catálogo** (Habilidades) y **«Quitarlo»** en la de cada
+   agente que `.rsc.json` apunta como pedido a RSC (Agentes). Con un clic y una pregunta que dice qué se quita:
+   «Voy a quitar «Facturación» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede
+   volver a añadir desde el catálogo.». Se corre `uninstall <id> --target <los asistentes declarados>` (los mismos
+   que usa «Añadir»).
+2. **«Recuperar lo que había»**, en la pantalla de las copias, junto a «Ver la copia» (que solo sale si el arnés
+   guardó algo suyo). Antes de preguntar se corre `restore <copia> --dry-run` para decir cuántos sitios son; la
+   pregunta es: «Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes,
+   lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos N sitios se pierde. Antes guardo
+   una copia de lo de ahora.». Con el sí, **la barra guarda lo de ahora** en `.rsc/antes-de-recuperar/<fecha>/files/`
+   (RSC no lo hace, y su restore no se deshace) y entonces corre `restore <copia>`. Si no puede guardarlo, no
+   restaura nada. La copia usada es la de `laCopiaDelMontaje` (el primer montaje), buscada otra vez en disco.
+3. **Después, repintar y decir lo que ha pasado**: «Facturación ya no está puesta.» / «Hecho: la carpeta está como
+   antes de montar el arnés. Lo de antes de recuperar está en …»; si RSC falla o no ha quitado lo que dijo, «No he
+   podido… El arnés ha dicho: «…»» con su última línea (como la 166), y todo en el registro. Un agente cuyo
+   fichero sigue tras el `uninstall` dice solo eso: «No se ha podido quitar {nombre}: sigue puesto.», sin inventar la
+   causa. Lo que cuenta es el disco, no el código de salida.
+
+### Lo que no se ofrece
+Nunca «Quitarla» en: lo suyo (`ownSkills` y lo de fuera del catálogo), lo que ponen los raíles de la barra
+(`acciones.esDeLaBarra`), el suelo de RSC (`orient`, `suggest`, `unslop`, `ftd`, `connect-tool`), la fontanería del
+arnés (`nombres.esFontaneria`) ni nada con un nombre que no sea un nombre. Nunca «Quitarlo» en un agente que la
+persona escribió. El manejador lo vuelve a comprobar con lo que hay en disco: el panel solo dice qué botón se
+pulsó. Las tres acciones van con las del arnés (`LOS_DEL_ARNES`: no se pisan con un arreglo en marcha, dan la
+carpeta por conocida) y esperan si la carpeta va por delante (`ESCRIBEN_CON_EL_ARNES`).
+
+### Dudas que quedan
+- **«Recuperar» es grande**: deshace el montaje entero, no solo lo suyo. Se dice en la pregunta y se guarda lo de
+  ahora, pero tras él la barra ve una carpeta sin arnés (con el botón de montarlo otra vez). RSC no tiene un
+  «recuperar solo lo suyo»; no se inventa.
+- **Un agente quitable puede venir del montaje**, no de un «añadir» de la persona: `.rsc.json` no distingue. Se
+  ofrece igual (es del catálogo de RSC y la pregunta lo dice).
+- **Los agentes sueltos de Codex/otros** no cambian: el subcomando es el mismo.
+
+### Las pruebas
+`humo.js`: tres comprobaciones nuevas con un RSC de mentira (qué se ofrece y en qué pantalla; sin el sí no corre ni
+se quita nada y con él corre el subcomando; recuperar con su copia, y fallos con la salida de RSC) y una con el
+arnés de verdad (`--con-arnes`: `onboard`, `add`, `uninstall` y `restore` reales). 12 mutaciones (sin confirmar en
+las tres acciones, suelo vacío, ofrecer lo suyo / lo de la barra / la fontanería, agente suyo, restaurar sin guardar
+lo de ahora, todo quitable, el manejador sin volver a comprobar, dar por quitada sin mirar el disco): las 12 tumbadas.
+Una cosa que salió de probar con el de verdad: RSC escribe las rutas con los enlaces resueltos (`/private/var/…` en
+un Mac), y comparar con la ruta de la carpeta sin resolver las descartaba todas.
+
+### La revisión
+
+La revisión de la PR #69 encontró un fallo grave y otro que fallaba abierto. Arreglados, cada uno con su prueba y su
+mutación.
+
+- **Un agente llamado `--all` corría `rsc uninstall --all`**, que en RSC es un alias de `purge` (comprobado con
+  `--dry-run`): un repositorio ajeno con `.claude/agents/--all.md` y `"agents":["--all"]` en `.rsc.json` habría
+  borrado el arnés entero con un clic. Tres guardas, cada una sola basta: (a) un id no puede empezar por `-`
+  (`/^[a-z0-9][a-z0-9-]{1,59}$/`, y `{1,39}` en las habilidades); (b) un agente solo se ofrece si está en la lista
+  cerrada del catálogo de RSC (`media/agentes-del-catalogo.json`, que una prueba compara con `stackAgentNames()` del
+  paquete) y además lo apunta `.rsc.json`: lo que diga `.rsc.json` lo escribe quien hizo la carpeta; (c) `quitarAgente`
+  vuelve a comprobar las dos cosas antes de correr nada, para un mensaje a mano. **No se usa `--` como fin de
+  opciones**: el analizador de RSC (`rsc.js`) lo salta como a cualquier `--algo` y no lo entiende como separador,
+  así que no protege y no se pasa.
+- **`recuperar` seguía aunque no hubiera guardado nada.** `lasRutasDeLaSalida` descartaba en silencio las rutas que no
+  cuadraban con la carpeta (en Windows, `C:\` frente a `c:\`), y con ellas la copia de lo de ahora. Ahora cuenta las
+  rutas de `--dry-run` antes de filtrar: con 0, o con alguna que no es de la carpeta, no se restaura y se dice
+  («No he tocado nada: …»). Se compara con `path.relative` (`path.win32` sin distinguir mayúsculas en Windows) y con
+  `fs.realpathSync.native`. Y tras el sí se vuelve a correr `--dry-run`: si la lista cambió, no se restaura (la copia de
+  lo de ahora cubre exactamente lo que se toca).
+- **Texto:** el agente cuyo fichero sigue ya no dice por qué (antes: «lo necesita una habilidad», que era una suposición).
+
+Pruebas: una comprobación nueva para el `--all` (cada guarda sola, el manejador con el mensaje a mano, y nada corrido) y
+casos nuevos en la de recuperar (ruta de fuera, 0 rutas, lista que cambia, y letra de unidad en otra caja con un RSC de
+mentira que escribe `c:\…`). 10 mutaciones, 8 tumbadas; las dos vivas son equivalentes: `path.win32.relative` ya
+ignora la caja por sí mismo, y una ruta relativa se resuelve contra la carpeta de trabajo y cae fuera de todos modos.
+
+
+## 174. Las pruebas no fallan en falso
+
+Dos pruebas de `humo.js` fallaban a veces sin que el código estuviera mal. Las dos dependían de lo que tarda
+la máquina, no de lo que hace el código.
+
+- **«lo que pide el asistente: la barra la añade sola…»** (en Windows de GitHub: «no son los tres primeros»).
+  Un pedido que llega mientras se atiende otro hace que la vuelta de `atenderLosPedidos` se repita al terminar;
+  la prueba esperaba a esa vuelta con un tope de 100 tics de 10 ms, o sea un segundo. En una máquina lenta la
+  vuelta pasaba de un segundo, la prueba la daba por acabada, seguía con el paso de «tres por vez» y su
+  `atenderLosPedidos()` volvía de inmediato (ya había una en marcha): la vuelta vieja se comía los pedidos del
+  paso nuevo. El código no tiene carrera (`atendiendo` y `otraVuelta` serializan las vueltas); era la espera
+  de la prueba. Ahora el tope es de 60 s, solo para no colgarse, y se sale en cuanto la barra termina.
+- **«el guion de los avisos…»** (con el Mac cargado: «no se lanza el aviso»). El guion corrido de verdad se
+  corta solo a los 6 s (su tope de todo); con la máquina cargada, node tardaba en arrancar y se cortaba antes
+  de lanzar nada. La prueba lo vuelve a lanzar hasta cinco veces si salió sin avisar; un guion que de verdad
+  no avisa falla las cinco. Los márgenes de «atascado» y «no se deja cortar» (`TOPE.todo` más 3 y 5 s) pasan a
+  más 12 s: miden que no se cuelga, no que arranque rápido.
+- De paso, cuatro esperas fijas a algo asíncrono pasan a esperar a la cosa: el botón nuevo tras el vigía
+  (900 ms), la pregunta de lo arreglado y la puesta sola de la versión nueva (topes de 200 y 500 ms), y el
+  repintado por el vigía (800 ms).
+
+Comprobado con ocho procesos de carga dando vueltas: seis pasadas seguidas de estas pruebas sin un fallo.
+
+## 175. Las conexiones MCP se ven
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · FTD `las-conexiones-mcp`
+
+Muchos alumnos conectan herramientas pidiéndoselo al asistente, por MCP, sin pasar por la barra. La barra no
+sabía nada de eso: «Conexiones (tools)» solo enseñaba `01-TOOLS/`, y una persona con tres servidores MCP puestos
+veía «todavía no hay ninguna». Ahora se ven, solo lectura (P9): no se añade, no se quita ni se cambia ninguno.
+
+### Dónde mira cada asistente (fuentes oficiales)
+
+| Asistente | Sitio | Qué hay | Fuente |
+|---|---|---|---|
+| Claude, de la carpeta | `.mcp.json` en la raíz, `mcpServers` | nombre → `{type, command\|url, …}` | code.claude.com/docs/en/mcp (ámbito «project») |
+| Claude, solo tuyo y en esta carpeta | `.claude.json`, `projects["<ruta>"].mcpServers` | igual | ídem (ámbito «local», el de por defecto) |
+| Claude, de tu usuario | `.claude.json`, `mcpServers` de arriba | igual | ídem (ámbito «user») |
+| Codex, de la carpeta | `.codex/config.toml`, `[mcp_servers.<nombre>]` | `command` (programa) o `url` (web), más `env`, `http_headers`, … | developers.openai.com/codex/mcp (sale a learn.chatgpt.com/docs/extend/mcp); solo en carpetas de confianza |
+| Codex, de tu usuario | `$CODEX_HOME/config.toml` o `~/.codex/config.toml` | igual | ídem |
+
+Tipos de Claude: `stdio` (o sin `type` y con `command`) es un programa de tu ordenador; `http`, `streamable-http`,
+`sse` y `ws` son una dirección web. Una entrada con `url` y sin `type` Claude misma la salta con un error, y `sdk`
+solo la registra un programa que la usa: ninguna sale. En Codex, con `command` es un programa y con `url`, una
+dirección; con `enabled = false`, no sale.
+
+**Sin confirmar en la documentación:** que `CLAUDE_CONFIG_DIR` cambie dónde está `.claude.json`. La página de MCP
+nombra solo `~/.claude.json` y la de variables de entorno no lo dice en lo leído. Se lee de ahí, que es como se
+comporta Claude Code, y las pruebas lo fijan; si un día no fuera así, se cambia una línea de `mcp.js`.
+
+### Lo que lee la barra
+
+- `extension/src/mcp.js`, nuevo. De cada servidor guarda **cuatro cosas**: el nombre, el asistente, de dónde sale
+  (`carpeta`, `tuyoAqui`, `usuario`) y el tipo (`programa`, `web`). Nada más: ni la orden, ni los argumentos, ni
+  las variables de entorno y sus valores, ni las cabeceras, ni la dirección, ni los nombres de las variables. Los
+  campos no se copian a ninguna variable que salga de la función.
+- Solo los asistentes que se usan en la carpeta (`.rsc.json`, y si no hay, el de ahora).
+- Sin seguir enlaces (el fichero, ni la carpeta `.codex`), con tope: 256 KB para `.mcp.json` y `config.toml`, 32 MB
+  para `.claude.json` (guarda también el historial de cada carpeta; con mucho pasa de 8 MB); pasado el tope, ese fichero no se lee.
+- Si no se entiende, de ese fichero no se enseña nada y no se adivina: JSON roto, o `mcpServers` que no es un
+  mapa; en TOML, cadenas de varias líneas, comillas o listas sin cerrar, claves con puntos de `mcp_servers`
+  arriba del todo, tablas de tablas, un servidor dos veces, una línea de más de 2000 letras.
+- TOML propio y pequeño, no `retirados.leerElToml` (rechaza el fichero entero ante una tabla en línea, y
+  `env = { A = "b" }` es lo normal aquí) ni `toml-campos.js` (se para en la primera tabla).
+- Un nombre del servidor se limpia de caracteres de control y no pasa de 60 letras; con más, ese servidor no sale.
+
+### Lo que enseña la barra
+
+Un apartado al final de «Conexiones (tools)», **«Conectadas por MCP»**, con una línea por servidor:
+`{nombre} — {Claude|Codex} · {de esta carpeta | solo tuya, en esta carpeta | de tu usuario} · {programa de tu
+ordenador | dirección web}`. Ocho como mucho y «Y N más». Si el nombre coincide entero (sin mayúsculas ni signos)
+con una conexión que la barra ya tiene, la línea lo dice al final («es tu conexión Holded, la de arriba») en vez
+de duplicarla. Sin ningún servidor, no sale nada. Los textos, en `docs/diccionario.md`.
+
+### Lo que no se ha hecho
+
+- Añadir, quitar o apagar un servidor: sería otra decisión (escribe en ficheros suyos, y en el de Claude hay que
+  saber qué ámbito).
+- Saber si un servidor funciona o si la carpeta (`.mcp.json`) está aprobada por la persona: Claude lo pregunta
+  la primera vez y eso no está en el fichero que se lee.
+- Servidores gestionados por la empresa (`managed-mcp.json`), los de plugins y los de conectores de la cuenta
+  (claude.ai): no están en estos ficheros y no se miran.
+- Los de `[mcp_servers]` dentro de un perfil de Codex.
+- No se ha visto con una persona delante.
+
+### Las pruebas
+
+`humo.js`: cuatro comprobaciones nuevas junto a las de Conexiones, con una casa y una carpeta de mentira y
+servidores falsos cuyos «secretos» se construyen en tiempo de ejecución: la lectura (siete servidores, dos
+asistentes, tres orígenes, y los que no salen), lo que no se entiende (ocho formas de TOML, JSON roto, topes y
+enlaces), la pantalla, y lo que viaja de la extensión a la pantalla (ningún valor, ni en el HTML ni en el
+estado). Mutaciones a mano en lo importante, restauradas desde una copia.
+
+### La revisión
+
+Cuatro retoques tras revisar la PR #72:
+
+1. **Caracteres que no se ven.** `limpiarElNombre` quita también `\p{Cf}` (bidi y ancho cero): `a‮gnp.exe​` se
+   pintaba al revés. Un nombre que se queda vacío no sale.
+2. **«Es tu conexión X» solo si lo es.** Un `.mcp.json` o un `.codex/config.toml` puede venir en un repo
+   clonado y llamarse «Holded». Solo lo que sale de tu usuario o de «solo tuya, en esta carpeta» (`.claude.json`)
+   dice «es tu conexión Holded, la de arriba»; lo de un fichero de la carpeta dice «se llama como tu conexión Holded».
+3. **Lo que no se pudo leer se dice.** Un fichero que hay y no se lee (demasiado grande, JSON o TOML roto, un
+   enlace) sale como «No he podido leer lo de Claude de tu usuario.» en vez de callar. El tope de `.claude.json`
+   sube a 32 MB: con mucho historial pasa de 8 MB, y solo se lee al abrir Conexiones.
+4. **Sin confianza, sin aprobar.** En una carpeta sin confianza (`vscode.workspace.isTrusted` false), los
+   servidores de ficheros de la carpeta llevan «· sin aprobar todavía»: el asistente no los activaría así.
+
+Pruebas: cuatro afirmaciones nuevas dentro de las comprobaciones de MCP (491 en `humo.js`, ninguna nueva en
+número) y una mutación por retoque, las diez tumbadas (también la de `esSuya`, el panel, el tope, el
+«no se pudo leer», la confianza en la extensión y en el módulo, y el texto «sin aprobar»).
+
+Batería entera, una vez, tras traer `origin/main` (173 y 174 ya estaban; la 175 va la última): `humo.js` 491,
+`humo.js --con-arnes` 500, `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js`,
+`comprobar-diccionario.js` y `revisar-powershell.js` en verde. `--con-arnes` falló una vez con un error de
+resolución de módulos sin ninguna comprobación en rojo, al correr justo después de `humo.js`, y no se repitió
+(pasó la segunda); ajena.
+
 ## 176. Recordar entre conversaciones, a un clic
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · FTD `la-memoria-a-un-clic`

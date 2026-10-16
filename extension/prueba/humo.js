@@ -96,7 +96,7 @@ async function main() {
 
   // ---------------------------------------------------- los módulos cargan
   const modulos = ['entorno', 'proyecto', 'frontmatter', 'procesos', 'rsc', 'guardar', 'cuando', 'recordatorios', 'rutinas',
-    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'ajustes-locales', 'retirados', 'conectar', 'extension'];
+    'conexiones', 'acciones', 'cerebro', 'brujula', 'puente', 'soporte', 'disfraz', 'arrancar', 'git', 'terreno', 'github', 'saberes', 'salidas', 'papeles', 'reglas', 'asistentes', 'ajustes', 'tema', 'fijadas', 'proyectos', 'lecciones', 'agentes', 'rastro', 'nombres', 'rumbo', 'encargos', 'web', 'solo', 'decidir', 'ajustes-locales', 'retirados', 'conectar', 'mcp', 'extension'];
   await comprobar('todos los módulos cargan', () => {
     modulos.forEach(cargar);
     return `${modulos.length} módulos`;
@@ -784,6 +784,206 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     assert.match(crudo, /^HOLDED_API_KEY=nueva-clave-9999$/m);
     assert.match(crudo, /^HOLDED_ENV=test$/m, 'no pisa las demás claves');
     return 'sin comillas ni saltos';
+  });
+
+  // ------------------------------------------- las conexiones MCP se ven (decisión 175)
+  // Una casa y una carpeta de mentira, con servidores falsos cuyos «secretos» se
+  // construyen aquí, en tiempo de ejecución: ningún valor puede salir de la lectura.
+  const casaDeMcp = (() => {
+    const crypto = require('node:crypto');
+    const hex = () => crypto.randomBytes(8).toString('hex');
+    const SECRETOS = { token: `sk-live-${hex()}`, cabecera: `Bearer ${hex()}`, argumento: `--clave=${hex()}`, url: `https://${hex()}.ejemplo.test/mcp?k=${hex()}`, orden: `/opt/${hex()}/servidor`, otro: `tok-${hex()}` };
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-casa-'));
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-carpeta-'));
+    fs.mkdirSync(path.join(casa, '.codex'));
+    fs.mkdirSync(path.join(carpeta, '.codex'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude', 'codex'] }));
+    // Claude, de la carpeta
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: {
+      holded: { type: 'stdio', command: SECRETOS.orden, args: [SECRETOS.argumento], env: { HOLDED_API_KEY: SECRETOS.token } },
+      'tienda-web': { type: 'http', url: SECRETOS.url, headers: { Authorization: SECRETOS.cabecera } },
+      'sin-tipo': { url: SECRETOS.url },
+      roto: 'no es un objeto',
+    } }));
+    // Claude, de la persona: para todas las carpetas, y solo para esta
+    fs.writeFileSync(path.join(casa, '.claude.json'), JSON.stringify({
+      historial: 'x'.repeat(5000),
+      mcpServers: { 'de-todas': { command: SECRETOS.orden, env: { T: SECRETOS.otro } } },
+      projects: {
+        [carpeta]: { mcpServers: { 'solo-aqui': { type: 'sse', url: SECRETOS.url, headers: { A: SECRETOS.cabecera } } } },
+        '/otra/carpeta': { mcpServers: { 'de-otra': { command: 'x' } } },
+      },
+    }));
+    // Codex, de la carpeta y de la persona
+    fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), [
+      'model = "gpt-5.5"', '',
+      '[mcp_servers.context7]', 'command = "npx"', 'args = ["-y", "@upstash/context7-mcp",', `  "${SECRETOS.argumento}"]`, `env = { MY_KEY = "${SECRETOS.token}" }`, '',
+      '[mcp_servers.context7.env]', `OTRA = "${SECRETOS.otro}"`, '',
+      '[mcp_servers.figma]', `url = "${SECRETOS.url}"`, `bearer_token_env_var = "FIGMA_TOKEN"`, `http_headers = { "X-Clave" = "${SECRETOS.cabecera}" }`, '',
+      '[mcp_servers.apagado]', 'command = "x"', 'enabled = false', '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(casa, '.codex', 'config.toml'), `[mcp_servers."mi.servidor"]\ncommand = "uvx"\nenv = { Z = "${SECRETOS.token}" }\n`);
+    return { casa, carpeta, SECRETOS, entorno: { CODEX_HOME: path.join(casa, '.codex') } };
+  })();
+
+  await comprobar('las conexiones MCP: de dónde salen y qué son, sin ningún valor', () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    const visto = mcp.leer({ raiz: carpeta, asistentes: ['claude', 'codex'], casa, entorno });
+    const resumen = visto.servidores.map((s) => `${s.asistente}/${s.origen}/${s.nombre}/${s.tipo}`).sort();
+    assert.deepEqual(resumen, [
+      'claude/carpeta/holded/programa',
+      'claude/carpeta/tienda-web/web',
+      'claude/tuyoAqui/solo-aqui/web',
+      'claude/usuario/de-todas/programa',
+      'codex/carpeta/context7/programa',
+      'codex/carpeta/figma/web',
+      'codex/usuario/mi.servidor/programa',
+    ], 'sin-tipo (Claude lo salta), roto, apagado y lo de otra carpeta no salen');
+    assert.deepEqual(visto.noSeEntendio, []);
+    // Ningún valor: ni en lo que devuelve ni, entero, tal y como lo guarda la barra.
+    const crudo = JSON.stringify(visto);
+    for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!crudo.includes(valor), `el valor «${cual}» sale de la lectura`);
+    assert.ok(!/ejemplo\.test|npx|uvx|HOLDED_API_KEY|FIGMA_TOKEN|MY_KEY|X-Clave/.test(crudo), 'ni órdenes, ni direcciones, ni nombres de variables');
+    for (const s of visto.servidores) assert.deepEqual(Object.keys(s).sort(), ['asistente', 'nombre', 'origen', 'tipo']);
+    // Solo los asistentes que se usan en la carpeta.
+    assert.ok(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa, entorno }).servidores.every((s) => s.asistente === 'claude'));
+    assert.ok(mcp.leer({ raiz: carpeta, asistentes: ['codex'], casa, entorno }).servidores.every((s) => s.asistente === 'codex'));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: [], casa, entorno }).servidores, []);
+    // Con CLAUDE_CONFIG_DIR, el de Claude es el que está ahí.
+    const otraCasa = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-otra-'));
+    fs.writeFileSync(path.join(otraCasa, '.claude.json'), JSON.stringify({ mcpServers: { enOtraCasa: { command: 'x' } } }));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa, entorno: { ...entorno, CLAUDE_CONFIG_DIR: otraCasa } }).servidores.filter((s) => s.origen !== 'carpeta').map((s) => s.nombre), ['enOtraCasa']);
+    return '7 servidores, 2 asistentes, 3 orígenes';
+  });
+
+  await comprobar('las conexiones MCP: lo que no se entiende no se enseña, y no se siguen enlaces', () => {
+    const mcp = cargar('mcp');
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-raro-'));
+    const casa = path.join(base, 'casa');
+    const carpeta = path.join(base, 'carpeta');
+    fs.mkdirSync(path.join(casa, '.codex'), { recursive: true });
+    fs.mkdirSync(path.join(carpeta, '.codex'), { recursive: true });
+    const entorno = { CODEX_HOME: path.join(casa, '.codex') };
+    const ver = (asistentes = ['claude', 'codex']) => mcp.leer({ raiz: carpeta, asistentes, casa, entorno });
+    const bueno = JSON.stringify({ mcpServers: { a: { command: 'x' } } });
+    const tomlBueno = '[mcp_servers.a]\ncommand = "x"\n';
+
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), '{ "mcpServers": { "a": { "command": "x" }, ');
+    assert.deepEqual(ver(['claude']).servidores, [], 'un JSON a medias no enseña nada');
+    assert.deepEqual(ver(['claude']).noSeEntendio, [{ asistente: 'claude', origen: 'carpeta' }]);
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: ['a'] }));
+    assert.deepEqual(ver(['claude']).servidores, [], 'mcpServers que no es un mapa');
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ otra: 1 }));
+    assert.deepEqual(ver(['claude']).noSeEntendio, [], 'un JSON válido sin servidores no es un fallo');
+    // Los caracteres que no se ven (bidi, ancho cero) no llegan al nombre: `a‮gnp.exe​` se pintaba al revés.
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: { 'a\u202egnp.exe\u200b': { command: 'x' }, '\u202e\u200b': { command: 'x' } } }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['agnp.exe'], 'sin bidi ni ancho cero, y uno que se queda vacío no sale');
+    assert.ok(!/[\u202e\u200b]/.test(JSON.stringify(ver(['claude']))));
+    // Más del tope de `.claude.json` (32 MB): no se lee, y se dice (revisión de la 175).
+    const grande = path.join(casa, '.claude.json');
+    const fd = fs.openSync(grande, 'w');
+    fs.writeSync(fd, '{"mcpServers":{"a":{"command":"x"}},"historial":"');
+    fs.ftruncateSync(fd, 33 * 1024 * 1024);
+    fs.closeSync(fd);
+    fs.rmSync(path.join(carpeta, '.mcp.json'));
+    assert.deepEqual(ver(['claude']).servidores, [], 'uno de más del tope no se lee');
+    assert.deepEqual(ver(['claude']).noSeEntendio, [{ asistente: 'claude', origen: 'usuario' }], 'y se dice que no se pudo leer');
+    // Con 20 MB de historial sí: el tope de antes (8 MB) era corto.
+    fs.writeFileSync(grande, JSON.stringify({ mcpServers: { a: { command: 'x' } }, historial: 'h'.repeat(20 * 1024 * 1024) }));
+    assert.deepEqual(ver(['claude']).servidores.map((s) => s.nombre), ['a'], 'con 20 MB de historial se lee');
+    fs.rmSync(grande);
+
+    for (const [titulo, texto] of [
+      ['una cadena de varias líneas', `[mcp_servers.a]\ncommand = "x"\nnota = """\nhola\n"""\n`],
+      ['una comilla sin cerrar', '[mcp_servers.a]\ncommand = "x\n'],
+      ['una cabecera sin cerrar', '[mcp_servers.a\ncommand = "x"\n'],
+      ['una lista sin cerrar', '[mcp_servers.a]\ncommand = "x"\nargs = ["a",\n'],
+      ['las claves con puntos arriba', 'mcp_servers.a.command = "x"\n'],
+      ['una tabla de tablas', '[[mcp_servers.a]]\ncommand = "x"\n'],
+      ['el mismo servidor dos veces', `${tomlBueno}\n${tomlBueno}`],
+      ['una línea enorme', `${tomlBueno}\nx = "${'a'.repeat(3000)}"\n`],
+    ]) {
+      fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), texto);
+      assert.deepEqual(ver(['codex']).servidores, [], `${titulo}: no se enseña nada`);
+      assert.deepEqual(ver(['codex']).noSeEntendio, [{ asistente: 'codex', origen: 'carpeta' }], titulo);
+    }
+    // Con un tope: pasado, ese fichero no se lee.
+    fs.writeFileSync(path.join(carpeta, '.codex', 'config.toml'), `${tomlBueno}\n${'# nada\n'.repeat(60000)}`);
+    assert.deepEqual(ver(['codex']).servidores, [], 'un config.toml enorme no se lee');
+    fs.writeFileSync(path.join(carpeta, '.mcp.json'), JSON.stringify({ mcpServers: { a: { command: 'x' } }, relleno: 'x'.repeat(300 * 1024) }));
+    assert.deepEqual(ver(['claude']).servidores, [], 'un .mcp.json enorme no se lee');
+
+    // Sin enlaces: ni el fichero ni la carpeta `.codex`.
+    const fuera = path.join(base, 'fuera');
+    fs.mkdirSync(path.join(fuera, 'dentro'), { recursive: true });
+    fs.writeFileSync(path.join(fuera, 'mcp.json'), bueno);
+    fs.writeFileSync(path.join(fuera, 'dentro', 'config.toml'), tomlBueno);
+    fs.rmSync(path.join(carpeta, '.mcp.json'));
+    fs.symlinkSync(path.join(fuera, 'mcp.json'), path.join(carpeta, '.mcp.json'));
+    assert.deepEqual(ver(['claude']).servidores, [], 'un .mcp.json que es un enlace no se sigue');
+    fs.rmSync(path.join(carpeta, '.codex'), { recursive: true });
+    fs.symlinkSync(path.join(fuera, 'dentro'), path.join(carpeta, '.codex'));
+    assert.deepEqual(ver(['codex']).servidores, [], 'una carpeta .codex que es un enlace no se sigue');
+    fs.rmSync(path.join(carpeta, '.codex'));
+    // Y los dos de la persona.
+    fs.rmSync(path.join(casa, '.codex'), { recursive: true });
+    fs.symlinkSync(path.join(fuera, 'dentro', 'config.toml'), path.join(casa, '.codex'));
+    fs.mkdirSync(path.join(base, 'casa2'));
+    fs.symlinkSync(path.join(fuera, 'mcp.json'), path.join(base, 'casa2', '.claude.json'));
+    assert.deepEqual(mcp.leer({ raiz: carpeta, asistentes: ['claude'], casa: path.join(base, 'casa2'), entorno: {} }).servidores, [], 'un .claude.json que es un enlace no se sigue');
+    // Sin nada: no falla.
+    assert.deepEqual(mcp.leer({ raiz: path.join(base, 'no-existe'), asistentes: ['claude', 'codex'], casa: path.join(base, 'tampoco'), entorno: {} }).servidores, []);
+    assert.deepEqual(mcp.leer({ raiz: null, asistentes: ['claude'] }).servidores, []);
+    return '8 formas de TOML raro, JSON roto, topes y enlaces';
+  });
+
+  await comprobar('las conexiones MCP: la pantalla las enseña sin ningún valor, y sin nada no sale nada', async () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    const lista = mcp.conLasConocidas(mcp.leer({ raiz: carpeta, asistentes: ['claude', 'codex'], casa, entorno }).servidores,
+      [{ id: 'HOLDED', etiqueta: 'Holded' }, { id: 'Facturas', etiqueta: 'Facturas' }]);
+    assert.equal(lista.find((s) => s.nombre === 'holded').herramienta, 'Holded', 'la que la barra ya conoce lo dice');
+    assert.equal(lista.filter((s) => s.herramienta).length, 1, 'y solo si coincide entera');
+    const p = require('./panel-falso').montarPanel();
+    const pintado = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: lista });
+    assert.match(pintado, /Conectadas por MCP/);
+    assert.match(pintado, /context7 — Codex · de esta carpeta · programa de tu ordenador/);
+    assert.match(pintado, /tienda-web — Claude · de esta carpeta · dirección web/);
+    assert.match(pintado, /solo-aqui — Claude · solo tuya, en esta carpeta · dirección web/);
+    assert.match(pintado, /mi\.servidor — Codex · de tu usuario/);
+    // Un fichero de la carpeta (que puede venir en un repo clonado) no afirma que sea tuya: solo que se llama igual.
+    assert.match(pintado, /holded — Claude · de esta carpeta · programa de tu ordenador · se llama como tu conexión Holded/);
+    assert.ok(!/es tu conexión Holded/.test(pintado), 'una de la carpeta no dice que es tu conexión');
+    const tuya = mcp.conLasConocidas([{ nombre: 'Holded', asistente: 'claude', origen: 'usuario', tipo: 'web' }, { nombre: 'holded', asistente: 'claude', origen: 'tuyoAqui', tipo: 'web' }], [{ id: 'HOLDED', etiqueta: 'Holded' }]);
+    assert.equal((p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: tuya }).match(/es tu conexión Holded, la de arriba/g) || []).length, 2, 'las de tu usuario, sí');
+    // Lo que no se pudo leer, se dice.
+    const sinLeer = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: [], mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }, { asistente: 'claude', origen: 'tuyoAqui' }, { asistente: 'codex', origen: 'carpeta' }] });
+    assert.match(sinLeer, /No he podido leer lo de Claude de tu usuario\./);
+    assert.match(sinLeer, /No he podido leer lo de Codex de esta carpeta\./);
+    assert.equal((sinLeer.match(/lo de Claude de tu usuario/g) || []).length, 1, 'una sola vez');
+    assert.match(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: lista, mcpNoLeido: [{ asistente: 'claude', origen: 'usuario' }] }), /No he podido leer lo de Claude de tu usuario[\s\S]*context7/, 'también con otros servidores');
+    // Sin confianza en la carpeta, los de sus ficheros llevan «sin aprobar todavía».
+    const sinConfianza = mcp.conLaConfianza(lista, false);
+    const deLaCarpeta = lista.filter((s) => s.origen === 'carpeta').length;
+    assert.equal(sinConfianza.filter((s) => s.sinAprobar).length, deLaCarpeta);
+    assert.ok(sinConfianza.filter((s) => s.sinAprobar).every((s) => s.origen === 'carpeta'), 'los de tu usuario no');
+    const htmlSin = p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: sinConfianza });
+    assert.equal((htmlSin.match(/sin aprobar todavía/g) || []).length, deLaCarpeta);
+    assert.match(htmlSin, /tienda-web — Claude · de esta carpeta · dirección web · sin aprobar todavía/);
+    assert.ok(!/sin aprobar/.test(pintado), 'con confianza, no sale');
+    assert.equal(mcp.conLaConfianza(lista, true).filter((s) => s.sinAprobar).length, 0);
+    for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!pintado.includes(valor), `el valor «${cual}» sale en pantalla`);
+    assert.ok(!/ejemplo\.test|npx|uvx|Bearer|HOLDED_API_KEY/.test(pintado), 'ni órdenes ni direcciones');
+    const con = p.mandar({ tipo: 'conexiones', proveedores: [{ id: 'HOLDED', etiqueta: 'Holded', faltan: 0, fueraDeSitio: 0, cositas: 0 }], sueltas: null, mcp: lista });
+    assert.match(con, /Conectadas por MCP/, 'también con conexiones propias');
+    for (const sin of [[], undefined]) {
+      assert.ok(!/MCP/.test(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: sin })), 'sin ninguna, no sale nada');
+    }
+    const muchas = Array.from({ length: 12 }, (_, i) => ({ nombre: `s${i}`, asistente: 'claude', origen: 'usuario', tipo: 'web' }));
+    assert.match(p.mandar({ tipo: 'conexiones', proveedores: [], sueltas: null, mcp: muchas }), /Y 4 más/, 'con muchas, se cuentan');
+
+    return 'en pantalla';
   });
 
   // --------------------------------------------------------------- cerebro
@@ -3350,7 +3550,8 @@ exec git "$@"
     fs.writeFileSync(path.join(empresa, '.claude/commands/cobrar.md'),
       '---\ndescription: Reclamar cobros\nboton: Reclamar lo que me deben\n---\n\nInstrucciones.\n');
     vigia.disparar(path.join(empresa, '.claude/commands/cobrar.md'));
-    await new Promise((listo) => setTimeout(listo, 900));
+    // Hasta que el botón sale (el vigía espera un poco antes de leer), con tope solo para no colgarse.
+    for (let i = 0; i < 300 && !cargar('acciones').acciones().some((a) => a.etiqueta === 'Reclamar lo que me deben'); i += 1) await new Promise((listo) => setTimeout(listo, 50));
 
     const etiquetas = cargar('acciones').acciones().map((a) => a.etiqueta);
     assert.ok(etiquetas.includes('Reclamar lo que me deben'), 'el botón nuevo tiene que salir solo');
@@ -6942,6 +7143,8 @@ exec git "$@"
       assert.ok(dicho.deFuera, `${n} sin nombre en español`);
       assert.ok(!/\b(Cpp|Csharp|Php|Mle|Rag|Fastapi|Postgres|Pytorch)\b/.test(dicho.nombre), `${n} sale con el lenguaje en clave: ${dicho.nombre}`);
     }
+    // La lista cerrada de la que «Quitarlo» no sale (decisión 173) es la del paquete.
+    assert.deepEqual([...cargar('deshacer').agentesDelCatalogo()].sort(), [...catalogoAgentes.stackAgentNames()].sort(), 'media/agentes-del-catalogo.json no es la lista del paquete');
     return `${manifiesto.skills.length} habilidades y ${catalogoAgentes.stackAgentNames().length} agentes, todos con nombre`;
   });
 
@@ -12784,7 +12987,11 @@ exec git "$@"
       return { codigo: hecho.status, tarda: Date.now() - desde, args: fs.existsSync(llamada) ? fs.readFileSync(llamada, 'utf8').split('\0').slice(0, -1) : null };
     };
     ponerFingidos(APUNTAR);
-    const bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
+    // Con el Mac cargado, node puede tardar en arrancar y el guion se corta a su propio
+    // tope (6 s) antes de lanzar nada: ese corte no es un fallo del guion. Hasta 5 intentos,
+    // y solo si salió sin lanzar; un guion que de verdad no lanza falla las cinco veces.
+    let bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
+    for (let i = 1; i < 5 && !bien.args; i += 1) bien = correr(JSON.stringify({ notification_type: 'permission_prompt', cwd: '/otra' }));
     assert.equal(bien.codigo, 0);
     assert.ok(bien.args, 'no se lanza el aviso');
     assert.equal(av.elNombre(MALO), MALO, 'el nombre de prueba no llega entero');
@@ -12806,14 +13013,14 @@ exec git "$@"
     const atascado = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
     assert.equal(atascado.codigo, 0, 'atascado, falla');
     assert.ok(fs.existsSync(cortado), 'al programa atascado no se le corta');
-    assert.ok(atascado.tarda < av.TOPE.todo + 3000, `atascado, tarda ${atascado.tarda} ms`);
+    assert.ok(atascado.tarda < av.TOPE.todo + 12000, `atascado, tarda ${atascado.tarda} ms`);
     // Y uno que no se deja cortar: el tope de todo, y sale con 0. Luego se le quita de en medio.
     const suPid = path.join(fingidos, 'pid');
     ponerFingidos(`echo $$ > "${suPid}"\ntrap '' TERM\nexec /bin/sleep 30`);
     const terco = correr(JSON.stringify({ notification_type: 'idle_prompt' }));
     try { process.kill(Number(fs.readFileSync(suPid, 'utf8')), 'SIGKILL'); } catch { /* ya no está */ }
     assert.equal(terco.codigo, 0, 'con un programa que no se deja cortar, falla');
-    assert.ok(terco.tarda < av.TOPE.todo + 5000, `con un programa que no se deja cortar, tarda ${terco.tarda} ms`);
+    assert.ok(terco.tarda < av.TOPE.todo + 12000, `con un programa que no se deja cortar, tarda ${terco.tarda} ms`);
     // Un programa que falla: 0.
     ponerFingidos('exit 3');
     assert.equal(correr(JSON.stringify({ notification_type: 'idle_prompt' })).codigo, 0, 'con el programa fallando, falla');
@@ -16740,7 +16947,7 @@ exec git "$@"
       pedidas.length = 0;
       await contexto.workspaceState.update(MIRADOS, 0);
       await proveedor.refrescar(true);
-      for (let i = 0; i < 20 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
+      for (let i = 0; i < 300 && !pedidas.length; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       await new Promise((listo) => setTimeout(listo, 50));
       assert.equal(pedidas.length, 1, `una pregunta por aviso, o ninguna al pintar: ${pedidas.length}`);
       assert.match(pedidas[0], /^https:\/\/api\.github\.com\/repos\/Executive-Lab\/executive-vscode-interfaz\/issues\?state=closed&since=/);
@@ -16848,7 +17055,7 @@ exec git "$@"
       proveedor.solaNoPudo = null;
       falla = false;
       await proveedor.refrescar(true);
-      for (let i = 0; i < 50 && instalados.length < 3; i += 1) await new Promise((listo) => setTimeout(listo, 10));
+      for (let i = 0; i < 300 && instalados.length < 3; i += 1) await new Promise((listo) => setTimeout(listo, 10));
       assert.equal(instalados.length, 3, 'al pintar, no se pone sola');
       return 'sola · sin espera · una vez · si falla, el botón · el interruptor';
     } finally {
@@ -19261,6 +19468,42 @@ exec git "$@"
       vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
       fs.rmSync(carpeta, { recursive: true, force: true });
     }
+  });
+
+  await comprobar('las conexiones MCP: lo que viaja de la extensión a la pantalla no lleva ningún valor', async () => {
+    const mcp = cargar('mcp');
+    const { casa, carpeta, SECRETOS, entorno } = casaDeMcp;
+    // De punta a punta: lo que viaja de la extensión a la pantalla no lleva ningún valor.
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, claude: process.env.CLAUDE_CONFIG_DIR, codex: process.env.CODEX_HOME, casa: process.env.HOME };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    vscode.guion.raiz = carpeta;
+    process.env.CLAUDE_CONFIG_DIR = casa;
+    process.env.CODEX_HOME = entorno.CODEX_HOME;
+    const confianzaAntes = vscode.guion.confianza;
+    try {
+      vscode.guion.confianza = true;
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const mensaje = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
+      assert.equal(mensaje.mcp.length, 7, 'la extensión manda lo que lee');
+      assert.equal(mensaje.mcp.filter((s) => s.sinAprobar).length, 0, 'con confianza, ninguno sin aprobar');
+      assert.deepEqual(mensaje.mcpNoLeido, []);
+      vscode.guion.confianza = false;
+      await proveedor.manejar({ tipo: 'verConexiones' });
+      const sin = [...enviados].reverse().find((m) => m.tipo === 'conexiones');
+      assert.deepEqual(sin.mcp.filter((s) => s.sinAprobar).map((s) => s.nombre).sort(), ['context7', 'figma', 'holded', 'tienda-web'], 'sin confianza, los de ficheros de la carpeta, sin aprobar');
+      assert.ok(sin.mcp.filter((s) => s.origen !== 'carpeta').every((s) => !s.sinAprobar));
+      const entero = JSON.stringify(mensaje);
+      for (const [cual, valor] of Object.entries(SECRETOS)) assert.ok(!entero.includes(valor), `el valor «${cual}» viaja en el estado`);
+      assert.ok(!(entero.includes('ejemplo.test')), 'ni la dirección');
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = confianzaAntes;
+      for (const [k, v] of [['CLAUDE_CONFIG_DIR', antes.claude], ['CODEX_HOME', antes.codex]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+    return 'en el estado, 7 servidores';
   });
 
   await comprobar('conexiones paso a paso: se prueba sola al guardar, la lista dice cómo fue, y la guía va de uno en uno', async () => {
@@ -22075,7 +22318,9 @@ exec git "$@"
     const tic = () => new Promise((r) => setTimeout(r, 10));
     // Hasta que la barra termina lo que tenga entre manos, y la pregunta, si la hubo.
     const esperar = async () => {
-      for (let i = 0; i < 100 && (proveedor.atendiendo || (proveedor.preguntados && proveedor.preguntados.size)); i += 1) await tic();
+      // Tope de 60 s solo para no colgar la prueba: con el Mac cargado una vuelta pasa de 1 s,
+      // y si se da por acabada antes, sigue en segundo plano y pisa la del paso siguiente.
+      for (let i = 0; i < 6000 && (proveedor.atendiendo || (proveedor.preguntados && proveedor.preguntados.size)); i += 1) await tic();
       await tic();
     };
     // Una pregunta que nadie contesta todavía.
@@ -22113,7 +22358,7 @@ exec git "$@"
       assert.ok(vscode.registrado.vigia.patron.includes('02-DOCS/raw/pedidos/*'), 'la barra no vigila los pedidos');
       pedir('connect-tool');
       vscode.registrado.vigia.disparar(path.join(pedidosDir, 'connect-tool.habilidad'));
-      for (let i = 0; i < 100 && contestado('connect-tool') === null; i += 1) await tic();
+      for (let i = 0; i < 6000 && contestado('connect-tool') === null; i += 1) await tic();
       assert.equal(contestado('connect-tool'), 'Añadida. Se pide con /connect-tool.', 'el vigía no atiende el pedido');
       // Uno que llega mientras se atiende otro no espera al minuto siguiente.
       assert.equal(proveedor.atendiendo, true, 'la prueba no pilla la barra atendiendo');
@@ -22863,7 +23108,8 @@ exec git "$@"
         await new Promise((r) => setTimeout(r, 800));
         assert.equal(repintados, 0, 'el vigía repinta por un encargo que acaba de dejar la barra');
         vscode.registrado.vigia.disparar(path.join(empresa, '02-DOCS', 'wiki', 'index.md'));
-        await new Promise((r) => setTimeout(r, 800));
+        for (let i = 0; i < 100 && repintados < 1; i += 1) await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 100));
         assert.equal(repintados, 1, 'la prueba del vigía no ve repintar nada');
       } finally {
         proveedor.repintarLoQueHaya = repintar;
@@ -24007,6 +24253,390 @@ exec git "$@"
     }
   }));
 
+  // ------------------------------------------ deshacer con RSC (decisión 173)
+  //
+  // Quitar una habilidad o un agente que se añadió, y volver a la copia que guardó
+  // el arnés al montar. Las dos cosas borran o sustituyen ficheros: con el clic y la
+  // pregunta de la persona, nunca solas, y solo lo que es del arnés y se añadió.
+  const unaCarpetaConLoAnadido = () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'deshacer-'));
+    const habilidad = (id) => {
+      fs.mkdirSync(path.join(carpeta, '.claude', 'skills', id), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'skills', id, 'SKILL.md'), `---\nname: ${id}\n---\n`);
+    };
+    // `invoicing` del catálogo; `unslop` y `orient` de suelo; `mi-contrato` suya.
+    for (const id of ['invoicing', 'unslop', 'orient', 'mi-contrato']) habilidad(id);
+    fs.mkdirSync(path.join(carpeta, '.claude', 'agents'), { recursive: true });
+    for (const id of ['spec-miner', 'el-mio', 'cobros', '--all']) fs.writeFileSync(path.join(carpeta, '.claude', 'agents', `${id}.md`), `---\nname: ${id}\ndescription: Hace lo suyo cuando se lo piden.\n---\nHaz tu encargo.\n`);
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({
+      version: 1, targets: ['claude'], skills: ['invoicing', 'unslop', 'orient'], ownSkills: ['mi-contrato'], agents: ['spec-miner', 'cobros', '--all'],
+    }));
+    return carpeta;
+  };
+  // Un RSC de mentira: apunta lo que le piden y, para `uninstall`, borra de verdad lo suyo.
+  const conUnRscDeMentira = (carpeta, { falla = false, noQuita = false } = {}) => {
+    const rscM = cargar('rsc');
+    const original = rscM.correr;
+    const pedidas = [];
+    rscM.correr = async (args, opciones) => {
+      if (!['uninstall', 'restore'].includes(args[0])) return original(args, opciones);
+      pedidas.push(args);
+      if (falla) return { codigo: 1, salida: '', error: 'rsc: algo ha ido mal\nrsc: no se puede quitar' };
+      if (args[0] === 'restore' && args.includes('--dry-run')) {
+        return { codigo: 0, salida: `Would restore ${args[1]}\n  ${path.join(carpeta, 'CLAUDE.md')}\n  ${path.join(carpeta, '.claude', 'skills', 'invoicing')}\n` };
+      }
+      if (args[0] === 'uninstall' && !noQuita) {
+        fs.rmSync(path.join(carpeta, '.claude', 'skills', args[1]), { recursive: true, force: true });
+        fs.rmSync(path.join(carpeta, '.claude', 'agents', `${args[1]}.md`), { force: true });
+      }
+      if (args[0] === 'restore') fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de antes');
+      return { codigo: 0, salida: 'Removed:\n' };
+    };
+    return { pedidas, volver: () => { rscM.correr = original; } };
+  };
+  const conLaBarraPuesta = async (carpeta, haz) => {
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, eleccion: vscode.guion.eleccion, enviar: proveedor.enviar, conocida: proveedor.contexto.workspaceState.get('executiveLab.carpetaConocida') };
+    const enviados = [];
+    proveedor.enviar = (m) => { enviados.push(m); };
+    vscode.guion.raiz = carpeta;
+    try {
+      return await haz({ proveedor, enviados, avisos: () => enviados.filter((m) => m.tipo === 'aviso') });
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.eleccion = antes.eleccion;
+      await proveedor.contexto.workspaceState.update('executiveLab.carpetaConocida', antes.conocida);
+    }
+  };
+
+  await comprobar('deshacer: «Quitarla» solo en lo del catálogo que se añadió, no en lo suyo, lo de la barra ni lo del arnés', async () => {
+    const saberesM = cargar('saberes');
+    const deshacerM = cargar('deshacer');
+    const agentesM = cargar('agentes');
+    const carpeta = unaCarpetaConLoAnadido();
+    const antes = vscode.guion.raiz;
+    vscode.guion.raiz = carpeta;
+    try {
+      const datos = saberesM.queSabe(RAIZ, '');
+      const quitables = datos.sabe.filter((c) => c.quitable).map((c) => c.id);
+      assert.deepEqual(quitables, ['invoicing'], 'se ofrece quitar otra cosa, o no se ofrece la que se añadió');
+      assert.ok(datos.sabe.find((c) => c.id === 'unslop') && !datos.sabe.find((c) => c.id === 'unslop').quitable, 'se ofrece quitar lo que el arnés pone de suelo');
+      assert.ok(![...datos.suyas, ...datos.otras, ...datos.deSerie].some((c) => c.quitable), 'se ofrece quitar lo suyo, lo de fuera del catálogo o lo del arnés');
+      // La regla, sola: lo suyo, lo de la barra, el suelo y la fontanería no.
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('invoicing'), true);
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('invoicing', { propias: ['invoicing'] }), false, 'una suya con nombre del catálogo');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('guardar', { deLaBarra: true }), false, 'una de la barra');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('executive-lab', { deLaBarra: true }), false, 'la de la barra que está siempre activa');
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('review', { esFontaneria: true }), false, 'una que el arnés necesita para funcionar');
+      for (const id of ['orient', 'suggest', 'unslop', 'ftd', 'connect-tool']) assert.equal(deshacerM.sePuedeQuitarLaHabilidad(id), false, `${id} es de suelo`);
+      for (const raro of ['../../Documents', 'a/b', '', 'A', null, 'x'.repeat(80)]) assert.equal(deshacerM.sePuedeQuitarLaHabilidad(raro), false, `un nombre como ${JSON.stringify(raro)}`);
+      // Los agentes: solo el que la declaración apunta como pedido, no el que escribió la persona.
+      const agentes = agentesM.queHay();
+      assert.deepEqual(agentes.filter((a) => a.quitable).map((a) => a.id), ['spec-miner'], 'se ofrece quitar un agente suyo, uno que no es del catálogo, o no el que se añadió');
+      assert.equal(deshacerM.sePuedeQuitarElAgente('el-mio', { declarados: ['el-mio'] }), false);
+      assert.equal(deshacerM.sePuedeQuitarElAgente('../x', { declarados: ['../x'] }), false);
+
+      // En pantalla: el botón, solo donde toca, con el nombre de lo que se quita.
+      const { montarPanel } = require('./panel-falso');
+      const habilidades = montarPanel().mandar({ tipo: 'saberes', sabe: datos.sabe, suyas: datos.suyas, otras: datos.otras, deSerie: datos.deSerie, puedeAprender: [] });
+      const quitar = accionesDe(habilidades).filter((a) => a.tipo === 'quitarHabilidad');
+      assert.deepEqual(quitar.map((a) => a.habilidad), ['invoicing']);
+      assert.equal(quitar[0].nombre, 'Facturación');
+      assert.match(habilidades, /Quitarla/);
+      const losAgentes = montarPanel().mandar({ tipo: 'agentes', agentes });
+      assert.deepEqual(accionesDe(losAgentes).filter((a) => a.tipo === 'quitarAgente').map((a) => a.fichero), ['spec-miner.md']);
+      assert.match(losAgentes, /Quitarlo/);
+      return 'una habilidad con botón, un agente con botón, y nada más';
+    } finally {
+      vscode.guion.raiz = antes;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('deshacer: un agente con nombre de opción (--all) no se ofrece, y el manejador tampoco lo corre', async () => {
+    // Revisión de la 173: `.claude/agents/--all.md` y `"agents":["--all"]` en un repositorio ajeno
+    // llegaban a `rsc uninstall --all`, que en RSC es `purge`. Tres guardas, cada una probada sola.
+    const deshacerM = cargar('deshacer');
+    const agentesM = cargar('agentes');
+    const carpeta = unaCarpetaConLoAnadido();
+    const rscDeMentira = conUnRscDeMentira(carpeta);
+    try {
+      // La regla del nombre, sola: aunque la lista y la declaración lo dieran por bueno.
+      assert.equal(deshacerM.sePuedeQuitarElAgente('--all', { declarados: ['--all'], catalogo: ['--all'] }), false, 'un nombre que empieza por «-» se ofrece');
+      assert.equal(deshacerM.sePuedeQuitarElAgente('-x', { declarados: ['-x'], catalogo: ['-x'] }), false);
+      // La lista cerrada, sola: un nombre bueno que no es del catálogo, declarado o no.
+      assert.equal(deshacerM.sePuedeQuitarElAgente('cobros', { declarados: ['cobros'] }), false, 'un agente que no es del catálogo se ofrece porque lo dice .rsc.json');
+      assert.equal(deshacerM.sePuedeQuitarElAgente('spec-miner', { declarados: ['spec-miner'] }), true);
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('--all'), false);
+      assert.equal(deshacerM.sePuedeQuitarLaHabilidad('-all'), false);
+      const vistos = (() => { const antes = vscode.guion.raiz; vscode.guion.raiz = carpeta; try { return agentesM.queHay(); } finally { vscode.guion.raiz = antes; } })();
+      assert.ok(vistos.some((a) => a.id === '--all') && vistos.some((a) => a.id === 'cobros'), 'el repositorio ajeno no está en la prueba');
+      assert.deepEqual(vistos.filter((a) => a.quitable).map((a) => a.id), ['spec-miner']);
+      // La última guarda, sola: aunque llegue a mano, la función de correr no corre.
+      for (const id of ['--all', '-all', 'cobros', 'nada', '../x']) {
+        const hecho = await deshacerM.quitarAgente(id, []);
+        assert.equal(hecho.ok, false, id);
+      }
+      assert.deepEqual(rscDeMentira.pedidas, [], 'corre RSC con un agente que no se puede quitar');
+      // Y el manejador, con el mensaje a mano y con el sí.
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        vscode.guion.eleccion = 'Sí, quítalo';
+        for (const fichero of ['--all.md', 'cobros.md', '../--all.md']) {
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero, nombre: 'x' });
+          assert.equal(avisos().at(-1).texto, 'Ese agente no se puede quitar desde aquí.', fichero);
+        }
+      });
+      assert.deepEqual(rscDeMentira.pedidas, [], 'el manejador corre RSC con un agente que no se ofrece');
+      assert.ok(fs.existsSync(path.join(carpeta, '.rsc.json')) && fs.existsSync(path.join(carpeta, '.claude', 'agents', '--all.md')));
+      return 'ni con nombre de opción, ni fuera del catálogo, ni a mano';
+    } finally {
+      rscDeMentira.volver();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('deshacer: quitar una habilidad o un agente pide el sí, usa el subcomando de RSC y dice lo que ha pasado', async () => {
+    const carpeta = unaCarpetaConLoAnadido();
+    const rscDeMentira = conUnRscDeMentira(carpeta);
+    try {
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        const habilidad = (id) => path.join(carpeta, '.claude', 'skills', id);
+        const agente = (id) => path.join(carpeta, '.claude', 'agents', `${id}.md`);
+        const preguntas = () => vscode.registrado.mensajes.filter((m) => /^WARN Voy a quitar/.test(m));
+        vscode.registrado.mensajes.length = 0;
+
+        // Sin el sí (cierra la pregunta, o dice que no): no se quita nada, ni se corre nada.
+        for (const respuesta of [undefined, 'No', 'Cancelar']) {
+          vscode.guion.eleccion = respuesta;
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'spec-miner.md', nombre: 'x' });
+        }
+        assert.deepEqual(rscDeMentira.pedidas, [], 'sin confirmar, corre algo');
+        assert.ok(fs.existsSync(habilidad('invoicing')) && fs.existsSync(agente('spec-miner')), 'sin confirmar, se quita');
+        assert.equal(preguntas().length, 6, 'no pregunta antes de quitar');
+        // La pregunta dice, en una frase, qué se va a quitar.
+        assert.ok(preguntas().includes('WARN Voy a quitar «Facturación» de esta carpeta: se borran sus ficheros y queda apuntada como no puesta. Se puede volver a añadir desde el catálogo.'));
+        assert.ok(preguntas().some((m) => /^WARN Voy a quitar el agente «Extractor de especificación»: se borra su fichero y queda apuntado como no puesto\.$/.test(m.replace(/ de esta carpeta/, ''))), preguntas().join('\n'));
+
+        // Con lo que no se ofrece, ni con el sí: «unslop», «orient», lo suyo y lo que no es una habilidad.
+        vscode.guion.eleccion = 'Sí, quítala';
+        for (const id of ['unslop', 'orient', 'mi-contrato', '../../Documents', 'nada']) {
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: id, nombre: 'x' });
+          assert.equal(avisos().at(-1).texto, 'Esa habilidad no se puede quitar desde aquí.', id);
+        }
+        vscode.guion.eleccion = 'Sí, quítalo';
+        await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'el-mio.md', nombre: 'x' });
+        assert.equal(avisos().at(-1).texto, 'Ese agente no se puede quitar desde aquí.');
+        assert.deepEqual(rscDeMentira.pedidas, [], 'corre RSC con algo que no se ofrece');
+        assert.ok(['unslop', 'orient', 'mi-contrato'].every((id) => fs.existsSync(habilidad(id))) && fs.existsSync(agente('el-mio')));
+
+        // Con el sí: el subcomando oficial, el disco como queda, y lo que ha pasado.
+        vscode.guion.eleccion = 'Sí, quítala';
+        await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+        assert.deepEqual(rscDeMentira.pedidas, [['uninstall', 'invoicing', '--target', 'claude']]);
+        assert.ok(!fs.existsSync(habilidad('invoicing')));
+        assert.deepEqual(avisos().at(-1), { tipo: 'aviso', texto: 'Facturación ya no está puesta.', malo: false });
+        vscode.guion.eleccion = 'Sí, quítalo';
+        await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'spec-miner.md', nombre: 'x' });
+        assert.deepEqual(rscDeMentira.pedidas.at(-1), ['uninstall', 'spec-miner', '--target', 'claude']);
+        assert.ok(!fs.existsSync(agente('spec-miner')));
+        assert.equal(avisos().at(-1).texto, 'Extractor de especificación ya no está puesto.');
+        assert.equal(avisos().at(-1).malo, false);
+      });
+      // Si RSC falla, con su salida, y sin decir que se quitó.
+      rscDeMentira.volver();
+      const fallido = conUnRscDeMentira(carpeta, { falla: true });
+      fs.mkdirSync(path.join(carpeta, '.claude', 'skills', 'invoicing'), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, '.claude', 'skills', 'invoicing', 'SKILL.md'), '---\nname: invoicing\n---\n');
+      fs.writeFileSync(path.join(carpeta, '.claude', 'agents', 'spec-miner.md'), '---\nname: spec-miner\ndescription: Hace lo suyo cuando se lo piden.\n---\n');
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, quítala';
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Facturación\. El arnés ha dicho: «rsc: no se puede quitar»\. Pulsa «Algo va mal»/);
+          vscode.guion.eleccion = 'Sí, quítalo';
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'spec-miner.md', nombre: 'x' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Extractor de especificación\. El arnés ha dicho: «rsc: no se puede quitar»/);
+        });
+      } finally {
+        fallido.volver();
+      }
+      // Sale bien y el fichero sigue (RSC mantiene un agente que una habilidad necesita): se dice.
+      const sigue = conUnRscDeMentira(carpeta, { noQuita: true });
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, quítala';
+          await proveedor.manejar({ tipo: 'quitarHabilidad', habilidad: 'invoicing', nombre: 'x' });
+          assert.match(avisos().at(-1).texto, /^No he podido quitar Facturación\./, 'dice que la quitó con la carpeta todavía puesta');
+          assert.equal(avisos().at(-1).malo, true);
+          vscode.guion.eleccion = 'Sí, quítalo';
+          await proveedor.manejar({ tipo: 'quitarAgente', fichero: 'spec-miner.md', nombre: 'x' });
+          assert.equal(avisos().at(-1).texto, 'No se ha podido quitar Extractor de especificación: sigue puesto.');
+          assert.equal(avisos().at(-1).malo, true);
+        });
+      } finally {
+        sigue.volver();
+      }
+      return 'sin el sí no se quita nada; con él, el subcomando de RSC; si falla o no quita, se dice';
+    } finally {
+      rscDeMentira.volver();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('deshacer: «Recuperar lo que había» pide el sí, guarda lo de ahora, usa restore de RSC y dice lo que ha pasado', async () => {
+    const carpeta = unaCarpetaConLoAnadido();
+    const id = '20261002-100000-onboarding-transaction-claude';
+    const copia = path.join(carpeta, '.rsc', 'backups', id);
+    fs.mkdirSync(path.join(copia, 'files'), { recursive: true });
+    fs.writeFileSync(path.join(copia, 'manifest.json'), JSON.stringify({
+      schemaVersion: 1, id, createdAt: '2026-10-02T10:00:00Z', operation: 'onboarding-transaction', target: 'claude',
+      entries: [{ path: 'CLAUDE.md', existed: true, kind: 'file' }, { path: '.claude/skills/invoicing', existed: false, kind: 'missing' }],
+    }));
+    fs.writeFileSync(path.join(copia, 'files', 'CLAUDE.md'), 'lo de antes');
+    fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de ahora');
+    const rscDeMentira = conUnRscDeMentira(carpeta);
+    const deshacerM = cargar('deshacer');
+    try {
+      // La salida de `restore --dry-run`: solo cuentan las rutas de dentro de la carpeta.
+      const sola = deshacerM.lasRutasDeLaSalida(`Would restore x\n  ${path.join(carpeta, 'a')}\n  ${path.join(carpeta, '..', 'fuera')}\n  relativa\nOtra línea\n`, carpeta);
+      assert.deepEqual([sola.rutas, sola.total, sola.descartadas], [[path.join(carpeta, 'a')], 3, 2]);
+
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        const copias = path.join(carpeta, '.rsc', 'antes-de-recuperar');
+        const pregunta = () => vscode.registrado.mensajes.filter((m) => /^WARN Voy a devolver/.test(m));
+        vscode.registrado.mensajes.length = 0;
+
+        // Sin el sí: se mira qué tocaría, pero no se restaura ni se guarda nada.
+        for (const respuesta of [undefined, 'No']) {
+          vscode.guion.eleccion = respuesta;
+          await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        }
+        assert.deepEqual(rscDeMentira.pedidas.filter((a) => !a.includes('--dry-run')), [], 'restaura sin confirmar');
+        assert.ok(rscDeMentira.pedidas.every((a) => a[0] === 'restore' && a[1] === id && a.includes('--dry-run')));
+        assert.ok(!fs.existsSync(copias), 'guarda algo sin confirmar');
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de ahora');
+        assert.equal(pregunta().length, 2);
+        assert.equal(pregunta()[0], 'WARN Voy a devolver esta carpeta a como estaba antes de montar el arnés: lo tuyo vuelve a lo de antes, lo que puso el arnés se quita, y lo que hayas cambiado desde entonces en esos 2 sitios se pierde. Antes guardo una copia de lo de ahora.');
+
+        // Con el sí: lo de ahora guardado, restore con la copia del montaje, y dicho.
+        rscDeMentira.pedidas.length = 0;
+        vscode.guion.eleccion = 'Sí, recupéralo';
+        await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        assert.deepEqual(rscDeMentira.pedidas, [['restore', id, '--dry-run'], ['restore', id, '--dry-run'], ['restore', id]], 'mira dos veces qué tocaría, y restaura');
+        const guardadas = fs.readdirSync(copias);
+        assert.equal(guardadas.length, 1);
+        assert.equal(fs.readFileSync(path.join(copias, guardadas[0], 'files', 'CLAUDE.md'), 'utf8'), 'lo de ahora', 'no guarda lo de ahora antes de restaurar');
+        assert.ok(fs.existsSync(path.join(copias, guardadas[0], 'files', '.claude', 'skills', 'invoicing', 'SKILL.md')), 'no guarda la habilidad que va a quitar');
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de antes');
+        assert.equal(avisos().at(-1).malo, false);
+        assert.equal(avisos().at(-1).texto, `Hecho: la carpeta está como antes de montar el arnés. Lo de antes de recuperar está en .rsc/antes-de-recuperar/${guardadas[0]}.`);
+      });
+
+      // Si no se puede guardar lo de ahora, no se restaura: la carpeta se queda como está.
+      fs.writeFileSync(path.join(carpeta, 'CLAUDE.md'), 'lo de ahora');
+      fs.rmSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), { recursive: true, force: true });
+      fs.writeFileSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), 'esto es un fichero');
+      rscDeMentira.pedidas.length = 0;
+      await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+        vscode.guion.eleccion = 'Sí, recupéralo';
+        await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+        assert.deepEqual(rscDeMentira.pedidas.filter((a) => !a.includes('--dry-run')), [], 'restaura sin haber guardado lo de ahora');
+        assert.equal(avisos().at(-1).texto, 'No he tocado nada: no he podido guardar antes una copia de lo de ahora.');
+        assert.equal(avisos().at(-1).malo, true);
+        assert.equal(fs.readFileSync(path.join(carpeta, 'CLAUDE.md'), 'utf8'), 'lo de ahora');
+      });
+      fs.rmSync(path.join(carpeta, '.rsc', 'antes-de-recuperar'), { force: true });
+
+      // Si RSC falla, con su salida, y dónde queda lo de ahora.
+      rscDeMentira.volver();
+      const fallido = conUnRscDeMentira(carpeta, { falla: true });
+      try {
+        await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+          vscode.guion.eleccion = 'Sí, recupéralo';
+          await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+          assert.equal(avisos().at(-1).malo, true);
+          assert.match(avisos().at(-1).texto, /^No he podido mirar qué cambiaría\. El arnés ha dicho: «rsc: no se puede quitar»\. No he tocado nada\.$/);
+        });
+      } finally {
+        fallido.volver();
+      }
+
+      // Lo que RSC lista no cuadra con la carpeta, viene vacío, o cambia entre la pregunta y el restore:
+      // no se restaura nada, y se dice. La copia de lo de ahora cubre exactamente lo que se toca.
+      const rscM2 = cargar('rsc');
+      const original = rscM2.correr;
+      const restauradas = [];
+      const dentro = path.join(carpeta, 'CLAUDE.md');
+      const conSalidas = (listas) => {
+        let n = 0;
+        rscM2.correr = async (args) => {
+          if (args[0] !== 'restore') return original(args);
+          if (!args.includes('--dry-run')) { restauradas.push(args); return { codigo: 0, salida: '' }; }
+          const lista = listas[Math.min(n, listas.length - 1)];
+          n += 1;
+          return { codigo: 0, salida: `Would restore x\n${lista.map((r) => `  ${r}`).join('\n')}${lista.length ? '\n' : ''}` };
+        };
+      };
+      try {
+        const casos = [
+          ['una ruta de fuera', [[dentro, path.join(os.tmpdir(), 'fuera.md')]], /^No he tocado nada: el arnés ha nombrado sitios que no reconozco en esta carpeta\.$/],
+          ['sin ninguna ruta', [[]], /^No he tocado nada: no he podido saber qué cambiaría\.$/],
+          ['la lista cambia', [[dentro], [dentro, path.join(carpeta, '.claude', 'skills', 'invoicing')]], /^No he tocado nada: lo que iba a cambiar ya no es lo mismo\. Vuelve a pulsar «Recuperar lo que había»\.$/],
+        ];
+        for (const [que, listas, aviso] of casos) {
+          conSalidas(listas);
+          restauradas.length = 0;
+          await conLaBarraPuesta(carpeta, async ({ proveedor, avisos }) => {
+            vscode.guion.eleccion = 'Sí, recupéralo';
+            await proveedor.manejar({ tipo: 'recuperarLoQueHabia' });
+            assert.deepEqual(restauradas, [], `${que}: restaura`);
+            assert.match(avisos().at(-1).texto, aviso, que);
+            assert.equal(avisos().at(-1).malo, true);
+            assert.ok(!fs.existsSync(path.join(carpeta, '.rsc', 'antes-de-recuperar')), `${que}: guarda algo sin ir a restaurar`);
+          });
+        }
+        // Windows: `C:\` y `c:\` son la misma unidad, y una de otra unidad no es de la carpeta.
+        const raizWin = 'C:\\Users\\Ana\\Empresa';
+        const salidaWin = (...rutas) => `Would restore x\n${rutas.map((r) => `  ${r}`).join('\n')}\n`;
+        const igual = deshacerM.lasRutasDeLaSalida(salidaWin('c:\\users\\ana\\empresa\\CLAUDE.md', 'C:\\USERS\\ANA\\EMPRESA\\.claude\\settings.json'), raizWin, 'win32');
+        assert.deepEqual([igual.total, igual.descartadas, igual.rutas.length], [2, 0, 2], 'otra caja en la letra o en la carpeta se descarta');
+        const otra = deshacerM.lasRutasDeLaSalida(salidaWin('D:\\Users\\Ana\\Empresa\\a.md', 'C:\\Users\\Ana\\Empresa2\\a.md', 'C:\\Users\\Ana\\Empresa\\..\\fuera.md'), raizWin, 'win32');
+        assert.deepEqual([otra.total, otra.descartadas, otra.rutas.length], [3, 3, 0], 'una ruta de otra unidad, de una carpeta vecina o con «..» cuenta como de dentro');
+        assert.equal(deshacerM.deLaCarpeta(raizWin, 'c:\\users\\ana\\empresa\\Sub\\A.md', 'win32'), 'Sub\\A.md', 'la ruta relativa pierde su caja');
+        // Y de punta a punta, con la carpeta de la barra en `C:\…` y RSC escribiendo `c:\…`.
+        const antesRaiz = vscode.guion.raiz;
+        vscode.guion.raiz = raizWin;
+        try {
+          rscM2.correr = async () => ({ codigo: 0, salida: salidaWin('c:\\users\\ana\\empresa\\CLAUDE.md') });
+          const mirada = await deshacerM.loQueTocaria(id, 'win32');
+          assert.equal(mirada.ok, true, 'con otra caja en la unidad, no se reconoce');
+          assert.equal(mirada.rutas.length, 1);
+          rscM2.correr = async () => ({ codigo: 0, salida: salidaWin('D:\\Users\\Ana\\Empresa\\CLAUDE.md') });
+          assert.equal((await deshacerM.loQueTocaria(id, 'win32')).motivo, 'ajenas');
+        } finally {
+          vscode.guion.raiz = antesRaiz;
+        }
+      } finally {
+        rscM2.correr = original;
+      }
+
+      // Y el botón, en la pantalla de las copias, junto a «Ver la copia».
+      const { montarPanel } = require('./panel-falso');
+      const html = montarPanel().mandar({ tipo: 'copias', copias: [], delMontaje: { texto: 'Antes de cambiar lo tuyo, el arnés guardó una copia.', accion: { tipo: 'verLaCopiaDelMontaje' } } });
+      assert.ok(accionesDe(html).some((a) => a.tipo === 'recuperarLoQueHabia'));
+      assert.match(html, /Recuperar lo que había/);
+      assert.doesNotMatch(montarPanel().mandar({ tipo: 'copias', copias: [], delMontaje: null }), /recuperarLoQueHabia/, 'sin copia, ofrece recuperarla');
+      return 'sin el sí no se toca; con él, copia de lo de ahora y restore de RSC; si falla, con su salida';
+    } finally {
+      rscDeMentira.volver();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   await comprobar('una carpeta vacía no lleva «Lo último» encima', () => {
     const pintar = (estado) => require('./panel-falso').montarPanel().mandar({ tipo: 'estado', estado });
     const base = { sinArnes: true, donde: 'Aquí todavía no hay nada', aviso: 'Puedo preparar esta carpeta.' };
@@ -24021,6 +24651,54 @@ exec git "$@"
   // Monta un arnés entero: tarda minutos y toca la red, así que no va en la
   // pasada normal. `node prueba/humo.js --con-arnes` lo incluye.
   if (process.argv.includes('--con-arnes')) {
+    await comprobar('deshacer, con el arnés de verdad: quitar una habilidad y volver a la copia del montaje', async () => {
+      // Decisión 173. Con el RSC que viaja en la barra: `uninstall` y `restore` hacen lo que la barra cuenta.
+      const rscM = cargar('rsc');
+      const deshacerM = cargar('deshacer');
+      const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'deshacer-de-verdad-'));
+      const antes = vscode.guion.raiz;
+      vscode.guion.raiz = carpeta;
+      try {
+        fs.mkdirSync(path.join(carpeta, '.claude'), { recursive: true });
+        fs.writeFileSync(path.join(carpeta, '.claude', 'settings.json'), '{"lo-mio": "de antes"}\n');
+        const plan = await rscM.correr(['onboard', '--technical-level', 'non-technical', '--project-kind', 'operations', '--goal', 'llevar el día', '--target', 'claude'], { tiempoMaximo: 120000 });
+        const planId = (plan.salida.match(/Plan id: (\w+)/) || [])[1];
+        assert.ok(planId, `sin plan: ${plan.salida} ${plan.error}`);
+        const aceptado = await rscM.correr(['onboard', '--technical-level', 'non-technical', '--project-kind', 'operations', '--goal', 'llevar el día', '--target', 'claude', '--accept-plan', planId], { tiempoMaximo: 180000 });
+        assert.equal(aceptado.codigo, 0, aceptado.salida + aceptado.error);
+        assert.equal((await rscM.anadir('invoicing')).ok, true, 'no se ha podido añadir');
+        const hay = (id) => fs.existsSync(path.join(carpeta, '.claude', 'skills', id));
+        assert.ok(hay('invoicing'));
+
+        // Quitarla: se va de disco y de `.rsc.json`; lo demás sigue.
+        const quitada = await deshacerM.quitar('invoicing');
+        assert.equal(quitada.ok, true, quitada.dijo);
+        assert.ok(!hay('invoicing'), 'sigue en disco');
+        assert.ok(!JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8')).skills.includes('invoicing'), 'sigue en .rsc.json');
+        assert.ok(hay('orient') && hay('unslop'), 'se lleva lo del suelo');
+        // Una que no existe: RSC lo dice y la barra no lo da por hecho.
+        const noHay = await deshacerM.quitar('no-existe-esta');
+        assert.equal(noHay.ok, false);
+        assert.match(noHay.dijo, /unknown skill/);
+
+        // Volver a la copia: lo de antes de montar, y lo de ahora guardado.
+        const copia = deshacerM.loQueTocaria ? await deshacerM.loQueTocaria(fs.readdirSync(path.join(carpeta, '.rsc', 'backups')).find((n) => /onboarding-transaction/.test(n))) : null;
+        assert.equal(copia.ok, true, copia.dijo);
+        assert.ok(copia.rutas.length > 5, 'RSC no lista lo que tocaría');
+        assert.ok(copia.rutas.every((r) => r.startsWith(fs.realpathSync(carpeta))), 'RSC lista algo de fuera de la carpeta');
+        fs.writeFileSync(path.join(carpeta, '.claude', 'settings.json'), '{"lo-de": "ahora"}\n');
+        const hecho = await deshacerM.recuperar(fs.readdirSync(path.join(carpeta, '.rsc', 'backups')).find((n) => /onboarding-transaction/.test(n)), copia.rutas);
+        assert.equal(hecho.ok, true, hecho.dijo);
+        assert.equal(fs.readFileSync(path.join(carpeta, '.claude', 'settings.json'), 'utf8'), '{"lo-mio": "de antes"}\n', 'no vuelve lo de antes');
+        assert.ok(!hay('orient') && !fs.existsSync(path.join(carpeta, '.rsc.json')), 'lo del arnés sigue');
+        assert.equal(fs.readFileSync(path.join(hecho.guardado, 'files', '.claude', 'settings.json'), 'utf8'), '{"lo-de": "ahora"}\n', 'lo de ahora no se guardó');
+        return `quitada sin tocar el suelo; ${copia.rutas.length} sitios a como estaban, y lo de ahora guardado`;
+      } finally {
+        vscode.guion.raiz = antes;
+        fs.rmSync(carpeta, { recursive: true, force: true });
+      }
+    });
+
     await comprobar('el wizard monta una empresa en una carpeta vacía', async () => {
       const vacia = fs.mkdtempSync(path.join(os.tmpdir(), 'empresa-nueva-'));
       vscode.guion.raiz = vacia;

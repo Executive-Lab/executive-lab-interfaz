@@ -207,6 +207,14 @@ async function retomar() {
   return limpio;
 }
 
+// Los asistentes a los que se les pone o se les quita una habilidad: todos los declarados
+// que sabemos dónde miran, a la vez; sin nada declarado, el de ahora (E2).
+function losAsistentes() {
+  const sitios = require('../media/railes/sitios');
+  const declarados = ((proyecto.declaracion() || {}).targets || []).filter((q) => sitios.sitiosDe(q));
+  return declarados.length ? declarados : [require('./donde').paraQuien()];
+}
+
 // Enseñarle algo nuevo del catálogo. El catálogo viaja dentro del paquete,
 // así que esto no necesita red.
 //
@@ -224,9 +232,7 @@ async function anadir(id) {
   // claude,codex`, medido con el paquete): con uno solo, el otro se quedaba con una
   // habilidad declarada que no tenía (revisión de F5, m5). Sin nada declarado,
   // para el de ahora (E2). Por el objeto del módulo, para que se pueda fingir.
-  const sitios = require('../media/railes/sitios');
-  const declarados = ((proyecto.declaracion() || {}).targets || []).filter((q) => sitios.sitiosDe(q));
-  const para = declarados.length ? declarados : [require('./donde').paraQuien()];
+  const para = losAsistentes();
   const hecho = await module.exports.correr(['add', id, '--target', para.join(',')], { tiempoMaximo: 180000 });
   // En disco, no declarada: una que el arnés declaró y no puso no se da por añadida (G4).
   return { ok: hecho.codigo === 0 && para.every((quien) => habilidadesDelArnesEnDisco(quien).includes(id)) };
@@ -610,5 +616,5 @@ module.exports = {
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,
-  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, habilidadesDelArnesEnDisco, anadir,
+  paquete, vaPorDelante, nombresQueSalenDeLaCarpeta, VERSION_DE_RESPALDO, comoEsLaVersion, habilidadesDeLaClase, yDespuesElPlan, saberDondeEstamos, habilidadesPuestas, habilidadesEnDisco, habilidadesDelArnesEnDisco, anadir, losAsistentes,
 };

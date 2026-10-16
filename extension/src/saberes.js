@@ -33,6 +33,7 @@ const frontmatter = require('./frontmatter');
 const rsc = require('./rsc');
 const donde = require('./donde');
 const acciones = require('./acciones');
+const deshacer = require('./deshacer');
 
 // Las que ha escrito esta empresa para sí misma. RSC las apunta aparte en
 // `.rsc.json` (`ownSkills`), separadas de las del catálogo, y hace bien:
@@ -191,7 +192,15 @@ function queSabe(carpetaDeLaExtension, corpus = '') {
 
   return {
     suyas: suyas.map((id) => comoSeLlama(id, raiz)),
-    sabe: sabe.map(delCatalogo),
+    // Las del catálogo se pueden quitar con su botón (decisión 173), salvo lo que el
+    // arnés pone de suelo, lo de fontanería y lo de la barra. Las suyas y las de fuera
+    // del catálogo no llevan botón: no son de RSC.
+    sabe: sabe.map((c) => ({
+      ...delCatalogo(c),
+      quitable: deshacer.sePuedeQuitarLaHabilidad(c.id, {
+        propias, deLaBarra: deLaBarra.includes(c.id), esFontaneria: nombres.esFontaneria(c.id),
+      }),
+    })),
     otras: otras.map((id) => comoSeLlama(id, raiz)),
     // Las que trae el arnés para funcionar. Se ven —plegadas— con su nombre en
     // español y su identificador, porque están instaladas y lo instalado se ve.
