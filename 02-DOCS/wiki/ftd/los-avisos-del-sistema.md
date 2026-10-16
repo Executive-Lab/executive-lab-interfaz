@@ -54,7 +54,7 @@ termina, y no se entera nadie. Era lo siguiente de la tabla de lo investigado en
 
 ## Evidence
 
-- `humo.js`: 422 comprobaciones, tres nuevas: «los avisos del sistema: el enganche en los ajustes de
+- `humo.js`: 432 comprobaciones con main traído (la 161), tres nuevas: «los avisos del sistema: el enganche en los ajustes de
   Claude…», «el guion de los avisos…» y «los avisos del sistema al abrir una carpeta de la 157…». Dos de la
   157, al día con la frase y el botón.
 - `windows.js`: dos nuevas, para la máquina Windows de GitHub. El enganche corre en Git Bash con el relevo, y

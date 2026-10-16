@@ -6704,7 +6704,8 @@ en cada respuesta merece la pena.
 
 **Las pruebas.**
 
-- `humo.js`: tres comprobaciones nuevas, y dos de la 157 al día con la frase y el botón nuevos.
+- `humo.js`: tres comprobaciones nuevas, y dos de la 157 al día con la frase y el botón nuevos. Con main traído (la
+  161), 432.
   - *El enganche*: su forma, la del freno; con y sin el guion, y con el guion como enlace; lo suyo intacto;
     los seis casos en que no se pone; «Quitarlo» de los avisos y del idioma por separado; el enganche
     cambiado, que no se quita; las constancias de la 157 y las plantadas; git, y `--solo=avisos`.
@@ -6741,3 +6742,6 @@ compara con el tope de todo.
   tendría que ir por `Stop`, que sale al acabar cada respuesta.
 - **La burbuja en un Windows 10 y 11 de verdad.** El modo de concentración la calla.
 - **Ningún aviso se ha lanzado de verdad**: los programas son de mentira, en Mac, en Windows y en Linux.
+
+`contrato.js` (15), `empresas-distintas.js`, `mapeos-codex.js` (29), el diccionario y `revisar-powershell.js`, en
+verde. `windows.js` corre en la máquina Windows de GitHub.
