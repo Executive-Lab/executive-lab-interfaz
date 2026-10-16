@@ -69,6 +69,7 @@ const ESCRIBEN_CON_EL_ARNES = new Set(['arrancar', 'arreglar', 'aprenderCapacida
 const POR_DELANTE = 'Esta carpeta lleva una versión del arnés más nueva que la de la barra. Hasta que la barra se ponga al día, pídeselo al asistente.';
 // Lo que el asistente le pide a la barra (decisión 150).
 const pedidos = require('./pedidos');
+const conectar = require('./conectar');
 // Lo de la carpeta que entra en un encargo, en una línea y sin comillas (`limpio.js`).
 const { etiqueta: unRotulo } = require('./limpio');
 const nombres = require('./nombres');
@@ -134,6 +135,9 @@ const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
 const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
 const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
+// Las tarjetas de las claves (decisión 167), apartadas con «Ahora no»: vuelven a
+// la semana, antes que un consejo, porque una clave mal guardada puede costar dinero.
+const CLAVES_APARTADAS_DURANTE = 7 * 24 * 60 * 60 * 1000;
 // Si ya se dijo «Esto parece …» en esta carpeta, o si la primera vez no había
 // nada que decir (decisión 152).
 const CLAVE_LO_QUE_PARECE = 'executiveLab.loQueParece';
@@ -658,6 +662,9 @@ ${cabecera}
       costumbrePuesta: await this.ponerLasCostumbres(),
       // Los datos de clientes, dichos una vez al empezar a entrar (decisión 153).
       datosDeClientes: this.laTarjetaDeLosDatos(),
+      // Las claves de una aplicación dentro de las copias, y las que están fuera
+      // de sitio: en la tarjeta, con su botón (decisión 167).
+      ...this.lasClavesQueTocan(),
       // Un aviso para Executive Lab que espera a que la persona diga si se
       // manda: lo ha preparado su asistente, la barra al fallar, o ella misma
       // sin poder mandarlo. Como mucho uno; los demás, en Ayuda.
@@ -922,6 +929,31 @@ ${cabecera}
     }
   }
 
+  // Lo que la tarjeta dice de las claves (decisión 167). Solo con el arnés
+  // montado, y nada de lo apartado con «Ahora no» hace menos de una semana. Sin
+  // nombres de fichero ni valores: cuántas, y el encargo, que ya lleva lo suyo.
+  lasClavesQueTocan() {
+    try {
+      if (!proyecto.arnesCompleto()) return {};
+      const apartadas = this.almacen().get(CLAVE_SILENCIADOS) || {};
+      const apartada = (id) => Boolean(apartadas[id]) && Date.now() - apartadas[id] < CLAVES_APARTADAS_DURANTE;
+      const enLasCopias = apartada('claves:en-las-copias') ? null : sueltas.deLasAppsEnLasCopias();
+      const fuera = apartada('claves:fuera-de-sitio') ? null : sueltas.resumen();
+      return {
+        clavesEnLasCopias: enLasCopias
+          ? { claves: enLasCopias.claves, deAcceso: enLasCopias.deAcceso, aplicaciones: enLasCopias.carpetas.length, prompt: enLasCopias.prompt }
+          : null,
+        clavesFueraDeSitio: fuera
+          ? { claves: fuera.claves, deAcceso: (fuera.ficherosDeAcceso || []).length, prompt: fuera.prompt }
+          : null,
+      };
+    } catch (error) {
+      // Como el consejo: si falla, la barra sigue igual, sin la tarjeta.
+      this.salida.appendLine(`[claves] ${error.stack || error.message}`); // diccionario: interno
+      return {};
+    }
+  }
+
   async ahoraNo(id) {
     const silenciados = { ...(this.almacen().get(CLAVE_SILENCIADOS) || {}), [id]: Date.now() };
     await this.almacen().update(CLAVE_SILENCIADOS, silenciados);
@@ -1130,6 +1162,8 @@ ${cabecera}
 
       verConexiones: () => this.verConexiones(),
       verConexion: () => this.verConexion(mensaje.proveedor),
+      // Decisión 167: qué conectar se pregunta aquí, y el encargo sale con el nombre.
+      conectarAlgoNuevo: () => this.conectarAlgoNuevo(),
       guardarClave: () => this.guardarClave(mensaje.proveedor, mensaje.clave, mensaje.valor),
       pasoDeLaGuia: () => this.pasoDeLaGuia(mensaje.proveedor, mensaje.paso, mensaje.todos),
       // Decisión 156: cada clase de acceso, su forma, y lo que pedirle al informático.
@@ -1574,6 +1608,37 @@ ${cabecera}
     });
   }
 
+  // «Conectar algo nuevo» (decisión 167): qué programa, en el propio editor, con
+  // lo que ya se ve en sus claves y en su perfil, y «Otro» para escribirlo. Sin
+  // nada que ofrecer, directamente la caja. Si cancela, no se pide nada.
+  async conectarAlgoNuevo() {
+    const raiz = proyecto.raiz();
+    let candidatos = [];
+    try {
+      candidatos = conectar.queSePuedeConectar({ catalogo: consejos.capacidades(this.contexto.extensionPath) });
+    } catch (error) {
+      this.salida.appendLine(`[conectar] ${error.message}`); // diccionario: interno
+    }
+    let nombre = null;
+    if (candidatos.length) {
+      const DE_DONDE = { claves: 'Sus claves ya están en esta carpeta', perfil: 'Sale en tu perfil' };
+      const elegida = await vscode.window.showQuickPick([
+        ...candidatos.map((c) => ({ label: c.nombre, description: DE_DONDE[c.deDonde], nombre: c.nombre })),
+        { label: 'Otro', description: 'Lo escribes tú', otro: true },
+      ], { title: 'Conectar algo nuevo', placeHolder: '¿Qué programa quieres conectar?' });
+      if (!elegida || proyecto.raiz() !== raiz) return undefined;
+      if (!elegida.otro) nombre = elegida.nombre;
+    }
+    if (!nombre) {
+      const escrito = await vscode.window.showInputBox({ title: 'Conectar algo nuevo', prompt: '¿Qué programa quieres conectar?', placeHolder: 'Tu programa de facturas, tu correo, tu tienda online…' });
+      if (proyecto.raiz() !== raiz) return undefined;
+      nombre = escrito;
+    }
+    // Limpio, o null si no queda nada: lo escrito entra en el encargo (`conectar.encargo`).
+    const pedido = conectar.encargo(nombre);
+    return pedido ? this.pedir(pedido) : undefined;
+  }
+
   verConexion(proveedor, aviso = null) {
     // Lo que escribió el asistente (los pasos, de dónde se saca cada clave y el
     // nombre), tapado como en el PDF: con ello arma el panel lo que «No lo
@@ -1586,18 +1651,23 @@ ${cabecera}
     // Conecta con una clave que puede escribir y no ha dicho qué hace: la pregunta
     // sigue aquí, también si se fue mientras se probaba (revisión del punto 7).
     // Y por delante del aviso que se queda, que es solo decir algo (revisión de corrección de la 159).
-    if (!aviso || aviso.seQueda) {
-      const ultima = this.laUltimaPrueba(proveedor);
-      if (ultima && ultima.puedeEscribir) aviso = this.loQueDijoLaPrueba(proveedor, { ok: true, puedeEscribir: true, mensaje: ultima.mensaje, huella: conexiones.huella(proveedor) });
+    const ultima = this.laUltimaPrueba(proveedor);
+    if ((!aviso || aviso.seQueda) && ultima && ultima.puedeEscribir) {
+      aviso = this.loQueDijoLaPrueba(proveedor, { ok: true, puedeEscribir: true, mensaje: ultima.mensaje, huella: conexiones.huella(proveedor) });
     }
+    // La última prueba dijo que esta clave no vale (decisión 167): la guía sigue,
+    // y si no se ha movido por ella desde entonces, en el paso donde se saca.
+    const noVale = Boolean(ultima && ultima.ok === false);
     const desordenadas = sueltas.resumen();
-    const guia = (this.guias || {})[proveedor] || {};
+    const guia = (this.guias || {})[proveedor] || (noVale ? { paso: datos.proveedor.pasoDeLaClave } : {});
     return this.enviar({
       tipo: 'conexion',
       ...datos,
+      noVale,
       // Cuándo caduca: se pregunta con las claves puestas, una vez por clave, y no
-      // mientras haya otra pregunta en pantalla (decisión 149).
-      caduca: this.queDecirDeCuandoCaduca(proveedor, datos, aviso),
+      // mientras haya otra pregunta en pantalla (decisión 149). Y si trae prueba,
+      // solo después de una buena: de una clave que no vale no se pregunta (decisión 167).
+      caduca: this.queDecirDeCuandoCaduca(proveedor, datos, aviso, ultima),
       // Por qué paso de la guía va, o si quiere verlos todos (decisión 146).
       paso: Math.min(Math.max(Number(guia.paso) || 0, 0), Math.max(datos.proveedor.pasos.length - 1, 0)),
       todosLosPasos: Boolean(guia.todos),
@@ -1784,7 +1854,8 @@ ${cabecera}
     }
     if (!hecho.puedeEscribir) return { texto: hecho.mensaje, malo: !hecho.ok };
     if (this.laDejoAsi(proveedor)) return { texto: 'Conectado. Funciona. Esta clave puede cambiar y borrar, como elegiste.', malo: false };
-    const datos = conexiones.claves(proveedor);
+    // Con el nombre tapado, como en su pantalla: va en lo que se le pide al asistente (decisión 167).
+    const datos = informatico.conexionALaVista(conexiones.claves(proveedor));
     // Recortado: sale de la primera línea de su README, que puede escribir cualquiera.
     const nombre = String((datos && datos.proveedor && datos.proveedor.etiqueta) || proveedor).slice(0, 60);
     return {
@@ -1811,13 +1882,19 @@ ${cabecera}
     return una && huella && una.huella === huella ? una : null;
   }
 
-  queDecirDeCuandoCaduca(proveedor, datos, aviso) {
+  queDecirDeCuandoCaduca(proveedor, datos, aviso, ultima = this.laUltimaPrueba(proveedor)) {
     // Y con su fichero de acceso, si lo pide: antes se preguntaba sin él (revisión de corrección de la 156).
     const puestas = (datos.claves.length ? datos.claves.every((c) => c.puesta) : Boolean(datos.proveedor.conFichero))
       && (!datos.proveedor.pideFichero || Boolean(datos.proveedor.conFichero));
     if (!puestas || datos.proveedor.aMedioHacer) return null;
     const una = this.cuandoCaduca(proveedor);
-    if (!una) return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };
+    if (!una) {
+      // Con prueba, solo después de una buena (decisión 167). Con la clave mala
+      // salían a la vez «La clave no vale» y cinco botones para decir cuándo
+      // caduca esa misma clave. Sin prueba no hay otra forma de saberlo: como antes.
+      if (conexiones.tienePrueba(proveedor) && !(ultima && ultima.ok)) return null;
+      return aviso && aviso.botones ? null : { pregunta: true, huella: conexiones.huella(proveedor) };
+    }
     // También «No lo sé» se dice, para que tenga su «Cambiar» (revisión de la 149).
     const texto = una.hasta
       ? `${Date.now() < una.hasta ? 'Caduca' : 'Caducó'} ${elDia(una.hasta)}.${Date.now() < una.hasta ? ' Te aviso una semana antes.' : ''}`
@@ -1863,7 +1940,8 @@ ${cabecera}
     await this.almacen().update(CLAVE_CADUCAN_AVISADAS, avisadas);
     // Sin esperar a que lo cierre: los recordatorios de este minuto no esperan a nadie.
     for (const p of tocan) {
-      const datos = conexiones.claves(p);
+      // El nombre, tapado como en su pantalla (decisión 167).
+      const datos = informatico.conexionALaVista(conexiones.claves(p));
       // Sale de la primera línea de su README: sin lo que el editor pintaría como enlace.
       const nombre = String((datos && datos.proveedor && datos.proveedor.etiqueta) || p).replace(/[[\]()<>`*_]/g, '').slice(0, 60);
       const texto = `La clave de ${nombre} ${this.loQueCaduca(p).texto}. Saca una nueva y pégala en su conexión.`;
@@ -1900,6 +1978,9 @@ ${cabecera}
     const pruebas = { ...(this.almacen().get(CLAVE_PRUEBAS) || {}) };
     pruebas[proveedor] = { ok: hecho.ok, mensaje: hecho.mensaje, cuando: Date.now(), huella, ...(hecho.puedeEscribir ? { puedeEscribir: true } : {}) };
     await this.almacen().update(CLAVE_PRUEBAS, pruebas);
+    // No vale: la guía vuelve al paso donde se saca la clave (decisión 167). Se
+    // olvida por qué paso iba, y `verConexion` la pone ahí.
+    if (!hecho.ok && this.guias) delete this.guias[proveedor];
     // Conecta pasada la fecha apuntada: la fecha estaba mal. Se olvida, y se vuelve
     // a preguntar, en vez de dejar «caducó» en la lista de una que funciona.
     const caducaba = this.cuandoCaduca(proveedor);
@@ -3469,7 +3550,10 @@ function vigilarElArnes(contexto, panel) {
   const alCambiar = (uri) => {
     // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
     if (pedidos.esUnPedido(uri.fsPath)) panel.atenderLosPedidos().catch((error) => panel.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
-    const esMarca = uri.fsPath.includes(`${marca.CARPETA.join('/')}/`) || uri.fsPath.includes(marca.FICHERO);
+    // Con «/» siempre: en Windows `fsPath` va con «\», y la marca no se repintaba
+    // al cambiar el logotipo, solo al cambiar `marca.md` (decisión 167).
+    const ruta = String(uri.fsPath).replace(/\\/g, '/');
+    const esMarca = ruta.includes(`${marca.CARPETA.join('/')}/`) || ruta.includes(marca.FICHERO);
     // El índice del buscador se hizo con lo que había antes de este cambio.
     buscador.olvidar();
     // Cambiar de asistente cambia dónde vive todo lo suyo, y eso se escribe en

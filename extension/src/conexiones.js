@@ -402,6 +402,33 @@ function losPasosDe(seccion, tope) {
     .slice(0, Math.min(tope, 4));
 }
 
+// ── El paso donde se saca la clave (decisión 167) ────────────────────────
+//
+// La guía de un paso cada vez decía «Cuando la tengas, pégala abajo» en cada paso
+// que nombraba algo parecido a una clave. El primero de Holded es «Entra en
+// app.holded.com con el usuario y la contraseña de la empresa», y ya decía
+// «pégala abajo» antes de haber sacado nada. Y si la clave no vale, la guía tiene
+// que volver a un paso concreto: el de sacarla otra vez.
+//
+// Es el último paso que nombra la clave (o el fichero de acceso, si lo pide y no
+// está). El último, porque el primero suele ser el camino («Ve a Ajustes → Claves
+// de API») y el último, donde se crea o se copia. La contraseña solo cuenta si lo
+// que se pega es un usuario y una contraseña: si no, es la de entrar. Sin ninguno,
+// el último paso, que es donde acaba la guía.
+const NOMBRA_LA_CLAVE = /\bclave|\bkey|\btoken|\bsecret|\bc[oó]digo/i;
+const NOMBRA_LA_CONTRASENA = /\bcontrase|\bpassword/i;
+const NOMBRA_EL_FICHERO = /\bfichero|\barchivo|\bdescarg/i;
+function elPasoDeLaClave(pasos = [], { acceso = [], pideFichero = false, conFichero = 0 } = {}) {
+  if (!pasos.length) return 0;
+  const conContrasena = acceso.includes('usuario');
+  const sinFichero = pideFichero && !conFichero;
+  const nombraLaClave = (p) => NOMBRA_LA_CLAVE.test(p)
+    || (conContrasena && NOMBRA_LA_CONTRASENA.test(p))
+    || (sinFichero && NOMBRA_EL_FICHERO.test(p));
+  for (let n = pasos.length - 1; n >= 0; n -= 1) if (nombraLaClave(pasos[n])) return n;
+  return pasos.length - 1;
+}
+
 // ── Lo que lee la guía en PDF (decisión 159) ─────────────────────────────
 //
 // Lo que hace falta antes de empezar (una cuenta, ser administrador, un plan),
@@ -626,15 +653,20 @@ function claves(proveedorId) {
   const enOtroSitio = dondeMasEstan(proveedorId, nombres.filter((k) => !puestas.get(k)));
   const deVerdad = accesoDe(carpeta);
   const acceso = deVerdad.clases;
+  const pasos = comoSeConecta(carpeta);
+  const conFichero = conFicheroDeAcceso(proveedorId);
 
   return {
     proveedor: {
       id: proveedorId,
       etiqueta: etiquetaDeProveedor(proveedorId, carpeta),
       ayuda: dondeSeConsigue(carpeta),
-      pasos: comoSeConecta(carpeta),
+      pasos,
+      // Dónde se saca la clave: ahí dice la guía que se pegue abajo, y ahí vuelve
+      // si la clave no vale (decisión 167).
+      pasoDeLaClave: elPasoDeLaClave(pasos, { acceso, pideFichero: pideElFichero(deVerdad), conFichero }),
       aMedioHacer: [...esperadas.keys()].some(ES_MARCADOR),
-      conFichero: conFicheroDeAcceso(proveedorId),
+      conFichero,
       // La clase de acceso decide la pantalla (decisión 156). Vacío, la de siempre.
       acceso,
       // Si le hace falta su fichero, y no como una opción más.
@@ -1070,7 +1102,9 @@ async function probar(proveedorId) {
 
   if (resultado.codigo === 0) return { ok: true, mensaje: 'Conectado. Funciona.' };
   if (diceQuePuedeEscribir(error)) {
-    const nombre = String(etiquetaDeProveedor(proveedorId, carpeta)).slice(0, 60);
+    // El nombre sale de la primera línea del README: tapado como en su pantalla,
+    // que va en el aviso y en lo que se le pide al asistente (decisión 167).
+    const nombre = String(require('./informatico').sinClaves(etiquetaDeProveedor(proveedorId, carpeta))).slice(0, 60);
     return { ok: true, puedeEscribir: true, mensaje: `Conecta, pero esta clave puede cambiar y borrar cosas en ${nombre}, no solo mirarlas.` };
   }
 
@@ -1348,3 +1382,5 @@ module.exports = { huella, tienePrueba, proveedores, claves, escribir, probar, s
 Object.assign(module.exports, { comoSeEntra, clasesQueNombra, leerLasClases, paraTuInformatico, ponerFicheroDeAcceso, elQueBusca, NOMBRE_SECRETO, CABE_UN_FICHERO_DE_ACCESO });
 // Decisión 159: lo que lee la guía en PDF.
 Object.assign(module.exports, { laGuia, laFecha });
+// Decisión 167: el paso donde se saca la clave, y los nombres de los programas que la barra conoce.
+Object.assign(module.exports, { elPasoDeLaClave, PROVEEDORES });

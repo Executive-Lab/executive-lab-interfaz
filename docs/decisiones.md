@@ -6515,3 +6515,114 @@ que ya había en este Mac y sin red:
   un documento, y el diccionario lo dice.
 - **No se ha visto en un VS Code de verdad**: el botón, el PDF abierto con el programa de siempre en Mac y en
   Windows, y el nombre con tilde en Windows.
+
+## 167. Conectar sin perderse
+
+**Fecha:** 16 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `conectar-sin-perderse`
+
+Sale de una revisión de producto que pintó la barra pantalla a pantalla: Holded con una clave que no vale,
+«Conectar algo nuevo» y una web hecha con React montada encima. Cinco sitios donde quien conecta algo se
+pierde, o donde la barra le manda a hacer algo que rompe lo suyo.
+
+**1. Si la clave no vale, la guía sigue.** Pintado con Holded: salía «La clave no vale…» y la guía de pasos
+desaparecía, porque solo se enseñaba mientras faltara alguna clave. En su lugar salía «¿Cuándo caduca esta
+clave?» con cinco botones: esa pregunta no miraba la última prueba.
+
+- Con la última prueba fallida, la guía sigue, y vuelve al paso donde se saca la clave. Si se mueve por ella,
+  se queda donde la deja; si vuelve a fallar, vuelve a ese paso.
+- Cuándo caduca se pregunta solo después de una prueba buena. Una conexión sin prueba no tiene otra forma de
+  saberlo: ahí se pregunta como antes, con las claves puestas (decisión 149). Lo ya apuntado se sigue
+  diciendo aunque no valga.
+- «¿Dónde consigo la clave?» no sale con la guía a la vista: la guía ya lleva «Abrir su página».
+
+**El paso donde se saca la clave** (`conexiones.elPasoDeLaClave`) es el último que la nombra: clave, key,
+token, secreto o código. El último, porque el primero suele ser el camino («Ve a Ajustes → Claves de la
+API») y el último, donde se crea o se copia. La contraseña cuenta solo si lo que se pega es un usuario y una
+contraseña; y el fichero, si lo pide y no está. Sin ninguno, el último paso.
+
+**2. «Conectar algo nuevo» pregunta en el editor.** Mandaba una frase fija, «…Pregúntame cuál es»: pulsar,
+enviar, esperar la pregunta y contestar. Ahora sale una lista en el propio editor:
+
+- los programas de sus claves, también las de una aplicación, que están en su sitio pero dicen qué usa. Con
+  el mismo filtro que «Conectar …» de las ideas (decisión 152);
+- los que nombra su perfil, de entre los que la barra conoce por su nombre, como palabra entera;
+- y «Otro», que abre una caja. Sin nada que ofrecer, directamente la caja.
+
+Ninguno que ya tenga su conexión, ni el asistente, que sale en el perfil por ser con quien se habla. El
+encargo sale con el nombre entre «», limpio (`limpio.etiqueta`), y con lo mismo que pedía antes: su
+habilidad `connect-tool`, los pasos de la documentación oficial, la clase de acceso y lo del informático
+(decisiones 146, 156 y 159). Si cancela, no se pide nada. Lo arma la extensión (`conectar.js`), no el panel.
+
+**Un solo nombre**: en Conexiones vacía, el mismo botón se llamaba «Conectar algo» (decisión 101). Ahora es
+«Conectar algo nuevo» en los tres sitios, el del diccionario.
+
+**3. Las claves en la tarjeta, y antes el fallo.**
+
+- **El fallo.** Si la carpeta entera es una aplicación (`package.json`, `pyproject.toml`… en la raíz), su
+  `.env` contaba como fuera de sitio: la 135 solo miraba las de dentro. Pintado: una web hecha con React
+  daba «Hay 3 claves fuera de sitio · Que las ordene», y el encargo le pedía al asistente llevarlas a
+  `01-TOOLS`, con lo que la web dejaba de encontrarlas. Ahora los ficheros de claves de su raíz son suyos.
+  Siguen siendo ficheros de claves: no entran en una copia y sus valores se tapan (`paraProteger`).
+- Con eso, «Esto parece» y las ideas ya no nombran sus claves, como con las de dentro.
+- Si ya están en git, la tarjeta de Conexiones dice «la aplicación de la carpeta principal», y no «de la
+  carpeta .env».
+- **Las filas 3 y 4 de «La tarjeta que toca»** (`proposals/simplificar-la-barra.md`):
+  - claves de una aplicación dentro de las copias: «Hay 2 claves de tu aplicación dentro de tus copias.»,
+    con «Que deje de guardarlas»;
+  - claves fuera de sitio: «Hay 3 claves y 1 fichero de acceso fuera de sitio.», con «Que las ordene».
+- Van después de lo urgente (falta git o el asistente, sin preparar o a medias, el recordatorio de su hora
+  y recargar la versión puesta) y antes que todo lo demás: es lo único que puede costar dinero si se deja.
+  Una tarjeta, como siempre.
+- Las dos con «Ahora no»: puede que estén bien donde están, y la tarjeta no puede tapar las demás para
+  siempre. Vuelven a la semana, antes que un consejo (dos semanas).
+
+**4. Los textos.**
+
+- «Cuando la tengas, pégala abajo» sale solo en el paso donde se saca la clave. Buscar «contrase» en cada
+  paso hacía que el primero de Holded, «Entra… con el usuario y la contraseña», ya lo dijera.
+- El nombre de la conexión va tapado también en el aviso de la clave que puede escribir, en su «Cambiarla
+  por una de solo lectura» y en el de cuándo caduca, como en su pantalla (lo que quedaba de los arreglos
+  sueltos de la tanda).
+
+**5. La marca, en Windows.** El vigía comparaba `uri.fsPath` con `02-DOCS/wiki/brand/`, escrito con «/». En
+Windows va con «\», así que la marca no se repintaba al cambiar el logotipo, solo al cambiar `marca.md`.
+Ahora compara con «/».
+
+**Las pruebas**: `humo.js` pasa de 421 a 426. Cinco comprobaciones nuevas, una por punto, y cuatro de antes
+cambiadas a lo que dice esta decisión:
+
+- la 149: «Cambiar» con la clave mala ya no pregunta hasta que una prueba diga que vale;
+- la 152: las claves de «Esto parece» van en `config/`, porque con el `package.json` arriba las de la raíz
+  son de la aplicación; y la tarjeta de las claves va antes que «Esto parece»;
+- la 146 y la principal sencilla: «Conectar algo nuevo» lleva a su acción, y el encargo sale de
+  `conectar.js`.
+
+`empresas-distintas.js` pinta la principal de las tres empresas también con las dos tarjetas de las claves:
+una tarjeta y como mucho cinco cosas a la vista.
+
+**Mutaciones: 49, las 49 tumbadas.**
+
+- 9 en la clave que no vale;
+- 11 en el paso de la clave y los textos;
+- 13 en «Conectar algo nuevo»;
+- 15 en la raíz que es una aplicación y las tarjetas;
+- 1 en la marca.
+
+Eran 50, y tres sobrevivieron por el camino:
+
+- Dos, porque la limpieza del nombre estaba dos veces, en la extensión y en el encargo, y quitar una no
+  cambiaba nada. Se quitó la de la extensión, con su mutación, y la del encargo la tumba su prueba.
+- Una, porque cancelar la caja con Escape no se probaba, solo dejarla en blanco. Ahora sí.
+
+**Lo que no hace, todavía:**
+
+- **La fila 2 de la tarjeta** (algo roto, «Arreglarlo»): pide la radiografía entera en cada repintado, que
+  mira GitHub. Sigue en Qué falta por montar.
+- **Los ficheros de acceso de la raíz de una aplicación** (una cuenta de servicio junto al `package.json`)
+  siguen contando como fuera de sitio, como dice la 105 y su prueba. Es el mismo caso que el `.env`: falta
+  decidirlo.
+- **«Esto parece» ya no nombra los programas de una web montada encima**, aunque los use. Se ofrecen en
+  «Conectar algo nuevo».
+- **En el perfil solo se reconocen los programas que la barra ya nombra** (`conexiones.PROVEEDORES`).
+- **No se ha visto en un VS Code de verdad**: la lista del editor, y la marca con un logotipo cambiado en
+  Windows.

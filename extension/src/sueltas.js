@@ -79,6 +79,15 @@ const DE_UNA_APP = ['package.json', 'pyproject.toml', 'pubspec.yaml', 'Cargo.tom
 
 const esUnaApp = (carpetaRelativa) => DE_UNA_APP.some((f) => proyecto.existe(carpetaRelativa, f));
 
+// Y si la carpeta entera es una aplicación (decisión 167), los ficheros de claves
+// de su raíz también son suyos. La 135 solo miraba las de dentro: una web hecha
+// con React, con su `package.json` y su `.env` arriba, daba «Hay 3 claves fuera de
+// sitio · Que las ordene», y el encargo le pedía al asistente llevarlas a
+// `01-TOOLS`, con lo que la web dejaba de encontrarlas. Solo los de la raíz: una
+// carpeta de dentro sigue siendo suya o no por lo que tenga ella. Los ficheros de
+// acceso de la raíz siguen contando como hasta ahora (decisión 105).
+const laRaizEsUnaApp = () => esUnaApp('');
+
 function lineasDe(fichero) {
   try {
     // Un .env de verdad no ocupa medio mega: si lo ocupa, no es un .env.
@@ -156,7 +165,7 @@ function buscar({ conLasDeLasApps = false } = {}) {
   if (!raiz) return [];
 
   const encontradas = [];
-  for (const fichero of ficherosDeClavesEn('')) mirar(fichero, encontradas);
+  if (conLasDeLasApps || !laRaizEsUnaApp()) for (const fichero of ficherosDeClavesEn('')) mirar(fichero, encontradas);
 
   // Carpetas de primer nivel: `auto/.env`, `publicar/.env.local`… Sin bajar
   // más: lo que está más hondo es de un subproyecto y no se toca.
@@ -580,7 +589,9 @@ function deLasAppsEnLasCopias() {
   const enGit = (s) => subidas.includes(s.donde);
   const nombres = [...new Set(claves.filter(enGit).flatMap((s) => s.nombres))];
   const deAcceso = ficheros.filter(enGit).length;
-  const carpetas = [...new Set(subidas.map((d) => d.split('/')[0]))].sort();
+  // La de un fichero de la raíz es la principal (''): con la carpeta entera como
+  // aplicación, salía «la aplicación de la carpeta .env» (decisión 167).
+  const carpetas = [...new Set(subidas.map((d) => (d.includes('/') ? d.split('/')[0] : '')))].sort();
   return {
     ficheros: subidas,
     carpetas,
