@@ -8744,6 +8744,54 @@ mirar la constancia (cae «se pone al día con una constancia que no casa»); «
 antes (cae la de los avisos); sin el texto de la página (caen los textos del guion); otro texto para el formulario
 (caen los textos); y el matcher sin los dos nuevos (cae la de los avisos).
 
+## 183. Ningún mensaje sin salida
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `ningun-callejon`
+
+La regla: cada mensaje que diga que algo falla, o que hay que hacer algo, lleva su botón para hacerlo, o
+«Algo va mal», que reúne el informe para el tutor. Una auditoría encontró siete callejones; se comprobó cada
+uno contra el código de main (0.55.0) y estos son los que eran y lo que se hizo.
+
+**1. Avisos del editor que decían «Pulsa «Algo va mal»…» sin botón.** Eran cuatro en `arrancar.js` (poner un
+asistente, los dos avisos de `conElAjuste`, crear la carpeta) y tres en `extension.js` (preparar para el otro
+asistente, el aviso de Codex, y los recordatorios que salían del editor). Todos pasan ahora por
+`avisarConSalida` (`src/salida-del-aviso.js`): el aviso lleva el botón «Algo va mal», que abre la barra y
+corre la misma pantalla que el comando. Los avisos de la barra ya lo traían (`bloqueAviso`). Una prueba lee
+`src/*.js` y cae si queda un `showWarningMessage` o `showErrorMessage` con «Algo va mal» en el texto.
+
+**2. `pintarElFallo`.** Enseñaba `error.message` en inglés y solo «Volver». Ahora dice la frase de siempre
+con «Pulsa «Algo va mal»…» y los botones «Algo va mal» y «Volver». El motivo técnico no se ve: la barra se lo
+manda a la extensión (`falloAlPintar`) y queda en el registro, que es lo que lee el informe.
+
+**3. `soporte.arreglar`.** «No he podido arreglarlo yo solo.» llevaba solo el punto: ahora añade «Pulsa «Algo
+va mal»…» y, como sale en un aviso de la barra, con su botón.
+
+**4. «Pídeselo / Pregúntaselo / Pídele al asistente» sin botón.** No se tocó cada texto: `bloqueAviso` añade
+«Que lo mire el asistente» a todo aviso malo que mande al asistente y no traiga ya su botón (los de
+`conexiones.js`, `extension.js` y los demás). También las filas de habilidades, comandos y agentes con un
+nombre que no vale, y el «no he podido usar» de la cara (`marca.js`). El botón manda `queLoMireElAsistente`
+con el texto del aviso; la extensión arma el encargo con `limpio.etiqueta` (una línea, sin comillas ni «»,
+con tope de 300) y lo pasa por `pedir`, o sea por el puente de la casa y con su «Dale a enviar» de la 166. Ya
+tenían botón y no se tocaron: las claves en git, «Que la termine» y «Pregúntaselo al asistente» de la búsqueda.
+
+**5. Subir a GitHub sin internet.** Decía «Prueba a entrar otra vez en tu cuenta» también sin conexión. Se
+separa por el error de la red (el `fetch` que se cae, o lo que dice git: «Could not resolve host»…): «No hay
+conexión a internet, y sin ella no puedo subirlo. Mira que estés conectado y vuelve a intentarlo.», con el
+botón «Volver a intentarlo». Un fallo de la cuenta (un 500, una credencial mala) sigue diciendo lo de antes.
+
+**6. «¿No tienes cuenta?».** Lleva «Crear mi cuenta de GitHub», que abre `https://github.com/signup` por la
+ruta `abrir` de la casa (solo https), y esa página se cuenta como nuestra para no preguntar «¿Lo abro?».
+
+**7. «(inbox)», «(out)», «(tools)» y «(skills)».** El diccionario las pide así (Darle documentos (inbox),
+Resultados (out), Conexiones (tools), Habilidades (skills)), de modo que se quedan. Una prueba comprueba que
+siguen en el diccionario, para que quitarlas de la vista obligue a cambiar las dos cosas.
+
+**Las pruebas**: `humo.js` pasa de 497 a 505. Ocho comprobaciones nuevas, una por callejón y una para «Dale a
+enviar». Siete mutaciones, cada una puesta y restaurada desde copia: el aviso de poner el asistente sin botón;
+el botón sin abrir «Algo va mal»; sin separar la falta de red; sin «Que lo mire el asistente»; el fallo de
+pintar con el mensaje en inglés; la página de crear cuenta sin contar como nuestra; el encargo sin limpiar.
+Todas las cayeron.
+
 ## 184. El primer día, con menos preguntas
 
 Una auditoría del primer día (17-10-2026) contó lo que se le pregunta a alguien que elige una carpeta y pulsa

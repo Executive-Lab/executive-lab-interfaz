@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 
 const proyecto = require('./proyecto');
+const { avisarConSalida } = require('./salida-del-aviso');
 const procesos = require('./procesos');
 const entorno = require('./entorno');
 const git = require('./git');
@@ -147,7 +148,7 @@ async function ponerElAsistente(asistente, { callado = false } = {}) {
     await vscode.commands.executeCommand('workbench.extensions.installExtension', asistente.extension);
     return true;
   } catch {
-    if (!callado) await vscode.window.showWarningMessage(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    if (!callado) await avisarConSalida(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return false;
   }
 }
@@ -180,12 +181,12 @@ async function conElAjuste(ajuste) {
   const hay = queridos.filter((a) => !fallan.includes(a));
   const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
   if (!hay.length) {
-    await vscode.window.showWarningMessage(`${noSePuso}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    await avisarConSalida(`${noSePuso}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return null;
   }
   // Con los dos, si uno no se pudo poner, se sigue con el que sí está, como con
   // «Seguir con…», y se dice.
-  if (fallan.length) await vscode.window.showWarningMessage(`${noSePuso}: sigo solo con ${hay[0].nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+  if (fallan.length) await avisarConSalida(`${noSePuso}: sigo solo con ${hay[0].nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
   return hay.map((a) => a.id).join(',');
 }
 
@@ -1505,7 +1506,7 @@ async function crearUnaCarpetaDentro(base, salida) {
     fs.mkdirSync(nueva, { recursive: true });
   } catch (error) {
     if (salida) salida.appendLine(`[arrancar] no se pudo crear ${nueva}: ${error.message}`); // diccionario: interno
-    await vscode.window.showWarningMessage('No he podido crear la carpeta. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+    await avisarConSalida('No he podido crear la carpeta. Pulsa «Algo va mal» y pásale el código a tu tutor.');
     return { ok: false };
   }
   await apuntarLaEleccion(nueva);
