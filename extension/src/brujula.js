@@ -17,6 +17,7 @@
 const proyecto = require('./proyecto');
 const rsc = require('./rsc');
 const guardar = require('./guardar');
+const sesionDelAsistente = require('./sesion-del-asistente');
 const git = require('./git');
 const terreno = require('./terreno');
 const rumbo = require('./rumbo');
@@ -274,6 +275,14 @@ async function calcular() {
   const copiasSuyas = copias.filter((c) => !guardar.esElPuntoDePartida(c));
   const sinEmpezar = !continuacion && !sabe && !conectados && !copiasSuyas.length;
 
+  // Decisión 186: lo que se puede saber de la sesión, sin adivinar. Con `si`, la
+  // tarjeta de «entra con tu cuenta» sobra; con `no`, va antes que el primer
+  // encargo, que se queda esperando; sin saberlo, como siempre. Solo se mira
+  // cuando la tarjeta podría salir: el de Claude lanza un proceso.
+  const aplazado = Boolean(sesionDelAsistente.loAplazado());
+  const sesion = sinEmpezar || aplazado ? await sesionDelAsistente.haySesion(quien) : null;
+  const conTarjeta = (sinEmpezar && sesion !== 'si') || (aplazado && asistentes.estaInstalado(quien));
+
   // Que falte el asistente no es solo un problema del primer día: si alguien lo
   // desinstala, o abre esta carpeta en otro ordenador, la barra sigue pintando
   // botones que no van a contestar. Antes esto solo se decía cuando no se había
@@ -320,9 +329,11 @@ async function calcular() {
     faltaElAsistente: faltaElAsistente ? quien.nombre : null,
     // Y el botón que lo pone, hecho aquí, que es quien sabe cuál (decisión 166).
     ponerElAsistente: faltaElAsistente ? asistentes.falta(quien).boton : null,
-    primerPaso: sinEmpezar ? {
+    primerPaso: conTarjeta ? {
       asistente: quien.nombre,
       instalado: asistentes.estaInstalado(quien),
+      // Solo cuando hay algo esperando: así la forma de antes no cambia.
+      ...(aplazado ? { esperaElEncargo: true, sesion } : {}),
     } : null,
   };
 }

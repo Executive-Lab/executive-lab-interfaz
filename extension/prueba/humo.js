@@ -33,6 +33,8 @@ process.env.CLAUDE_CONFIG_DIR = CLAUDE_DE_MENTIRA;
 // versión que ya no existe, y aquí lo hace en uno de mentira.
 const CODEX_DE_MENTIRA = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-codex-de-mentira-'));
 process.env.CODEX_HOME = CODEX_DE_MENTIRA;
+// Y el `claude` de verdad no se lanza para saber si hay sesión (decisión 186).
+require(path.join(RAIZ, 'src', 'sesion-del-asistente')).modulo.ejecutar = async () => ({ codigo: -1, salida: '' });
 // Los ficheros de la plantilla de conexiones, como los deja RSC: el suelo los
 // pide todos, no solo la carpeta (G7). Salen del paquete que viaja dentro.
 // Sin el paquete —`node_modules` no va en git— la batería reventaba aquí,
@@ -25125,6 +25127,251 @@ exec git "$@"
       return 'sale el primer día, y se va con la primera copia de verdad';
     } finally {
       vscode.guion.raiz = antes;
+    }
+  }));
+
+  // ── Decisión 186: las cuentas, sin rodeos ───────────────────────────────
+  await comprobar('186: saber si hay sesión — Codex por su auth.json sin leerlo, Claude por `claude auth status`, y sin saberlo, null', async () => {
+    const sesionM = cargar('sesion-del-asistente');
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'u186-casa-'));
+    const codex = { id: 'codex' };
+    const claude = { id: 'claude' };
+    const antesLeer = fs.readFileSync;
+    const leidos = [];
+    fs.readFileSync = function (f, ...r) { leidos.push(String(f)); return antesLeer.call(this, f, ...r); };
+    try {
+      // Codex: la casa de mentira, `CODEX_HOME` primero.
+      const propia = path.join(casa, 'codex-propia');
+      assert.equal(sesionM.sesionDeCodex({ entorno: { CODEX_HOME: propia }, casa }), 'no', 'sin fichero ni llavero');
+      fs.mkdirSync(propia, { recursive: true });
+      fs.mkdirSync(path.join(propia, 'auth.json'));
+      assert.equal(sesionM.sesionDeCodex({ entorno: { CODEX_HOME: propia }, casa }), 'no', 'una carpeta llamada auth.json');
+      fs.rmSync(path.join(propia, 'auth.json'), { recursive: true });
+      fs.writeFileSync(path.join(propia, 'auth.json'), '{"nada":"de mentira"}');
+      assert.equal(sesionM.sesionDeCodex({ entorno: { CODEX_HOME: propia }, casa }), 'si');
+      assert.equal(sesionM.sesionDeCodex({ entorno: {}, casa }), 'no', 'sin CODEX_HOME mira ~/.codex, no la otra');
+      fs.mkdirSync(path.join(casa, '.codex'));
+      fs.writeFileSync(path.join(casa, '.codex', 'auth.json'), '{}');
+      assert.equal(sesionM.sesionDeCodex({ entorno: {}, casa }), 'si', '~/.codex por defecto');
+      // Con el llavero elegido, que falte el fichero no dice nada.
+      const llavero = path.join(casa, 'llavero');
+      fs.mkdirSync(llavero);
+      for (const modo of ['keyring', 'auto']) {
+        fs.writeFileSync(path.join(llavero, 'config.toml'), `model = "x"\ncli_auth_credentials_store = "${modo}"\n`);
+        assert.equal(sesionM.sesionDeCodex({ entorno: { CODEX_HOME: llavero }, casa }), null, `con ${modo} no se sabe`);
+      }
+      fs.writeFileSync(path.join(llavero, 'config.toml'), 'cli_auth_credentials_store = "file"\n');
+      assert.equal(sesionM.sesionDeCodex({ entorno: { CODEX_HOME: llavero }, casa }), 'no', 'con file, sin fichero, no hay');
+      assert.ok(!leidos.some((f) => /auth\.json$/.test(f)), `se leyó un auth.json: ${leidos.join(', ')}`);
+
+      // Claude: lo que dice el código de salida; si no se puede lanzar, no se sabe.
+      const antes = sesionM.modulo.ejecutar;
+      const llamadas = [];
+      try {
+        for (const [codigo, esperado] of [[0, 'si'], [1, 'no'], [-1, null], [2, null]]) {
+          sesionM.modulo.ejecutar = async (programa, args) => { llamadas.push([programa, ...args].join(' ')); return { codigo, salida: '' }; };
+          assert.equal(await sesionM.haySesion(claude, { fresco: true }), esperado, `código ${codigo}`);
+        }
+        assert.ok(llamadas.every((l) => l === 'claude auth status'), llamadas.join(' | '));
+        sesionM.modulo.ejecutar = async () => { throw new Error('no'); };
+        assert.equal(await sesionM.haySesion(claude, { fresco: true }), null, 'si revienta, no se sabe');
+        // Con memoria corta: dos preguntas seguidas, un solo proceso.
+        let lanzados = 0;
+        sesionM.modulo.ejecutar = async () => { lanzados++; return { codigo: 0, salida: '' }; };
+        await sesionM.haySesion(claude, { fresco: true });
+        await sesionM.haySesion(claude);
+        assert.equal(lanzados, 1, 'sin memoria corta');
+        assert.equal(await sesionM.haySesion({ id: 'otro' }), null);
+        assert.equal(await sesionM.haySesion(null), null);
+      } finally {
+        sesionM.modulo.ejecutar = antes;
+        sesionM.olvidar();
+      }
+      assert.ok(codex && sesionM.haySesion);
+      return 'Codex por fichero (sin leerlo), Claude por código de salida, y null cuando no se puede saber';
+    } finally {
+      fs.readFileSync = antesLeer;
+      fs.rmSync(casa, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('186: la tarjeta «Empieza por aquí» según la sesión — con sesión no sale, sin ella o sin saberlo sí, y con el encargo esperando se queda', elPrimerDia.conGit(async () => {
+    const brujulaM = cargar('brujula');
+    const sesionM = cargar('sesion-del-asistente');
+    const guardarM = cargar('guardar');
+    const antes = { raiz: vscode.guion.raiz, ejecutar: sesionM.modulo.ejecutar };
+    try {
+      const recien = elPrimerDia.montar();
+      vscode.guion.raiz = recien;
+      const con = async (codigo) => {
+        const esperaba = sesionM.loAplazado();
+        sesionM.olvidar();
+        if (esperaba) sesionM.aplazar(esperaba);
+        sesionM.modulo.ejecutar = async () => ({ codigo, salida: '' });
+        return brujulaM.estado({ fresco: true });
+      };
+      assert.deepEqual((await con(-1)).primerPaso, { asistente: 'Claude', instalado: true }, 'sin saberlo cambió');
+      assert.deepEqual((await con(1)).primerPaso, { asistente: 'Claude', instalado: true }, 'sin sesión no sale');
+      assert.equal((await con(0)).primerPaso, null, 'con sesión sale «entra con tu cuenta»');
+
+      // Con el primer encargo esperando, la tarjeta sale aunque haya sesión: dice que ya se manda.
+      sesionM.aplazar('El primer encargo');
+      const esperando = await con(1);
+      assert.deepEqual(esperando.primerPaso, { asistente: 'Claude', instalado: true, esperaElEncargo: true, sesion: 'no' });
+      const yaDentro = await con(0);
+      assert.deepEqual(yaDentro.primerPaso, { asistente: 'Claude', instalado: true, esperaElEncargo: true, sesion: 'si' });
+      const pintar = (estado) => require('./panel-falso').montarPanel().mandar({
+        tipo: 'estado', estado, barraCompleta: false,
+        piezas: JSON.parse(fs.readFileSync(path.join(RAIZ, 'media', 'piezas.json'), 'utf8')),
+        copias: { hace: 'hace un momento', sinGuardar: false, subir: false }, versionDeLaBarra: '0.0.0',
+      });
+      const sin = pintar(esperando);
+      assert.match(sin, /Abre Claude y entra con tu cuenta/);
+      assert.match(sin, /Ya he entrado/);
+      assert.match(sin, /abrirAsistente/);
+      assert.match(sin, /mandarElPrimerEncargo/);
+      const dentro = pintar(yaDentro);
+      assert.match(dentro, /Ya has entrado: te mando el primer encargo/);
+      assert.match(dentro, /Mandar el primer encargo/);
+      assert.ok(!/Abre Claude y entra/.test(dentro));
+      // Sin nada esperando, la tarjeta de siempre, sin el botón de «Ya he entrado».
+      sesionM.soltar();
+      const normal = pintar(await con(-1));
+      assert.match(normal, /Abre Claude y entra con tu cuenta/);
+      assert.ok(!/Ya he entrado|mandarElPrimerEncargo/.test(normal), 'sale «Ya he entrado» sin encargo esperando');
+      // Y con trabajo hecho y sin encargo esperando, ni se lanza el proceso.
+      fs.writeFileSync(path.join(recien, 'nota.txt'), 'algo');
+      assert.equal((await guardarM.guardar(`Copia automática — ${guardarM.fechaLarga()}`)).ok, true);
+      let lanzados = 0;
+      sesionM.olvidar();
+      sesionM.modulo.ejecutar = async () => { lanzados++; return { codigo: 1, salida: '' }; };
+      assert.equal((await brujulaM.estado({ fresco: true })).primerPaso, null);
+      assert.equal(lanzados, 0, 'se lanza `claude` aunque ya hay trabajo');
+      return 'con sesión no sale; sin ella o sin saberlo sí; con el encargo esperando, «Ya he entrado»';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      sesionM.modulo.ejecutar = antes.ejecutar;
+      sesionM.olvidar();
+    }
+  }));
+
+  await comprobar('186: el primer mensaje del montaje no se manda sin sesión, y «Sí, ahora» sigue sola hasta subir la copia', elPrimerDia.conGit(async () => {
+    const arrancarM = cargar('arrancar');
+    const puenteM = cargar('puente');
+    const sesionM = cargar('sesion-del-asistente');
+    const ghM = cargar('github');
+    const guardarM = cargar('guardar');
+    const relevoM = cargar('relevo');
+    const proveedor = vscode.registrado.proveedor;
+    const enviados = [];
+    const antes = {
+      vista: proveedor.vista, raiz: vscode.guion.raiz, arrancar: arrancarM.arrancar, puente: puenteM.enviar,
+      eleccion: vscode.guion.eleccion, sinCopias: proveedor.contexto.workspaceState.get('executiveLab.sigueSinCopias'),
+      relevo: relevoM.comoEsta, instaladas: vscode.guion.extensionesInstaladas, ejecutar: sesionM.modulo.ejecutar,
+      conectar: ghM.conectar, estado: ghM.estado, subir: guardarM.subirCopia, subirAlVolver: proveedor.subirAlVolver,
+    };
+    relevoM.comoEsta = () => ({ modo: 'path' });
+    vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+    const hecho = {
+      ok: true, rama: 'desdeCero', mensaje: 'Ferretería Soler ya está listo.', objetivo: 'Poner orden en mis facturas',
+      nombres: { arnes: 'Ferretería Soler', empresa: 'Ferretería Soler' }, dichos: [], pegas: [], encargos: [],
+    };
+    try {
+      vscode.guion.raiz = elPrimerDia.montar();
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      arrancarM.arrancar = async () => hecho;
+      let mandados = [];
+      puenteM.enviar = async (t) => { mandados.push(t); return true; };
+      ghM.estado = async () => ({ conectado: false, usuario: null, remoto: null });
+      const montar = async (codigo, eleccion) => {
+        sesionM.olvidar();
+        sesionM.modulo.ejecutar = async () => ({ codigo, salida: '' });
+        vscode.guion.eleccion = eleccion;
+        mandados = [];
+        enviados.length = 0;
+        await proveedor.arrancar();
+        return enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto).join(' | ');
+      };
+
+      // Sin sesión: no se manda, se guarda, y se dice que primero entre.
+      const sinSesion = await montar(1, undefined);
+      assert.equal(mandados.length, 0, 'se mandó el primer mensaje a una caja que va a pedir entrar');
+      assert.ok(sesionM.loAplazado(), 'no se guardó el encargo');
+      assert.match(sinSesion, /Antes de nada, entra con tu cuenta en el asistente/);
+      // «Ya he entrado»: sale una vez, y se acaba la espera.
+      await proveedor.mandarElPrimerEncargo();
+      assert.equal(mandados.length, 1, 'no salió con «Ya he entrado»');
+      assert.equal(sesionM.loAplazado(), null);
+      await proveedor.mandarElPrimerEncargo();
+      assert.equal(mandados.length, 1, 'salió dos veces');
+
+      // Con sesión, o sin poder saberlo, como siempre: se manda al momento.
+      for (const [codigo, cual] of [[0, 'con sesión'], [-1, 'sin saberlo']]) {
+        await montar(codigo, undefined);
+        assert.equal(mandados.length, 1, `${cual}: no se mandó`);
+        assert.equal(sesionM.loAplazado(), null, `${cual}: se guardó`);
+      }
+
+      // GitHub. «Sí, ahora» + volver del acceso del editor: sube sola, una vez.
+      let subidas = 0;
+      guardarM.subirCopia = async () => { subidas++; return { ok: true, mensaje: 'Copia guardada fuera de este ordenador.' }; };
+      let accesos = 0;
+      ghM.conectar = async () => { accesos++; return { ok: true, usuario: 'ana' }; };
+      await montar(0, 'Sí, ahora');
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 1, '«Sí, ahora» no siguió hasta subir');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /Ya estás dentro como ana\. Te subo la copia\./.test(m.texto)));
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /Copia guardada fuera/.test(m.texto)), 'no dice que se subió');
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 1, 'el segundo acceso volvió a subir');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && /Ya puedes guardar copias fuera/.test(m.texto)), 'el segundo acceso no es el de siempre');
+
+      // «Más tarde», y entrar luego a mano: no sube nada.
+      await montar(0, 'Más tarde');
+      subidas = 0;
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0, 'sin «Sí, ahora» subió');
+
+      // Cancelar el acceso no gasta el sí; el de después sí sigue.
+      await montar(0, 'Sí, ahora');
+      ghM.conectar = async () => ({ ok: false, cancelado: true });
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0);
+      ghM.conectar = async () => ({ ok: true, usuario: 'ana' });
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 1, 'tras cancelar, el sí se perdió');
+
+      // Un «Sí, ahora» de hace una hora ya no vale.
+      await montar(0, 'Sí, ahora');
+      proveedor.subirAlVolver = Date.now() - 61 * 60 * 1000;
+      subidas = 0;
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0, 'un sí viejo subió');
+
+      // Si subir falla, lo dice con lo de siempre (las mismas guardas: es `subirCopia`).
+      await montar(0, 'Sí, ahora');
+      guardarM.subirCopia = async () => ({ ok: false, sinRed: true, mensaje: 'No hay conexión a internet, y sin ella no puedo subirlo. Mira que estés conectado y vuelve a intentarlo.' });
+      enviados.length = 0;
+      await proveedor.conectarGitHub();
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.malo && m.boton && m.boton.accion.tipo === 'subirCopia'), 'sin red no ofrece volver a intentarlo');
+      assert.ok(accesos >= 0);
+      return 'sin sesión el primer mensaje espera; «Sí, ahora» sube al volver, una vez y con su caducidad';
+    } finally {
+      proveedor.vista = antes.vista;
+      vscode.guion.raiz = antes.raiz;
+      arrancarM.arrancar = antes.arrancar;
+      puenteM.enviar = antes.puente;
+      vscode.guion.eleccion = antes.eleccion;
+      relevoM.comoEsta = antes.relevo;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      sesionM.modulo.ejecutar = antes.ejecutar;
+      ghM.conectar = antes.conectar;
+      ghM.estado = antes.estado;
+      guardarM.subirCopia = antes.subir;
+      proveedor.subirAlVolver = antes.subirAlVolver;
+      proveedor.avisoPendiente = null;
+      sesionM.olvidar();
+      await proveedor.contexto.workspaceState.update('executiveLab.sigueSinCopias', antes.sinCopias);
     }
   }));
 

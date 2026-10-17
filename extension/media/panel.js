@@ -2221,18 +2221,31 @@ function lasTarjetas() {
     </div>
     ${boton({ etiqueta: 'Ajustarlo ahora', icono: '✳', principal: true, accion: { tipo: 'arrancar' } })}` : '';
 
+  // Con el primer encargo esperando (decisión 186): primero la cuenta, y el encargo
+  // sale con un botón en cuanto está dentro.
+  const esperaElEncargo = Boolean(estado.primerPaso && estado.primerPaso.esperaElEncargo);
+  const yaEntro = esperaElEncargo && estado.primerPaso.sesion === 'si';
   const primerPaso = estado.primerPaso ? `
     <h2>Empieza por aquí</h2>
     <div class="conexion">
-      <p class="nombre">${texto(estado.primerPaso.instalado
-        ? `Abre ${estado.primerPaso.asistente} y entra con tu cuenta`
-        : `Falta ${estado.primerPaso.asistente} en este ordenador`)}</p>
-      <p class="pista">${texto(estado.primerPaso.instalado
-        ? 'Hace falta una cuenta de pago. Sin ella no te va a contestar.'
-        : 'Sin él no puedo hablar con nadie. Es lo único que falta.')}</p>
-      ${estado.primerPaso.instalado
-        ? boton({ etiqueta: `Abrir ${estado.primerPaso.asistente}`, icono: '▸', principal: true, accion: { tipo: 'abrirAsistente' } })
-        : ponerlo(true)}
+      <p class="nombre">${texto(yaEntro
+        ? 'Ya has entrado: te mando el primer encargo'
+        : (estado.primerPaso.instalado
+          ? `Abre ${estado.primerPaso.asistente} y entra con tu cuenta`
+          : `Falta ${estado.primerPaso.asistente} en este ordenador`))}</p>
+      <p class="pista">${texto(yaEntro
+        ? 'Estaba esperando a que entraras.'
+        : (estado.primerPaso.instalado
+          ? (esperaElEncargo
+            ? 'Hace falta una cuenta de pago. Cuando hayas entrado, pulsa «Ya he entrado» y le paso el primer encargo.'
+            : 'Hace falta una cuenta de pago. Sin ella no te va a contestar.')
+          : 'Sin él no puedo hablar con nadie. Es lo único que falta.'))}</p>
+      ${yaEntro
+        ? boton({ etiqueta: 'Mandar el primer encargo', icono: '▸', principal: true, accion: { tipo: 'mandarElPrimerEncargo' } })
+        : (estado.primerPaso.instalado
+          ? boton({ etiqueta: `Abrir ${estado.primerPaso.asistente}`, icono: '▸', principal: true, accion: { tipo: 'abrirAsistente' } })
+            + (esperaElEncargo ? boton({ etiqueta: 'Ya he entrado', discreto: true, accion: { tipo: 'mandarElPrimerEncargo' } }) : '')
+          : ponerlo(true))}
     </div>
     <hr class="separador">` : '';
 
