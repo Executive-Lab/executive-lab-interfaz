@@ -97,6 +97,7 @@ const ajustesLocales = require('./ajustes-locales');
 const deAlguien = require('./de-alguien');
 const procesos = require('./procesos');
 const retirados = require('./retirados');
+const sesionDelAsistente = require('./sesion-del-asistente');
 const avisoDeCodex = require('./aviso-de-codex');
 const enganchesDeCodex = require('./enganches-de-codex');
 const loDelEditor = require('./lo-del-editor');
@@ -130,6 +131,10 @@ const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a envia
 
 // Lo que se dice al dejar la cuenta de GitHub para más tarde, al montar: dónde
 // queda, con su botón (decisión 164).
+// Sin sesión en el asistente, el primer encargo espera (decisión 186).
+const PRIMERO_LA_CUENTA = 'Antes de nada, entra con tu cuenta en el asistente. El primer encargo te espera: en cuanto entres, lo mando.';
+// Cuánto vale el «Sí, ahora» para subir la copia al volver del acceso del editor.
+const VIGENCIA_DEL_SI_AHORA = 30 * 60 * 1000;
 const GITHUB_MAS_TARDE = 'Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.';
 
 const LO_QUE_SE_HIZO = {
@@ -1492,6 +1497,7 @@ ${cabecera}
       noOfrecerMas: () => this.noOfrecerMas(mensaje.cual),
       ponerElBloque: () => this.ponerElBloque(),
       conectarGitHub: () => this.conectarGitHub(),
+      mandarElPrimerEncargo: () => this.mandarElPrimerEncargo(),
       verCopiaFuera: () => this.verCopiaFuera(),
       verRadiografia: () => this.verRadiografia(),
       guardarLaRevision: () => this.guardarLaRevision(),
@@ -3327,7 +3333,11 @@ ${cabecera}
     this.enviar({ tipo: 'radiografia', queEs: radio.queEs, piezas: radio.piezas });
   }
 
-  async verCopiaFuera() {
+  // `delMontaje`: la pantalla que sale del «Sí, ahora» del montaje. Cualquier otra
+  // entrada (Ayuda, Histórico, un comando) la suelta: ese sí no vale para otra cosa
+  // (decisión 186).
+  async verCopiaFuera({ delMontaje = false } = {}) {
+    if (!delMontaje) this.subirAlVolver = null;
     this.donde = { tipo: 'quieto' };
     this.enviar({ tipo: 'esperando', que: 'Un momento…' });
     this.enviar({ tipo: 'copiaFuera', github: await github.estado() });
@@ -3336,13 +3346,51 @@ ${cabecera}
   // Entrar en la cuenta. Lo hace el editor, con su propio diálogo y su
   // navegador: aquí no se pide ni se guarda ninguna clave.
   async conectarGitHub() {
+    // El sí del montaje se gasta en el primer acceso que sale de su pantalla, acabe
+    // como acabe, y solo vale para esta carpeta y un rato (decisión 186).
+    const elSi = this.subirAlVolver;
+    this.subirAlVolver = null;
     const hecho = await github.conectar();
     if (!hecho.ok) {
       if (!hecho.cancelado) this.salida.appendLine(`[conectarGitHub] ${hecho.detalle}`);
       return this.verCopiaFuera();
     }
+    // Venía de «Sí, ahora» al montar: ya dijo que sí a guardarla fuera, así que
+    // sigue sola hasta subirla, con las guardas y los avisos de `subirCopia`
+    // (decisión 186). Dura un rato, no para siempre. Venida de otro sitio, como antes.
+    const dijoQueSi = Boolean(elSi) && elSi.raiz === proyecto.raiz() && Date.now() - elSi.cuando < VIGENCIA_DEL_SI_AHORA;
+    if (dijoQueSi) {
+      this.enviar({ tipo: 'aviso', texto: `Ya estás dentro${hecho.usuario ? ` como ${hecho.usuario}` : ''}. Te subo la copia.` });
+      return this.subirCopia();
+    }
     await this.refrescar(true);
     this.enviar({ tipo: 'aviso', texto: `Ya estás dentro${hecho.usuario ? ` como ${hecho.usuario}` : ''}. Ya puedes guardar copias fuera.` });
+    return undefined;
+  }
+
+  // Manda el primer mensaje del montaje a la caja del asistente. Escrito sin
+  // enviar: se dice, como en `pedir` (decisión 181). Copiado, ya lo dice el
+  // aviso del portapapeles.
+  async mandarElPrimero(texto) {
+    const como = await puente.enviar(texto);
+    if (como === 'directo') this.dejarElAviso(DALE_A_ENVIAR);
+    return como;
+  }
+
+  // «Ya he entrado»: lo que esperaba la cuenta, sale.
+  async mandarElPrimerEncargo() {
+    const texto = sesionDelAsistente.soltar();
+    if (!texto) return this.refrescar(true);
+    try {
+      await this.mandarElPrimero(texto);
+    } catch (error) {
+      // Si no salió, sigue esperando, y se dice (decisiones 166 y 183).
+      sesionDelAsistente.aplazar(texto);
+      this.salida.appendLine(`[primer encargo] ${error && error.message}`); // diccionario: interno
+      this.enviar({ tipo: 'aviso', texto: `No he podido pasarle el encargo a ${asistentes.elDeAhora().nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`, malo: true });
+      return this.refrescar(true);
+    }
+    await this.refrescar(true);
     return undefined;
   }
 
@@ -4094,7 +4142,10 @@ ${cabecera}
       );
       if (ahora === 'Sí, ahora') {
         fueAGitHub = true;
-        await this.verCopiaFuera();
+        // Su sí es el permiso para subir (decisión 186): al volver del acceso del
+        // editor, la copia sale sola, sin otros cuatro clics.
+        this.subirAlVolver = { cuando: Date.now(), raiz: proyecto.raiz() };
+        await this.verCopiaFuera({ delMontaje: true });
       } else {
         this.dejarElAviso(GITHUB_MAS_TARDE);
       }
@@ -4113,10 +4164,20 @@ ${cabecera}
     // salía si alguien entraba en Conexiones y pulsaba (decisión 104). Ahora
     // va con los demás encargos del arranque, en `hecho.paraElMensaje` (A7).
     const comoSeLlama = hecho.nombres.arnes || identidad.deQuien();
-    const como = await puente.enviar(arrancar.primerMensaje(hecho, { comoSeLlama, conWeb, conFreno: arrancar.hayFreno() }));
-    // Escrito en su caja sin enviar: se dice, como en `pedir` (decisión 181).
-    // Copiado, ya lo dice el aviso del portapapeles.
-    if (como === 'directo') this.dejarElAviso(DALE_A_ENVIAR);
+    const primero = arrancar.primerMensaje(hecho, { comoSeLlama, conWeb, conFreno: arrancar.hayFreno() });
+    // Sin sesión, la caja del asistente iba a pedir entrar y se comía el encargo
+    // (decisión 186): se guarda hasta que se diga que ya está dentro. Sin poder
+    // saberlo, como antes.
+    // Y este montaje manda o aplaza solo el suyo: uno aplazado de antes ya no vale
+    // y no sale después del nuevo con «Ya he entrado».
+    sesionDelAsistente.soltar();
+    const sesion = await sesionDelAsistente.haySesion(asistentes.elDeAhora(), { fresco: true });
+    if (sesion === 'no') {
+      sesionDelAsistente.aplazar(primero);
+      this.dejarElAviso(PRIMERO_LA_CUENTA);
+    } else {
+      await this.mandarElPrimero(primero);
+    }
     // Al final, la principal, con la tarjeta que toca y lo aplazado dicho; o la
     // lista, si algo se ha roto. Si fue a preparar la cuenta, se queda allí.
     await this.siFaltaAlgoDecirlo(!fueAGitHub);

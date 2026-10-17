@@ -8980,3 +8980,63 @@ deshace) y las de la 157, la 162, la 163 y la 168 cambiadas para el valor nuevo.
 restaurada desde copia, y todas caen: consejos sin mirar los ajustes de usuario; «Quitarlo» sin mirar que siga a
 `false`; el interruptor en la carpeta y no en el usuario; `0` y `false` como variable puesta; Ayuda sin mirar si
 hay Claude; Ayuda sin leer el entorno; los verbos en `append`; y el interruptor sin Claude.
+
+## 186. Las cuentas, sin rodeos
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `las-cuentas-sin-rodeos`
+
+Una auditoría de lo que pasa entre montar la carpeta y tener a alguien dentro de su cuenta encontró tres
+cosas. Se comprobó cada una contra el código de main antes de tocarla.
+
+**Lo que dice la documentación oficial.**
+- Claude Code: `claude auth status` «sale con 0 si hay sesión y con 1 si no» y da un JSON con `authMethod`
+  (https://code.claude.com/docs/en/cli-reference). No hay un fichero documentado para saberlo: la credencial
+  vive en el llavero. La documentación no dice que no use la red; se le da un tope de ocho segundos y, si no
+  contesta o no se puede lanzar, no se sabe.
+- Codex: la sesión se guarda en `auth.json` de `CODEX_HOME` (por defecto `~/.codex`) o, si se elige
+  `cli_auth_credentials_store` con `keyring` o `auto`, en el llavero del sistema; `codex login status` la dice
+  (https://learn.chatgpt.com/docs/auth). Con el llavero, que falte el fichero no dice nada.
+
+**1. «Empieza por aquí» quizá nunca sale.** Ya estaba arreglado por la decisión 164: `esElPuntoDePartida`
+(`guardar.js`) deja fuera el punto de partida al contar las copias, y una prueba lo cubre («el primer día
+sale la tarjeta de la cuenta»). No se tocó esa parte. Lo que seguía cierto era la otra mitad: el primer
+mensaje del montaje se mandaba antes de saber si había sesión.
+
+**2. Saber si hay sesión** (`src/sesion-del-asistente.js`). Contesta `si`, `no` o `null` (no se sabe, y
+entonces todo sigue como antes: no se adivina). Codex: existe `auth.json` en `CODEX_HOME` o `~/.codex`; su
+contenido no se lee nunca, y una prueba lo vigila. Con el llavero elegido, `null`. Claude: el código de
+salida de `claude auth status`, con memoria de veinte segundos; si no se puede lanzar, `null`.
+- Al montar, con `no`, el primer mensaje no se manda: se guarda y el aviso dice «Antes de nada, entra con tu
+  cuenta en el asistente. El primer encargo te espera: en cuanto entres, lo mando.» La tarjeta Empieza por
+  aquí sale delante de todo con Abrir {Claude} y «Ya he entrado», que manda el encargo (una vez). Si la
+  barra ve que ya entró, la tarjeta dice «Ya has entrado: te mando el primer encargo». Con `si` o `null`, se
+  manda al momento, como antes.
+- La tarjeta del primer día no sale con `si` (decía «entra con tu cuenta» a quien ya había entrado), y solo
+  se lanza `claude` mientras la tarjeta puede salir.
+- Límite: el encargo guardado vive en la memoria de la ventana; si se recarga antes de entrar, se pierde (el
+  arnés ya está montado; solo faltaría el primer empujón).
+- Un `no` falso de Codex (sesión en el llavero sin haberlo escrito en `config.toml`) deja el encargo
+  esperando, y de ahí sale con «Ya he entrado».
+
+**3. «Sí, ahora» a GitHub, seis clics.** Su «Sí, ahora» al montar es el permiso para subir la copia. La barra
+lo apunta (`subirAlVolver`, vale media hora) y, al volver del acceso del editor, dice «Ya estás dentro como
+{usuario}. Te subo la copia.» y sigue por `subirCopia`, o sea con las mismas guardas y los mismos avisos
+(sin internet, con «Volver a intentarlo»). Se gasta con el primer acceso que sale de esa pantalla, acabe
+como acabe (también si se cancela); «Más tarde», o entrar por otro camino, sigue como antes: «Ya puedes
+guardar copias fuera». Lo ajustó la revisión (abajo).
+
+**Las pruebas**: `humo.js` pasa de 507 a 510. Tres comprobaciones nuevas: la sesión (Codex sin leer el
+fichero, Claude por el código de salida, y `null`), la tarjeta según la sesión y el encargo esperando, y el
+montaje con GitHub. La batería no lanza el `claude` de verdad: lo sustituye al empezar.
+
+**La revisión.** Cuatro arreglos tras revisar la PR #84, cada uno con su prueba y su mutación.
+1. Volver a montar en la misma ventana con un encargo ya aplazado: el montaje nuevo suelta lo aplazado antes
+   de mandar o aplazar el suyo, así «Ya he entrado» no manda el viejo detrás del nuevo.
+2. El «Sí, ahora» guarda `{ cuando, raiz }` y al volver del acceso exige la misma carpeta; si no coincide, no
+   sube y se olvida.
+3. El sí se gasta en el primer acceso que sale de la pantalla del montaje, acabe como acabe (cancelar
+   también lo gasta; antes no), y entrar desde otra pantalla (Ayuda, un comando) lo suelta: «Conectar» pide su
+   sí como siempre.
+4. «Ya he entrado» con un puente que falla: el encargo se repone y se dice «No he podido pasarle el encargo a
+   {Claude}. Pulsa «Algo va mal» y pásale el código a tu tutor.»
+Pruebas: `humo.js` sigue en 514 (las comprobaciones de la 186 crecen por dentro). Cinco mutaciones, todas caen.
