@@ -1,13 +1,15 @@
 ---
 type: ftd
-title: Lo que se puede hacer solo al montar, se hace solo
+title: Lo que debe hacerse solo al montar, se hace solo
 date: 2026-10-17
 author: Jose Sanchis
 branch: lo-que-se-hace-solo-al-montar
 status: hecho
 ---
 
-# Lo que se puede hacer solo al montar, se hace solo
+# Lo que debe hacerse solo al montar, se hace solo
+
+> **Nota (decisión 187, 17-10-2026).** Jose corrigió P9: «debe hacerse solo lo que debe hacerse solo, no lo que puede». Esta decisión se escribió con la lectura anterior; el título ya dice la regla nueva, y lo que cambió de esta (la vista sencilla vuelve a preguntarse) se cuenta en `solo-lo-que-debe.md`. El resto se deja como estaba.
 
 ## Intent
 

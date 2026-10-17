@@ -9,6 +9,8 @@ status: hecho
 
 # El primer día, con menos preguntas
 
+> **Nota (decisión 187, 17-10-2026).** Con la P9 corregida («debe hacerse solo lo que debe hacerse solo, no lo que puede»), la 187 devuelve las tres preguntas que esta quitó: qué lleva la carpeta, cuánta gente hay y cómo se maneja la persona. Son información suya. El resto de esta decisión sigue (nombre rellenado, elegir carpeta, «Crear una carpeta nueva», la palabra «carpeta»). Ver `solo-lo-que-debe.md`.
+
 ## Intent
 
 Que quien elige una carpeta y pulsa «Preparar esta carpeta» conteste solo lo que RSC necesita para su plan, y que
