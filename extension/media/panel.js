@@ -1915,9 +1915,10 @@ function pantallaSinCarpeta() {
     <div class="brujula">
       <h2>Por dónde empezamos</h2>
       <p class="donde">Elige con qué quieres trabajar</p>
-      <p class="hiciste">Una carpeta cualquiera: la contabilidad, el personal, un proyecto. Si está vacía, la preparo.</p>
+      <p class="hiciste">Una carpeta cualquiera: la contabilidad, el personal, un proyecto. Si no tienes ninguna, te creo una nueva. Si está vacía, la preparo.</p>
     </div>
     ${boton({ etiqueta: 'Elegir una carpeta', icono: '📂', principal: true, accion: { tipo: 'elegirCarpeta' } })}
+    ${boton({ etiqueta: 'Crear una carpeta nueva', icono: '📁', discreto: true, accion: { tipo: 'crearCarpeta' } })}
   `;
 }
 
@@ -1926,7 +1927,7 @@ function pantallaSinCarpeta() {
 // Dos pantallas (decisión 138). La sencilla, que es la de todos: arriba una sola
 // tarjeta con lo que toca; debajo Documentos, Acciones (solo lo que hay) y
 // Ayuda; la línea de las copias, si las hay; y abajo, en pequeño, la versión y
-// Cambiar de proyecto. Y la completa de antes, entera, con
+// Cambiar de carpeta. Y la completa de antes, entera, con
 // `executiveLab.barraCompleta`. Un estado que no dice cuál —el de una prueba
 // que pinta a mano— es la completa, como hasta ahora.
 function pantallaPrincipal() {
@@ -2083,14 +2084,14 @@ function lineaDeLasCopias() {
   });
 }
 
-// Abajo y en pequeño: qué barra es, y Cambiar de proyecto, que se deja a la
+// Abajo y en pequeño: qué barra es, y Cambiar de carpeta, que se deja a la
 // vista porque con el editor en modo sencillo no hay menús.
 function pieDeLaBarra() {
   return `
     <div class="fila pie">
       ${/* Lleva a lo de la versión, no a Más ayuda (decisión 166). */''}
       ${estado.versionDeLaBarra ? boton({ etiqueta: `Barra ${estado.versionDeLaBarra}`, pequeno: true, discreto: true, accion: { tipo: 'verEstaBarra' } }) : ''}
-      ${boton({ etiqueta: 'Cambiar de proyecto', icono: '📂', pequeno: true, discreto: true, accion: { tipo: 'elegirCarpeta' } })}
+      ${boton({ etiqueta: 'Cambiar de carpeta', icono: '📂', pequeno: true, discreto: true, accion: { tipo: 'elegirCarpeta' } })}
     </div>`;
 }
 
@@ -2540,7 +2541,7 @@ function grupoAjustes() {
           pequeno: true,
           accion: { tipo: 'verLaCara' },
         })}
-        ${boton({ etiqueta: 'Cambiar de proyecto', icono: '📂', pequeno: true, accion: { tipo: 'elegirCarpeta' } })}
+        ${boton({ etiqueta: 'Cambiar de carpeta', icono: '📂', pequeno: true, accion: { tipo: 'elegirCarpeta' } })}
         ${modo === 'avanzado'
           ? boton({ etiqueta: 'Volver al modo sencillo', icono: '◂', pequeno: true, accion: { tipo: 'modoSencillo' } })
           : boton({ etiqueta: 'Ver el editor completo', icono: '▸', pequeno: true, accion: { tipo: 'verEditorCompleto' } })}`,

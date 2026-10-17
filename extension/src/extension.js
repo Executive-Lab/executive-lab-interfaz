@@ -132,9 +132,9 @@ const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a envia
 const GITHUB_MAS_TARDE = 'Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.';
 
 const LO_QUE_SE_HIZO = {
-  traer: 'Ya tienes aquí lo que este proyecto traía puesto.',
+  traer: 'Ya tienes aquí lo que esta carpeta traía puesto.',
   completar: 'He terminado de prepararlo. Ya está entero.',
-  sinRecibo: 'Lo he puesto al día con lo que este proyecto declaraba.',
+  sinRecibo: 'Lo he puesto al día con lo que esta carpeta declaraba.',
   adoptar: 'Le he puesto lo que le faltaba de la barra.',
   ponerAlDia: 'Lo he puesto al día con la versión que trae la barra.',
 };
@@ -4170,9 +4170,29 @@ ${cabecera}
     });
     if (!elegida || !elegida.length) return;
 
+    // Se apunta que la eligió aquí: al abrirla, si es nueva o vacía, empieza a
+    // prepararla sin esperar otro botón (decisión 184).
+    await arrancar.apuntarLaEleccion(elegida[0].fsPath);
     // Se abre en esta misma ventana: abrir otra deja al alumno con dos y sin
     // saber cuál es la suya.
     await vscode.commands.executeCommand('vscode.openFolder', elegida[0], { forceNewWindow: false });
+  }
+
+  // Lo que se eligió desde la barra, ya abierto (decisión 184). Elegir la carpeta
+  // es decir «quiero trabajar aquí»: si es nueva o vacía y no es delicada, se
+  // empieza a preparar como si se pulsara «Preparar esta carpeta». Va siempre
+  // por `tomarLaEleccion`, que borra el apunte: abrir cualquier otra carpeta, o
+  // esta mismo otro día, no empieza nada.
+  async prepararLaQueSeEligio() {
+    const eraLaElegida = await arrancar.tomarLaEleccion(proyecto.raiz());
+    if (!eraLaElegida || vscode.workspace.isTrusted === false) return null;
+    if (lasRespuestas.leer(this.contexto.workspaceState) || this.conElArnes()) return null;
+    if (!arrancar.sePuedePrepararAlElegirla(terreno.mirarYClasificar())) {
+      this.salida.appendLine('[elegida] no es nueva ni está vacía, o es delicada: se queda en su botón'); // diccionario: interno
+      return null;
+    }
+    this.salida.appendLine('[elegida] carpeta nueva elegida desde la barra: se empieza a preparar'); // diccionario: interno
+    return this.manejar({ tipo: 'arrancar' });
   }
 
   // ------------------------------------------------------ interruptor
@@ -4446,6 +4466,8 @@ function activate(contexto) {
   terreno.saberDondeRecordar(contexto.workspaceState);
   // Y lo contestado al preparar que espera a git (decisión 165).
   lasRespuestas.saberDondeGuardar(contexto.workspaceState);
+  // Y la carpeta que se eligió desde la barra, que sobrevive a recargar la ventana (decisión 184).
+  arrancar.saberDondeRecordarLaEleccion(contexto.globalState);
   buscador.saberDondeEstamos(contexto.extensionPath);
 
   // El relevo de Node, antes de que se abra el chat del asistente: así su
@@ -4583,6 +4605,8 @@ function activate(contexto) {
     // Y lo que esperaba a git, si ya está: se termina con lo contestado
     // (decisión 165). Lo último, porque al terminar pregunta lo de siempre.
     await panel.retomarLaPreparacion().catch((e) => salida.appendLine(`[retomar] ${e.message}`)); // diccionario: interno
+    // Y la carpeta que se eligió desde la barra, si es nueva (decisión 184).
+    await panel.prepararLaQueSeEligio().catch((e) => salida.appendLine(`[elegida] ${e.message}`)); // diccionario: interno
   }, 3000);
 }
 

@@ -353,7 +353,7 @@ async function laRecienMontada() {
     const vacia = temporal('recien-de-verdad-');
     vscode.guion.raiz = vacia;
     vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
-    vscode.guion.respuestas = ['Llevar el día a día', 'La empresa entera', 'De 2 a 10', 'Poner orden en mis facturas', 'Lo justo', 'Ferretería Soler', ''];
+    vscode.guion.respuestas = ['Llevar el día a día', 'Poner orden en mis facturas', 'Ferretería Soler', '', ''];
     cargar('rsc').saberDondeEstamos(ext);
     cargar('terreno').saberDondeEstamos(ext);
     const memoria = new Map();
