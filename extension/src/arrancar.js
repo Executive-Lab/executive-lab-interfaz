@@ -160,7 +160,9 @@ async function ponerUnAsistente() {
   );
   const cual = opciones.find((o) => o.boton === elegido);
   if (!cual) return null;
-  return (await ponerElAsistente(cual.asistente)) ? cual.asistente.id : null;
+  if (!(await ponerElAsistente(cual.asistente))) return null;
+  puestosSolos.push(cual.asistente.nombre);
+  return cual.asistente.id;
 }
 
 // Ponerlo en el ordenador, con su botón ya pulsado. Si no se puede, se dice, salvo
@@ -175,41 +177,48 @@ async function ponerElAsistente(asistente, { callado = false } = {}) {
   }
 }
 
+// Los asistentes que la barra ha puesto sola en este ordenador al montar, para
+// decirlo al terminar (decisión 181). Se vacía al darlos (`losQueSePusieron`).
+const puestosSolos = [];
+const losQueSePusieron = () => puestosSolos.splice(0);
+
 // Lo que dice el ajuste (decisión 158): para uno, o para los dos, sin preguntar.
-// Si falta alguno en este ordenador, se ofrece ponerlo, como sin ninguno (A9), y
-// con el que sí está se puede seguir. Devuelve lo que va a `--target`: un
-// asistente, o los dos separados por una coma, que RSC acepta así.
+// Si falta alguno en este ordenador se pone sin preguntar (decisión 181): es una
+// extensión del editor, gratis y se quita cuando se quiera, y lo pidió la persona
+// en los ajustes. Se dice al terminar el montaje. Si no se puede, se dice con un
+// botón para intentarlo otra vez, y con el que sí está se puede seguir. Devuelve
+// lo que va a `--target`: un asistente, o los dos separados por una coma, que RSC
+// acepta así.
 async function conElAjuste(ajuste) {
   const queridos = ajuste === 'losDos' ? asistentes.ASISTENTES : [asistentes.porId(ajuste)].filter(Boolean);
+  const losIds = (cuales) => cuales.map((a) => a.id).join(',');
   const faltan = queridos.filter((a) => !asistentes.estaInstalado(a));
-  if (!faltan.length) return queridos.map((a) => a.id).join(',');
+  if (!faltan.length) return losIds(queridos);
 
-  const puesto = asistentes.ASISTENTES.find(asistentes.estaInstalado);
-  const losDos = ajuste === 'losDos';
-  const poner = faltan.length > 1 ? 'Poner los dos' : `Poner ${faltan[0].nombre}`;
-  const seguir = puesto ? `${losDos ? 'Seguir solo con' : 'Seguir con'} ${puesto.nombre}` : null;
-  const elegiste = losDos ? 'los dos asistentes' : faltan[0].nombre;
-  const mensaje = faltan.length > 1
-    ? `En los ajustes elegiste ${elegiste}, y no tienes ninguno en este ordenador. ¿Los pongo?`
-    : `En los ajustes elegiste ${elegiste}, y ${losDos ? `${faltan[0].nombre} no está` : 'no está'} en este ordenador. ¿Lo pongo?`;
-  const elegido = await vscode.window.showWarningMessage(mensaje, { modal: true }, poner, ...(seguir ? [seguir] : []));
-
-  if (seguir && elegido === seguir) return puesto.id;
-  if (elegido !== poner) return null;
-  const fallan = [];
-  for (const asistente of faltan) {
-    if (!(await ponerElAsistente(asistente, { callado: true }))) fallan.push(asistente);
+  const ponerLos = async (cuales) => {
+    const fallan = [];
+    for (const asistente of cuales) {
+      if (await ponerElAsistente(asistente, { callado: true })) puestosSolos.push(asistente.nombre);
+      else fallan.push(asistente);
+    }
+    return fallan;
+  };
+  let fallan = await ponerLos(faltan);
+  if (fallan.length) {
+    const sigue = queridos.filter((a) => !fallan.includes(a));
+    const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
+    const texto = sigue.length
+      ? `${noSePuso}: sigo solo con ${sigue[0].nombre}. Si quieres, lo intento otra vez.`
+      : `${noSePuso}. Si quieres, lo intento otra vez.`;
+    const ahora = fallan.length > 1 ? 'Ponerlos ahora' : 'Ponerlo ahora';
+    if (await vscode.window.showWarningMessage(texto, ahora) === ahora) fallan = await ponerLos(fallan);
   }
   const hay = queridos.filter((a) => !fallan.includes(a));
-  const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
   if (!hay.length) {
-    await avisarConSalida(`${noSePuso}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    await avisarConSalida(`No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return null;
   }
-  // Con los dos, si uno no se pudo poner, se sigue con el que sí está, como con
-  // «Seguir con…», y se dice.
-  if (fallan.length) await avisarConSalida(`${noSePuso}: sigo solo con ${hay[0].nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
-  return hay.map((a) => a.id).join(',');
+  return losIds(hay);
 }
 
 // Cómo se llama esto. Dos nombres, y los pone el alumno: para qué es esta
@@ -1614,6 +1623,8 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
           : `${(respuestas.nombres && respuestas.nombres.arnes) || 'Tu arnés'} ya está listo.`) + loQueSeRenombro(renombrados),
         renombrados,
         dichos,
+        // Los asistentes que se pusieron solos en este ordenador (decisión 181).
+        puestos: losQueSePusieron(),
       };
     },
   );
@@ -1683,7 +1694,7 @@ module.exports = {
   estaEnGitConLaBarra, ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
   arrancar, estaEnMarcha, dejarDeEsperarAGit, sePuedeSinNadie, sePuedeRetomar, faltanPorContestar, RAMAS_SIN_NADIE, RAMAS_QUE_SE_RETOMAN, momento, ESPERANDO_A_GIT, CLAVE_SIN_GIT, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
   confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
-  prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
+  prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente, losQueSePusieron,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
   COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
   COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO, SIN_COPIAS_HASTA_QUE_QUIERAS,

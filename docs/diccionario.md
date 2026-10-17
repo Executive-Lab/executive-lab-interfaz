@@ -241,6 +241,9 @@ jerga por goteo.
 | abrir otra carpeta | Elegir una carpeta (la primera vez) · Cambiar de proyecto |
 | quitar el disfraz en esta ventana | Ver el editor completo |
 | poner el disfraz en esta ventana | Volver al modo sencillo |
+| lo que la barra hace sola al montar una carpeta nueva, dicho en un aviso al terminar, cada cosa con su «Quitarlo» (decisión 181) | «He dejado esta ventana en vista sencilla, sin barras ni ficheros a la vista. Se ve del todo al cerrar y abrir la ventana.» · «Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo.» (o «un par de veces al día») · «He puesto {Codex} en este ordenador.» · con varias cosas a la vez, cada botón dice qué quita: Quitar la vista sencilla · Quitar las copias solas · Quitar lo de Claude · con una sola, Quitarlo · tras Quitarlo de las copias: «Quitado. Solo guardo una copia cuando pulses el botón.» |
+| el asistente de los ajustes que falta en el ordenador, al montar o al abrir con «Los dos» (decisión 181) | «He puesto {Claude} en este ordenador, porque en los ajustes elegiste los dos asistentes.» · si no se puede: «No he podido poner {Codex}. Si quieres, lo intento otra vez.» · «No he podido poner {Codex}: sigo solo con {Claude}. Si quieres, lo intento otra vez.» · «En los ajustes elegiste los dos asistentes, y no he podido poner {Claude} en este ordenador. Si quieres, lo intento otra vez.» · Ponerlo ahora · Ponerlos ahora |
+| el texto del primer mensaje del montaje, o del de «He puesto al día», que queda escrito en la caja del asistente sin enviar (decisión 181, como la 166) | «Te lo he dejado escrito en la conversación. Dale a enviar.» al final del aviso; copiado, lo dice el aviso del portapapeles |
 | `02-DOCS/wiki/brand/marca.md` | La marca de tu empresa |
 | buscar entre los ficheros | Buscar un documento |
 | buscar en la wiki, los comandos y `01-TOOLS/` | Buscar un concepto |

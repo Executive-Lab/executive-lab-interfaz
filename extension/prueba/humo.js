@@ -14880,68 +14880,84 @@ exec git "$@"
     }
   });
 
-  await comprobar('al montar, sin el que pide el ajuste se ofrece ponerlo, o seguir con el que hay', async () => {
+  await comprobar('al montar, el asistente que pide el ajuste y falta se pone solo y se dice; si falla, un botón para reintentar', async () => {
     const arrancarM = cargar('arrancar');
     const antes = { instaladas: vscode.guion.extensionesInstaladas, ejecutar: vscode.commands.executeCommand };
     const puestas = () => vscode.registrado.ejecutados.filter((e) => e.id === 'workbench.extensions.installExtension').map((e) => e.args[0]);
-    const con = async (valor, instaladas, contesta) => {
+    const con = async (valor, instaladas, contesta = {}) => {
       ponerElAjuste(valor);
       vscode.guion.extensionesInstaladas = instaladas;
       vscode.registrado.ejecutados.length = 0;
-      return conRespuestas(contesta, () => arrancarM.preguntarAsistente());
+      arrancarM.losQueSePusieron();
+      const r = await conRespuestas(contesta, () => arrancarM.preguntarAsistente());
+      return { ...r, puestos: arrancarM.losQueSePusieron() };
     };
     try {
-      const PIDE_CODEX = 'En los ajustes elegiste Codex, y no está en este ordenador. ¿Lo pongo?';
-      let r = await con('codex', ['anthropic.claude-code'], { [PIDE_CODEX]: 'Poner Codex' });
-      assert.deepEqual(r.vistas.map((v) => [v.pregunta, v.opciones]), [[PIDE_CODEX, ['Poner Codex', 'Seguir con Claude']]]);
+      // Decisión 181: lo local, gratis y que se deshace no se pregunta.
+      let r = await con('codex', ['anthropic.claude-code']);
+      assert.deepEqual(r.vistas, [], 'pregunta si lo pone');
       assert.equal(r.hecho, 'codex');
-      assert.deepEqual(puestas(), ['openai.chatgpt'], 'con su sí, no se pone Codex');
-      r = await con('codex', ['anthropic.claude-code'], { [PIDE_CODEX]: 'Seguir con Claude' });
-      assert.equal(r.hecho, 'claude', 'con «Seguir con Claude» no se monta para Claude');
-      assert.deepEqual(puestas(), [], 'se pone sin pedirlo');
-      r = await con('codex', ['anthropic.claude-code'], {});
-      assert.equal(r.hecho, null, 'sin contestar, se sigue montando');
-      assert.deepEqual(puestas(), []);
-
-      // Los dos, con uno solo puesto.
-      const PIDE_LOS_DOS = 'En los ajustes elegiste los dos asistentes, y Codex no está en este ordenador. ¿Lo pongo?';
-      r = await con('losDos', ['anthropic.claude-code'], { [PIDE_LOS_DOS]: 'Poner Codex' });
-      assert.deepEqual(r.vistas.map((v) => [v.pregunta, v.opciones]), [[PIDE_LOS_DOS, ['Poner Codex', 'Seguir solo con Claude']]]);
+      assert.deepEqual(puestas(), ['openai.chatgpt'], 'no pone Codex');
+      assert.deepEqual(r.puestos, ['Codex'], 'no apunta lo que ha puesto para decirlo');
+      r = await con('losDos', ['anthropic.claude-code']);
+      assert.deepEqual(r.vistas, []);
       assert.equal(r.hecho, 'claude,codex');
       assert.deepEqual(puestas(), ['openai.chatgpt']);
-      r = await con('losDos', ['anthropic.claude-code'], { [PIDE_LOS_DOS]: 'Seguir solo con Claude' });
-      assert.equal(r.hecho, 'claude');
-
-      // Sin ninguno: los dos, o nada.
-      const PIDE_NINGUNO = 'En los ajustes elegiste los dos asistentes, y no tienes ninguno en este ordenador. ¿Los pongo?';
-      r = await con('losDos', [], { [PIDE_NINGUNO]: 'Poner los dos' });
-      assert.deepEqual(r.vistas.map((v) => [v.pregunta, v.opciones]), [[PIDE_NINGUNO, ['Poner los dos']]], 'sin ninguno, se ofrece seguir con uno que no hay');
+      assert.deepEqual(r.puestos, ['Codex']);
+      r = await con('losDos', []);
+      assert.deepEqual(r.vistas, []);
       assert.equal(r.hecho, 'claude,codex');
       assert.deepEqual(puestas(), ['anthropic.claude-code', 'openai.chatgpt']);
+      assert.deepEqual(r.puestos, ['Claude', 'Codex']);
+      // Con todo puesto, no se toca nada ni se dice nada.
+      r = await con('losDos', ['anthropic.claude-code', 'openai.chatgpt']);
+      assert.deepEqual([puestas(), r.puestos, r.vistas], [[], [], []]);
+      // Sin ninguno y en automático sí se elige: es una decisión suya, cuál.
+      r = await con(undefined, [], { 'No tienes ningún asistente': 'Poner Codex' });
+      assert.equal(r.hecho, 'codex');
+      assert.deepEqual(r.puestos, ['Codex']);
 
-      // Si no se puede poner, se dice y no se monta.
-      vscode.commands.executeCommand = async (id, ...args) => {
-        if (id === 'workbench.extensions.installExtension') throw new Error('sin red');
+      // Si no se puede poner: se dice, con «Ponerlo ahora», y no se monta sin él.
+      let intentados = 0;
+      const SIN_RED = async (id, ...args) => {
+        if (id === 'workbench.extensions.installExtension') { intentados += 1; throw new Error('sin red'); }
         return antes.ejecutar(id, ...args);
       };
-      r = await con('claude', ['openai.chatgpt'], { 'En los ajustes elegiste Claude': 'Poner Claude' });
+      vscode.commands.executeCommand = SIN_RED;
+      const NO_CLAUDE = 'No he podido poner Claude. Si quieres, lo intento otra vez.';
+      r = await con('claude', ['openai.chatgpt']);
       assert.equal(r.hecho, null, 'sin poderlo poner, se monta igual');
-      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.'), 'no se dice');
-      r = await con('losDos', [], { [PIDE_NINGUNO]: 'Poner los dos' });
+      assert.deepEqual(r.vistas.map((v) => [v.pregunta, v.opciones]), [
+        [NO_CLAUDE, ['Ponerlo ahora']],
+        ['No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.', ['Algo va mal']],
+      ]);
+      assert.deepEqual(r.puestos, []);
+      r = await con('losDos', [], { 'No he podido poner Claude ni Codex': 'Ponerlos ahora' });
       assert.equal(r.hecho, null, 'sin poder poner ninguno, se monta igual');
-      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Claude ni Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.'), 'no se dice');
+      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Claude ni Codex. Si quieres, lo intento otra vez.' && v.opciones.join() === 'Ponerlos ahora'), 'no se dice');
+      assert.equal(intentados, 5, 'con «Ponerlos ahora» no lo intenta otra vez');
+      // Con el reintento que sí sale, se sigue.
+      let vez = 0;
+      vscode.commands.executeCommand = async (id, ...args) => {
+        if (id === 'workbench.extensions.installExtension') { vez += 1; if (vez === 1) throw new Error('sin red'); }
+        return antes.ejecutar(id, ...args);
+      };
+      r = await con('claude', ['openai.chatgpt'], { [NO_CLAUDE]: 'Ponerlo ahora' });
+      assert.equal(r.hecho, 'claude', 'con «Ponerlo ahora» y red, no sigue');
+      assert.deepEqual(r.puestos, ['Claude']);
       // Con los dos, si uno no se puede poner, se sigue con el que sí está, y se dice.
       vscode.commands.executeCommand = async (id, ...args) => {
         if (id === 'workbench.extensions.installExtension' && args[0] === 'openai.chatgpt') throw new Error('sin red');
         return antes.ejecutar(id, ...args);
       };
-      r = await con('losDos', [], { [PIDE_NINGUNO]: 'Poner los dos' });
+      r = await con('losDos', []);
       assert.equal(r.hecho, 'claude', 'con Claude ya puesto, no se monta');
-      assert.deepEqual(puestas(), ['anthropic.claude-code']);
-      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Codex: sigo solo con Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.'), `no se dice: ${r.vistas.map((v) => v.pregunta).join(' | ')}`);
-      r = await con('losDos', ['anthropic.claude-code'], { [PIDE_LOS_DOS]: 'Poner Codex' });
+      assert.deepEqual(puestas(), ['anthropic.claude-code'], 'Codex falla, y solo Claude se pone');
+      assert.deepEqual(r.puestos, ['Claude']);
+      assert.ok(r.vistas.some((v) => v.pregunta === 'No he podido poner Codex: sigo solo con Claude. Si quieres, lo intento otra vez.' && v.opciones.join() === 'Ponerlo ahora'), `no se dice: ${r.vistas.map((v) => v.pregunta).join(' | ')}`);
+      r = await con('losDos', ['anthropic.claude-code']);
       assert.equal(r.hecho, 'claude', 'con Claude puesto y Codex sin poder ponerse, no se monta');
-      return 'ponerlo · seguir con el que hay · sin contestar · los dos · ninguno · sin poder, y con uno que sí';
+      return 'se pone sola y se dice · sin poder, «Ponerlo ahora» · reintento · los dos · uno que sí';
     } finally {
       ponerElAjuste(undefined);
       vscode.guion.extensionesInstaladas = antes.instaladas;
@@ -15159,33 +15175,55 @@ exec git "$@"
       assert.deepEqual(pedidos, [], 'en alguno de esos casos ha corrido el arnés');
       assert.deepEqual(llamadas, [], 'en alguno de esos casos se ha intentado prepararla');
 
-      // Sin Claude en el ordenador: se ofrece ponerlo, una vez, y no se prepara.
+      // Sin Claude en el ordenador (decisión 181): se pone solo, una vez, y se dice.
+      // Hasta que el editor lo ve no se prepara.
       vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
-      const OFRECE = 'INFO En los ajustes elegiste los dos asistentes, y Claude no está en este ordenador. ¿Lo pongo?';
-      const ofertas = () => vscode.registrado.mensajes.filter((m) => m === OFRECE).length;
-      const yaHabia = ofertas();
+      const instalaciones = () => vscode.registrado.ejecutados.filter((e) => e.id === 'workbench.extensions.installExtension' && e.args[0] === 'anthropic.claude-code').length;
+      const PUESTO = 'He puesto Claude en este ordenador, porque en los ajustes elegiste los dos asistentes.';
+      const preguntas = () => vscode.registrado.mensajes.filter((m) => /¿Lo pongo\?/.test(m)).length;
+      vscode.registrado.ejecutados.length = 0;
       vscode.guion.eleccion = undefined;
+      enviados.length = 0;
       assert.deepEqual(await proveedor.prepararParaLosDos(), []);
       await respirar();
       await proveedor.prepararParaLosDos();
       await respirar();
-      assert.equal(ofertas() - yaHabia, 1, 'no se ofrece ponerlo, o se ofrece cada vez');
-      // En otra carpeta es otra oferta.
+      assert.equal(instalaciones(), 1, 'no se pone una vez, o se pone cada vez');
+      assert.equal(preguntas(), 0, 'pregunta si lo pone');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.texto === PUESTO), `no dice que lo ha puesto: ${enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto).join(' | ')}`);
+      // En otra carpeta es otra vez.
       const r2 = fs.mkdtempSync(path.join(os.tmpdir(), 'ajuste-los-dos-otra-'));
       fs.writeFileSync(path.join(r2, '.rsc.json'), JSON.stringify({ version: 1, catalogVersion: rscM.VERSION_DE_RESPALDO, targets: ['codex'], skills: [] }, null, 2));
       vscode.guion.raiz = r2;
       await proveedor.prepararParaLosDos();
       await respirar();
       vscode.guion.raiz = r;
-      assert.equal(ofertas() - yaHabia, 2, 'en otra carpeta no se ofrece, porque ya se ofreció en esta');
-      // Al volver a ponerlo en los ajustes se ofrece otra vez, y con su sí, se pone.
-      vscode.guion.eleccion = 'Poner Claude';
+      assert.equal(instalaciones(), 2, 'en otra carpeta es otra vez');
+      // Al volver a ponerlo en los ajustes se mira otra vez, y se pone.
       vscode.registrado.ejecutados.length = 0;
       await cambiarElAjuste('losDos');
       await respirar();
-      assert.equal(ofertas() - yaHabia, 3, 'al cambiar el ajuste no se vuelve a ofrecer');
-      assert.ok(vscode.registrado.ejecutados.some((e) => e.id === 'workbench.extensions.installExtension' && e.args[0] === 'anthropic.claude-code'), 'con su sí no se pone');
-      vscode.guion.eleccion = undefined;
+      assert.equal(instalaciones(), 1, 'al cambiar el ajuste no lo pone');
+      // Si no se puede poner: un botón para intentarlo otra vez, y no se da por hecho.
+      const antesEjecutar = vscode.commands.executeCommand;
+      let intentos = 0;
+      vscode.commands.executeCommand = async (id, ...args) => {
+        if (id === 'workbench.extensions.installExtension') { intentos += 1; throw new Error('sin red'); }
+        return antesEjecutar(id, ...args);
+      };
+      try {
+        vscode.guion.eleccion = 'Ponerlo ahora';
+        enviados.length = 0;
+        vscode.registrado.mensajes.length = 0;
+        await cambiarElAjuste('losDos');
+        await respirar();
+        assert.equal(intentos, 2, 'con «Ponerlo ahora» no lo intenta otra vez');
+        assert.ok(vscode.registrado.mensajes.some((m) => /^WARN En los ajustes elegiste los dos asistentes, y no he podido poner Claude en este ordenador\. Si quieres, lo intento otra vez\.$/.test(m)), 'no lo dice, con su botón');
+        assert.ok(!enviados.some((m) => m.tipo === 'aviso' && m.texto === PUESTO), 'dice que lo ha puesto sin haberlo puesto');
+      } finally {
+        vscode.commands.executeCommand = antesEjecutar;
+        vscode.guion.eleccion = undefined;
+      }
       assert.deepEqual(pedidos, [], 'sin Claude se ha corrido el arnés');
 
       // Con los dos puestos y el arnés que falla: se dice, una vez, y no se da por preparada (P3).
@@ -24889,7 +24927,7 @@ exec git "$@"
       assert.equal(pantallas().pop(), 'estado', `después de montar no acaba en la principal: ${pantallas().join(', ')}`);
       assert.ok(!pantallas().includes('radiografia'), 'después de montar sale la lista');
       const dicho = enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto);
-      assert.ok(dicho.includes('Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.'), `con «Más tarde» no dice dónde queda: ${dicho.join(' | ')}`);
+      assert.ok(dicho.some((t) => t.includes('Cuando quieras preparar la cuenta de GitHub, la tienes en Ayuda › Sugerencias.')), `con «Más tarde» no dice dónde queda: ${dicho.join(' | ')}`);
       assert.ok(!dicho.some((t) => /Histórico/.test(t)), 'manda a Histórico, que en la barra sencilla no existe');
 
       // Con «Sí, ahora», se queda en la cuenta: no la tapa la principal.
@@ -24921,6 +24959,131 @@ exec git "$@"
       vscode.guion.eleccion = antes.eleccion;
       relevoM.comoEsta = antes.relevo;
       vscode.guion.extensionesInstaladas = antes.instaladas;
+      await proveedor.contexto.workspaceState.update('executiveLab.sigueSinCopias', antes.sinCopias);
+    }
+  }));
+
+  // ------------------------------- lo que se hace solo al montar (decisión 181)
+  //
+  // Lo local, gratis y que se deshace lo hace la barra sola y lo dice, con su
+  // «Quitarlo» (P9). Ya estaba hecho en la 164 que las copias solas van
+  // encendidas de fábrica, y en la 166 que «Falta Claude» lleva su botón: aquí se
+  // prueba lo que faltaba (decirlo y poder quitarlo, y la vista sencilla sin
+  // preguntar) y que «Dale a enviar» sale según cómo llegó el primer mensaje.
+  await comprobar('al montar, la vista sencilla y las copias solas se ponen solas, se dicen con su «Quitarlo» y «Dale a enviar» sale según llegó el mensaje', elPrimerDia.conGit(async () => {
+    const arrancarM = cargar('arrancar');
+    const puenteM = cargar('puente');
+    const ajustesM = cargar('ajustes');
+    const proveedor = vscode.registrado.proveedor;
+    const enviados = [];
+    const relevoM = cargar('relevo');
+    const clavesAjuste = ['executiveLab.vistaSencilla', ajustesM.CLAVE_GUARDADO];
+    const antes = {
+      vista: proveedor.vista, raiz: vscode.guion.raiz, arrancar: arrancarM.arrancar, puente: puenteM.enviar,
+      eleccion: vscode.guion.eleccion, sinCopias: proveedor.contexto.workspaceState.get('executiveLab.sigueSinCopias'),
+      relevo: relevoM.comoEsta, instaladas: vscode.guion.extensionesInstaladas,
+      ajustes: Object.fromEntries(clavesAjuste.map((c) => [c, vscode.registrado.ajustes.workspace[c]])),
+    };
+    relevoM.comoEsta = () => ({ modo: 'path' });
+    vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+    const DALE = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
+    const montaje = (extra = {}) => async () => ({
+      ok: true, rama: 'desdeCero', mensaje: 'Ferretería Soler ya está listo.', objetivo: 'Poner orden en mis facturas',
+      nombres: { arnes: 'Ferretería Soler', empresa: 'Ferretería Soler' }, dichos: [], pegas: [], encargos: [], ...extra,
+    });
+    const montar = async ({ extra, como = 'directo', vistaYa = false, guardarSolo } = {}) => {
+      for (const c of clavesAjuste) delete vscode.registrado.ajustes.workspace[c];
+      if (vistaYa) vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'] = true;
+      if (guardarSolo !== undefined) vscode.registrado.ajustes.workspace[ajustesM.CLAVE_GUARDADO] = guardarSolo;
+      arrancarM.arrancar = montaje(extra);
+      puenteM.enviar = async () => como;
+      vscode.guion.eleccion = undefined;
+      enviados.length = 0;
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.arrancar();
+      const avisos = enviados.filter((m) => m.tipo === 'aviso');
+      return { avisos, ultimo: avisos[avisos.length - 1] || {}, mensajes: vscode.registrado.mensajes.slice() };
+    };
+    try {
+      const recien = elPrimerDia.montar();
+      vscode.guion.raiz = recien;
+      await proveedor.contexto.workspaceState.update('executiveLab.sigueSinCopias', undefined);
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+
+      // Sin preguntar por la vista sencilla: se pone, y se dice con las copias y con «Dale a enviar».
+      let r = await montar();
+      assert.ok(!r.mensajes.some((m) => /vista sencilla/.test(m)), `pregunta por la vista sencilla: ${r.mensajes.join(' | ')}`);
+      assert.equal(vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'], true, 'no la pone');
+      assert.match(r.ultimo.texto, /^He dejado esta ventana en vista sencilla, sin barras ni ficheros a la vista\. Se ve del todo al cerrar y abrir la ventana\. Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo\./);
+      assert.ok(r.ultimo.texto.endsWith(DALE), `no dice «Dale a enviar»: ${r.ultimo.texto}`);
+      assert.deepEqual((r.ultimo.botones || []).map((b) => [b.etiqueta, b.accion.tipo]), [['Quitar la vista sencilla', 'verEditorCompleto'], ['Quitar las copias solas', 'quitarElGuardadoSolo']], 'no lleva cada Quitarlo');
+      assert.equal(proveedor.avisoPendiente, null, 'se queda un aviso sin soltar');
+
+      // Con una sola cosa dicha, su botón es «Quitarlo».
+      r = await montar({ vistaYa: true });
+      assert.ok(!/vista sencilla/.test(r.ultimo.texto), 'dice que la ha puesto si ya estaba');
+      assert.deepEqual(r.ultimo.boton && [r.ultimo.boton.etiqueta, r.ultimo.boton.accion.tipo], ['Quitarlo', 'quitarElGuardadoSolo']);
+      assert.ok(!r.ultimo.botones, 'con uno solo salen varios');
+      // Con lo que ya se decía de los ajustes de Claude, tres, cada uno con su nombre.
+      r = await montar({ extra: { dichos: ['He dejado a Claude hablándote en español.'] } });
+      assert.deepEqual((r.ultimo.botones || []).map((b) => b.etiqueta), ['Quitar lo de Claude', 'Quitar la vista sencilla', 'Quitar las copias solas']);
+      assert.ok(r.ultimo.texto.startsWith('He dejado a Claude hablándote en español. He dejado esta ventana'));
+
+      // «Dale a enviar» solo si el texto quedó escrito en su caja: copiado, ya lo dice el aviso del portapapeles.
+      r = await montar({ como: 'copiado' });
+      assert.ok(!/Dale a enviar/.test(r.ultimo.texto), 'dice «Dale a enviar» con el texto copiado');
+      r = await montar({ como: 'vacio' });
+      assert.ok(!/Dale a enviar/.test(r.ultimo.texto));
+
+      // Las copias solas: no se dicen si no van a guardar (apagadas, o sin copias), y se dicen como van.
+      r = await montar({ guardarSolo: 0 });
+      assert.ok(!/copia sola/.test(r.ultimo.texto), 'dice que guarda sola con el ajuste apagado');
+      r = await montar({ guardarSolo: 8 });
+      assert.match(r.ultimo.texto, /Guardo una copia sola un par de veces al día/);
+      r = await montar({ extra: { sinCopias: true } });
+      assert.ok(!/copia sola/.test(r.ultimo.texto), 'dice que guarda sola habiendo elegido seguir sin copias');
+
+      // El historial de alguien no se guarda solo, y entonces tampoco se dice.
+      const deAlguien = elPrimerDia.montar({ conHistorial: false });
+      elPrimerDia.git(deAlguien, 'init', '-q', '-b', 'main');
+      vscode.guion.raiz = deAlguien;
+      r = await montar();
+      assert.ok(!/copia sola/.test(r.ultimo.texto), 'dice que guarda sola en un historial que no es suyo');
+      vscode.guion.raiz = recien;
+
+      // «Quitarlo» de las copias: queda en «Solo cuando yo lo diga», y se dice.
+      vscode.registrado.ajustes.workspace[ajustesM.CLAVE_GUARDADO] = 1;
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'quitarElGuardadoSolo' });
+      assert.equal(vscode.registrado.ajustes.workspace[ajustesM.CLAVE_GUARDADO], 0, 'no lo quita');
+      assert.equal(ajustesM.cadaCuantoGuarda(), 0);
+      assert.deepEqual(enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto), ['Quitado. Solo guardo una copia cuando pulses el botón.']);
+
+      // Lo mismo en la puesta al día: lo que dice según cómo llegó el mensaje.
+      for (const [como, dice] of [['directo', true], ['copiado', false]]) {
+        arrancarM.arrancar = montaje({ rama: 'ponerAlDia' });
+        puenteM.enviar = async () => como;
+        enviados.length = 0;
+        await proveedor.arrancar();
+        const texto = enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto).join(' ');
+        assert.match(texto, /^Lo he puesto al día con la versión que trae la barra\./);
+        assert.equal(texto.includes(DALE), dice, `puesta al día, con el mensaje «${como}»: ${texto}`);
+        assert.ok(!/vista sencilla|copia sola/.test(texto), 'en una puesta al día no se pone nada de esto');
+      }
+      return 'vista sencilla sola · copias dichas · cada Quitarlo con su nombre · Dale a enviar según llegó, en el montaje y en la puesta al día';
+    } finally {
+      proveedor.vista = antes.vista;
+      vscode.guion.raiz = antes.raiz;
+      arrancarM.arrancar = antes.arrancar;
+      puenteM.enviar = antes.puente;
+      vscode.guion.eleccion = antes.eleccion;
+      relevoM.comoEsta = antes.relevo;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      for (const c of clavesAjuste) {
+        if (antes.ajustes[c] === undefined) delete vscode.registrado.ajustes.workspace[c];
+        else vscode.registrado.ajustes.workspace[c] = antes.ajustes[c];
+      }
+      proveedor.avisoPendiente = null;
       await proveedor.contexto.workspaceState.update('executiveLab.sigueSinCopias', antes.sinCopias);
     }
   }));

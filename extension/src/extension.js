@@ -120,6 +120,11 @@ const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitar
 // Lo que se dice cuando un texto ha quedado escrito en la caja del asistente:
 // escrito, no enviado (`asistentes.js`). Lo dicen `pedir` y lo que manda algo
 // detrás de hacer otra cosa, como darle documentos (decisión 166).
+// Lo que el montaje hace solo (decisión 181), cada cosa con su «Quitarlo». Con una
+// sola sale «Quitarlo»; con varias, cada una dice qué quita.
+const QUITAR_EL_GUARDADO_SOLO = { etiqueta: 'Quitarlo', etiquetaConVarios: 'Quitar las copias solas', accion: { tipo: 'quitarElGuardadoSolo' } };
+const QUITAR_LA_VISTA_SENCILLA = { etiqueta: 'Quitarlo', etiquetaConVarios: 'Quitar la vista sencilla', accion: { tipo: 'verEditorCompleto' } };
+const QUITAR_LO_DE_CLAUDE_DEL_MONTAJE = { ...QUITAR_LO_DE_CLAUDE, etiquetaConVarios: 'Quitar lo de Claude' };
 const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
 
 // Lo que se dice al dejar la cuenta de GitHub para más tarde, al montar: dónde
@@ -332,12 +337,26 @@ ${cabecera}
 
   // Lo que se hizo solo al abrir, en una sola frase aunque lo hagan dos sitios: el
   // segundo se suma al primero si todavía no ha salido, en vez de taparlo.
-  // Con su botón, si lo trae: el primero que llegue.
+  // Con su botón, si lo trae. Con un solo botón, el suyo («Quitarlo»); con varios
+  // distintos salen todos, cada uno con el rótulo que dice qué quita
+  // (`etiquetaConVarios`, decisión 181), porque tres «Quitarlo» seguidos no dicen
+  // cuál es cuál.
   dejarElAviso(texto, boton = null) {
     if (!texto) return;
     const antes = this.avisoPendiente && this.avisoPendiente.tipo === 'aviso' ? this.avisoPendiente : null;
-    const elBoton = (antes && antes.boton) || boton;
-    this.avisoPendiente = { tipo: 'aviso', texto: antes ? `${antes.texto} ${texto}` : texto, ...(elBoton ? { boton: elBoton } : {}) };
+    const losBotones = [...(antes ? (antes.botonesDe || (antes.boton ? [antes.boton] : [])) : [])];
+    // Uno que no trae su rótulo para cuando hay varios sigue como antes: el primero
+    // que llegue es el que sale.
+    const sePuedeSumar = !losBotones.length || (boton && boton.etiquetaConVarios && losBotones.every((b) => b.etiquetaConVarios));
+    if (boton && sePuedeSumar && !losBotones.some((b) => JSON.stringify(b.accion) === JSON.stringify(boton.accion))) losBotones.push(boton);
+    const limpio = (b) => ({ etiqueta: losBotones.length > 1 && b.etiquetaConVarios ? b.etiquetaConVarios : b.etiqueta, accion: b.accion });
+    this.avisoPendiente = {
+      tipo: 'aviso',
+      texto: antes ? `${antes.texto} ${texto}` : texto,
+      botonesDe: losBotones,
+      ...(losBotones.length === 1 ? { boton: limpio(losBotones[0]) } : {}),
+      ...(losBotones.length > 1 ? { botones: losBotones.map(limpio) } : {}),
+    };
   }
 
   // Una carpeta que este ordenador ya conoce: alguien ha pulsado aquí un botón
@@ -478,13 +497,25 @@ ${cabecera}
   async prepararParaLosDosYa() {
     const faltan = this.faltaParaLosDos();
     for (const otro of faltan.filter((a) => !asistentes.estaInstalado(a))) {
-      const poner = `Poner ${otro.nombre}`;
+      // Se pone sola (decisión 181): lo pidió en los ajustes, es una extensión del
+      // editor, gratis y se quita cuando quiera. Si no se puede, un botón para
+      // intentarlo otra vez.
       this.unaVez(`poner:${otro.id}`, async () => {
-        const quiere = await vscode.window.showInformationMessage(`En los ajustes elegiste los dos asistentes, y ${otro.nombre} no está en este ordenador. ¿Lo pongo?`, poner);
-        if (quiere !== poner || !(await arrancar.ponerElAsistente(otro))) return;
+        let puesto = await arrancar.ponerElAsistente(otro, { callado: true });
+        if (!puesto) {
+          const ahora = 'Ponerlo ahora';
+          const quiere = await vscode.window.showWarningMessage(`En los ajustes elegiste los dos asistentes, y no he podido poner ${otro.nombre} en este ordenador. Si quieres, lo intento otra vez.`, ahora);
+          if (quiere !== ahora) return;
+          puesto = await arrancar.ponerElAsistente(otro, { callado: true });
+          if (!puesto) return avisarConSalida(`No he podido poner ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+        }
+        this.dejarElAviso(`He puesto ${otro.nombre} en este ordenador, porque en los ajustes elegiste los dos asistentes.`);
         // Después de la que esté en marcha, que no lo contaba.
         await this.preparando;
         await this.prepararParaLosDos();
+        // Si no había nada más que preparar, la frase se dice igual.
+        if (this.avisoPendiente) { await this.repintarSinMover(); this.soltarElAviso(); }
+        return undefined;
       });
     }
     if (!faltan.some(asistentes.estaInstalado)) return [];
@@ -608,6 +639,16 @@ ${cabecera}
     return this.enviar(bien
       ? { tipo: 'aviso', texto: 'Quitado. No lo vuelvo a poner.' }
       : { tipo: 'aviso', texto: 'No he podido quitarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+  }
+
+  // «Quitarlo» de las copias solas (decisión 181): el ajuste a «Solo cuando yo lo
+  // diga», que es lo que ya ofrece Ajustes. Lo hecho no se borra.
+  async quitarElGuardadoSolo() {
+    const hecho = await ajustes.ponerCadaCuanto(0);
+    this.salida.appendLine(`[guardarSolo] quitado: ${hecho.ok ? 'sí' : hecho.mensaje}`); // diccionario: interno
+    return this.enviar(hecho.ok
+      ? { tipo: 'aviso', texto: 'Quitado. Solo guardo una copia cuando pulses el botón.' }
+      : { tipo: 'aviso', texto: hecho.mensaje, malo: true });
   }
 
   // Codex con una versión retirada (decisión 157), arreglado solo si la persona
@@ -1516,6 +1557,7 @@ ${cabecera}
       quitarAgente: () => this.quitarAgente(mensaje.fichero),
       recuperarLoQueHabia: () => this.recuperarLoQueHabia(),
       verEditorCompleto: () => this.verEditorCompleto(),
+      quitarElGuardadoSolo: () => this.quitarElGuardadoSolo(),
       modoSencillo: () => this.modoSencillo(),
     };
 
@@ -3978,29 +4020,36 @@ ${cabecera}
     // aquí un arnés», sería contarle una película que no ha pasado.
     const reciénMontado = ['desdeCero', 'encimaDeLoQueHay', 'otroArnes'].includes(hecho.rama);
 
+    // Los asistentes que se pusieron solos, dichos con lo demás (decisión 181).
+    const puestos = this.frasePuestos(hecho.puestos);
+
     if (!reciénMontado) {
+      // El mensaje va primero: así «Dale a enviar» se dice según cómo llegó (decisión 181).
+      const como = await puente.enviar('He puesto al día el arnés de esta carpeta. Mira qué hay montado y cuéntame en dos líneas por dónde seguimos.');
       this.enviar({
         tipo: 'aviso',
-        texto: [LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje, ...dichos, sinCopias].filter(Boolean).join(' '),
+        texto: [LO_QUE_SE_HIZO[hecho.rama] || hecho.mensaje, puestos, ...dichos, sinCopias, como === 'directo' ? DALE_A_ENVIAR : null].filter(Boolean).join(' '),
         ...(dichos.length ? { boton: QUITAR_LO_DE_CLAUDE } : {}),
       });
       await this.siFaltaAlgoDecirlo(true);
-      await puente.enviar('He puesto al día el arnés de esta carpeta. Mira qué hay montado y cuéntame en dos líneas por dónde seguimos.');
       return undefined;
     }
 
-    // Se pregunta, no se impone: puede ser la carpeta de un alumno o la de
-    // alguien que solo está mirando cómo funciona esto.
-    const sencilla = await vscode.window.showInformationMessage(
-      `${hecho.mensaje} ¿Dejo esta ventana en vista sencilla, sin barras ni ficheros a la vista?`,
-      'Sí, más sencillo',
-      'No, déjala como está',
-    );
-    if (sencilla === 'Sí, más sencillo') await this.modoSencillo();
+    // Lo local, gratis y que se deshace se hace solo y se dice, cada cosa con su
+    // «Quitarlo» (decisión 181, P9). Antes se preguntaba por la vista sencilla.
+    const vista = await this.ponerLaVistaSencillaSola();
+    const guardado = await this.fraseDelGuardadoSolo(hecho);
     // Sale al pintar la principal, aquí abajo.
-    for (const dicho of dichos) this.dejarElAviso(dicho, QUITAR_LO_DE_CLAUDE);
+    this.dejarElAviso(puestos);
+    for (const dicho of dichos) this.dejarElAviso(dicho, QUITAR_LO_DE_CLAUDE_DEL_MONTAJE);
+    this.dejarElAviso(vista, vista ? QUITAR_LA_VISTA_SENCILLA : null);
+    this.dejarElAviso(guardado, guardado ? QUITAR_EL_GUARDADO_SOLO : null);
     this.dejarElAviso(sinCopias);
+    // Se pinta la principal sin soltar el aviso: va al final, junto con «Dale a enviar».
+    const pendiente = this.avisoPendiente;
+    this.avisoPendiente = null;
     await this.refrescar(true);
+    this.avisoPendiente = pendiente;
     // La lista de lo que falta se deja para el final, después de GitHub: si
     // saliera ahora, la pregunta de la cuenta le caería encima.
 
@@ -4043,7 +4092,10 @@ ${cabecera}
     // salía si alguien entraba en Conexiones y pulsaba (decisión 104). Ahora
     // va con los demás encargos del arranque, en `hecho.paraElMensaje` (A7).
     const comoSeLlama = hecho.nombres.arnes || identidad.deQuien();
-    await puente.enviar(arrancar.primerMensaje(hecho, { comoSeLlama, conWeb, conFreno: arrancar.hayFreno() }));
+    const como = await puente.enviar(arrancar.primerMensaje(hecho, { comoSeLlama, conWeb, conFreno: arrancar.hayFreno() }));
+    // Escrito en su caja sin enviar: se dice, como en `pedir` (decisión 181).
+    // Copiado, ya lo dice el aviso del portapapeles.
+    if (como === 'directo') this.dejarElAviso(DALE_A_ENVIAR);
     // Al final, la principal, con la tarjeta que toca y lo aplazado dicho; o la
     // lista, si algo se ha roto. Si fue a preparar la cuenta, se queda allí.
     await this.siFaltaAlgoDecirlo(!fueAGitHub);
@@ -4132,6 +4184,43 @@ ${cabecera}
       await this.refrescar(true);
       await disfraz.proponerReabrir('Para que se vea entero, hay que cerrar y abrir esta ventana.');
     }
+  }
+
+  // Al montar, sin preguntar (decisión 181): es de esta ventana y se deshace con
+  // «Ver el editor completo». Sin frase si ya estaba así.
+  async ponerLaVistaSencillaSola() {
+    try {
+      if (disfraz.quiereVistaSencilla()) return null;
+      const { ok, mensaje } = await disfraz.volverAModoSencillo(this.contexto, this.salida);
+      if (!ok) {
+        this.salida.appendLine(`[vistaSencilla] no se ha podido poner sola: ${mensaje}`); // diccionario: interno
+        return null;
+      }
+      return 'He dejado esta ventana en vista sencilla, sin barras ni ficheros a la vista. Se ve del todo al cerrar y abrir la ventana.';
+    } catch (error) {
+      this.salida.appendLine(`[vistaSencilla] ${error.message}`); // diccionario: interno
+      return null;
+    }
+  }
+
+  // La copia sola, dicha una vez al montar (decisión 181). Va encendida de fábrica
+  // desde la 164: aquí solo se cuenta, y solo si de verdad va a guardar en esta
+  // carpeta (con historial nuestro y sin haber elegido seguir sin copias).
+  async fraseDelGuardadoSolo(hecho) {
+    if (hecho.sinCopias || this.eligioSinCopias()) return null;
+    const horas = ajustes.cadaCuantoGuarda();
+    if (!horas) return null;
+    try {
+      if (!(await terreno.podemosGuardarSolo())) return null;
+    } catch {
+      return null;
+    }
+    return `Guardo una copia sola ${horas === 1 ? 'cada hora' : 'un par de veces al día'}, mientras tengas esto abierto y haya algo nuevo.`;
+  }
+
+  frasePuestos(nombres) {
+    const cuales = Array.isArray(nombres) ? nombres.filter(Boolean) : [];
+    return cuales.length ? `He puesto ${cuales.join(' y ')} en este ordenador.` : null;
   }
 
   async modoSencillo() {
