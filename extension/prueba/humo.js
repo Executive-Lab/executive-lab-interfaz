@@ -14929,7 +14929,7 @@ exec git "$@"
       assert.equal(r.hecho, null, 'sin poderlo poner, se monta igual');
       assert.deepEqual(r.vistas.map((v) => [v.pregunta, v.opciones]), [
         [NO_CLAUDE, ['Ponerlo ahora']],
-        ['No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.', []],
+        ['No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.', ['Algo va mal']],
       ]);
       assert.deepEqual(r.puestos, []);
       r = await con('losDos', [], { 'No he podido poner Claude ni Codex': 'Ponerlos ahora' });

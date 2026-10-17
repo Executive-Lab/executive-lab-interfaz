@@ -8705,7 +8705,7 @@ varios, cada uno dice qué quita (Quitar la vista sencilla · Quitar las copias 
 demás avisos siguen como antes: el primer botón que llega. El aviso del montaje se guarda hasta el final del
 montaje para que «Dale a enviar» vaya con las demás frases y no las tape.
 
-**Las pruebas**: `humo.js` pasa de 497 a 499 (la de los ajustes de los asistentes se reescribió y se añadió una
+**Las pruebas**: `humo.js` pasa de 505 a 507 (516 con `--con-arnes`; la de los ajustes de los asistentes se reescribió y se añadió una
 nueva con la escena del montaje: sin pregunta, frases, cada «Quitarlo», copiado/escrito, ajuste a 0/8,
 sin copias, historial de otra persona, y la puesta al día). Nueve mutaciones, cada una puesta y restaurada
 desde copia, y las nueve caen: sin «Dale a enviar» tras el primer mensaje; sin él en la puesta al día; la vista
