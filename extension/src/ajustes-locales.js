@@ -25,8 +25,10 @@
 //     bastaba para que no se pusiera nunca (revisión de seguridad de la 157, B5).
 //   · Un enganche `Notification` (decisión 162) que llama a `avisar.mjs`, de la
 //     habilidad de la casa: un aviso del sistema cuando Claude te pregunta algo
-//     (`permission_prompt`) o ha terminado (`idle_prompt`), para quien se va a
-//     otra ventana mientras trabaja (code.claude.com/docs/en/hooks). Como el
+//     (`permission_prompt`) o ha terminado (`idle_prompt`), o un servicio conectado
+//     le pide un formulario o una página (`elicitation_dialog`,
+//     `elicitation_url_dialog`, decisión 182), para quien se va a
+//     otra ventana mientras trabaja (code.claude.com/docs/en/hooks-guide). Como el
 //     freno, con `node` a secas y la carpeta entre comillas: la forma sin shell
 //     (`args`) pide un `node.exe` de verdad en Windows, y el relevo no lo es. No
 //     se pone si esta persona ya tiene algún enganche `Notification`, aquí, en
@@ -38,6 +40,8 @@
 //   · sin tocar nada más del fichero, y entero o nada, con sus permisos;
 //   · si no se entiende como JSON, no se toca; ni a través de un enlace; ni si el
 //     fichero está en git, porque entonces viaja y es del equipo;
+//   · el que puso la barra con el matcher de antes (constancia y huella al día) se
+//     pone al día solo, y se dice (P9); el que la persona cambió, no se toca;
 //   · y se deja constancia de lo que se puso, en `.rsc/`, después de escribirlo:
 //     «Quitarlo», en el aviso, o `node ajustes-locales.js --quitar <carpeta>`,
 //     quita solo eso y solo si sigue como se dejó. Lo que se quita, a mano o así,
@@ -73,7 +77,12 @@ const LO_QUE_SE_PONE = ['idioma', 'preguntar', 'avisos'];
 const AVISAR = ['.claude', 'skills', 'executive-lab', 'avisar.mjs'];
 const ORDEN_DE_AVISAR = 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/executive-lab/avisar.mjs" "${CLAUDE_PROJECT_DIR}"';
 // Solo letras, `_` y `|`: Claude lo lee como dos nombres exactos.
-const CUANDO_AVISAR = 'permission_prompt|idle_prompt';
+// Decisión 182: además, cuando un servicio conectado pide un formulario o abrir
+// una página (`elicitation_dialog`, `elicitation_url_dialog`; tabla de
+// `notification_type` en code.claude.com/docs/en/hooks-guide).
+const CUANDO_AVISAR = 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog';
+// Los que la barra ya puso en carpetas montadas antes: se ponen al día solos.
+const CUANDO_AVISAR_ANTES = ['permission_prompt|idle_prompt'];
 // Segundos. El guion se corta antes él solo; esto es por si acaso.
 const TOPE_DE_AVISAR = 10;
 const elEngancheDeAvisar = () => ({ matcher: CUANDO_AVISAR, hooks: [{ type: 'command', command: ORDEN_DE_AVISAR, timeout: TOPE_DE_AVISAR }] });
@@ -139,13 +148,16 @@ function laConstancia(raiz) {
 
 // El enganche de los avisos tal como lo deja la barra. Si alguien lo ha cambiado,
 // ya es suyo: ni se quita ni se da por puesto.
-function esElDeAvisar(grupo) {
-  if (!esUnObjeto(grupo) || grupo.matcher !== CUANDO_AVISAR || !Array.isArray(grupo.hooks) || grupo.hooks.length !== 1) return false;
+function esElDeAvisar(grupo, matchers = [CUANDO_AVISAR, ...CUANDO_AVISAR_ANTES]) {
+  if (!esUnObjeto(grupo) || !matchers.includes(grupo.matcher) || !Array.isArray(grupo.hooks) || grupo.hooks.length !== 1) return false;
   if (Object.keys(grupo).length !== 2) return false;
   const [orden] = grupo.hooks;
   return esUnObjeto(orden) && Object.keys(orden).length === 3
     && orden.type === 'command' && orden.command === ORDEN_DE_AVISAR && orden.timeout === TOPE_DE_AVISAR;
 }
+
+// El de las versiones anteriores, tal cual lo dejó la barra (decisión 182).
+const esElDeAntes = (grupo) => esElDeAvisar(grupo, CUANDO_AVISAR_ANTES);
 
 // Lo que unos ajustes dicen de los avisos: 'nada', 'algo' (algún enganche
 // `Notification`, o todos apagados) o 'raro' (no se entiende cómo están).
@@ -256,7 +268,14 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
     preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
     avisos: sinQuitar.avisos && !antes.avisos && !conSuSi,
   };
-  if (!falta.idioma && !falta.preguntar.length && !falta.avisos) return { hecho: 'yaEstaba', fichero };
+  // Decisión 182: el enganche de avisos que puso la barra con el matcher de antes
+  // (la constancia lo dice y casa su huella) se pone al día; el que cambió la
+  // persona, no se toca. No es poner algo nuevo, es lo nuestro al día.
+  const avisosViejos = antes.avisos && !conSuSi && esUnObjeto(local.hooks) && Array.isArray(local.hooks.Notification)
+    && local.hooks.Notification.some(esElDeAntes);
+  const sinNovedad = !falta.idioma && !falta.preguntar.length && !falta.avisos;
+  if (sinNovedad && !avisosViejos) return { hecho: 'yaEstaba', fichero };
+  if (soloMirar && sinNovedad) return { hecho: 'yaEstaba', fichero };
   if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false };
 
   try {
@@ -269,6 +288,8 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
     if (falta.avisos) {
       const enganches = local.hooks || {};
       nuevo.hooks = { ...enganches, Notification: [...(enganches.Notification || []), elEngancheDeAvisar()] };
+    } else if (avisosViejos) {
+      nuevo.hooks = { ...local.hooks, Notification: local.hooks.Notification.map((g) => (esElDeAntes(g) ? elEngancheDeAvisar() : g)) };
     }
     escribir(fichero, nuevo);
     // Después del fichero: si no se escribe, no hay constancia. Y con lo de antes,
@@ -291,12 +312,12 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   } catch (error) {
     return { hecho: 'fallo', fichero, error: error.message };
   }
-  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: falta.avisos };
+  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: falta.avisos, ...(avisosViejos && !falta.avisos ? { avisosAlDia: true } : {}) };
 }
 
 // Lo que se puso en una vez, por su nombre, para que «Quitarlo» quite eso y nada más.
-const loQueSePuso = ({ idioma = false, preguntar = [], avisos = false } = {}) => [
-  ...(idioma ? ['idioma'] : []), ...(preguntar.length ? ['preguntar'] : []), ...(avisos ? ['avisos'] : []),
+const loQueSePuso = ({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false } = {}) => [
+  ...(idioma ? ['idioma'] : []), ...(preguntar.length ? ['preguntar'] : []), ...(avisos || avisosAlDia ? ['avisos'] : []),
 ];
 
 // Solo lo que puso la barra (la constancia, con su huella) y sigue como lo dejó:
@@ -355,7 +376,9 @@ async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas, que = null } 
 }
 
 // La frase de lo que se puso (P9: lo que se hace solo se dice).
-function laFrase({ idioma = false, preguntar = [], avisos = false } = {}) {
+function laFrase({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false } = {}) {
+  const alDia = 'He puesto al día los avisos de Claude: ahora también te avisan cuando un servicio conectado te pide rellenar algo o abrir una página.';
+  if (avisosAlDia && !idioma && !preguntar.length && !avisos) return alDia;
   const cosas = [
     idioma ? 'hablándote en español' : null,
     preguntar.length ? 'preguntándote antes de subir nada a GitHub' : null,
@@ -363,11 +386,11 @@ function laFrase({ idioma = false, preguntar = [], avisos = false } = {}) {
   ].filter(Boolean);
   if (!cosas.length) return null;
   const dichas = cosas.length < 2 ? cosas[0] : `${cosas.slice(0, -1).join(', ')} y ${cosas[cosas.length - 1]}`;
-  return `He dejado a Claude ${dichas}.`;
+  return `He dejado a Claude ${dichas}.${avisosAlDia ? ` ${alDia}` : ''}`;
 }
 
 module.exports = {
-  IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, LO_QUE_SE_PONE, AVISAR, ORDEN_DE_AVISAR, CUANDO_AVISAR,
+  IDIOMA, PREGUNTAR, FICHERO, CONSTANCIA, LO_QUE_SE_PONE, AVISAR, ORDEN_DE_AVISAR, CUANDO_AVISAR, CUANDO_AVISAR_ANTES,
   carpetaDeClaude, ponerLosDeLaBarra, quitarLosDeLaBarra, laFrase, loQueSePuso, queDice, laHuella, esElDeAvisar,
 };
 
