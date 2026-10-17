@@ -8958,9 +8958,22 @@ salida de `claude auth status`, con memoria de veinte segundos; si no se puede l
 **3. «Sí, ahora» a GitHub, seis clics.** Su «Sí, ahora» al montar es el permiso para subir la copia. La barra
 lo apunta (`subirAlVolver`, vale media hora) y, al volver del acceso del editor, dice «Ya estás dentro como
 {usuario}. Te subo la copia.» y sigue por `subirCopia`, o sea con las mismas guardas y los mismos avisos
-(sin internet, con «Volver a intentarlo»). Se gasta con el primer acceso; cancelar el acceso no lo gasta;
-«Más tarde», o entrar por otro camino, sigue como antes: «Ya puedes guardar copias fuera».
+(sin internet, con «Volver a intentarlo»). Se gasta con el primer acceso que sale de esa pantalla, acabe
+como acabe (también si se cancela); «Más tarde», o entrar por otro camino, sigue como antes: «Ya puedes
+guardar copias fuera». Lo ajustó la revisión (abajo).
 
 **Las pruebas**: `humo.js` pasa de 507 a 510. Tres comprobaciones nuevas: la sesión (Codex sin leer el
 fichero, Claude por el código de salida, y `null`), la tarjeta según la sesión y el encargo esperando, y el
 montaje con GitHub. La batería no lanza el `claude` de verdad: lo sustituye al empezar.
+
+**La revisión.** Cuatro arreglos tras revisar la PR #84, cada uno con su prueba y su mutación.
+1. Volver a montar en la misma ventana con un encargo ya aplazado: el montaje nuevo suelta lo aplazado antes
+   de mandar o aplazar el suyo, así «Ya he entrado» no manda el viejo detrás del nuevo.
+2. El «Sí, ahora» guarda `{ cuando, raiz }` y al volver del acceso exige la misma carpeta; si no coincide, no
+   sube y se olvida.
+3. El sí se gasta en el primer acceso que sale de la pantalla del montaje, acabe como acabe (cancelar
+   también lo gasta; antes no), y entrar desde otra pantalla (Ayuda, un comando) lo suelta: «Conectar» pide su
+   sí como siempre.
+4. «Ya he entrado» con un puente que falla: el encargo se repone y se dice «No he podido pasarle el encargo a
+   {Claude}. Pulsa «Algo va mal» y pásale el código a tu tutor.»
+Pruebas: `humo.js` sigue en 514 (las comprobaciones de la 186 crecen por dentro). Cinco mutaciones, todas caen.

@@ -25498,7 +25498,10 @@ exec git "$@"
       puenteM.enviar = async (t) => { mandados.push(t); return true; };
       ghM.estado = async () => ({ conectado: false, usuario: null, remoto: null });
       const montar = async (codigo, eleccion) => {
+        // Lo aplazado de antes se conserva: es lo que se prueba.
+        const habia = sesionM.loAplazado();
         sesionM.olvidar();
+        if (habia) sesionM.aplazar(habia);
         sesionM.modulo.ejecutar = async () => ({ codigo, salida: '' });
         vscode.guion.eleccion = eleccion;
         mandados = [];
@@ -25518,6 +25521,34 @@ exec git "$@"
       assert.equal(sesionM.loAplazado(), null);
       await proveedor.mandarElPrimerEncargo();
       assert.equal(mandados.length, 1, 'salió dos veces');
+
+      // Volver a montar con un encargo ya aplazado, sin `olvidar()` de por medio: el
+      // nuevo manda o aplaza solo el suyo, y «Ya he entrado» no suelta el viejo.
+      sesionM.olvidar();
+      sesionM.aplazar('ENCARGO VIEJO');
+      await montar(0, undefined);
+      assert.equal(mandados.length, 1);
+      assert.ok(!mandados[0].includes('ENCARGO VIEJO'));
+      assert.equal(sesionM.loAplazado(), null, 'el viejo se quedó esperando');
+      await proveedor.mandarElPrimerEncargo();
+      assert.equal(mandados.length, 1, '«Ya he entrado» mandó el viejo detrás del nuevo');
+      sesionM.olvidar();
+      sesionM.aplazar('ENCARGO VIEJO');
+      await montar(1, undefined);
+      assert.equal(mandados.length, 0);
+      assert.ok(sesionM.loAplazado() && !sesionM.loAplazado().includes('ENCARGO VIEJO'), 'sin sesión se quedó el viejo');
+
+      // Si al mandarlo falla el puente, el encargo no se pierde y se dice.
+      puenteM.enviar = async () => { throw new Error('el puente se rompió'); };
+      enviados.length = 0;
+      await proveedor.mandarElPrimerEncargo();
+      assert.ok(sesionM.loAplazado(), 'el encargo se perdió');
+      assert.ok(enviados.some((m) => m.tipo === 'aviso' && m.malo && /No he podido pasarle el encargo a Claude\. Pulsa «Algo va mal»/.test(m.texto)), 'no dice qué pasó');
+      puenteM.enviar = async (t) => { mandados.push(t); return true; };
+      mandados = [];
+      await proveedor.mandarElPrimerEncargo();
+      assert.equal(mandados.length, 1, 'al reintentar no salió');
+      assert.equal(sesionM.loAplazado(), null);
 
       // Con sesión, o sin poder saberlo, como siempre: se manda al momento.
       for (const [codigo, cual] of [[0, 'con sesión'], [-1, 'sin saberlo']]) {
@@ -25546,18 +25577,35 @@ exec git "$@"
       await proveedor.conectarGitHub();
       assert.equal(subidas, 0, 'sin «Sí, ahora» subió');
 
-      // Cancelar el acceso no gasta el sí; el de después sí sigue.
+      // El sí se gasta en el primer acceso que sale de su pantalla, también si se
+      // cancela: el de después ya no sube solo.
       await montar(0, 'Sí, ahora');
       ghM.conectar = async () => ({ ok: false, cancelado: true });
       await proveedor.conectarGitHub();
       assert.equal(subidas, 0);
       ghM.conectar = async () => ({ ok: true, usuario: 'ana' });
       await proveedor.conectarGitHub();
-      assert.equal(subidas, 1, 'tras cancelar, el sí se perdió');
+      assert.equal(subidas, 0, 'tras cancelar, el sí siguió valiendo');
+
+      // Otra pantalla (Ayuda, un comando) suelta el sí: «Conectar» pide el suyo.
+      await montar(0, 'Sí, ahora');
+      await proveedor.verCopiaFuera();
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0, 'entrando desde otra pantalla subió');
+
+      // Otra carpeta entre el sí y el acceso: no sube, y se olvida.
+      await montar(0, 'Sí, ahora');
+      const raizDelSi = vscode.guion.raiz;
+      vscode.guion.raiz = path.join(os.tmpdir(), 'u186-otra-carpeta');
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0, 'subió desde otra carpeta');
+      vscode.guion.raiz = raizDelSi;
+      await proveedor.conectarGitHub();
+      assert.equal(subidas, 0, 'al volver a la carpeta, el sí olvidado subió');
 
       // Un «Sí, ahora» de hace una hora ya no vale.
       await montar(0, 'Sí, ahora');
-      proveedor.subirAlVolver = Date.now() - 61 * 60 * 1000;
+      proveedor.subirAlVolver = { cuando: Date.now() - 61 * 60 * 1000, raiz: vscode.guion.raiz };
       subidas = 0;
       await proveedor.conectarGitHub();
       assert.equal(subidas, 0, 'un sí viejo subió');

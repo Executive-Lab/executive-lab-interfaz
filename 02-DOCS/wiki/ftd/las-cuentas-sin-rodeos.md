@@ -40,10 +40,13 @@ Decisión 186.
 - [x] «Sí, ahora» hasta subir
 - [x] Diccionario y decisión
 - [x] Mutaciones y batería entera
+- [x] La revisión de la PR #84: soltar lo aplazado al volver a montar, sí atado a la carpeta, sí gastado en el primer acceso, encargo repuesto si el puente falla
 
 ## Evidence
 
 Tres pruebas nuevas en `humo.js`, mutaciones puestas y restauradas desde copia.
+
+La revisión añadió cinco mutaciones más (viejo sin soltar, sin atar a la carpeta, sí sin gastar, otra pantalla sin soltarlo, encargo perdido), todas caen.
 
 ## Next
 
