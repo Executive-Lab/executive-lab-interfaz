@@ -1195,7 +1195,7 @@ function pantallaFijadas({ grupos = [], elegidas = [], tope = 5, aviso: avisoLoc
 // repartido: el SOS en un grupo, la revisión de la carpeta en otro, y "¿y ahora
 // qué hago?" en ningún sitio — que es la pregunta más frecuente de todas y no
 // tenía botón.
-function pantallaAyuda({ github, avisos = [], version = null }) {
+function pantallaAyuda({ github, avisos = [], version = null, controlRemoto = null }) {
   return `
     ${migas([{ etiqueta: 'Principal', accion: { tipo: 'volver' } }, { etiqueta: 'Ayuda' }])}
     ${bloqueAviso()}
@@ -1240,6 +1240,15 @@ function pantallaAyuda({ github, avisos = [], version = null }) {
     ${boton({ etiqueta: 'No hace lo que le pido', icono: '💬', pequeno: true, discreto: true, accion: { tipo: 'resolverIncidencia', cual: 'noHace' } })}
     ${boton({ etiqueta: 'Qué falta por montar', icono: '🔎', accion: { tipo: 'verRadiografia' } })}
     ${boton({ etiqueta: 'Algo va mal', icono: '🆘', accion: { tipo: 'algoVaMal' } })}
+
+    ${/* El control remoto lo deja puesto la barra, pero no siempre puede funcionar,
+          y nadie lo decía (decisión 185). Solo con Claude puesto. */''}
+    ${controlRemoto ? `
+      <hr class="separador">
+      <h2>Seguir desde el móvil</h2>
+      <p class="detalle">Tu conversación con Claude se puede seguir desde el móvil o desde claude.ai/code. La barra lo deja activado, pero no siempre funciona.</p>
+      <p class="detalle">Hace falta un plan de pago de Claude: con una clave de acceso de pago por uso no va. Si tu empresa usa Claude Team o Enterprise, quien lleva la cuenta tiene que activarlo antes. Si no te funciona, pídeselo a esa persona.</p>
+      ${controlRemoto.apagado ? '<p class="detalle">Y en este ordenador está apagado: tiene desactivado el envío de datos no esenciales de Claude, y con eso el control remoto no se puede usar. Dile a quien te instaló esto que lo quite.</p>' : ''}` : ''}
 
     <hr class="separador">
     ${/* Lo que falla, lo que no se entiende y lo que se echa en falta, para
@@ -1331,7 +1340,16 @@ function pantallaEstaBarra({ version = null } = {}) {
 // ajustes de su cuenta son suyos. Todo sale de `media/datos-de-clientes.json`,
 // comprobado en las páginas de Anthropic y OpenAI; aquí solo se pinta. Cada
 // enlace, a la página de ajustes de su asistente o a lo que dicen ellos.
-function pantallaDatosDeClientes({ titulo = '', entradilla = '', partes = [], pie = '', fuentes = [] } = {}) {
+// Una línea con un interruptor de un clic (decisión 185): «Que Claude solo vea lo que
+// le pegues». Dice cómo está y el botón hace lo contrario. Los dos rótulos salen de su tabla.
+function interruptorDeLinea(linea, puesto) {
+  if (linea.interruptor !== 'soloLoPegado') return '';
+  return puesto
+    ? `<p class="detalle">${texto(linea.puesto || '')}</p>${boton({ etiqueta: linea.botonQuitar, icono: '👁️', pequeno: true, discreto: true, accion: { tipo: 'soloLoQueLePegues', cual: false } })}`
+    : boton({ etiqueta: linea.botonPoner, icono: '🙈', pequeno: true, accion: { tipo: 'soloLoQueLePegues', cual: true } });
+}
+
+function pantallaDatosDeClientes({ titulo = '', entradilla = '', partes = [], pie = '', fuentes = [], soloLoPegado = false } = {}) {
   const enlace = (etiqueta, url, extra = {}) => (etiqueta && url
     ? boton({ etiqueta, icono: '↗', pequeno: true, ...extra, accion: { tipo: 'abrir', url } }) : '');
   return `
@@ -1346,7 +1364,7 @@ function pantallaDatosDeClientes({ titulo = '', entradilla = '', partes = [], pi
     ${partes.map((parte) => `
       <hr class="separador">
       <h2>${texto(parte.titulo)}</h2>
-      ${(parte.lineas || []).map((l) => `<p class="detalle">${texto(l.texto)}</p>${enlace(l.boton, l.url)}`).join('')}`).join('')}
+      ${(parte.lineas || []).map((l) => `<p class="detalle">${texto(l.texto)}</p>${enlace(l.boton, l.url)}${interruptorDeLinea(l, soloLoPegado)}`).join('')}`).join('')}
 
     <hr class="separador">
     <p class="detalle">${texto(pie)}</p>
@@ -3695,7 +3713,7 @@ function atender(data) {
     case 'fijadas': return pintar(pantallaFijadas(data));
     case 'ayuda': return pintar(pantallaAyuda(data));
     case 'estaBarra': return pintar(pantallaEstaBarra(data));
-    case 'datosDeClientes': return pintar(pantallaDatosDeClientes(data.tabla));
+    case 'datosDeClientes': return pintar(pantallaDatosDeClientes({ ...data.tabla, soloLoPegado: data.soloLoPegado === true }));
     case 'reglas': return pintar(pantallaReglas(data));
     case 'asistente': return pintar(pantallaAsistente(data));
     case 'comoTrabaja': return pintar(pantallaComoTrabaja(data));

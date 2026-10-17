@@ -225,6 +225,7 @@ const esperado = {
     'extensions.confirmedUriHandlerExtensionIds': ['anthropic.claude-code'],
     'claudeCode.focusView': true,
     'claudeCode.hideOnboarding': true,
+    'claudeCode.spinnerVerbs': {'mode':'replace','verbs':['Pensando','Dándole vueltas','Revisando','Buscando','Ordenando','Redactando','Atando cabos','Preparando','Mirándolo','Cocinándolo','Trabajando','Casi lo tengo']},
   } : {}),
   ...(conCodex && !conClaude ? { 'chatgpt.openOnStartup': true } : {}),
 };

@@ -82,6 +82,7 @@ function laFrase(puestas) {
   const deClaude = [
     hay('claudeCode.focusView') && 'enseñándote solo lo que le pides y lo que te contesta',
     hay('claudeCode.hideOnboarding') && 'sin su lista de primeros pasos',
+    hay('claudeCode.spinnerVerbs') && 'diciéndote en español lo que hace mientras trabaja',
   ].filter(Boolean);
   if (deClaude.length) frases.push(`He dejado a Claude ${deClaude.join(', ')}.`);
   if (hay('chatgpt.openOnStartup')) frases.push('He dejado Codex abriéndose solo al arrancar.');

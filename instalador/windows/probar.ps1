@@ -142,6 +142,10 @@ Comprobar 'lo del editor y lo del asistente estan puestos, con su valor y apunta
     $esperado['extensions.confirmedUriHandlerExtensionIds'] = '["anthropic.claude-code"]'
     $esperado['claudeCode.focusView'] = 'true'
     $esperado['claudeCode.hideOnboarding'] = 'true'
+    # Los verbos van en espanol, y este fichero es ASCII (PowerShell 5.1 destroza
+    # lo demas): aqui se mira la forma (modo y doce verbos) y que la constancia
+    # diga lo mismo que los ajustes; el texto de cada verbo lo comprueba probar.sh.
+    $esperado['claudeCode.spinnerVerbs'] = '{"mode":"replace","verbs":12}'
   }
   if ($conCodex -and -not $conClaude) { $esperado['chatgpt.openOnStartup'] = 'true' }
 
@@ -157,6 +161,13 @@ Comprobar 'lo del editor y lo del asistente estan puestos, con su valor y apunta
     $p = $actuales.PSObject.Properties[$clave]
     if (-not $p) { $mal += "falta $clave"; continue }
     $valor = ConvertTo-Json -InputObject $p.Value -Compress
+    if ($clave -eq 'claudeCode.spinnerVerbs') {
+      $q = $puestas.PSObject.Properties[$clave]
+      $forma = '{"mode":"' + $p.Value.mode + '","verbs":' + @($p.Value.verbs).Count + '}'
+      if ($forma -ne $esperado[$clave]) { $mal += "$clave vale $forma y debia valer $($esperado[$clave])"; continue }
+      if (-not $q -or (ConvertTo-Json -InputObject $q.Value -Compress) -ne $valor) { $mal += "la constancia no dice $clave" }
+      continue
+    }
     if ($valor -ne $esperado[$clave]) { $mal += "$clave vale $valor y debia valer $($esperado[$clave])"; continue }
     $q = $puestas.PSObject.Properties[$clave]
     if (-not $q -or (ConvertTo-Json -InputObject $q.Value -Compress) -ne $esperado[$clave]) { $mal += "la constancia no dice $clave" }

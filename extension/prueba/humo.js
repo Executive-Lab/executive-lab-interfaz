@@ -12531,9 +12531,9 @@ exec git "$@"
     const vacia = nueva();
     const hecho = await poner(vacia);
     assert.equal(hecho.hecho, 'puesto');
-    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR } });
+    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR }, spinnerTipsEnabled: false });
     assert.ok(fs.existsSync(constancia(vacia)), 'sin constancia no se puede quitar');
-    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.');
+    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja y preguntándote antes de subir nada a GitHub.');
     assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
 
     // Con lo suyo (lo que deja la memoria de RSC): intacto, con sus permisos, y sin fichero a medias.
@@ -12542,7 +12542,7 @@ exec git "$@"
     fs.writeFileSync(path.join(suya, '.claude', 'settings.local.json'), JSON.stringify(SUYOS));
     fs.chmodSync(path.join(suya, '.claude', 'settings.local.json'), 0o600);
     assert.equal((await poner(suya)).hecho, 'puesto');
-    assert.deepEqual(local(suya), { ...SUYOS, language: 'español', permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)', ...PREGUNTAR] } }, 'se pisa algo suyo');
+    assert.deepEqual(local(suya), { ...SUYOS, language: 'español', spinnerTipsEnabled: false, permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)', ...PREGUNTAR] } }, 'se pisa algo suyo');
     if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(suya, '.claude', 'settings.local.json')).mode & 0o777, 0o600, 'cambian los permisos del fichero');
     assert.deepEqual(fs.readdirSync(path.join(suya, '.claude')).filter((f) => f !== 'settings.local.json'), [], 'queda un fichero a medias');
 
@@ -12563,7 +12563,7 @@ exec git "$@"
     fs.writeFileSync(path.join(suyo, 'settings.json'), JSON.stringify({ language: 'english', permissions: { deny: ['Bash(gh pr create *)'] } }));
     const conElSuyo = nueva();
     await al.ponerLosDeLaBarra({ raiz: conElSuyo, claude: suyo, estaEnGit: fuera });
-    assert.deepEqual(local(conElSuyo), { permissions: { ask: ['Bash(git push *)'] } }, 'se pisa lo que dicen sus ajustes de usuario');
+    assert.deepEqual(local(conElSuyo), { permissions: { ask: ['Bash(git push *)'] }, spinnerTipsEnabled: false }, 'se pisa lo que dicen sus ajustes de usuario');
 
     // Un `ask` o un `deny` que ya están, también con la otra forma de escribirlos, se
     // respetan. Un `allow` no cuenta: el `ask` le gana igual, y uno plantado bastaba
@@ -12787,9 +12787,9 @@ exec git "$@"
       proveedor.soltarElAviso();
       const juntos = enviados.filter((m) => m.tipo === 'aviso');
       assert.equal(juntos.length, 1, 'salen por separado');
-      assert.equal(juntos[0].texto, 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub. Al abrir la carpeta he arreglado solo «Lo que debería estar puesto».');
+      assert.equal(juntos[0].texto, 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja y preguntándote antes de subir nada a GitHub. Al abrir la carpeta he arreglado solo «Lo que debería estar puesto».');
       // Y quita lo que cuenta ese aviso, nada más (decisión 162).
-      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar'] } }, 'sin «Quitarlo»');
+      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar', 'consejos'] } }, 'sin «Quitarlo»');
       // «Quitarlo» quita lo de la barra, lo dice, y no vuelve al abrir.
       enviados.length = 0;
       await proveedor.manejar({ tipo: 'quitarLoDeClaude' });
@@ -12819,7 +12819,7 @@ exec git "$@"
       const hechoDelMontaje = await arrancarM.hacerLosPasos({ rama: 'adoptar', pasos: [{ id: 'ponerLosRailes', escribe: true, etiqueta: 'poniendo los raíles' }] },
         null, {}, contexto, vscode.window.createOutputChannel());
       // Los raíles traen el guion de los avisos, así que al montar van los tres (decisión 162).
-      const LAS_TRES = 'He dejado a Claude hablándote en español, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.';
+      const LAS_TRES = 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.';
       assert.deepEqual(hechoDelMontaje.dichos, [LAS_TRES], 'el montaje no junta lo que se dijo');
       // …y la barra lo enseña.
       const elMontaje = arrancarM.arrancar;
@@ -12874,6 +12874,8 @@ exec git "$@"
       return r;
     };
     const claude = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-claude-'));
+    // Los consejos de Claude (decisión 185) ya los dice su propia prueba: aquí, ya decididos arriba.
+    fs.writeFileSync(path.join(claude, 'settings.json'), JSON.stringify({ spinnerTipsEnabled: true }));
     const fuera = () => false;
     const poner = (r, extra = {}) => al.ponerLosDeLaBarra({ raiz: r, claude, estaEnGit: fuera, ...extra });
     const quitar = (r, que = null) => al.quitarLosDeLaBarra({ raiz: r, estaEnGit: fuera, que });
@@ -13310,12 +13312,12 @@ exec git "$@"
       proveedor.donde = { tipo: 'principal' };
       proveedor.avisoPendiente = null;
       const hecho = await proveedor.ponerLoDeClaudeAlAbrir();
-      assert.deepEqual([hecho.hecho, hecho.idioma, hecho.preguntar, hecho.avisos], ['puesto', false, [], true]);
+      assert.deepEqual([hecho.hecho, hecho.idioma, hecho.preguntar, hecho.avisos, hecho.consejos], ['puesto', false, [], true, true], 'al abrir una carpeta de la 157 se ponen los avisos y, de la 185, los consejos');
       assert.equal(local().hooks.Notification.length, 1, 'al abrir no se enganchan los avisos');
       proveedor.soltarElAviso();
       const dicho = enviados.find((m) => m.tipo === 'aviso');
-      assert.equal(dicho && dicho.texto, 'He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra ventana.');
-      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['avisos'] } }, 'el botón quita más de lo que cuenta');
+      assert.equal(dicho && dicho.texto, 'He dejado a Claude sin consejos en inglés mientras trabaja y avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['avisos', 'consejos'] } }, 'el botón quita más de lo que cuenta');
       // El botón, tal cual viene (P6).
       enviados.length = 0;
       await proveedor.manejar(dicho.boton.accion);
@@ -19232,6 +19234,261 @@ exec git "$@"
     return 'puesto · lo decidido, respetado · una vez · Claude, Codex y los dos · y se quita solo lo nuestro';
   });
 
+  // ───────────────────────── decisión 185: lo nuevo de Claude que le sirve al alumno
+  await comprobar('185: los consejos de Claude, apagados en su carpeta, sin pisar lo decidido, con «Quitarlo» y puestos al día en las ya montadas', async () => {
+    const al = cargar('ajustes-locales');
+    const nueva = () => {
+      const r = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-consejos-'));
+      fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+      fs.mkdirSync(path.join(r, '.claude'));
+      fs.mkdirSync(path.join(r, '.rsc'));
+      return r;
+    };
+    const claude = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-claude-'));
+    const fuera = () => false;
+    const poner = (r, extra = {}) => al.ponerLosDeLaBarra({ raiz: r, claude, estaEnGit: fuera, ...extra });
+    const quitar = (r, que = null) => al.quitarLosDeLaBarra({ raiz: r, estaEnGit: fuera, que });
+    const fichero = (r) => path.join(r, '.claude', 'settings.local.json');
+    const local = (r) => JSON.parse(fs.readFileSync(fichero(r), 'utf8'));
+    const CLAVE = 'spinnerTipsEnabled';
+
+    // Se pone a false, se apunta, y la frase lo dice.
+    const vacia = nueva();
+    const hecho = await poner(vacia);
+    assert.equal(local(vacia)[CLAVE], false, 'no apaga los consejos');
+    assert.equal(hecho.consejos, true);
+    assert.deepEqual(al.loQueSePuso(hecho), ['idioma', 'preguntar', 'consejos']);
+    assert.equal(al.laFrase({ consejos: true }), 'He dejado a Claude sin consejos en inglés mientras trabaja.');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(vacia, ...al.CONSTANCIA), 'utf8')).tips, true, 'la constancia no lo dice');
+    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
+
+    // Lo que ya dijo, sí o no, en cualquiera de los tres sitios, manda; y lo que no se entiende, tampoco se toca.
+    for (const [donde, valor, escribir] of [
+      ['aquí, a true', true, (r) => fs.writeFileSync(fichero(r), JSON.stringify({ [CLAVE]: true }))],
+      ['en los de la carpeta, a true', undefined, (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ [CLAVE]: true }))],
+      ['en los de la carpeta, que no se entienden', undefined, (r) => fs.writeFileSync(path.join(r, '.claude', 'settings.json'), `{ "${CLAVE}": true, }`)],
+    ]) {
+      const r = nueva();
+      escribir(r);
+      await poner(r);
+      const puesto = fs.existsSync(fichero(r)) ? local(r) : {};
+      assert.equal(puesto[CLAVE], valor, `se pisa lo dicho ${donde}`);
+    }
+    const suyos = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-suyos-'));
+    fs.writeFileSync(path.join(suyos, 'settings.json'), JSON.stringify({ [CLAVE]: true }));
+    const conLosSuyos = nueva();
+    await al.ponerLosDeLaBarra({ raiz: conLosSuyos, claude: suyos, estaEnGit: fuera });
+    assert.equal(local(conLosSuyos)[CLAVE], undefined, 'se pisa lo que dicen sus ajustes de usuario');
+
+    // «Quitarlo»: solo si sigue como se dejó; lo quitado no vuelve.
+    assert.equal((await quitar(vacia, ['consejos'])).hecho, 'quitado');
+    assert.equal(local(vacia)[CLAVE], undefined, '«Quitarlo» no lo quita');
+    assert.equal(local(vacia).language, 'español', 'quitar los consejos se lleva el español');
+    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'lo quitado vuelve');
+    const cambiada = nueva();
+    await poner(cambiada);
+    const c = local(cambiada); c[CLAVE] = true; fs.writeFileSync(fichero(cambiada), JSON.stringify(c));
+    await quitar(cambiada, ['consejos']);
+    assert.equal(local(cambiada)[CLAVE], true, 'quita lo que ahora es suyo');
+    // Sin el que (todo): también se lleva los consejos.
+    const todo = nueva();
+    await poner(todo);
+    await quitar(todo);
+    assert.equal(local(todo)[CLAVE], undefined);
+
+    // Una constancia plantada con otra cosa no vale; y la de antes de la 185 sigue valiendo.
+    const plantada = nueva();
+    await poner(plantada);
+    const marca = path.join(plantada, ...al.CONSTANCIA);
+    const m = JSON.parse(fs.readFileSync(marca, 'utf8')); m.tips = 'sí';
+    fs.writeFileSync(marca, JSON.stringify(m));
+    assert.equal((await quitar(plantada)).hecho, 'noCasa', 'cree una constancia con otra cosa');
+
+    // Las carpetas ya montadas (decisión 157): su constancia no tiene `tips`, y al abrir se ponen solos, se dicen, y se quitan.
+    const vieja = nueva();
+    fs.writeFileSync(fichero(vieja), JSON.stringify({ language: 'español', permissions: { ask: al.PREGUNTAR } }));
+    fs.writeFileSync(path.join(vieja, ...al.CONSTANCIA), JSON.stringify({
+      ask: al.PREGUNTAR, language: 'español', huella: al.laHuella(vieja, { language: 'español', ask: al.PREGUNTAR }),
+    }));
+    const alDia = await poner(vieja);
+    assert.deepEqual([alDia.hecho, alDia.idioma, alDia.preguntar, alDia.consejos], ['puesto', false, [], true], 'una carpeta de la 157 no se pone al día');
+    assert.equal(al.laFrase(alDia), 'He dejado a Claude sin consejos en inglés mientras trabaja.');
+    assert.equal(local(vieja).language, 'español');
+    assert.equal((await quitar(vieja, ['consejos'])).hecho, 'quitado');
+    assert.deepEqual(local(vieja), { language: 'español', permissions: { ask: al.PREGUNTAR } }, 'quitar los consejos toca otra cosa');
+
+    // En una carpeta de alguien, con su botón, no: ese botón cuenta el español y lo de subir, y nada más.
+    const deAlguien = nueva();
+    fs.mkdirSync(path.join(deAlguien, '.claude', 'skills'), { recursive: true });
+    const mirado = await poner(deAlguien, { conSuSi: true, soloMirar: true });
+    assert.equal(mirado.consejos, false, 'ofrece los consejos en una carpeta de alguien');
+    await poner(deAlguien, { conSuSi: true });
+    assert.equal(local(deAlguien)[CLAVE], undefined, 'pone los consejos en una carpeta de alguien');
+    return 'puestos y dichos · lo decidido, respetado en los tres sitios · «Quitarlo» solo si sigue igual · las ya montadas, al día · no en la de alguien';
+  });
+
+  await comprobar('185: los verbos de Claude, en español, del instalador a los ajustes del editor, sin pisar lo suyo y con constancia', async () => {
+    const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
+    const CLAVE = 'claudeCode.spinnerVerbs';
+    const valor = ade.DE_CLAUDE[CLAVE];
+    // Los valores de la doc: `mode` es `append` o `replace`, y `verbs` una lista de textos.
+    assert.ok(['append', 'replace'].includes(valor.mode), 'un modo que Claude no conoce');
+    assert.equal(valor.mode, 'replace', 'con append saldrían también los verbos en inglés');
+    assert.ok(Array.isArray(valor.verbs) && valor.verbs.length >= 8 && valor.verbs.every((v) => typeof v === 'string' && v.trim() && !/[a-z]ing\b/i.test(v)), 'los verbos no son una lista de textos en español');
+    assert.equal(new Set(valor.verbs).size, valor.verbs.length, 'verbos repetidos');
+    // Solo con Claude; con Codex solo, ni se toca. Y de la barra, no solo del instalador.
+    assert.deepEqual(ade.queToca(['claude'])[CLAVE], valor);
+    assert.equal(CLAVE in ade.queToca(['codex'], { delEditor: true }), false, 'se pone con Codex solo');
+    assert.ok(ade.DE_LA_BARRA.includes(CLAVE), 'la barra no lo pone a quien solo instaló la barra');
+    assert.ok(!ade.DEL_INSTALADOR.includes(CLAVE));
+
+    // En el fichero de una casa de mentira: puesto, apuntado, y quitado al desinstalar.
+    const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-verbos-'));
+    const f = path.join(casa, 'settings.json');
+    const hecho = await ade.ponerEnElFichero({ fichero: f, asistentes: ['claude'] });
+    assert.equal(hecho.hecho, 'puesto');
+    assert.deepEqual(JSON.parse(fs.readFileSync(f, 'utf8'))[CLAVE], valor);
+    assert.deepEqual(ade.leerConstancia(casa).puestas[CLAVE], valor, 'no queda constancia');
+    assert.deepEqual(ade.quitar({ fichero: f }).quitadas.includes(CLAVE), true);
+    assert.equal(CLAVE in JSON.parse(fs.readFileSync(f, 'utf8')), false, 'desinstalar no lo quita');
+    // Lo suyo no se pisa, y desinstalar no lo quita; y si lo cambió después, tampoco.
+    const suya = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-verbos-'));
+    const fs2 = path.join(suya, 'settings.json');
+    fs.writeFileSync(fs2, JSON.stringify({ [CLAVE]: { mode: 'append', verbs: ['Vamos'] } }));
+    const h2 = await ade.ponerEnElFichero({ fichero: fs2, asistentes: ['claude'] });
+    assert.ok(h2.respetadas.includes(CLAVE));
+    assert.deepEqual(JSON.parse(fs.readFileSync(fs2, 'utf8'))[CLAVE], { mode: 'append', verbs: ['Vamos'] }, 'se pisa lo suyo');
+    ade.quitar({ fichero: fs2 });
+    assert.deepEqual(JSON.parse(fs.readFileSync(fs2, 'utf8'))[CLAVE], { mode: 'append', verbs: ['Vamos'] }, 'desinstalar quita lo suyo');
+    const cambiada = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-verbos-'));
+    const fc = path.join(cambiada, 'settings.json');
+    await ade.ponerEnElFichero({ fichero: fc, asistentes: ['claude'] });
+    const dc = JSON.parse(fs.readFileSync(fc, 'utf8')); dc[CLAVE].verbs.push('Uno más'); fs.writeFileSync(fc, JSON.stringify(dc));
+    ade.quitar({ fichero: fc });
+    assert.ok(JSON.parse(fs.readFileSync(fc, 'utf8'))[CLAVE].verbs.includes('Uno más'), 'desinstalar quita lo que ya cambió');
+    return 'replace con doce verbos, solo con Claude, de la barra y del instalador, con constancia y sin pisar lo suyo';
+  });
+
+  await comprobar('185: Ayuda dice cuándo el control remoto no funciona, y solo avisa del ordenador si el editor tiene la variable', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const nuevo = cargar('lo-nuevo-de-claude');
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, instaladas: vscode.guion.extensionesInstaladas, env: { ...process.env } };
+    proveedor.enviar = (m) => enviados.push(m);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const ayuda = async () => { enviados.length = 0; await proveedor.manejar({ tipo: 'verAyuda' }); return enviados.find((m) => m.tipo === 'ayuda'); };
+    try {
+      // La función sola: qué variables, y que un valor vacío, 0 o false no las enciende.
+      assert.deepEqual(nuevo.VARIABLES_QUE_LO_APAGAN, ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'DISABLE_GROWTHBOOK']);
+      assert.deepEqual(nuevo.loQueApagaElControlRemoto({}), []);
+      assert.deepEqual(nuevo.loQueApagaElControlRemoto({ DISABLE_GROWTHBOOK: '1' }), ['DISABLE_GROWTHBOOK']);
+      assert.deepEqual(nuevo.loQueApagaElControlRemoto({ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 'true', DISABLE_GROWTHBOOK: '0' }), ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']);
+      assert.deepEqual(nuevo.loQueApagaElControlRemoto({ DISABLE_GROWTHBOOK: '', DISABLE_TELEMETRY: '1', DO_NOT_TRACK: '1' }), [], 'DISABLE_TELEMETRY y DO_NOT_TRACK no lo apagan');
+      assert.equal(nuevo.paraAyuda({ conClaude: false, entorno: { DISABLE_GROWTHBOOK: '1' } }), null);
+
+      // Con Claude y sin las variables: la línea de siempre, sin la del ordenador.
+      for (const v of nuevo.VARIABLES_QUE_LO_APAGAN) delete process.env[v];
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      let m = await ayuda();
+      assert.deepEqual(m.controlRemoto, { apagado: false });
+      let html = pintar(m);
+      assert.match(html, /Seguir desde el móvil/);
+      assert.match(html, /plan de pago de Claude/);
+      assert.match(html, /Claude Team o Enterprise, quien lleva la cuenta tiene que activarlo antes/);
+      assert.match(html, /pídeselo a esa persona/);
+      assert.doesNotMatch(html, /en este ordenador está apagado/, 'dice que está apagado sin que lo esté');
+
+      // Con una de las dos variables en el entorno del editor: lo dice.
+      process.env.DISABLE_GROWTHBOOK = '1';
+      m = await ayuda();
+      assert.deepEqual(m.controlRemoto, { apagado: true });
+      html = pintar(m);
+      assert.match(html, /en este ordenador está apagado/);
+      assert.match(html, /Dile a quien te instaló esto que lo quite/);
+      assert.doesNotMatch(html, /DISABLE_GROWTHBOOK/, 'enseña el nombre de la variable');
+
+      // Sin Claude (Codex solo), no sale nada de esto.
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      m = await ayuda();
+      assert.equal(m.controlRemoto, null);
+      assert.doesNotMatch(pintar(m), /Seguir desde el móvil/);
+      return 'la línea con Claude · la del ordenador solo con la variable · nada con Codex solo';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      for (const v of cargar('lo-nuevo-de-claude').VARIABLES_QUE_LO_APAGAN) { if (antes.env[v] === undefined) delete process.env[v]; else process.env[v] = antes.env[v]; }
+    }
+  });
+
+  await comprobar('185: «Que Claude solo vea lo que le pegues»: un clic en los ajustes de usuario del editor, que se deshace, para todas las carpetas', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const nuevo = cargar('lo-nuevo-de-claude');
+    const CLAVE = 'claudeCode.attachOpenFile';
+    const enviados = [];
+    const antes = { enviar: proveedor.enviar, rechaza: vscode.guion.rechazaAjuste, instaladas: vscode.guion.extensionesInstaladas, global: vscode.registrado.ajustes.global[CLAVE], trabajo: vscode.registrado.ajustes.workspace[CLAVE], puesto: proveedor.contexto.globalState.get(nuevo.CLAVE_LO_PUSIMOS) };
+    proveedor.enviar = (m) => enviados.push(m);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const desescapar = (v) => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const botones = (html) => [...html.matchAll(/<button[^>]*data-accion="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)]
+      .map(([, accion, dentro]) => [dentro.replace(/<span class="icono"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), JSON.parse(desescapar(accion))]);
+    const lleva = (html, etiqueta) => (botones(html).find(([e]) => e === etiqueta) || [])[1];
+    const pantalla = async () => { enviados.length = 0; await proveedor.manejar({ tipo: 'verDatosDeClientes' }); return pintar([...enviados].reverse().find((m) => m.tipo === 'datosDeClientes')); };
+    try {
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      vscode.guion.rechazaAjuste = () => false; // con la extensión de Claude puesta, la clave está registrada
+      delete vscode.registrado.ajustes.global[CLAVE];
+      await proveedor.contexto.globalState.update(nuevo.CLAVE_LO_PUSIMOS, undefined);
+      // Sin pulsar: lo de fábrica (la clave sin tocar), y el botón que lo pone.
+      let html = await pantalla();
+      assert.match(html, /Que Claude solo vea lo que le pegues/);
+      assert.match(html, /Vale para todas tus carpetas, no solo para esta/);
+      assert.deepEqual(lleva(html, 'Que Claude solo vea lo que le pegues'), { tipo: 'soloLoQueLePegues', cual: true });
+      assert.equal(lleva(html, 'Que vuelva a ver el fichero abierto'), undefined, 'ofrece deshacer lo que no está hecho');
+      // Con el clic: en los ajustes de USUARIO, a false, no en los de la carpeta; y la pantalla lo dice.
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: true });
+      assert.equal(vscode.registrado.ajustes.global[CLAVE], false, 'no lo pone en los ajustes de usuario ');
+      assert.equal(vscode.registrado.ajustes.workspace[CLAVE], undefined, 'lo pone solo en esta carpeta');
+      html = pintar([...enviados].reverse().find((m) => m.tipo === 'datosDeClientes'));
+      assert.match(html, /Hecho: Claude ya no ve el fichero que tienes abierto/);
+      assert.deepEqual(lleva(html, 'Que vuelva a ver el fichero abierto'), { tipo: 'soloLoQueLePegues', cual: false });
+      // Deshacer: quita la clave, que es volver a lo de fábrica.
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: false });
+      assert.ok(!(CLAVE in vscode.registrado.ajustes.global), 'deshacer no quita lo que pusimos');
+      // Lo que ya tenía a false antes de pulsar es suyo: al pedir que vuelva a ver, queda a true y no se borra.
+      vscode.registrado.ajustes.global[CLAVE] = false;
+      await proveedor.contexto.globalState.update(nuevo.CLAVE_LO_PUSIMOS, undefined);
+      html = await pantalla();
+      assert.match(html, /Hecho: Claude ya no ve/, 'no ve que ya lo tenía puesto');
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: true });
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: false });
+      assert.equal(vscode.registrado.ajustes.global[CLAVE], true, 'al deshacer lo que ya tenía, lo deja a true');
+      // Si el editor no deja escribirlo, se dice y no se queda a medias.
+      vscode.guion.rechazaAjuste = (c) => c === CLAVE;
+      enviados.length = 0;
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: true });
+      assert.equal(enviados.find((m) => m.tipo === 'aviso').malo, true, 'no dice que no ha podido');
+      vscode.guion.rechazaAjuste = () => false;
+      // Sin Claude puesto (Codex solo), ni sale: el editor no conoce esa clave.
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      html = await pantalla();
+      assert.doesNotMatch(html, /Que Claude solo vea lo que le pegues/, 'sale sin Claude');
+      assert.match(html, /Lo que no se pega nunca/, 'quita más que el interruptor');
+      vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+      // Una acción que no es un booleano pedido, no la pone.
+      delete vscode.registrado.ajustes.global[CLAVE];
+      await proveedor.manejar({ tipo: 'soloLoQueLePegues', cual: 'si' });
+      assert.ok(!(CLAVE in vscode.registrado.ajustes.global) || vscode.registrado.ajustes.global[CLAVE] === true, 'un valor raro lo pone');
+      return 'el botón pone false en los ajustes de usuario · lo dice · se deshace · lo suyo no se pierde · si falla, lo dice';
+    } finally {
+      proveedor.enviar = antes.enviar;
+      vscode.guion.rechazaAjuste = antes.rechaza;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      if (antes.global === undefined) delete vscode.registrado.ajustes.global[CLAVE]; else vscode.registrado.ajustes.global[CLAVE] = antes.global;
+      await proveedor.contexto.globalState.update(nuevo.CLAVE_LO_PUSIMOS, antes.puesto);
+    }
+  });
+
+
   await comprobar('los instaladores, con los dos asistentes y comprobados: el Mac y el .exe preguntan, y probar.sh y probar.ps1 miran cada clave con su valor (decisión 168)', async () => {
     const cp = require('node:child_process');
     const ade = require(path.join(RAIZ, '..', 'instalador', 'comun', 'ajustes-del-editor.js'));
@@ -19292,7 +19549,9 @@ exec git "$@"
     for (const asistentes of [['claude'], ['codex'], ['claude', 'codex']]) {
       for (const [clave, valor] of Object.entries(ade.queToca(asistentes, { delEditor: true }))) {
         assert.ok(sh.includes(`'${clave}': ${JSON.stringify(valor).replace(/"/g, "'")}`), `probar.sh no mira ${clave} con su valor`);
-        assert.ok(ps.includes(`'${clave}' = '${JSON.stringify(valor)}'`) || ps.includes(`['${clave}'] = '${JSON.stringify(valor)}'`), `probar.ps1 no mira ${clave} con su valor`);
+        // Los verbos van en español y probar.ps1 es ASCII (PowerShell 5.1): ahí se mira su forma, modo y cuántos.
+        const enPs = clave === 'claudeCode.spinnerVerbs' ? JSON.stringify({ mode: valor.mode, verbs: valor.verbs.length }) : JSON.stringify(valor);
+        assert.ok(ps.includes(`'${clave}' = '${enPs}'`) || ps.includes(`['${clave}'] = '${enPs}'`), `probar.ps1 no mira ${clave} con su valor`);
       }
     }
     assert.match(sh, /remoteControlAtStartup":true/);
@@ -19333,7 +19592,7 @@ exec git "$@"
     };
     for (const asistente of ['claude', 'codex', 'losDos']) {
       const bien = await probarEn(asistente);
-      assert.match(bien.editor, /^✓ .*(10|8) claves/, `probar.sh, con ${asistente} bien puesto: ${bien.editor}\n${bien.todo}`);
+      assert.match(bien.editor, /^✓ .*(11|8) claves/, `probar.sh, con ${asistente} bien puesto: ${bien.editor}\n${bien.todo}`);
       assert.match(bien.piezas, /^✓/, `${asistente}: ${bien.piezas}`);
       assert.match(bien.remoto, asistente === 'codex' ? /^·/ : /^✓/, `${asistente}: ${bien.remoto}`);
     }
@@ -19471,10 +19730,10 @@ exec git "$@"
       vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
       let usuario = unOrdenador();
       let hecho = await proveedor.ponerLoDelEditor();
-      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding']);
-      assert.deepEqual(vscode.registrado.ajustes.global, { 'claudeCode.focusView': true, 'claudeCode.hideOnboarding': true }, 'la barra pone algo de todo el editor');
-      assert.equal(frase(), 'He dejado a Claude enseñándote solo lo que le pides y lo que te contesta, sin su lista de primeros pasos.');
-      assert.deepEqual(Object.keys(ade.leerConstancia(usuario).puestas).sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding'], 'no queda constancia para desinstalar');
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding', 'claudeCode.spinnerVerbs']);
+      assert.deepEqual(Object.keys(vscode.registrado.ajustes.global).sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding', 'claudeCode.spinnerVerbs'], 'la barra pone algo de todo el editor');
+      assert.equal(frase(), 'He dejado a Claude enseñándote solo lo que le pides y lo que te contesta, sin su lista de primeros pasos, diciéndote en español lo que hace mientras trabaja.');
+      assert.deepEqual(Object.keys(ade.leerConstancia(usuario).puestas).sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding', 'claudeCode.spinnerVerbs'], 'no queda constancia para desinstalar');
       // Otra vez: nada, y nada que decir. Y lo que quitó no vuelve.
       proveedor.avisoPendiente = null;
       assert.equal((await proveedor.ponerLoDelEditor()).hecho, 'nada');
@@ -19489,7 +19748,7 @@ exec git "$@"
       hecho = await proveedor.ponerLoDelEditor();
       assert.deepEqual(hecho.respetadas, ['claudeCode.focusView']);
       assert.equal(vscode.registrado.ajustes.global['claudeCode.focusView'], false, 'se pisa lo que decidió');
-      assert.equal(frase(), 'He dejado a Claude sin su lista de primeros pasos.');
+      assert.equal(frase(), 'He dejado a Claude sin su lista de primeros pasos, diciéndote en español lo que hace mientras trabaja.');
 
       // Codex en el ajuste y sin poner: no se apunta nada, y cuando está, se pone.
       usuario = unOrdenador();
@@ -19507,11 +19766,11 @@ exec git "$@"
       unOrdenador();
       vscode.registrado.ajustes.global['executiveLab.asistente'] = 'losDos';
       hecho = await proveedor.ponerLoDelEditor();
-      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding']);
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding', 'claudeCode.spinnerVerbs']);
       // En automático con los dos puestos, igual.
       unOrdenador();
       hecho = await proveedor.ponerLoDelEditor();
-      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding'], 'en automático no cuentan los dos que están puestos');
+      assert.deepEqual(hecho.puestas.sort(), ['claudeCode.focusView', 'claudeCode.hideOnboarding', 'claudeCode.spinnerVerbs'], 'en automático no cuentan los dos que están puestos');
 
       // Lo que puso el instalador ya está mirado: la barra no lo vuelve a poner.
       usuario = unOrdenador();
@@ -22588,8 +22847,8 @@ exec git "$@"
     try {
       // ── Lo que dice, de su tabla: las tres cosas, y cada asistente de la barra con su camino.
       assert.equal(tabla.titulo, 'Si trabajas con datos de clientes');
-      assert.deepEqual(tabla.partes.map((p) => p.titulo), ['Con datos de clientes, una licencia de empresa', 'Dónde se apaga que se usen tus datos', 'Lo que no se pega nunca'], 'faltan o sobran partes');
-      const [licencia, apagar, nunca] = tabla.partes.map((p) => p.lineas.map((l) => l.texto).join(' '));
+      assert.deepEqual(tabla.partes.map((p) => p.titulo), ['Con datos de clientes, una licencia de empresa', 'Dónde se apaga que se usen tus datos', 'Que Claude solo vea lo que le pegues', 'Lo que no se pega nunca'], 'faltan o sobran partes');
+      const [licencia, apagar, , nunca] = tabla.partes.map((p) => p.lineas.map((l) => l.texto).join(' '));
       for (const plan of ['Team', 'Enterprise', 'Education', 'Business', 'Edu']) assert.match(licencia, new RegExp(`\\b${plan}\\b`), `la licencia de empresa no nombra ${plan}`);
       assert.match(licencia, /plan personal.*depende de un ajuste/, 'no dice que con un plan personal depende de un ajuste');
       const de = Object.fromEntries(tabla.partes[1].lineas.map((l) => [l.asistente, l]));
