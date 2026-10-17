@@ -25175,7 +25175,7 @@ exec git "$@"
     const av = await import(require('node:url').pathToFileURL(viaja).href);
     const cp = require('node:child_process');
     const ID = '00893aaf-19fa-41d2-8238-13269b9b3ca0';
-    const hacer = () => { const c = fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-conv-')); fs.writeFileSync(path.join(c, '.rsc.json'), '{}'); return c; };
+    const hacer = () => { const c = fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-conv-')); fs.writeFileSync(path.join(c, '.rsc.json'), '{}'); fs.mkdirSync(path.join(c, '.rsc')); return c; };
     const fichero = (c) => path.join(c, '.rsc', 'executive-lab-ultima-conversacion.json');
     const propia = hacer();
     // Con un JSON de mentira, igual que lo manda Claude: id, ruta, y lo demás que trae.
@@ -25184,6 +25184,12 @@ exec git "$@"
     const apuntado = JSON.parse(fs.readFileSync(fichero(propia), 'utf8'));
     assert.deepEqual(apuntado, { id: ID, cuando: '2026-10-17T10:00:00.000Z' }, 'se apunta algo más que el id y la hora');
     assert.ok(!fs.readFileSync(fichero(propia), 'utf8').includes('PRIVADO') && !fs.readFileSync(fichero(propia), 'utf8').includes('secreto'), 'se apunta contenido de la conversación');
+    // Sin `.rsc/` (un clon, o la borró) no se apunta ni se crea: RSC dejaría de reponer las marcas del equipo.
+    const sinRsc = fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-conv-'));
+    fs.writeFileSync(path.join(sinRsc, '.rsc.json'), '{}');
+    assert.equal(av.apuntarLaUltima({ ...entrada, cwd: sinRsc }, sinRsc), false, 'sin .rsc/ se apunta');
+    assert.ok(!fs.existsSync(path.join(sinRsc, '.rsc')), 'el aviso crea .rsc/');
+    fs.rmSync(sinRsc, { recursive: true, force: true });
     // Los cuatro tipos de Claude lo apuntan; el último manda.
     ['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog'].forEach((tipo, i) => {
       assert.equal(av.apuntarLaUltima({ ...entrada, session_id: `sesion-${i}-abc`, notification_type: tipo }, propia), true, tipo);

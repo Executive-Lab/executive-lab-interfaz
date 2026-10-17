@@ -53,7 +53,7 @@
 //
 //   argv[2] = la carpeta del proyecto   stdin = el JSON del enganche (Notification)
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 export const TITULO = 'Executive Lab';
@@ -142,7 +142,8 @@ export function apuntarLaUltima(entrada, carpeta, ahora = new Date()) {
     if (typeof id !== 'string' || !ID_VALIDO.test(id)) return false;
     if (typeof carpeta !== 'string' || !carpeta.trim() || carpeta.length > 4096 || !existsSync(join(carpeta.trim(), '.rsc.json'))) return false;
     const dir = join(carpeta.trim(), DONDE_SE_APUNTA[0]);
-    try { if (!lstatSync(dir).isDirectory()) return false; } catch { mkdirSync(dir, { recursive: true }); }
+    // Sin `.rsc/` no se apunta: crearla haría que RSC dejara de reponer las marcas del equipo (revisión de la 177).
+    try { if (!lstatSync(dir).isDirectory()) return false; } catch { return false; }
     const fichero = join(dir, DONDE_SE_APUNTA[1]);
     try { if (lstatSync(fichero).isSymbolicLink()) return false; } catch { /* no está: se crea */ }
     const temporal = `${fichero}.${process.pid}.tmp`;
