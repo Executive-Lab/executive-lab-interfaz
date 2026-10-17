@@ -354,7 +354,10 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
     }
   };
 
-  mirarCarpeta('');
+  // Con la carpeta entera como aplicación, sus ficheros de acceso de la raíz son
+  // suyos, como su `.env` (decisión 180): están en su sitio y no se mueven. Siguen
+  // contando para `paraProteger` y para el aviso de «ya están en tus copias».
+  if (conLasDeLasApps || !laRaizEsUnaApp()) mirarCarpeta('');
   let primerNivel = [];
   try {
     primerNivel = fs.readdirSync(raiz, { withFileTypes: true })
