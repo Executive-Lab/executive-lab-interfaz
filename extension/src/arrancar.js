@@ -631,6 +631,8 @@ async function sinSuSi(parte) {
 // es el fichero que RSC ya usa para el perfil y el que leen `orient` y la
 // barra lateral. Con ellos, qué lleva la carpeta y cuánta gente hay detrás,
 // que no los pide RSC y el asistente sí necesita saber.
+const elSaltoDe = (texto) => (/\r\n/.test(String(texto)) ? '\r\n' : '\n');
+
 function ponerEnElPerfil(campos) {
   const perfil = proyecto.ruta(...identidad.PERFIL);
   if (!perfil || !fs.existsSync(perfil)) return false;
@@ -642,15 +644,17 @@ function ponerEnElPerfil(campos) {
   // Los reemplazos van con función y no con texto: en un texto de reemplazo,
   // `$&` o `$'` quieren decir «lo encontrado» o «lo que viene detrás», y un
   // nombre como «Soler $& Hijos» rompía la cabecera del perfil.
+  // El salto que ya tenía el fichero (en Windows, «\r\n»): mezclar los dos deja el perfil a medias.
+  const salto = elSaltoDe(texto);
   let cabecera = bloque[1];
   for (const [clave, valor] of Object.entries(campos)) {
     if (!valor) continue;
     const linea = new RegExp(`^${clave}:.*$`, 'm');
     const puesta = `${clave}: ${valor}`;
-    cabecera = linea.test(cabecera) ? cabecera.replace(linea, () => puesta) : `${cabecera}\n${puesta}`;
+    cabecera = linea.test(cabecera) ? cabecera.replace(linea, () => puesta) : `${cabecera}${salto}${puesta}`;
   }
 
-  fs.writeFileSync(perfil, texto.replace(bloque[0], () => `---\n${cabecera}\n---`));
+  fs.writeFileSync(perfil, texto.replace(bloque[0], () => `---${salto}${cabecera}${salto}---`));
   return true;
 }
 
@@ -697,6 +701,7 @@ function devolverAlPerfil(antes) {
   if (!antes || !ahora || ahora === antes) return false;
   const viejo = partesDelPerfil(antes);
   const nuevo = partesDelPerfil(ahora);
+  const salto = elSaltoDe(ahora);
 
   const suValor = (clave) => ((nuevo.cabecera || '').match(new RegExp(`^${clave}\\s*:\\s*(.+)$`, 'm')) || [])[1];
   const alDia = { accompaniment_level: suValor('accompaniment'), technical_level: suValor('technical_level') };
@@ -709,17 +714,17 @@ function devolverAlPerfil(antes) {
   if (cabecera !== null && viejo.cabecera) {
     const tiene = new Set(entradasDe(cabecera).map((e) => e.clave));
     const faltan = entradasDe(viejo.cabecera).filter((e) => !tiene.has(e.clave)).flatMap((e) => e.lineas);
-    if (faltan.length) cabecera = `${cabecera}\n${conLoDeHoy(faltan.join('\n').replace(/\s+$/, ''))}`;
+    if (faltan.length) cabecera = `${cabecera}${salto}${conLoDeHoy(faltan.join(salto).replace(/\s+$/, ''))}`;
   }
 
   // Lo suyo se busca tal cual estaba: un RSC que ya conserve el cuerpo lo trae
   // con el dial de antes, y buscarlo ya al día lo duplicaría.
   const suyo = viejo.cuerpo.replace(/^#\s+User profile\s*$/im, '').replace(/^Goal:.*$/m, '').trim();
   let cuerpo = nuevo.cuerpo;
-  if (suyo && !cuerpo.includes(suyo)) cuerpo = `${cuerpo.replace(/\s*$/, '')}\n\n${suyo}\n`;
+  if (suyo && !cuerpo.includes(suyo)) cuerpo = `${cuerpo.replace(/\s*$/, '')}${salto}${salto}${suyo}${salto}`;
   cuerpo = conLoDeHoy(cuerpo);
 
-  const escrito = cabecera === null ? cuerpo : `---\n${cabecera}\n---\n${cuerpo}`;
+  const escrito = cabecera === null ? cuerpo : `---${salto}${cabecera}${salto}---${salto}${cuerpo}`;
   if (escrito === ahora) return false;
   fs.writeFileSync(proyecto.ruta(...identidad.PERFIL), escrito);
   return true;

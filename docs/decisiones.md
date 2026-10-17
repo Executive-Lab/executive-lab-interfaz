@@ -9113,6 +9113,49 @@ vista sencilla preguntada aunque ya esté puesta; los consejos quitados sin su s
 consejos preguntados en una carpeta que no montó la barra; la costumbre puesta sin su sí; «Sí» a una costumbre que no se
 había propuesto; y la regla 9 del asistente sin mandar preguntar lo suyo.
 
+
+## 189. Windows y los errores que no se dicen
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `windows-y-errores`
+
+Una auditoría leyó un árbol viejo. Se comprobó cada punto contra main (0.56.0) y esto es lo que ya estaba y lo
+que se hizo.
+
+**1. Saltos de línea de Windows (`\r\n`).** Eran de verdad cuatro listas que salían vacías: `laCorta` de
+`diario.js`, `seccionDelPerfil` de `ajustes.js`, y `puntosDe` y `principios` de `reglas.js` (partían con `'\n'` y
+la regex acababa en `$`, que no admite el `\r`). Ahora parten con `/\r?\n/`. Las demás búsquedas (`cerebro.js`,
+`conexiones.js`, `mcp.js`, `retirados.js`, `enganches-de-codex.js`) ya recortaban o usaban `\s*$`: no se tocaron.
+`trato.js` y `arrancar.js` (`ponerEnElPerfil`, `devolverAlPerfil`) reescribían la cabecera con `\n`: ahora usan
+el salto que ya tenía el fichero.
+
+**2. `esMarca` en el vigía.** Ya estaba arreglado (decisión 167: pasa `\` a `/`). Solo se sacó a
+`marca.esDeLaMarca` para poder probarlo con rutas de Windows.
+
+**3. Rutas comparadas por texto.** Nuevo `src/rutas.js` (`estaDentro`, `mismoSitio`, `sitioReal`): `path.relative`,
+sin distinguir mayúsculas en Windows, y `sitioReal` con `realpathSync.native`, que devuelve las mayúsculas del
+disco. Lo usan `cerebro.js`, `marca.js`, `conexiones.js` y `terreno.js` (`queHayEncima`; `queCarpetaEs` ya
+ignoraba mayúsculas). `ajena.js` ya usaba `path.relative`.
+
+**4. `pedidos.contestar`.** Ya no borra el pedido si no pudo escribir la respuesta. Quien llama pasa por
+`dejarLaRespuesta`: si falla, apunta el pedido (no se reintenta cada minuto) y dice «No he podido contestarle al
+asistente, y se queda esperando. Pulsa «Algo va mal»…» con su botón, una vez por pedido.
+
+**5. `historial.cuantosCambios`.** Devuelve `null` si no pudo mirar (git falló, o la salida pasó del `maxBuffer`),
+no 0. `guardarSiToca` devuelve `sinMirar` y la barra dice «No he podido mirar si hay cambios sin guardar» en vez
+de «✓ Todo guardado». El resto de quien lo usa trata `null` como «no avisar», como antes.
+
+**6. `tema.js` y `web.js`.** El aviso dice cuál y por qué en una frase (`por-que-no-se-escribio.js`: permiso,
+disco lleno, otro programa lo tiene abierto…): «No he podido guardar «logo.png»: no queda sitio en el disco.»,
+«Guardado 1. No he podido guardar «x.pdf»: …», y en `web.js` la carpeta, los colores (`marca.md`) y el logotipo.
+Antes `sacarLaCara` reventaba si no podía crear la carpeta.
+
+**Las pruebas**: `humo.js` pasa a 527 (536 con `--con-arnes`). Siete comprobaciones nuevas (CRLF en las cuatro
+listas, cabecera del perfil, `esDeLaMarca`, `rutas` con rutas de Windows y Linux, pedido, `null`, avisos de la
+marca) y una cambiada (el pedido sin respuesta se queda). Tres en `windows.js` (rutas y mayúsculas reales,
+git de Windows con `null`/0/1, perfil `\r\n`), que solo corren en la máquina `windows`.
+**Mutaciones**, todas caen: sin `\r?\n` en `laCorta`; `esDeLaMarca` sin pasar `\` a `/`; `estaDentro` por texto;
+`contestar` sin devolver `false` antes de borrar; `cuantosCambios` devolviendo 0; `trato.js` con `\n` fijo.
+
 ## 188. La barra no se atasca
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `la-barra-no-se-atasca`

@@ -300,7 +300,9 @@ async function guardarSiToca({ horas, desde, ahora = Date.now(), sigueSinCopias 
   if (sigueSinCopias) return { hecho: 'sinCopias' };
   if (!(await hayGit())) return { hecho: 'sinGit' };
   if (!(await require('./terreno').podemosGuardarSolo())) return { hecho: 'noEsSuyo' };
-  if (!(await cambiosSinGuardar())) return { hecho: 'sinCambios' };
+  const cambios = await cambiosSinGuardar();
+  if (cambios === null) return { hecho: 'sinMirar' };
+  if (!cambios) return { hecho: 'sinCambios' };
   return { hecho: 'guardada', ...(await guardar(`Copia automática — ${fechaLarga()}`)) };
 }
 
@@ -470,8 +472,9 @@ async function subirCopia() {
   };
 }
 
-// Cuánto ha cambiado desde la última copia. Es para avisar, no para decidir:
-// si no se puede saber, se dice que cero y no se avisa de nada.
+// Cuánto ha cambiado desde la última copia. Es para avisar, no para decidir. Sin
+// historial o sin carpeta son 0; si había que mirar y no se pudo, `null` (decisión
+// 189): quien lo enseña no dice «todo guardado» sin saberlo.
 async function cambiosSinGuardar() {
   const h = historial();
   const donde = proyecto.raiz();

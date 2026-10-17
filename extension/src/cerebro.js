@@ -16,6 +16,7 @@ const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
 const lecturas = require('./lecturas');
+const rutas = require('./rutas');
 const { quedaDentro } = require('./foto');
 
 const WIKI = ['02-DOCS', 'wiki'];
@@ -185,9 +186,9 @@ function dentroDeLaWiki(rutaRelativa) {
   const wiki = proyecto.ruta(...WIKI);
   if (!wiki || typeof rutaRelativa !== 'string') return null;
   const completa = path.resolve(wiki, rutaRelativa);
-  if (!completa.startsWith(wiki + path.sep)) return null;
+  if (!rutas.estaDentro(wiki, completa)) return null;
   try {
-    return fs.realpathSync(completa).startsWith(fs.realpathSync(wiki) + path.sep) ? completa : null;
+    return rutas.estaDentro(fs.realpathSync.native(wiki), fs.realpathSync.native(completa)) ? completa : null;
   } catch {
     return null;
   }

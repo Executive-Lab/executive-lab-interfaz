@@ -119,11 +119,11 @@ function seccionDelPerfil(nombres) {
   for (const nombre of nombres) {
     const desde = texto.search(new RegExp(`^##\\s+${nombre}\\s*$`, 'mi'));
     if (desde === -1) continue;
-    const resto = texto.slice(desde).split('\n').slice(1).join('\n');
+    const resto = texto.slice(desde).split(/\r?\n/).slice(1).join('\n');
     const hasta = resto.search(/^##\s+/m);
     const trozo = hasta === -1 ? resto : resto.slice(0, hasta);
 
-    const puntos = trozo.split('\n')
+    const puntos = trozo.split(/\r?\n/)
       .map((l) => l.match(/^\s*[-*]\s+(.{3,})$/))
       .filter(Boolean)
       .map((m) => m[1].trim())

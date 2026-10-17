@@ -293,10 +293,13 @@ async function subir(carpeta, { url, token }, opciones) {
   }
 }
 
+// Cuántos cambios hay sin guardar. Si no se pudo mirar (git falló, o la salida no
+// cupió), devuelve `null`, no 0 (decisión 189): «0» es «sin cambios», y decirlo sin
+// haber podido mirar es decirle a la persona que está todo guardado sin saberlo.
 async function cuantosCambios(carpeta, opciones) {
   try {
     return await motor(opciones).cuantosCambios(carpeta);
-  } catch { return 0; }
+  } catch { return null; }
 }
 
 // Para el informe de "Algo va mal" y para las pruebas.

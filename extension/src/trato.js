@@ -83,9 +83,11 @@ function escribir(claves, valor) {
 
   if (!puesta) {
     const cabecera = nuevo.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    // El salto que ya tenía el fichero: en Windows es «\r\n», y mezclarlos lo deja a medias.
+    const salto = /\r\n/.test(nuevo) ? '\r\n' : '\n';
     nuevo = cabecera
-      ? nuevo.replace(/^---\r?\n/, `---\n${claves[0]}: ${valor}\n`)
-      : `---\n${claves[0]}: ${valor}\n---\n\n${nuevo}`;
+      ? nuevo.replace(/^---\r?\n/, `---${salto}${claves[0]}: ${valor}${salto}`)
+      : `---${salto}${claves[0]}: ${valor}${salto}---${salto}${salto}${nuevo}`;
   }
 
   try {

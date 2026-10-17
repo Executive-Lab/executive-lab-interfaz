@@ -143,7 +143,7 @@ function laLarga(texto) {
   const trozos = texto.split(/^##\s+/m).slice(1);
 
   for (const trozo of trozos) {
-    const lineas = trozo.split('\n');
+    const lineas = trozo.split(/\r?\n/);
     const encabezado = lineas.shift().trim();
     const titulo = encabezado.replace(/^D-\d+\s*[—–-]\s*/, '').trim();
     if (!titulo || ES_PLANTILLA(titulo)) continue;
@@ -167,7 +167,7 @@ function laLarga(texto) {
 // montaje inicial, y sin esto la pantalla sale vacía el primer día.
 function laCorta(texto) {
   return texto
-    .split('\n')
+    .split(/\r?\n/)
     .map((l) => l.match(/^[-*]\s+(.{4,})$/))
     .filter(Boolean)
     .map((m) => m[1].trim())
