@@ -84,7 +84,14 @@ function ejecutar(programa, args, opciones = {}) {
 
 // Sin mirar dentro de un repositorio anidado ni correr el `fsmonitor` de nadie:
 // ver SIN_MIRAR_DENTRO en instalador/comun/historial.js.
-const git = (...args) => ejecutar(entorno.git(), ['-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=all', ...args]);
+//
+// Decisión 188: con tope (15 s: todo lo que pasa por aquí es de la propia carpeta,
+// nada sube) y con `--no-optional-locks`, para que un `status` de la barra no le
+// quite el `index.lock` a un commit del asistente. En las órdenes que escriben
+// la bandera no hace nada: solo afecta a los candados que git coge «de paso».
+const TOPE_DE_GIT = 15000;
+const ARGS_DE_GIT = ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=all'];
+const git = (...args) => ejecutar(entorno.git(), [...ARGS_DE_GIT, ...args], { tiempoMaximo: TOPE_DE_GIT });
 const node = (args, opciones) => ejecutar(entorno.node(), args, opciones);
 const bash = (script, opciones) => ejecutar(entorno.bash(), [script], opciones);
 
@@ -98,4 +105,4 @@ function delPath(programa, args, opciones) {
   return ejecutar('cmd.exe', ['/d', '/s', '/c', `"${linea}"`], { ...opciones, verbatim: true });
 }
 
-module.exports = { ejecutar, git, node, bash, delPath };
+module.exports = { TOPE_DE_GIT, ARGS_DE_GIT, ejecutar, git, node, bash, delPath };

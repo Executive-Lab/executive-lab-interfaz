@@ -41,6 +41,19 @@ const RAMA = 'main';
 // se excluye además a mano (ver `guardar`).
 const SIN_MIRAR_DENTRO = ['-c', 'core.fsmonitor=false', '-c', 'diff.ignoreSubmodules=all'];
 
+// ── Ni sin tope ni quitándole el candado a nadie (decisión 188) ────────────
+//
+// Un git que se queda esperando (un disco de red, un candado que no suelta
+// nadie) dejaba la barra esperando con él. Cada orden lleva su tope: las que
+// solo leen, 15 s; subir, tres minutos; el resto, uno. Y las que solo leen van
+// con `--no-optional-locks`: un `status` refresca el índice y, para eso, coge
+// `index.lock`; si lo coge justo cuando el asistente hace un commit, es el
+// commit el que falla. Así lo que mira no estorba a lo que escribe.
+const SOLO_LEEN = new Set(['status', 'log', 'ls-files', 'ls-tree', 'rev-parse', 'show', 'diff', 'cat-file']);
+const TOPE = { lee: 15000, escribe: 60000, sube: 180000 };
+const topeDe = (args) => (SOLO_LEEN.has(args[0]) ? TOPE.lee : args[0] === 'push' ? TOPE.sube : TOPE.escribe);
+const SIN_CANDADOS = (args) => (SOLO_LEEN.has(args[0]) ? ['--no-optional-locks'] : []);
+
 // ───────────────────────────── el motor binario ───────────────────────────────
 
 function motorBinario(ejecutable) {
@@ -48,7 +61,7 @@ function motorBinario(ejecutable) {
   // (E2BIG en macOS con miles; en Windows, con unos cientos).
   function correr(dir, args, entorno = null, entrada = null) {
     return new Promise((resolver) => {
-      const hijo = execFile(ejecutable, ['-C', dir, ...SIN_MIRAR_DENTRO, ...args], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, ...(entorno ? { env: { ...process.env, ...entorno } } : {}) },
+      const hijo = execFile(ejecutable, ['-C', dir, ...SIN_CANDADOS(args), ...SIN_MIRAR_DENTRO, ...args], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: topeDe(args), windowsHide: true, ...(entorno ? { env: { ...process.env, ...entorno } } : {}) },
         (error, salida, err) => resolver({ codigo: error ? (error.code ?? 1) : 0, salida: salida || '', error: err || '' }));
       if (hijo.stdin) {
         hijo.stdin.on('error', () => { /* git ya se fue: lo dice su código */ });
@@ -292,4 +305,4 @@ async function cuantosCambios(carpeta, opciones) {
 // Para el informe de "Algo va mal" y para las pruebas.
 const queMotor = (opciones) => motor(opciones).nombre;
 
-module.exports = { iniciar, guardar, historial, volverA, enlazar, subir, cuantosCambios, queMotor, RAMA };
+module.exports = { SOLO_LEEN, TOPE, topeDe, iniciar, guardar, historial, volverA, enlazar, subir, cuantosCambios, queMotor, RAMA };
