@@ -2069,6 +2069,13 @@ const porDondeIbas = () => {
   return ibas && ibas.texto && ibas.accion ? ibas : null;
 };
 
+// «Volver a la última conversación» (decisión 191): solo si la extensión dice que
+// sabe cuál fue. La acción viene hecha de allí (P6): aquí no hay id.
+const botonVolver = (pequeno) => {
+  const v = estado && estado.volverALaUltima;
+  return v && v.accion ? boton({ etiqueta: 'Volver a la última conversación', icono: '💬', pequeno, accion: v.accion }) : '';
+};
+
 // Ayuda, para cuando no se sabe ni qué escribir. Lo demás de Ayuda sigue entero
 // detrás de «Más ayuda».
 function grupoAyudaSencillo() {
@@ -2080,6 +2087,7 @@ function grupoAyudaSencillo() {
     dentro: `
       ${boton({ etiqueta: 'Seguir donde lo dejé', icono: '↩️', pequeno: true, accion: ibas ? ibas.accion : { tipo: 'pedir', prompt: 'Sigue donde lo dejamos la última vez: mira lo último que hicimos, dime en qué punto estamos y qué sería lo siguiente.' } })}
       ${ibas ? `<p class="pista ibas-por">${texto(ibas.texto)}</p>` : ''}
+      ${botonVolver(true)}
       ${boton({ etiqueta: 'Conversación nueva', icono: '💬', pequeno: true, accion: { tipo: 'conversacionNueva' } })}
       ${boton({ etiqueta: 'Dime qué hago ahora', icono: '🧭', pequeno: true, accion: { tipo: 'pedir', prompt: 'Mira cómo está esto y dime qué hago ahora: qué tengo a medias, qué sería lo siguiente y por qué. Dame dos o tres opciones concretas, no una lista larga.' } })}
       ${boton({ etiqueta: 'Pedir ayuda en el foro', icono: '🙋', pequeno: true, accion: { tipo: 'pedirAyudaEnElForo' } })}
@@ -2440,6 +2448,7 @@ function lasTarjetas() {
     <div class="consejo">
       <p class="que ibas-por">${texto(u.texto)}</p>
       ${boton({ etiqueta: 'Seguir donde lo dejé', icono: '↩️', principal: true, accion: u.accion })}
+      ${botonVolver(false)}
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: u.ahoraNo })}
     </div>`;
 

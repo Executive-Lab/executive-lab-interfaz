@@ -104,6 +104,7 @@ const loDelEditor = require('./lo-del-editor');
 const loNuevoDeClaude = require('./lo-nuevo-de-claude');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
+const ultimaConversacion = require('./ultima-conversacion');
 
 // Lo que la barra recuerda de esta carpeta, y que nadie más ve: las últimas
 // peticiones (para detectar la que se repite) y los consejos que el alumno
@@ -1488,6 +1489,7 @@ ${cabecera}
       ahoraNoRecordatorio: () => this.dejarElRecordatorio(mensaje.nombre),
       seguirDondeLoDeje: () => this.seguirDondeLoDeje(mensaje.prompt, mensaje.dia),
       ahoraNoLaUltimaVez: () => this.ahoraNoLaUltimaVez(mensaje.dia),
+      volverALaConversacion: () => this.volverALaConversacion(),
       quitarRecordatorio: () => this.quitarRecordatorio(mensaje.nombre),
       verRecordatorios: () => this.verRecordatorios(),
       crearRecordatorio: () => this.pedir(rutinas.CREAR_RECORDATORIO),
@@ -2917,6 +2919,26 @@ ${cabecera}
     await porDondeIbas.hastaManana(this.almacen(), dia);
     await this.pedir(prompt);
     return this.refrescar(true);
+  }
+
+  // «Volver a la última conversación» (decisión 191). Abre la conversación que
+  // apuntó el enganche de avisos con el enlace que documenta Claude Code. Si esa
+  // conversación ya no existe, Claude Code abre una nueva: se dice así. El id se lee
+  // aquí, al pulsar, y no viaja por la pantalla.
+  async volverALaConversacion() {
+    const quien = asistentes.elDeAhora();
+    if (quien.id !== 'claude' || !asistentes.estaInstalado(quien)) return this.sinAsistente(quien);
+    const ultima = ultimaConversacion.laUltima(proyecto.raiz());
+    const enlace = ultima && ultimaConversacion.elEnlace(ultima.id, vscode.env.uriScheme);
+    if (!enlace) return this.enviar({ tipo: 'aviso', texto: 'No sé cuál fue tu última conversación. Pulsa «Seguir donde lo dejé».' });
+    let abierto = false;
+    try {
+      abierto = await vscode.env.openExternal(vscode.Uri.parse(enlace));
+    } catch (error) {
+      this.salida.appendLine(`[volver] ${error.message}`); // diccionario: interno
+    }
+    if (!abierto) return this.enviar({ tipo: 'aviso', texto: 'No he podido abrir esa conversación. Pulsa «Seguir donde lo dejé».', malo: true });
+    return this.enviar({ tipo: 'aviso', texto: 'Te he abierto tu última conversación. Si ya no existe, se abre una nueva.' });
   }
 
   async ahoraNoLaUltimaVez(dia) {

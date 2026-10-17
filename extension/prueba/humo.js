@@ -25168,6 +25168,167 @@ exec git "$@"
     }
   });
 
+  // ── Volver a la última conversación (decisión 191) ───────────────────────
+
+  await comprobar('el enganche de avisos apunta solo el id de la última conversación, y solo en carpetas de la barra (decisión 191)', async () => {
+    const viaja = path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs');
+    const av = await import(require('node:url').pathToFileURL(viaja).href);
+    const cp = require('node:child_process');
+    const ID = '00893aaf-19fa-41d2-8238-13269b9b3ca0';
+    const hacer = () => { const c = fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-conv-')); fs.writeFileSync(path.join(c, '.rsc.json'), '{}'); return c; };
+    const fichero = (c) => path.join(c, '.rsc', 'executive-lab-ultima-conversacion.json');
+    const propia = hacer();
+    // Con un JSON de mentira, igual que lo manda Claude: id, ruta, y lo demás que trae.
+    const entrada = { session_id: ID, transcript_path: '/x/secreto.jsonl', cwd: propia, hook_event_name: 'Notification', message: 'DATO PRIVADO DE LA CONVERSACION', title: 'T', notification_type: 'idle_prompt' };
+    assert.equal(av.apuntarLaUltima(entrada, propia, new Date('2026-10-17T10:00:00Z')), true);
+    const apuntado = JSON.parse(fs.readFileSync(fichero(propia), 'utf8'));
+    assert.deepEqual(apuntado, { id: ID, cuando: '2026-10-17T10:00:00.000Z' }, 'se apunta algo más que el id y la hora');
+    assert.ok(!fs.readFileSync(fichero(propia), 'utf8').includes('PRIVADO') && !fs.readFileSync(fichero(propia), 'utf8').includes('secreto'), 'se apunta contenido de la conversación');
+    // Los cuatro tipos de Claude lo apuntan; el último manda.
+    ['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog'].forEach((tipo, i) => {
+      assert.equal(av.apuntarLaUltima({ ...entrada, session_id: `sesion-${i}-abc`, notification_type: tipo }, propia), true, tipo);
+    });
+    assert.equal(JSON.parse(fs.readFileSync(fichero(propia), 'utf8')).id, 'sesion-2-abc');
+    // Lo que no es de Claude o no sirve, no escribe.
+    const otra = hacer();
+    const casosMalos = [
+      [{ ...entrada, notification_type: 'auth_success' }, otra, 'otro tipo'],
+      [{ ...entrada, notification_type: 'agent-turn-complete' }, otra, 'es de Codex'],
+      [{ ...entrada, session_id: undefined }, otra, 'sin id'],
+      [{ ...entrada, session_id: 'a/../b' }, otra, 'id con barras'],
+      [{ ...entrada, session_id: 'x'.repeat(65) }, otra, 'id largo'],
+      [{ ...entrada, session_id: 'ab' }, otra, 'id corto'],
+      [{ ...entrada, session_id: { toString: () => ID } }, otra, 'id que no es texto'],
+      [null, otra, 'sin entrada'],
+      [entrada, '', 'sin carpeta'],
+      [entrada, path.join(os.tmpdir(), 'no-existe-191'), 'carpeta que no es de la barra'],
+      [entrada, fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-sin-rsc-')), 'sin .rsc.json'],
+    ];
+    for (const [e, donde, que] of casosMalos) assert.equal(av.apuntarLaUltima(e, donde), false, que);
+    assert.ok(!fs.existsSync(fichero(otra)), 'se ha escrito en la carpeta de pruebas malas');
+    // Un enlace en su sitio no se sigue.
+    const fuera = path.join(otra, 'fuera.json');
+    fs.mkdirSync(path.join(otra, '.rsc'), { recursive: true });
+    fs.writeFileSync(fuera, 'INTACTO');
+    try { fs.symlinkSync(fuera, fichero(otra)); } catch { /* sin permiso para enlaces (Windows) */ }
+    if (fs.existsSync(fichero(otra)) && fs.lstatSync(fichero(otra)).isSymbolicLink()) {
+      assert.equal(av.apuntarLaUltima(entrada, otra), false);
+      assert.equal(fs.readFileSync(fuera, 'utf8'), 'INTACTO', 'se escribe a través de un enlace');
+    }
+    // Como lo corre el enganche, de verdad: JSON por la entrada, la carpeta como argumento, sin ningún programa de avisos en el camino.
+    const real = hacer();
+    const vacio = fs.mkdtempSync(path.join(os.tmpdir(), 'ultima-sin-nada-'));
+    let h;
+    for (let i = 0; i < 5; i += 1) {
+      h = cp.spawnSync(process.execPath, [viaja, real], { input: JSON.stringify({ ...entrada, cwd: real, session_id: 'sesion-de-verdad-1' }), env: { PATH: vacio }, timeout: 20000 });
+      if (fs.existsSync(fichero(real))) break;
+    }
+    assert.equal(h.status, 0);
+    assert.equal(JSON.parse(fs.readFileSync(fichero(real), 'utf8')).id, 'sesion-de-verdad-1', 'el enganche no apunta el id');
+    // Y con Codex (notify), nada apuntado.
+    const conCodex = hacer();
+    cp.spawnSync(process.execPath, [viaja, JSON.stringify({ type: 'agent-turn-complete', 'thread-id': 'hilo-de-codex-1', cwd: conCodex })], { env: { PATH: vacio }, timeout: 20000 });
+    assert.ok(!fs.existsSync(fichero(conCodex)), 'con Codex se apunta algo');
+    for (const c of [propia, otra, real, conCodex, vacio]) fs.rmSync(c, { recursive: true, force: true });
+    return 'el id y la hora, nada más; solo con Claude y en carpetas de la barra';
+  });
+
+  await comprobar('«Volver a la última conversación»: el enlace documentado, solo con Claude y con un id apuntado, y si ya no existe lo dice (decisión 191)', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const procesosM = cargar('procesos');
+    const rscM = cargar('rsc');
+    const brujulaM = cargar('brujula');
+    const ucM = cargar('ultima-conversacion');
+    const carpeta = montar(fs.mkdtempSync(path.join(os.tmpdir(), 'volver-conv-')));
+    const ID = '00893aaf-19fa-41d2-8238-13269b9b3ca0';
+    const donde = path.join(carpeta, ...ucM.FICHERO);
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, node: procesosM.node, delPath: procesosM.delPath, completa: vscode.registrado.ajustes.global['executiveLab.barraCompleta'], instaladas: vscode.guion.extensionesInstaladas, abiertos: vscode.registrado.abiertos.length, portapapeles: vscode.registrado.portapapeles };
+    const fingido = async () => ({ codigo: 0, salida: '', error: '' });
+    procesosM.node = fingido;
+    procesosM.delPath = async () => fingido();
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const pintar = (m) => require('./panel-falso').montarPanel().mandar(m);
+    const laAyuda = (html) => (html.match(/<details[^>]*data-abrir="sencilla:ayuda"[\s\S]*?<\/details>/) || [''])[0];
+    const otraVez = async () => { rscM.olvidarLaContinuacion(); brujulaM.olvidar(); enviados.length = 0; await proveedor.refrescar(true); return [...enviados].reverse().find((m) => m.tipo === 'estado'); };
+    const apuntar = (id) => { fs.mkdirSync(path.dirname(donde), { recursive: true }); fs.writeFileSync(donde, JSON.stringify({ id, cuando: '2026-10-17T10:00:00.000Z' })); };
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = false;
+      // Sin nada apuntado: el botón no sale y todo sigue como antes.
+      fs.rmSync(donde, { force: true });
+      const sin = await otraVez();
+      assert.equal(sin.estado.volverALaUltima, null);
+      assert.doesNotMatch(pintar(sin), /Volver a la última conversación/);
+      // Con el id apuntado, y con Claude: sale en Ayuda, y la pantalla no lleva el id.
+      apuntar(ID);
+      const con = await otraVez();
+      assert.deepEqual(con.estado.volverALaUltima, { accion: { tipo: 'volverALaConversacion' } });
+      assert.ok(!JSON.stringify(con).includes(ID), 'el id sale de la extensión');
+      const html = pintar(con);
+      assert.match(laAyuda(html), /Volver a la última conversación/);
+      assert.match(laAyuda(html), /Seguir donde lo dejé[\s\S]*Volver a la última conversación[\s\S]*Conversación nueva/, 'no está debajo de Seguir donde lo dejé');
+      // Y en la tarjeta de la última vez.
+      const tarjeta = pintar({ ...con, laUltimaVez: { texto: 'La última vez trabajaste en X.', accion: { tipo: 'seguirDondeLoDeje', prompt: 'p', dia: '2026-10-17' }, ahoraNo: { tipo: 'ahoraNoLaUltimaVez', dia: '2026-10-17' } } });
+      const laTarjeta = tarjeta.slice(tarjeta.indexOf('La última vez trabajaste en X'));
+      assert.match(laTarjeta.slice(0, laTarjeta.indexOf('</div>')), /Volver a la última conversación/, 'no está en la tarjeta de la última vez');
+      // Pulsarlo: abre exactamente el enlace documentado.
+      await proveedor.manejar({ tipo: 'volverALaConversacion' });
+      const abiertos = vscode.registrado.abiertos.slice(antes.abiertos);
+      assert.deepEqual(abiertos, [`vscode://anthropic.claude-code/open?session=${ID}`]);
+      const aviso = [...enviados].reverse().find((m) => m.tipo === 'aviso');
+      assert.equal(aviso.texto, 'Te he abierto tu última conversación. Si ya no existe, se abre una nueva.');
+      // Si nadie recoge el enlace, lo dice y no engaña.
+      vscode.guion.enlaceFalla = true;
+      await proveedor.manejar({ tipo: 'volverALaConversacion' });
+      vscode.guion.enlaceFalla = false;
+      const malo = [...enviados].reverse().find((m) => m.tipo === 'aviso');
+      assert.equal(malo.malo, true);
+      assert.equal(malo.texto, 'No he podido abrir esa conversación. Pulsa «Seguir donde lo dejé».');
+      // Un id que no sirve (puesto por otro) no sale ni se abre.
+      for (const feo of ['a b', 'x/../y', 'ab', 'x'.repeat(65), '/malo?x=1&session=2']) {
+        apuntar(feo);
+        const n = vscode.registrado.abiertos.length;
+        assert.equal((await otraVez()).estado.volverALaUltima, null, feo);
+        await proveedor.manejar({ tipo: 'volverALaConversacion' });
+        assert.equal(vscode.registrado.abiertos.length, n, `se abre con ${feo}`);
+        assert.match([...enviados].reverse().find((m) => m.tipo === 'aviso').texto, /No sé cuál fue tu última conversación/);
+      }
+      // Con Codex no hay nada documentado: no sale, aunque haya un id apuntado, y pulsarlo a mano no abre nada.
+      apuntar(ID);
+      const declarada = JSON.parse(fs.readFileSync(path.join(carpeta, '.rsc.json'), 'utf8'));
+      fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ ...declarada, targets: ['codex'] }, null, 2));
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      assert.equal(cargar('asistentes').elDeAhora().id, 'codex');
+      const deCodex = await otraVez();
+      assert.equal(deCodex.estado.volverALaUltima, null, 'con Codex sale');
+      assert.doesNotMatch(pintar(deCodex), /Volver a la última conversación/);
+      const m = vscode.registrado.abiertos.length;
+      await proveedor.manejar({ tipo: 'volverALaConversacion' });
+      assert.equal(vscode.registrado.abiertos.length, m, 'con Codex se abre algo');
+      // Lo que dicen los textos: ninguna palabra prohibida.
+      const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
+      for (const t of ['Volver a la última conversación', aviso.texto, malo.texto]) assert.equal(tieneUnaProhibida(t), null, t);
+      // El módulo, solo.
+      assert.equal(ucM.elEnlace(ID, 'vscode-insiders'), `vscode-insiders://anthropic.claude-code/open?session=${ID}`);
+      assert.equal(ucM.elEnlace(ID, 'Mal Esquema://'), `vscode://anthropic.claude-code/open?session=${ID}`);
+      assert.equal(ucM.elEnlace('a b'), null);
+      return 'vscode://anthropic.claude-code/open?session=<id>';
+    } finally {
+      procesosM.node = antes.node;
+      procesosM.delPath = antes.delPath;
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.enlaceFalla = false;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      if (antes.completa === undefined) delete vscode.registrado.ajustes.global['executiveLab.barraCompleta'];
+      else vscode.registrado.ajustes.global['executiveLab.barraCompleta'] = antes.completa;
+      rscM.olvidarLaContinuacion();
+      brujulaM.olvidar();
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   // ── La revisión de la 166: tres retoques ─────────────────────────────────
 
   await comprobar('si el encargo no llega al asistente, la barra dice el hecho y que no ha llegado (decisión 166, la revisión)', async () => {
