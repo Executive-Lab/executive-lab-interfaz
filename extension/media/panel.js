@@ -206,13 +206,21 @@ function lineaDeVarias() {
 
 // Un aviso puede traer su propio botón, cuando lo que dice tiene arreglo: el de
 // «Guardar en git» con una credencial suelta lo trae para ponerla en su sitio (F1).
+// Decisión 183: un texto que manda a «preguntárselo al asistente» lleva el botón
+// que se lo pregunta. El texto va tal cual a la extensión, que lo limpia y arma
+// el encargo (lo que viene de la carpeta no se fía aquí).
+const MANDA_AL_ASISTENTE = /(Pregúntaselo|Pídeselo|Pídele[^.]*) al asistente/;
+const queLoMire = (dicho) => boton({ etiqueta: 'Que lo mire el asistente', icono: '💬', pequeno: true, accion: { tipo: 'queLoMireElAsistente', texto: dicho } });
+
 function bloqueAviso(cual = aviso) {
   if (!cual) return '';
   const manda = cual.malo && /Algo va mal/.test(cual.texto || '');
+  const alAsistente = cual.malo && !cual.boton && !(Array.isArray(cual.botones) && cual.botones.length) && MANDA_AL_ASISTENTE.test(cual.texto || '');
   return `<div class="aviso ${cual.malo ? 'malo' : ''}">${texto(cual.texto)}</div>`
     + (cual.boton && cual.boton.etiqueta && cual.boton.accion ? boton({ etiqueta: cual.boton.etiqueta, icono: '▸', pequeno: true, accion: cual.boton.accion }) : '')
     // O varios, cuando lo que dice es una pregunta y cada uno es una respuesta.
     + (Array.isArray(cual.botones) ? cual.botones.filter((b) => b && b.etiqueta && b.accion).map((b) => boton({ etiqueta: b.etiqueta, icono: '▸', pequeno: true, accion: b.accion })).join('') : '')
+    + (alAsistente ? queLoMire(cual.texto) : '')
     + (manda ? boton({ etiqueta: 'Algo va mal', icono: '🆘', accion: { tipo: 'algoVaMal' } }) : '');
 }
 
@@ -486,7 +494,8 @@ const sinNombreQueValga = (etiqueta, frase) => `
     <div class="fila">
       <p class="nombre">${texto(etiqueta)}</p>
     </div>
-    <p class="pista">${texto(frase)}</p>`;
+    <p class="pista">${texto(frase)}</p>
+    ${MANDA_AL_ASISTENTE.test(frase) ? queLoMire(`${etiqueta}: ${frase}`) : ''}`;
 
 // La que está siempre activa (`executive-lab`, de los raíles): un botón que la
 // pide no hace nada, así que se ve sin él, con lo que hace (decisión 164).
@@ -986,7 +995,7 @@ function pantallaLaCara({
   // Si la cara la sacó la barra sola de la web, se dice: es un primer intento
   // que el asistente todavía no ha mirado, y venderlo como final sería mentir.
   const estadoAhora = descartada
-    ? `<div class="aviso malo"><p>No he podido usar lo que hay: ${texto(descartada)}.</p></div>`
+    ? `<div class="aviso malo"><p>No he podido usar lo que hay: ${texto(descartada)}.</p></div>${MANDA_AL_ASISTENTE.test(descartada) ? queLoMire(`No he podido usar lo que hay para la cara de la barra: ${descartada}.`) : ''}`
     : (puesta
       ? `<p class="hiciste">Ahora mismo lleva la cara de ${texto(nombre || 'tu empresa')}${hayLogo ? ', con su logotipo' : ''}${provisional ? ', sacada de su web de forma automática; el asistente la afina' : ''}.</p>`
       : '<p class="hiciste">Ahora mismo lleva la de Executive Lab.</p>');
@@ -1719,7 +1728,8 @@ function pantallaCopiaFuera(datos) {
     ${dentro
       ? boton({ etiqueta: 'Subir a GitHub ahora', icono: '☁️', principal: true, accion: { tipo: 'subirCopia' } })
       : boton({ etiqueta: 'Entrar en mi cuenta', icono: '🔑', principal: true, accion: { tipo: 'conectarGitHub' } })}
-    ${dentro ? '' : `<p class="detalle">¿No tienes cuenta? Se hace en dos minutos en github.com y es gratis.</p>`}
+    ${dentro ? '' : `<p class="detalle">¿No tienes cuenta? Se hace en dos minutos en github.com y es gratis.</p>
+    ${boton({ etiqueta: 'Crear mi cuenta de GitHub', icono: '↗', pequeno: true, accion: { tipo: 'abrir', url: 'https://github.com/signup' } })}`}
   `;
 }
 
@@ -3610,10 +3620,12 @@ function engancharLaBusqueda() {
 function pintarElFallo(error) {
   pintar(`
     <p class="titulo">Algo no se ha podido pintar</p>
-    <p>Se me ha atragantado esta pantalla. Lo de abajo es para tu tutor.</p>
-    <p class="detalle">${texto(String((error && error.message) || error))}</p>
-    ${boton({ etiqueta: 'Volver', icono: '←', principal: true, accion: { tipo: 'volver' } })}
+    <p>Se me ha atragantado esta pantalla. Pulsa «Algo va mal» y pásale el código a tu tutor.</p>
+    ${boton({ etiqueta: 'Algo va mal', icono: '🆘', principal: true, accion: { tipo: 'algoVaMal' } })}
+    ${boton({ etiqueta: 'Volver', icono: '←', accion: { tipo: 'volver' } })}
   `);
+  // El motivo técnico, en inglés, no se enseña: se apunta para el informe.
+  try { pedir('falloAlPintar', { mensaje: String((error && error.message) || error).slice(0, 500) }); } catch { /* sin extensión no hay a quién decírselo */ }
 }
 
 window.addEventListener('message', ({ data }) => {

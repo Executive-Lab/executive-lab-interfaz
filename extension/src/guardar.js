@@ -416,6 +416,16 @@ async function dondeSubir({ clave, donde, usuario }) {
   return null;
 }
 
+// Decisión 183: sin internet no es un fallo de la cuenta, y «entra otra vez» no
+// arregla nada. Se reconoce por el error de la red (fetch) o por lo que dice git.
+const SIN_RED = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|network is unreachable|could not resolve host|unable to access|failed to connect|connection timed out|temporary failure in name resolution|getaddrinfo/i;
+const esSinRed = (cosa) => {
+  if (!cosa) return false;
+  const texto = typeof cosa === 'string' ? cosa : `${cosa.message || ''} ${(cosa.cause && (cosa.cause.code || cosa.cause.message)) || ''} ${cosa.code || ''}`;
+  return SIN_RED.test(texto);
+};
+const SIN_CONEXION = 'No hay conexión a internet, y sin ella no puedo subirlo. Mira que estés conectado y vuelve a intentarlo.';
+
 async function subirCopia() {
   const credenciales = await comoEntrar();
   if (!credenciales) return { ok: false, faltaGitHub: true, mensaje: 'Todavía no has entrado en tu cuenta para guardar fuera.' };
@@ -429,12 +439,15 @@ async function subirCopia() {
   if (!antes.ok) return antes;
 
   let url;
+  let sinRed = false;
   try {
     url = await dondeSubir(credenciales);
-  } catch {
+  } catch (error) {
     url = null;
+    sinRed = esSinRed(error);
   }
   if (!url) {
+    if (sinRed) return { ok: false, sinRed: true, mensaje: SIN_CONEXION };
     return {
       ok: false,
       mensaje: credenciales.delEditor
@@ -446,6 +459,7 @@ async function subirCopia() {
   await h.enlazar(donde, url, comoLlamar());
   const subida = await h.subir(donde, { url, token: credenciales.clave }, comoLlamar());
   if (subida.ok) return { ok: true, mensaje: 'Copia guardada fuera de este ordenador.' };
+  if (esSinRed(subida.error)) return { ok: false, sinRed: true, detalle: subida.error, mensaje: SIN_CONEXION };
   return {
     ok: false,
     // Lo que dijo git, ya sin el token (`historial` lo limpia), para «Algo va mal» (F2).
@@ -465,4 +479,4 @@ async function cambiosSinGuardar() {
   return h.cuantosCambios(donde, comoLlamar());
 }
 
-module.exports = { LIMITE_FICHERO, LIMITE_TOTAL, cuantoPesa, iniciar, guardar, copias, esElPuntoDePartida, guardarSiToca, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };
+module.exports = { esSinRed, LIMITE_FICHERO, LIMITE_TOTAL, cuantoPesa, iniciar, guardar, copias, esElPuntoDePartida, guardarSiToca, volverA, cambiosSinGuardar, subirCopia, puedeSubir, comoEntrar, fechaLarga, haceCuanto, haceUnRato, hayGit, olvidarSiHayGit };
