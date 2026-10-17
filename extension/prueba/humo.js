@@ -61,6 +61,16 @@ const MAS_NUEVA = (() => {
 })();
 const cargar = (m) => require(path.join(RAIZ, 'src', m));
 
+// Como al abrirse la barra (`extension.js`, `rsc.saberDondeEstamos`): el arnés que se
+// corre es el que viaja en esta carpeta, `media/harness`. Sin esto, las pruebas que
+// llaman a RSC antes de `activate` (la brújula, «Algo va mal», el diagnóstico...) caían
+// en `npx @ericrisco/rsc@X`, que baja el paquete a `~/.npm/_npx`, una caché que
+// comparten todos los procesos de la máquina: con dos baterías a la vez (otros
+// worktrees, la CI de otra rama) una deshacía el `node_modules` de la caché mientras la
+// otra lo leía, y salía `MODULE_NOT_FOUND` sin ninguna comprobación en rojo (decisión
+// 179). Con el arnés a mano, cada batería usa solo el suyo y no toca la red.
+cargar('rsc').saberDondeEstamos(RAIZ);
+
 let pasadas = 0;
 
 // Para probar una mutación sin esperar dos minutos: `HUMO_SOLO='trozo|otro'` corre
@@ -3076,7 +3086,26 @@ exec git "$@"
     // Al abrirse, el relevo y el aviso de versión apagado: de esa llamada salen C2
     // y C4, y nada la miraba (revisión de F3, I2).
     delete process.env.RSC_NO_UPDATE_CHECK;
-    cargar('extension').activate(contexto);
+    // Al abrirse, la barra deja relojes: lo que se hace solo a los 3 s (poner lo de
+    // Claude, los raíles, lo de Codex), los recordatorios a los 8 s y cada minuto, y
+    // el guardado cada cuarto de hora. En el editor, la carpeta es la misma toda la
+    // sesión; aquí cada prueba monta la suya y apunta `vscode.guion.raiz` a ella, así
+    // que un reloj que salta en mitad de otra prueba escribe en SU carpeta (un
+    // `settings.local.json`, un `.gitignore`) o manda avisos a SU pantalla. Salía
+    // cuando la máquina iba cargada y el reloj caía en las pruebas de la 177 (decisión
+    // 179). Cada prueba que quiere uno de esos efectos lo llama a mano. Aquí se recogen
+    // y se paran, para que nada salte por su cuenta.
+    const relojesDelArranque = [];
+    const { setTimeout: ponerPlazo, setInterval: ponerVuelta } = global;
+    global.setTimeout = (...a) => { const h = ponerPlazo(...a); relojesDelArranque.push(h); return h; };
+    global.setInterval = (...a) => { const h = ponerVuelta(...a); relojesDelArranque.push(h); return h; };
+    try {
+      cargar('extension').activate(contexto);
+    } finally {
+      global.setTimeout = ponerPlazo;
+      global.setInterval = ponerVuelta;
+    }
+    for (const h of relojesDelArranque) { clearTimeout(h); clearInterval(h); }
     assert.equal(process.env.RSC_NO_UPDATE_CHECK, '1', 'al abrirse, la barra no apaga el aviso de versión');
     const manifiesto = require(path.join(RAIZ, 'package.json')).contributes.commands.map((c) => c.command).sort();
     assert.deepEqual(vscode.registrado.comandos.sort(), manifiesto);
@@ -8236,7 +8265,9 @@ exec git "$@"
         escribir('.git-credentials', entrada);
         const t0 = Date.now();
         conexionesM.valoresDeClaves();
-        assert.ok(Date.now() - t0 < 100, `una URL con credenciales repetida no puede costar ${Date.now() - t0} ms`);
+        // Mide que no sea cuadrático (84.000 letras: minutos, no milisegundos), no que la máquina
+        // vaya sobrada: con ella cargada, 100 ms fallaba en falso (decisión 179).
+        assert.ok(Date.now() - t0 < 3000, `una URL con credenciales repetida no puede costar ${Date.now() - t0} ms`);
       }
     } finally {
       vscode.guion.raiz = empresa; vscode.guion.confianza = false;
