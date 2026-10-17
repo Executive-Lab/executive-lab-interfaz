@@ -21,6 +21,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
+const lecturas = require('./lecturas');
 
 const INBOX = ['02-DOCS', 'inbox'];
 const CRUDO = ['02-DOCS', 'raw'];
@@ -47,7 +48,7 @@ function listar(partes, { saltar = [], hondo = true } = {}) {
   const recorrer = (donde) => {
     let entradas;
     try {
-      entradas = fs.readdirSync(donde, { withFileTypes: true });
+      entradas = lecturas.entradas(donde);
     } catch {
       return;
     }
@@ -103,7 +104,7 @@ function sueltos() {
 
   let entradas;
   try {
-    entradas = fs.readdirSync(raiz, { withFileTypes: true });
+    entradas = lecturas.entradas(raiz);
   } catch {
     return [];
   }

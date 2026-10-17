@@ -19,6 +19,7 @@ const path = require('node:path');
 const os = require('node:os');
 
 const proyecto = require('./proyecto');
+const lecturas = require('./lecturas');
 const procesos = require('./procesos');
 const sueltas = require('./sueltas');
 const git = require('./git');
@@ -420,6 +421,17 @@ function mirar() {
   };
 }
 
+// Decisión 188: estas tres comparaciones corren en cada repintado y leían del
+// disco los mismos ficheros cada vez (los nuestros no cambian en toda la sesión).
+// Se leen una vez y se guardan mientras el fichero siga igual (`lecturas.js`). Si
+// uno no se puede leer, salta como antes, y cada comparación contesta «sí»: sin
+// poder mirar no se afirma que esté viejo.
+const leido = (ruta) => {
+  const texto = lecturas.texto(ruta);
+  if (texto === undefined) throw new Error('no se puede leer');
+  return texto;
+};
+
 // Los raíles son lo nuestro: la habilidad que fija el español y el vocabulario,
 // y los dos nombres en el perfil. No los pone RSC, así que un arnés montado por
 // otra vía —o traído de otro ordenador— puede estar entero y no tenerlos.
@@ -446,7 +458,7 @@ function laHabilidadEsLaDeHoy(carpetaDeLaExtension, puesta) {
   try {
     return fs.readdirSync(nuestra).every((fichero) => {
       const aqui = path.join(suya, fichero);
-      return fs.existsSync(aqui) && fs.readFileSync(path.join(nuestra, fichero), 'utf8') === fs.readFileSync(aqui, 'utf8');
+      return fs.existsSync(aqui) && leido(path.join(nuestra, fichero)) === leido(aqui);
     });
   } catch {
     // Sin poder leer uno de los dos no se afirma que esté viejo: decirlo mal
@@ -480,7 +492,7 @@ function losComandosSonLosDeHoy(carpetaDeLaExtension) {
     return fs.readdirSync(nuestros).every((fichero) => {
       const aqui = path.join(suyos, fichero.replace(/\.md$/, donde.acabaUnComando()));
       if (!fs.existsSync(aqui)) return false;
-      const [nuestro, suyo] = [fs.readFileSync(path.join(nuestros, fichero), 'utf8'), fs.readFileSync(aqui, 'utf8')];
+      const [nuestro, suyo] = [leido(path.join(nuestros, fichero)), leido(aqui)];
       return nuestro === suyo || descripcion(nuestro) !== descripcion(suyo);
     });
   } catch {
@@ -497,8 +509,8 @@ function lasDeBotonSonLasDeHoy(nuestros, carpetaDeLaExtension) {
       const nombre = fichero.replace(/\.md$/, '');
       const aqui = path.join(donde.carpetaDeBotones(), nombre, 'SKILL.md');
       if (!fs.existsSync(aqui)) return false;
-      const fuente = fs.readFileSync(path.join(nuestros, fichero), 'utf8');
-      const suya = fs.readFileSync(aqui, 'utf8');
+      const fuente = leido(path.join(nuestros, fichero));
+      const suya = leido(aqui);
       // Una suya que se llama como una nuestra no es nuestra de antes: no se pisa.
       // Con su recordatorio, que no la hace de antes (decisión 144).
       return suya === comoHabilidad(fuente, nombre, quien, { cuando: cuandoDe(suya) }).skill || descripcionDe(fuente) !== descripcionDe(suya);

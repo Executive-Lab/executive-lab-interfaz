@@ -26708,6 +26708,242 @@ exec git "$@"
     return 'el diccionario los pide así';
   });
 
+  // ---------------------------------------------------------- 188: la barra no se atasca
+  await comprobar('188: el vigía no solapa repintados: uno en marcha y, como mucho, uno en cola', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { vista: proveedor.vista, ahora: proveedor.repintarAhora, donde: proveedor.donde };
+    let aLaVez = 0; let maximo = 0; let hechos = 0;
+    proveedor.vista = { visible: true, webview: { postMessage: () => {} } };
+    proveedor.repintarAhora = async () => {
+      aLaVez += 1; maximo = Math.max(maximo, aLaVez); hechos += 1;
+      await new Promise((r) => setTimeout(r, 40));
+      aLaVez -= 1;
+    };
+    try {
+      await Promise.all([1, 2, 3, 4, 5, 6].map(() => proveedor.repintarLoQueHaya()));
+      assert.equal(maximo, 1, `dos repintados a la vez (${maximo})`);
+      assert.equal(hechos, 2, `seis avisos tenían que ser uno en marcha y uno en cola, y han sido ${hechos}`);
+      assert.equal(proveedor.repintando, null, 'se queda la bandera puesta');
+      // Y uno suelto, sin nada en marcha, es uno.
+      hechos = 0;
+      await proveedor.repintarLoQueHaya();
+      assert.equal(hechos, 1);
+      // Si el repintado revienta, la bandera se quita y el siguiente funciona.
+      proveedor.repintarAhora = async () => { throw new Error('boom'); };
+      await assert.rejects(proveedor.repintarLoQueHaya(), /boom/);
+      assert.equal(proveedor.repintando, null, 'tras un fallo se queda la bandera puesta');
+      return `máximo ${maximo} a la vez, 6 avisos = 2 repintados`;
+    } finally {
+      proveedor.vista = antes.vista; proveedor.repintarAhora = antes.ahora; proveedor.donde = antes.donde;
+    }
+  });
+
+  await comprobar('188: con la barra escondida no se repinta, y al verse sí', async () => {
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { vista: proveedor.vista, ahora: proveedor.repintarAhora, refrescar: proveedor.refrescar, sucio: proveedor.sucio };
+    let repintados = 0; let refrescados = 0;
+    let alCambiarLaVista = null;
+    const vista = {
+      visible: false,
+      webview: { postMessage: () => {}, options: {}, html: '', asWebviewUri: (u) => u, cspSource: 'x', onDidReceiveMessage: () => ({ dispose() {} }) },
+      onDidChangeVisibility: (f) => { alCambiarLaVista = f; return { dispose() {} }; },
+    };
+    try {
+      proveedor.resolveWebviewView(vista);
+      assert.equal(typeof alCambiarLaVista, 'function', 'no se engancha a la visibilidad');
+      proveedor.repintarAhora = async () => { repintados += 1; };
+      proveedor.refrescar = async () => { refrescados += 1; };
+      proveedor.sucio = false;
+      vista.visible = false;
+      await proveedor.repintarLoQueHaya();
+      await proveedor.repintarLoQueHaya();
+      assert.equal(repintados, 0, 'repinta con la barra escondida');
+      assert.equal(proveedor.sucio, true, 'no apunta que está sucia');
+      // Al volver a verse: un repintado, y ya no está sucia.
+      vista.visible = true;
+      alCambiarLaVista();
+      await new Promise((r) => setTimeout(r, 20));
+      assert.equal(repintados, 1, 'al verse no repinta lo que cambió');
+      assert.equal(proveedor.sucio, false);
+      assert.equal(refrescados, 0, 'además de repintar, refresca a la principal');
+      // Si no cambió nada mientras estaba escondida, lo de siempre: la brújula.
+      vista.visible = false; alCambiarLaVista();
+      vista.visible = true; alCambiarLaVista();
+      assert.equal(refrescados, 1);
+      assert.equal(repintados, 1);
+      return 'escondida no repinta; al verse, uno';
+    } finally {
+      proveedor.vista = antes.vista; proveedor.repintarAhora = antes.ahora; proveedor.refrescar = antes.refrescar; proveedor.sucio = antes.sucio;
+    }
+  });
+
+  await comprobar('188: .rsc.json se lee una vez por versión del fichero, y la caché se invalida al cambiarlo', async () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'lectura-188-'));
+    const antes = vscode.guion.raiz;
+    vscode.guion.raiz = carpeta;
+    try {
+      const lecturas = cargar('lecturas');
+      const proyecto = cargar('proyecto');
+      const fichero = path.join(carpeta, '.rsc.json');
+      fs.writeFileSync(fichero, JSON.stringify({ targets: ['claude'], n: 1 }));
+      const base = lecturas.contador.lecturas;
+      for (let i = 0; i < 50; i++) assert.deepEqual(proyecto.declaracion().targets, ['claude']);
+      assert.equal(lecturas.contador.lecturas - base, 1, 'cincuenta preguntas, más de una lectura del disco');
+      // Cambia el tamaño: se lee otra vez.
+      fs.writeFileSync(fichero, JSON.stringify({ targets: ['codex'], n: 22 }));
+      assert.deepEqual(proyecto.declaracion().targets, ['codex'], 'cambió el fichero y sigue la caché');
+      // Mismo tamaño, otra fecha: también.
+      fs.writeFileSync(fichero, JSON.stringify({ targets: ['claude'], n: 33 }));
+      const futuro = new Date(Date.now() + 5000);
+      fs.utimesSync(fichero, futuro, futuro);
+      assert.deepEqual(proyecto.declaracion().targets, ['claude'], 'cambió con el mismo tamaño y sigue la caché');
+      // Roto: null, y no se queda en la caché cuando se arregla.
+      fs.writeFileSync(fichero, '{ roto');
+      assert.equal(proyecto.declaracion(), null);
+      assert.equal(proyecto.comoEstaLaDeclaracion(), 'rota');
+      fs.writeFileSync(fichero, JSON.stringify({ targets: ['codex'] }));
+      assert.deepEqual(proyecto.declaracion().targets, ['codex']);
+      // Borrado: null.
+      fs.rmSync(fichero);
+      assert.equal(proyecto.declaracion(), null);
+      return 'una lectura por versión; cambia tamaño, cambia fecha, rota y borrada';
+    } finally {
+      vscode.guion.raiz = antes;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('188: log.md e index.md se leen con tope y de la caché; las carpetas, con tope de entradas', async () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'tope-188-'));
+    const antes = vscode.guion.raiz;
+    vscode.guion.raiz = carpeta;
+    try {
+      const lecturas = cargar('lecturas');
+      const cerebroM = cargar('cerebro');
+      const wiki = path.join(carpeta, '02-DOCS', 'wiki');
+      fs.mkdirSync(wiki, { recursive: true });
+      let log = '# Log\n';
+      for (let i = 0; i < 40000; i++) log += `## [2026-02-${String(1 + (i % 28)).padStart(2, '0')}] ingest | Entrada ${i}\n\ncuerpo de relleno de la entrada\n\n`;
+      fs.writeFileSync(path.join(wiki, 'log.md'), log);
+      assert.ok(log.length > 2 * 1024 * 1024, 'el log de la prueba es pequeño');
+      const base = lecturas.contador.lecturas;
+      const ultimas = cerebroM.aprendidoUltimamente(3);
+      assert.deepEqual(ultimas.map((u) => u.titulo), ['Entrada 0', 'Entrada 1', 'Entrada 2'], 'con tope, lo primero sigue saliendo');
+      cerebroM.aprendidoUltimamente(3); cerebroM.aprendidoUltimamente(5);
+      assert.equal(lecturas.contador.lecturas - base, 1, 'el log se lee del disco más de una vez');
+      const cuantasSalen = cerebroM.aprendidoUltimamente(100000).length;
+      assert.ok(cuantasSalen > 1000 && cuantasSalen < 40000, `con un log de más de 2 MB salen ${cuantasSalen} entradas: ni todas ni casi ninguna`);
+      const leido = lecturas.texto(path.join(wiki, 'log.md'), { tope: 1024 * 1024 });
+      assert.ok(leido.length <= 1024 * 1024 && leido.endsWith('\n'), 'no corta en un salto de línea entero');
+      // Un log que cambia se vuelve a leer, y se ve lo nuevo.
+      fs.writeFileSync(path.join(wiki, 'log.md'), '## [2026-03-01] ingest | Lo nuevo\n' + log);
+      assert.equal(cerebroM.aprendidoUltimamente(1)[0].titulo, 'Lo nuevo');
+      // Las carpetas: con tope de entradas, y se dice que pasó.
+      const grande = path.join(carpeta, 'grande');
+      fs.mkdirSync(grande);
+      for (let i = 0; i < 120; i++) fs.writeFileSync(path.join(grande, `f${i}.txt`), '');
+      const pocas = lecturas.entradas(grande, 50);
+      assert.equal(pocas.length, 50);
+      assert.equal(pocas.pasaDelTope, true);
+      assert.equal(lecturas.entradas(grande, 500).pasaDelTope, false);
+      return 'tope de 1 MB y de entradas; una lectura por versión';
+    } finally {
+      vscode.guion.raiz = antes;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('188: los git llevan su tope y los que solo leen, --no-optional-locks', async () => {
+    const historial = require(path.join(RAIZ, 'media', 'comun', 'historial.js'));
+    assert.equal(historial.topeDe(['status']), 15000, 'un status sin tope de 15 s');
+    assert.equal(historial.topeDe(['log']), 15000);
+    assert.ok(historial.topeDe(['push']) > historial.topeDe(['commit']), 'subir tiene que poder tardar más que guardar');
+    for (const lee of ['status', 'log', 'ls-files', 'rev-parse']) assert.ok(historial.SOLO_LEEN.has(lee), `${lee} es de leer`);
+    for (const escribe of ['add', 'commit', 'update-index', 'push', 'read-tree', 'config']) assert.ok(!historial.SOLO_LEEN.has(escribe), `${escribe} no es de solo leer`);
+    // Con un git de mentira que apunta lo que le piden.
+    const taller = fs.mkdtempSync(path.join(os.tmpdir(), 'git-188-'));
+    const apunte = path.join(taller, 'pedido.txt');
+    const falso = path.join(taller, 'git-falso');
+    fs.writeFileSync(falso, `#!/bin/sh\necho "$@" >> '${apunte}'\nexit 0\n`, { mode: 0o755 });
+    const repo = path.join(taller, 'repo');
+    fs.mkdirSync(repo);
+    try {
+      if (process.platform !== 'win32') {
+        await historial.cuantosCambios(repo, { git: falso, recalcular: true });
+        await historial.historial(repo, 3, { git: falso, recalcular: true });
+        await historial.iniciar(repo, { git: falso, recalcular: true });
+        const pedidos = fs.readFileSync(apunte, 'utf8').trim().split('\n');
+        const status = pedidos.find((l) => /\bstatus\b/.test(l));
+        const log = pedidos.find((l) => /\blog\b/.test(l));
+        const init = pedidos.find((l) => /\binit\b/.test(l));
+        assert.match(status, /--no-optional-locks/, `status sin la bandera: ${status}`);
+        assert.match(log, /--no-optional-locks/, `log sin la bandera: ${log}`);
+        assert.doesNotMatch(init, /--no-optional-locks/, 'la bandera en una orden que escribe');
+        // Y el tope corta de verdad: un git que no contesta no deja la barra esperando.
+        fs.writeFileSync(falso, '#!/bin/sh\nexec sleep 6\n', { mode: 0o755 });
+        const tope = historial.TOPE.lee;
+        historial.TOPE.lee = 300;
+        const t0 = Date.now();
+        try {
+          const cuantos = await historial.cuantosCambios(repo, { git: falso, recalcular: true });
+          assert.equal(cuantos, 0);
+        } finally { historial.TOPE.lee = tope; }
+        assert.ok(Date.now() - t0 < 3000, `el git colgado tardó ${Date.now() - t0} ms: el tope no corta`);
+      }
+      // La extensión: el mismo tope y la misma bandera.
+      const procesosM = cargar('procesos');
+      assert.equal(procesosM.TOPE_DE_GIT, 15000);
+      assert.ok(procesosM.ARGS_DE_GIT.includes('--no-optional-locks'), 'procesos.git sin --no-optional-locks');
+      const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'procesos.js'), 'utf8');
+      assert.match(fuente, /const git = \(\.\.\.args\) => ejecutar\(entorno\.git\(\), \[\.\.\.ARGS_DE_GIT, \.\.\.args\], \{ tiempoMaximo: TOPE_DE_GIT \}\)/, 'procesos.git sin tope');
+      return 'status/log con la bandera, add/commit sin ella; un git colgado se corta';
+    } finally {
+      historial.queMotor({ recalcular: true });
+      fs.rmSync(taller, { recursive: true, force: true });
+    }
+  });
+
+  await comprobar('188: estanSubidas no lanza git sin .git, usa el git de la casa y la caché evita repetirlo', async () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'subidas-188-'));
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza };
+    const cp = require('node:child_process');
+    const original = cp.execFileSync;
+    const llamadas = [];
+    cp.execFileSync = (...a) => { llamadas.push(a); return original(...a); };
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.guion.confianza = true;
+      const sueltasM = cargar('sueltas');
+      const entornoM = cargar('entorno');
+      const sitios = [{ donde: '.env' }];
+      assert.deepEqual(sueltasM.estanSubidas(sitios), []);
+      assert.equal(llamadas.length, 0, 'lanza git en una carpeta sin .git');
+      original('git', ['init', '-q'], { cwd: carpeta });
+      assert.deepEqual(sueltasM.estanSubidas(sitios), []);
+      assert.equal(llamadas.length, 0, 'lanza git con una carpeta recién iniciada, sin índice');
+      fs.writeFileSync(path.join(carpeta, '.env'), 'A=1\n');
+      original('git', ['add', '-f', '.env'], { cwd: carpeta });
+      assert.deepEqual(sueltasM.estanSubidas(sitios), ['.env']);
+      assert.equal(llamadas.length, 1);
+      assert.equal(llamadas[0][0], entornoM.git(), 'no usa el git de la casa');
+      assert.ok(llamadas[0][1].includes('--no-optional-locks') && llamadas[0][1].includes('core.fsmonitor=false'), 'sin las banderas');
+      assert.equal(llamadas[0][2].windowsHide, true, 'sin windowsHide');
+      assert.ok(llamadas[0][2].timeout > 0, 'sin tope');
+      for (let i = 0; i < 20; i++) sueltasM.estanSubidas(sitios);
+      assert.equal(llamadas.length, 1, 'con el índice igual, vuelve a lanzar git');
+      // Si el índice cambia, sí.
+      fs.writeFileSync(path.join(carpeta, 'otro.txt'), 'x');
+      original('git', ['add', 'otro.txt'], { cwd: carpeta });
+      sueltasM.estanSubidas(sitios);
+      assert.equal(llamadas.length, 2, 'cambia el índice y no se vuelve a preguntar');
+      return 'sin .git no corre; con índice igual, una vez';
+    } finally {
+      cp.execFileSync = original;
+      vscode.guion.raiz = antes.raiz; vscode.guion.confianza = antes.confianza;
+      fs.rmSync(carpeta, { recursive: true, force: true });
+    }
+  });
+
   // --------------------------------------------- el wizard, de verdad
   // Monta un arnés entero: tarda minutos y toca la red, así que no va en la
   // pasada normal. `node prueba/humo.js --con-arnes` lo incluye.

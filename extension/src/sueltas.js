@@ -37,6 +37,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const proyecto = require('./proyecto');
+const lecturas = require('./lecturas');
+const entorno = require('./entorno');
 const limpio = require('./limpio');
 
 const HERRAMIENTAS = '01-TOOLS';
@@ -136,7 +138,9 @@ function ficherosDeClavesEn(carpetaRelativa, salvo = []) {
   const completa = carpetaRelativa ? proyecto.ruta(carpetaRelativa) : proyecto.raiz();
   if (!completa || !fs.existsSync(completa)) return [];
   try {
-    return fs.readdirSync(completa)
+    // Con tope (decisión 188), y más holgado que el de las demás carpetas: aquí se
+    // busca un `.env`, y es mejor mirar de más que dejar uno sin ver.
+    return lecturas.entradas(completa, 20000).map((e) => e.name)
       .filter((n) => ES_DE_CLAVES.test(n) && !ES_EJEMPLO.test(n) && !salvo.includes(n))
       .map((n) => (carpetaRelativa ? path.posix.join(carpetaRelativa, n) : n));
   } catch {
@@ -149,7 +153,7 @@ function herramientas() {
   const base = proyecto.ruta(HERRAMIENTAS);
   if (!base || !fs.existsSync(base)) return [];
   try {
-    return fs.readdirSync(base, { withFileTypes: true })
+    return lecturas.entradas(base)
       .filter((e) => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'))
       .map((e) => ({ id: e.name, esperadas: nombresEsperados(path.join(base, e.name, '.env.example')) }));
   } catch {
@@ -172,7 +176,7 @@ function buscar({ conLasDeLasApps = false } = {}) {
   // más: lo que está más hondo es de un subproyecto y no se toca.
   let primerNivel = [];
   try {
-    primerNivel = fs.readdirSync(raiz, { withFileTypes: true })
+    primerNivel = lecturas.entradas(raiz)
       .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !NO_SE_MIRA.has(e.name))
       .map((e) => e.name);
   } catch { /* sin permiso para leer la raíz: se mira lo demás */ }
@@ -312,7 +316,7 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
     if (!completa || !fs.existsSync(completa)) return;
     let entradas;
     try {
-      entradas = fs.readdirSync(completa, { withFileTypes: true });
+      entradas = lecturas.entradas(completa);
     } catch { return; }
     for (const entrada of entradas.slice(0, TOPE_POR_CARPETA)) {
       if (!entrada.isFile()) continue;
@@ -360,7 +364,7 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
   if (conLasDeLasApps || !laRaizEsUnaApp()) mirarCarpeta('');
   let primerNivel = [];
   try {
-    primerNivel = fs.readdirSync(raiz, { withFileTypes: true })
+    primerNivel = lecturas.entradas(raiz)
       .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !NO_SE_MIRA.has(e.name))
       .map((e) => e.name);
   } catch { /* sin permiso: se mira lo demás */ }
@@ -373,7 +377,7 @@ function ficherosDeAcceso(lasHerramientas = herramientas(), { conLasDeLasApps = 
   for (const carpeta of primeras) mirarCarpeta(carpeta);
   const hijasDe = (carpeta) => {
     try {
-      return fs.readdirSync(proyecto.ruta(carpeta), { withFileTypes: true })
+      return lecturas.entradas(proyecto.ruta(carpeta))
         .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !NO_SE_MIRA.has(e.name))
         .map((e) => e.name).slice(0, TOPE_DE_SUBCARPETAS)
         .map((h) => path.posix.join(carpeta, h))
@@ -427,7 +431,7 @@ function tieneSuFichero(herramientaId) {
   const carpeta = proyecto.ruta(HERRAMIENTAS, herramientaId, 'keys');
   if (!carpeta || !fs.existsSync(carpeta)) return 0;
   try {
-    return fs.readdirSync(carpeta, { withFileTypes: true })
+    return lecturas.entradas(carpeta)
       .filter((e) => e.isFile() && !e.name.startsWith('.') && queEs(e.name, path.join(carpeta, e.name)))
       .length;
   } catch {
@@ -533,12 +537,20 @@ function estanSubidas(sitios) {
   if (!raiz || !sitios.length || !laCarpetaEsDeConfianza()) return [];
   const lista = sitios.map((s) => s.donde);
   const indice = paraElIndice(raiz);
-  const clave = indice ? `${raiz}\n${indice}\n${lista.join('\n')}` : null;
-  if (clave && ultimaRespuesta.clave === clave) return ultimaRespuesta.subidas;
+  // Decisión 188: sin `.git` (o sin índice, que es una carpeta recién iniciada)
+  // no hay nada subido y no hace falta lanzar nada. Antes, sin clave, el git se
+  // lanzaba en cada repintado para oír «no es un repositorio».
+  if (!indice) return [];
+  const clave = `${raiz}\n${indice}\n${lista.join('\n')}`;
+  if (ultimaRespuesta.clave === clave) return ultimaRespuesta.subidas;
   try {
     const { execFileSync } = require('node:child_process');
-    const salida = execFileSync('git', ['-c', 'core.fsmonitor=false', 'ls-files', '--', ...lista], {
-      cwd: raiz, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+    // El git de la casa (el que trae la barra, no el del PATH, que en un Mac sin
+    // las herramientas abre el diálogo de Apple); sin ventana en Windows; y con
+    // `--no-optional-locks`, que solo mira y no le quita el `index.lock` a nadie.
+    // Con el índice sin cambios no vuelve a correr (la clave de arriba).
+    const salida = execFileSync(entorno.git(), ['--no-optional-locks', '-c', 'core.fsmonitor=false', 'ls-files', '--', ...lista], {
+      cwd: raiz, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, windowsHide: true,
     });
     const subidas = salida.split('\n').map((l) => l.trim()).filter(Boolean);
     ultimaRespuesta.clave = clave;
@@ -699,7 +711,7 @@ function deLasAppsEnLasCopias() {
 }
 
 module.exports = {
-  deLasAppsEnLasCopias, ponerConfianza, rutas,
+  deLasAppsEnLasCopias, ponerConfianza, rutas, estanSubidas,
   buscar, resumen, reparto, aQuien, prefijoDe, herramientas, enCristiano, enElOrdenador, nombresDeClaves, nombresEsperados,
   ficherosDeAcceso, tieneSuFichero, queEs, paraProteger, DE_UNA_APP,
   // Para no ofrecer «Conectar» a lo que no es un programa (decisión 152).
