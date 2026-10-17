@@ -27062,8 +27062,9 @@ exec git "$@"
       // qué lleva la carpeta y cuánta gente hay detrás.
       assert.match(perfil, /^arnes: Contratos$/m);
       assert.match(perfil, /^empresa: Nexus Consulting$/m);
-      // Desde la 184 no se preguntan, así que no se inventan.
-      assert.doesNotMatch(perfil, /^(alcance|personas):/m, 'se escribe en el perfil algo que no se ha preguntado');
+      // Con la 187 vuelven a preguntarse (la 184 las había quitado).
+      assert.match(perfil, /^alcance: departamento$/m);
+      assert.match(perfil, /^personas: 2-10$/m);
 
       vscode.guion.raiz = empresa;
       vscode.guion.respuestas = null;
