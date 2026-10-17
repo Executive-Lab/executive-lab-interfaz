@@ -994,7 +994,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
   // sano: la barra pintaba botones que no respondían.
   if (parte.habilidades.colgando.length) {
     piezas.push({
-      nombre: 'Lo que este proyecto traía puesto',
+      nombre: 'Lo que esta carpeta traía puesto',
       estado: 'no',
       detalle: `${parte.habilidades.colgando.length} ${parte.habilidades.colgando.length === 1 ? 'cosa declarada que no está' : 'cosas declaradas que no están'} en este ordenador`,
       arreglo: { como: 'solo', etiqueta: 'Traerlo ahora', accion: { tipo: 'arrancar' }, alAbrir: true },

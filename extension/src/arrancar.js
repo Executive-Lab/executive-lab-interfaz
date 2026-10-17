@@ -45,33 +45,11 @@ const DE_QUE_VA = [
   { etiqueta: 'Un poco de todo', detalle: 'Todavía no lo tengo claro', kind: 'mixed' },
 ];
 
-// Las tres que se preguntan en vez de «¿es algo pequeño o va para largo?», que
-// para quien empieza es difícil de decidir (C-21, decisión de Jose del
-// 25-09-2026). Cada una contesta una sola cosa, y con un dato, no con una
-// opinión:
-//
-//   · qué lleva la carpeta — de una tarea suelta a la empresa entera;
-//   · cuánta gente hay detrás — no es lo mismo un departamento de tres que
-//     uno de cincuenta;
-//   · qué se va a construir — una landing no es una plataforma con usuarios.
-//
-// Solo la tercera va a RSC, como el tamaño del software: una empresa entera
-// puede querer una landing. Las otras dos van al perfil, al nombre que se
-// sugiere y al primer mensaje.
-const QUE_LLEVA = [
-  { etiqueta: 'Una tarea concreta', detalle: 'Preparar un informe, ordenar unos papeles, una web de una página', alcance: 'tarea' },
-  { etiqueta: 'Un proyecto', detalle: 'Algo con principio y fin: un lanzamiento, una web con reservas, un estudio', alcance: 'proyecto' },
-  { etiqueta: 'Un departamento o un área', detalle: 'Lo de todos los días de un equipo: facturación, personal, marketing', alcance: 'departamento' },
-  { etiqueta: 'La empresa entera', detalle: 'Todas las áreas a la vez: ventas, facturas, personal, clientes', alcance: 'empresa' },
-];
-
-const CUANTAS_PERSONAS = [
-  { etiqueta: 'Solo yo', personas: 'solo-yo' },
-  { etiqueta: 'De 2 a 10', personas: '2-10' },
-  { etiqueta: 'De 11 a 50', personas: '11-50' },
-  { etiqueta: 'Más de 50', personas: 'mas-de-50' },
-];
-
+// Lo que se pregunta en vez de «¿es algo pequeño o va para largo?», que para
+// quien empieza es difícil de decidir (C-21, decisión de Jose del 25-09-2026):
+// qué se va a construir, con ejemplos. Es lo único que va a RSC como tamaño del
+// software. «Qué lleva la carpeta» y «cuánta gente» se preguntaban también y
+// no iban a RSC: se quitaron en la 184 (el asistente lo pregunta en el perfil).
 // Cada respuesta, con el tamaño que le toca en RSC. RSC solo distingue pequeño
 // de no pequeño, y sube solo si el objetivo habla de pagos, cobros, bases de
 // datos o integraciones: «No lo sé» empieza pequeño sin atar nada. «Nada, o casi
@@ -160,7 +138,9 @@ async function ponerUnAsistente() {
   );
   const cual = opciones.find((o) => o.boton === elegido);
   if (!cual) return null;
-  return (await ponerElAsistente(cual.asistente)) ? cual.asistente.id : null;
+  if (!(await ponerElAsistente(cual.asistente))) return null;
+  puestosSolos.push(cual.asistente.nombre);
+  return cual.asistente.id;
 }
 
 // Ponerlo en el ordenador, con su botón ya pulsado. Si no se puede, se dice, salvo
@@ -175,41 +155,48 @@ async function ponerElAsistente(asistente, { callado = false } = {}) {
   }
 }
 
+// Los asistentes que la barra ha puesto sola en este ordenador al montar, para
+// decirlo al terminar (decisión 181). Se vacía al darlos (`losQueSePusieron`).
+const puestosSolos = [];
+const losQueSePusieron = () => puestosSolos.splice(0);
+
 // Lo que dice el ajuste (decisión 158): para uno, o para los dos, sin preguntar.
-// Si falta alguno en este ordenador, se ofrece ponerlo, como sin ninguno (A9), y
-// con el que sí está se puede seguir. Devuelve lo que va a `--target`: un
-// asistente, o los dos separados por una coma, que RSC acepta así.
+// Si falta alguno en este ordenador se pone sin preguntar (decisión 181): es una
+// extensión del editor, gratis y se quita cuando se quiera, y lo pidió la persona
+// en los ajustes. Se dice al terminar el montaje. Si no se puede, se dice con un
+// botón para intentarlo otra vez, y con el que sí está se puede seguir. Devuelve
+// lo que va a `--target`: un asistente, o los dos separados por una coma, que RSC
+// acepta así.
 async function conElAjuste(ajuste) {
   const queridos = ajuste === 'losDos' ? asistentes.ASISTENTES : [asistentes.porId(ajuste)].filter(Boolean);
+  const losIds = (cuales) => cuales.map((a) => a.id).join(',');
   const faltan = queridos.filter((a) => !asistentes.estaInstalado(a));
-  if (!faltan.length) return queridos.map((a) => a.id).join(',');
+  if (!faltan.length) return losIds(queridos);
 
-  const puesto = asistentes.ASISTENTES.find(asistentes.estaInstalado);
-  const losDos = ajuste === 'losDos';
-  const poner = faltan.length > 1 ? 'Poner los dos' : `Poner ${faltan[0].nombre}`;
-  const seguir = puesto ? `${losDos ? 'Seguir solo con' : 'Seguir con'} ${puesto.nombre}` : null;
-  const elegiste = losDos ? 'los dos asistentes' : faltan[0].nombre;
-  const mensaje = faltan.length > 1
-    ? `En los ajustes elegiste ${elegiste}, y no tienes ninguno en este ordenador. ¿Los pongo?`
-    : `En los ajustes elegiste ${elegiste}, y ${losDos ? `${faltan[0].nombre} no está` : 'no está'} en este ordenador. ¿Lo pongo?`;
-  const elegido = await vscode.window.showWarningMessage(mensaje, { modal: true }, poner, ...(seguir ? [seguir] : []));
-
-  if (seguir && elegido === seguir) return puesto.id;
-  if (elegido !== poner) return null;
-  const fallan = [];
-  for (const asistente of faltan) {
-    if (!(await ponerElAsistente(asistente, { callado: true }))) fallan.push(asistente);
+  const ponerLos = async (cuales) => {
+    const fallan = [];
+    for (const asistente of cuales) {
+      if (await ponerElAsistente(asistente, { callado: true })) puestosSolos.push(asistente.nombre);
+      else fallan.push(asistente);
+    }
+    return fallan;
+  };
+  let fallan = await ponerLos(faltan);
+  if (fallan.length) {
+    const sigue = queridos.filter((a) => !fallan.includes(a));
+    const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
+    const texto = sigue.length
+      ? `${noSePuso}: sigo solo con ${sigue[0].nombre}. Si quieres, lo intento otra vez.`
+      : `${noSePuso}. Si quieres, lo intento otra vez.`;
+    const ahora = fallan.length > 1 ? 'Ponerlos ahora' : 'Ponerlo ahora';
+    if (await vscode.window.showWarningMessage(texto, ahora) === ahora) fallan = await ponerLos(fallan);
   }
   const hay = queridos.filter((a) => !fallan.includes(a));
-  const noSePuso = `No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}`;
   if (!hay.length) {
-    await avisarConSalida(`${noSePuso}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    await avisarConSalida(`No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return null;
   }
-  // Con los dos, si uno no se pudo poner, se sigue con el que sí está, como con
-  // «Seguir con…», y se dice.
-  if (fallan.length) await avisarConSalida(`${noSePuso}: sigo solo con ${hay[0].nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
-  return hay.map((a) => a.id).join(',');
+  return losIds(hay);
 }
 
 // Cómo se llama esto. Dos nombres, y los pone el alumno: para qué es esta
@@ -247,7 +234,9 @@ async function preguntarNombres(objetivo, alcance) {
     // Lo que sale del objetivo son nombres de área —Facturación, Clientes—. A
     // una tarea o a un proyecto no les valen, y una caja vacía es mejor que un
     // nombre equivocado.
-    value: !alcance || alcance === 'departamento' ? sugerirNombre(objetivo) : '',
+    // Viene rellenado con el de la carpeta (decisión 184): quien no quiera
+    // pensar le da a Intro, y quien quiera otro lo cambia.
+    value: nombreDeLaCarpeta() || (!alcance || alcance === 'departamento' ? sugerirNombre(objetivo) : ''),
     ignoreFocusOut: true,
   });
   if (!arnes || !arnes.trim()) return null;
@@ -260,6 +249,15 @@ async function preguntarNombres(objetivo, alcance) {
   });
 
   return { arnes: arnes.trim(), empresa: (empresa || '').trim() || null };
+}
+
+// El nombre de la carpeta, dicho como una persona: sin guiones ni subrayados,
+// con la primera en mayúscula. «mi-tienda_2026» sale «Mi tienda 2026». Vacío si
+// no hay carpeta o no queda nada legible.
+function nombreDeLaCarpeta(raiz = proyecto.raiz()) {
+  if (!raiz) return '';
+  const limpio = path.basename(raiz).replace(/[-_.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return limpio ? `${limpio.charAt(0).toUpperCase()}${limpio.slice(1)}` : '';
 }
 
 // Del objetivo elegido sale un nombre razonable, para no dejar la caja vacía.
@@ -833,12 +831,9 @@ function deQueVaPorLoQueSeVe(parte) {
 const COMO_SE_PREGUNTA = {
   asistente: () => preguntarAsistente(),
   deQueVa: (yaDicho, parte) => elegir('Para empezar', '¿De qué va esto?', deQueVaPorLoQueSeVe(parte)),
-  alcance: () => elegir('Para empezar', '¿Qué vas a llevar en esta carpeta?', QUE_LLEVA),
-  personas: () => elegir('Para empezar', '¿Cuántas personas están metidas en esto?', CUANTAS_PERSONAS),
   queConstruir: (yaDicho) => elegir('Para empezar', '¿Qué vas a construir?',
     QUE_VAS_A_CONSTRUIR.filter((o) => !o.soloCon || o.soloCon === yaDicho.kind)),
   objetivo: (yaDicho, parte) => preguntarObjetivo(yaDicho.kind, { empezada: esDeAlguien(parte) }),
-  nivel: () => elegir('Sobre ti', '¿Qué tal te manejas con el ordenador?', COMO_TE_MANEJAS),
   nombres: (yaDicho) => preguntarNombres(yaDicho.objetivo, yaDicho.alcance),
 };
 
@@ -907,6 +902,9 @@ async function entrevistar(plan, parte, guardadas = null) {
   }
 
   const respuestas = { ...sabido, ...(guardadas || {}) };
+  // El nivel ya no se pregunta (decisión 184): el del recibo o el de «Cómo te
+  // habla» si vale, y si no, el menos técnico, que es lo que RSC da por hecho.
+  if (!rumbo.VALORES.nivel.includes(respuestas.nivel)) respuestas.nivel = 'non-technical';
   const nombres = parte.railes.nombres || null;
 
   for (const que of plan.preguntar) {
@@ -1434,6 +1432,51 @@ async function confirmarDentroDeOtro(parte) {
   return null;
 }
 
+// ── Elegir la carpeta ya es decir «quiero trabajar aquí» (decisión 184) ────
+//
+// Abrir una carpeta recarga la ventana y la barra arranca de nuevo, así que lo
+// que se eligió desde la barra se apunta antes de abrirla, en el almacén del
+// editor, y la barra nueva lo recoge: la ruta y la hora. Solo vale unos
+// minutos, y se borra al recogerlo, lo coja o no: abrir cualquier carpeta por
+// otro camino no empieza nada.
+const CLAVE_ELEGIDA = 'executiveLab.carpetaElegida';
+const VIGENCIA_DE_LA_ELECCION = 5 * 60 * 1000;
+let almacenDeLaEleccion = null;
+
+function saberDondeRecordarLaEleccion(almacen) {
+  almacenDeLaEleccion = almacen || null;
+}
+
+const esaRuta = (ruta) => {
+  const limpia = path.resolve(String(ruta || ''));
+  try { return fs.realpathSync(limpia); } catch { return limpia; }
+};
+
+async function apuntarLaEleccion(ruta) {
+  if (!almacenDeLaEleccion || !ruta) return;
+  await almacenDeLaEleccion.update(CLAVE_ELEGIDA, { ruta: esaRuta(ruta), hora: Date.now() });
+}
+
+// Devuelve true si esta carpeta es la que se acaba de elegir desde la barra.
+async function tomarLaEleccion(raiz) {
+  if (!almacenDeLaEleccion) return false;
+  const apuntada = almacenDeLaEleccion.get(CLAVE_ELEGIDA);
+  if (!apuntada) return false;
+  await almacenDeLaEleccion.update(CLAVE_ELEGIDA, undefined);
+  return Boolean(raiz) && typeof apuntada.ruta === 'string'
+    && Date.now() - apuntada.hora < VIGENCIA_DE_LA_ELECCION
+    && apuntada.ruta === esaRuta(raiz);
+}
+
+// ¿Se puede empezar a preparar sola? Solo una carpeta nueva o vacía, que no es
+// delicada ni prohibida, que no va dentro de otro proyecto y que no tiene ya su
+// `.rsc.json`. Cualquier otra se queda con su botón, como siempre.
+function sePuedePrepararAlElegirla(parte) {
+  const c = parte && parte.carpeta;
+  return Boolean(c) && c.vacia && !c.delicada && !c.prohibida
+    && !parte.dentroDeOtro && parte.declarada === 'no' && !parte.recibo;
+}
+
 async function elegirOtraCarpeta() {
   const elegida = await vscode.window.showOpenDialog({
     canSelectFolders: true,
@@ -1442,7 +1485,9 @@ async function elegirOtraCarpeta() {
     openLabel: 'Trabajar aquí',
     title: 'Elige la carpeta con la que quieres trabajar',
   });
-  if (elegida && elegida.length) await vscode.commands.executeCommand('vscode.openFolder', elegida[0], { forceNewWindow: false });
+  if (!elegida || !elegida.length) return;
+  await apuntarLaEleccion(elegida[0].fsPath);
+  await vscode.commands.executeCommand('vscode.openFolder', elegida[0], { forceNewWindow: false });
 }
 
 const NOMBRE_QUE_NO_VALE = 'Ese nombre no vale para una carpeta: sin barras ni símbolos.';
@@ -1473,6 +1518,7 @@ async function crearUnaCarpetaDentro(base, salida) {
     await avisarConSalida('No he podido crear la carpeta. Pulsa «Algo va mal» y pásale el código a tu tutor.');
     return { ok: false };
   }
+  await apuntarLaEleccion(nueva);
   await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(nueva), { forceNewWindow: false });
   return { ok: true, nueva };
 }
@@ -1614,6 +1660,8 @@ async function hacerLosPasos(plan, parte, respuestas, contexto, salida) {
           : `${(respuestas.nombres && respuestas.nombres.arnes) || 'Tu arnés'} ya está listo.`) + loQueSeRenombro(renombrados),
         renombrados,
         dichos,
+        // Los asistentes que se pusieron solos en este ordenador (decisión 181).
+        puestos: losQueSePusieron(),
       };
     },
   );
@@ -1682,9 +1730,10 @@ function primerMensaje(hecho, { comoSeLlama, conWeb = '', conFreno = false }) {
 module.exports = {
   estaEnGitConLaBarra, ponerLoDeClaude, quitarLoDeClaude, recordarSiSeMontaAqui, hacerLosPasos,
   arrancar, estaEnMarcha, dejarDeEsperarAGit, sePuedeSinNadie, sePuedeRetomar, faltanPorContestar, RAMAS_SIN_NADIE, RAMAS_QUE_SE_RETOMAN, momento, ESPERANDO_A_GIT, CLAVE_SIN_GIT, confirmarLoQueSeToca, confirmarLoQueCambia, entrevistar, ponerLosRailes, flagsDelMontaje, loQueLlevaLaCarpeta, primerMensaje,
-  confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
-  prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente,
+  saberDondeRecordarLaEleccion, apuntarLaEleccion, tomarLaEleccion, sePuedePrepararAlElegirla,
+  nombreDeLaCarpeta, confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
+  prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente, losQueSePusieron,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
-  COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
+  COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_VAS_A_CONSTRUIR,
   COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO, SIN_COPIAS_HASTA_QUE_QUIERAS,
 };
