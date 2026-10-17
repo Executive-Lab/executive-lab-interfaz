@@ -69,6 +69,17 @@ const DE_CLAUDE = {
   // La lista de primeros pasos de Claude sale al entrar, antes de que haya
   // ninguna carpeta con la vista sencilla.
   'claudeCode.hideOnboarding': true,
+  // Los verbos que da vueltas el indicador mientras Claude trabaja, en español:
+  // «replace» enseña solo los nuestros (con «append» saldrían también los
+  // ingleses). Con la lista vacía Claude vuelve a los suyos. Decisión 185;
+  // code.claude.com/docs/en/vs-code (tabla de ajustes) y /settings-reference.
+  'claudeCode.spinnerVerbs': {
+    mode: 'replace',
+    verbs: [
+      'Pensando', 'Dándole vueltas', 'Revisando', 'Buscando', 'Ordenando', 'Redactando',
+      'Atando cabos', 'Preparando', 'Mirándolo', 'Cocinándolo', 'Trabajando', 'Casi lo tengo',
+    ],
+  },
 };
 
 // Solo si Codex es el único: con los dos, la barra ya abre el de la carpeta, y

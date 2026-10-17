@@ -30,6 +30,19 @@
       ]
     },
     {
+      "titulo": "Que Claude solo vea lo que le pegues",
+      "lineas": [
+        {
+          "asistente": "claude",
+          "texto": "Claude ve también el fichero que tienes abierto en el editor, aunque no hayas seleccionado nada. Si lo apagas, solo ve lo que le pegues o selecciones. Vale para todas tus carpetas, no solo para esta.",
+          "interruptor": "soloLoPegado",
+          "botonPoner": "Que Claude solo vea lo que le pegues",
+          "puesto": "Hecho: Claude ya no ve el fichero que tienes abierto, solo lo que le pegues o selecciones. Vale para todas tus carpetas.",
+          "botonQuitar": "Que vuelva a ver el fichero abierto"
+        }
+      ]
+    },
+    {
       "titulo": "Lo que no se pega nunca",
       "lineas": [
         { "texto": "Claves de acceso y contraseñas. Las claves van en Conexiones (tools), no en la conversación." },
