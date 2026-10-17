@@ -9280,3 +9280,68 @@ y el cambio de carpeta, y `guardarSolo`) y una cambiada (antes un fallo no se re
 **Mutaciones**, todas caen: el fallo sin recordar; sin `if (guardando) return`; `enTerminal` siempre falso; sin
 apuntar el proceso; sin rearmar el vigía al cambiar de carpeta; la frase de reabrir fija en «Claude»; sin cancelar
 los relojes al cerrar; sin compartir el proceso en curso.
+
+
+## 191. Volver a la última conversación
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `volver-a-la-conversacion`
+
+«Seguir donde lo dejé» (decisión 160) abre una conversación nueva con el contexto. Faltaba lo otro: volver a la
+conversación de verdad, con todo lo que se habló. Regla de la 187: solo lo que debe hacerse solo se hace solo, y
+abrir una conversación es un clic de la persona; lo único que se hace solo es apuntar cuál fue.
+
+**Lo que dice la documentación oficial de Claude Code**
+
+- `vscode://anthropic.claude-code/open?session=<id>` («Launch a VS Code tab from other tools»,
+  https://code.claude.com/docs/en/vs-code): «The session must belong to the workspace currently open in VS Code.
+  If the session isn't found, a fresh conversation starts instead. If the session is already open in a tab, that
+  tab is focused.» Y `prompt` rellena el cuadro sin enviarlo.
+- De dónde sale el id, documentado: el JSON que reciben los enganches trae `session_id` y `transcript_path` en
+  todos los eventos, `Notification` incluido (https://code.claude.com/docs/en/hooks, «Common input fields»);
+  `claude -p --output-format json` lo devuelve en `session_id` y `--resume <id>` lo retoma
+  (https://code.claude.com/docs/en/headless, «Continue conversations»).
+- `transcript_path` apunta a `~/.claude/projects/…`, y la página de los enganches avisa de que el fichero se escribe
+  de forma asíncrona. Ese formato de carpeta y de ficheros no está documentado como interfaz: **no se lee**, ni se
+  adivina el id a partir de los nombres de ficheros.
+
+**Qué se hizo, con Claude**
+
+1. **`avisar.mjs`** (el enganche `Notification` de la 162, que ya corre en las carpetas de la barra) apunta, cuando
+   avisa de algo de Claude, el `session_id` y la hora en `.rsc/executive-lab-ultima-conversacion.json` de la
+   carpeta: `{ "id": …, "cuando": … }`. Solo eso: del JSON del enganche no se copia nada más (ni `message`, ni
+   `transcript_path`, ni `cwd`). Solo si la carpeta es de la barra (tiene `.rsc.json`), solo si el id son letras,
+   números, `-` y `_` de 6 a 64, sin seguir un enlace en su sitio, con un fichero temporal y `rename`, y sin fallar
+   nunca (sale con 0 como siempre). Lo de Codex (`agent-turn-complete`) no apunta nada. Las dos copias del guion,
+   la de `skills/` y la de `extension/media/railes/`, siguen idénticas.
+2. **`extension/src/ultima-conversacion.js`**, nuevo: lee ese fichero (sin enlaces, 4 KB como mucho, el id vuelve a
+   validarse porque lo escribió otro proceso y acaba en un enlace) y arma el enlace con el esquema del editor
+   (`vscode.env.uriScheme`, y `vscode` si no se entiende).
+3. **La brújula** manda `volverALaUltima` solo con Claude y solo si hay un id apuntado; manda el hecho, no el id.
+4. **La barra**: «Volver a la última conversación», debajo de «Seguir donde lo dejé» en Ayuda y en la tarjeta de la
+   última vez. «Seguir donde lo dejé» sigue como estaba (la conversación nueva con por dónde ibas). Al pulsar, la
+   extensión lee el id, abre el enlace y dice: «Te he abierto tu última conversación. Si ya no existe, se abre una
+   nueva.» Si el editor no recoge el enlace: «No he podido abrir esa conversación. Pulsa «Seguir donde lo dejé».»
+   Sin id válido: «No sé cuál fue tu última conversación. Pulsa «Seguir donde lo dejé».»
+
+**Lo que no se puede garantizar, y se dice así**: que el id apuntado sea el de la conversación que la persona tiene
+en la cabeza (gana el último aviso de esa carpeta, también de una conversación por terminal); que la conversación
+siga existiendo (la documentación dice que, si no, abre una nueva, y el aviso lo dice; la extensión archiva sola
+las de más de 14 días sin actividad, `archiveInactiveSessions`); y que haya id: solo se apunta cuando salta un
+aviso (pregunta, formulario, o un minuto de silencio tras terminar), y quien apagó los avisos (decisión 162) no
+tiene el botón. Sin id, el botón no sale: no se inventa uno.
+
+**Codex**: nada. Su documentación (https://learn.chatgpt.com/docs/codex/ide y
+https://learn.chatgpt.com/docs/config-file/config-advanced) da el `thread-id` en el `notify`, pero no documenta
+ninguna forma de abrir o retomar un hilo desde la extensión con él: el único enlace es el de instalar la extensión
+y el único comando consultado abre la barra de Codex. No se usa ningún formato interno de `~/.codex`. Con Codex el
+botón no sale y «Seguir donde lo dejé» sigue igual.
+
+**Fuera**: leer `~/.claude/projects/…`; `claude --continue`/`--resume` lanzados por la barra (abren otra cosa: una
+sesión de terminal, no la pestaña del editor); apuntar el id con un enganche nuevo (`SessionStart`): sería poner
+algo más en los ajustes de cada carpeta, y el de avisos ya está.
+
+**Las pruebas**: `humo.js` pasa a 542 (551 con `--con-arnes`). Dos comprobaciones nuevas: el enganche apunta solo el id y la hora
+(con un JSON de mentira, los cuatro tipos de Claude, lo que no es de Claude, ids malos, sin carpeta de la barra,
+enlace en su sitio, el guion corrido de verdad y Codex) y el botón (sin id, con id, Ayuda y tarjeta, el enlace
+exacto, el editor que no lo recoge, ids que no sirven, Codex, textos sin palabras prohibidas). `mapeos-codex` 30, `contrato` 15, `empresas-distintas`, diccionario y PowerShell, limpios.
+**Mutaciones**: todas caen: el id sin validar al apuntar; apuntar también con Codex; apuntar fuera de las carpetas de la barra; escribir a través de un enlace; apuntar algo más que el id; ofrecer el botón con Codex; la validación del id relajada en la extensión; el id viajando a la pantalla; dar por abierto sin mirar si el editor recogió el enlace; y quitar el botón de la tarjeta (esta no caía: la comprobación miraba toda la pantalla, y se acotó a la tarjeta).

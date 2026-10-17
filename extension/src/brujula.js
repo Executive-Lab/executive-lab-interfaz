@@ -25,6 +25,7 @@ const conexiones = require('./conexiones');
 const cerebro = require('./cerebro');
 const asistentes = require('./asistentes');
 const porDondeIbas = require('./por-donde-ibas');
+const ultimaConversacion = require('./ultima-conversacion');
 
 // Git, para la pantalla sin arnés (decisión 165): si falta; si se puede poner al
 // pulsar Preparar, la línea que lo dice; si se está poniendo, y si sigue el
@@ -321,6 +322,10 @@ async function calcular() {
     // `next:` o el documento de trabajo en marcha más reciente, leído del disco.
     // Sin nada en marcha, null, y el botón se queda como estaba.
     ibasPor: porDondeIbas.porDondeIbas(proyecto.raiz(), continuacion),
+    // «Volver a la última conversación» (decisión 191): solo con Claude, que es el
+    // que documenta cómo abrir una conversación por su id, y solo si el enganche de
+    // avisos apuntó una. Va el hecho, no el id: el id no sale de la extensión.
+    volverALaUltima: quien.id === 'claude' && ultimaConversacion.laUltima(proyecto.raiz()) ? { accion: { tipo: 'volverALaConversacion' } } : null,
     sabe,
     conectados,
     esperando,

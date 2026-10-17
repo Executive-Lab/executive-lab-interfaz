@@ -27,6 +27,11 @@
 // conversaciones de Codex, también las de fuera de la barra, solo avisa si `cwd`
 // está dentro de una carpeta que montó la barra (con su `.rsc.json`).
 //
+// Con Claude, además, apunta el `session_id` de ese JSON (decisión 191), solo el id
+// y la hora, en `.rsc/executive-lab-ultima-conversacion.json` de la carpeta: es lo
+// que usa «Volver a la última conversación» (`vscode://anthropic.claude-code/open?session=`,
+// code.claude.com/docs/en/vs-code). Ni una palabra de la conversación.
+//
 // Cualquier otro tipo, o una entrada que no se entiende, no avisa de nada.
 //
 // Lo engancha la barra en `.claude/settings.local.json` de sus carpetas
@@ -48,7 +53,7 @@
 //
 //   argv[2] = la carpeta del proyecto   stdin = el JSON del enganche (Notification)
 import { execFile, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 export const TITULO = 'Executive Lab';
@@ -122,6 +127,34 @@ export function elTexto(entrada, carpeta = '') {
   return decir ? decir(elNombre(carpeta, process.env.CLAUDE_PROJECT_DIR, entrada.cwd)) : null;
 }
 
+// El id de una conversación de Claude: lo que se apunta acaba en un enlace.
+export const ID_VALIDO = /^[A-Za-z0-9_-]{6,64}$/;
+export const DONDE_SE_APUNTA = ['.rsc', 'executive-lab-ultima-conversacion.json'];
+
+// Apunta el id de la última conversación en la carpeta de la barra. Devuelve true si
+// lo dejó escrito. Sin carpeta de la barra, sin id válido o con un enlace por medio,
+// no escribe nada.
+export function apuntarLaUltima(entrada, carpeta, ahora = new Date()) {
+  try {
+    if (!entrada || typeof entrada !== 'object' || !Object.prototype.hasOwnProperty.call(QUE_DICE, entrada.notification_type)) return false;
+    if (entrada.notification_type === 'agent-turn-complete') return false;
+    const id = entrada.session_id;
+    if (typeof id !== 'string' || !ID_VALIDO.test(id)) return false;
+    if (typeof carpeta !== 'string' || !carpeta.trim() || carpeta.length > 4096 || !existsSync(join(carpeta.trim(), '.rsc.json'))) return false;
+    const dir = join(carpeta.trim(), DONDE_SE_APUNTA[0]);
+    // Sin `.rsc/` no se apunta: crearla haría que RSC dejara de reponer las marcas del equipo (revisión de la 177).
+    try { if (!lstatSync(dir).isDirectory()) return false; } catch { return false; }
+    const fichero = join(dir, DONDE_SE_APUNTA[1]);
+    try { if (lstatSync(fichero).isSymbolicLink()) return false; } catch { /* no está: se crea */ }
+    const temporal = `${fichero}.${process.pid}.tmp`;
+    writeFileSync(temporal, `${JSON.stringify({ id, cuando: ahora.toISOString() })}\n`);
+    renameSync(temporal, fichero);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // El de Windows, fijo y solo en ASCII: PowerShell 5.1 lee mal lo demás. El
 // título y el texto llegan en dos variables de entorno.
 export const GUION_DE_WINDOWS = [
@@ -189,6 +222,7 @@ function lanzarDeVerdad(orden) {
 export async function avisar({ entrada, carpeta = '', plataforma = process.platform, lanzar = lanzarDeVerdad } = {}) {
   const texto = elTexto(entrada, carpeta);
   if (!texto) return null;
+  apuntarLaUltima(entrada, carpeta);
   const orden = laOrden(plataforma, TITULO, texto);
   if (!orden) return null;
   await lanzar(orden);
