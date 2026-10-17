@@ -39,6 +39,7 @@ const rutinas = require('./rutinas');
 const cuando = require('./cuando');
 const copias = require('./guardar');
 const soporte = require('./soporte');
+const { avisarConSalida } = require('./salida-del-aviso');
 // Lo que falla, lo que no se entiende y lo que se echa en falta, para Jose (decisión 131).
 const avisos = require('./avisos');
 const rsc = require('./rsc');
@@ -506,7 +507,7 @@ ${cabecera}
           const quiere = await vscode.window.showWarningMessage(`En los ajustes elegiste los dos asistentes, y no he podido poner ${otro.nombre} en este ordenador. Si quieres, lo intento otra vez.`, ahora);
           if (quiere !== ahora) return;
           puesto = await arrancar.ponerElAsistente(otro, { callado: true });
-          if (!puesto) return vscode.window.showWarningMessage(`No he podido poner ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+          if (!puesto) return avisarConSalida(`No he podido poner ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
         }
         this.dejarElAviso(`He puesto ${otro.nombre} en este ordenador, porque en los ajustes elegiste los dos asistentes.`);
         // Después de la que esté en marcha, que no lo contaba.
@@ -550,7 +551,7 @@ ${cabecera}
           });
         } else {
           // Nunca un fallo callado (P3): lo que dijo el arnés ya va en el registro.
-          this.unaVez(`fallo:${otro.id}`, () => vscode.window.showWarningMessage(`No he podido preparar esta carpeta también para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`));
+          this.unaVez(`fallo:${otro.id}`, () => avisarConSalida(`No he podido preparar esta carpeta también para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`));
         }
       }
       if (hechos.length && asistentes.conQuien().id !== conQuienAntes.id) await asistentes.seguirCon(conQuienAntes.id);
@@ -578,7 +579,7 @@ ${cabecera}
     this.salida.appendLine(`[losDos] ${cual}, con su botón: ${hecho.ok ? 'preparada' : (hecho.cancelado ? 'sin su sí' : 'no')}${hecho.detalle ? ` · ${hecho.detalle}` : ''}`); // diccionario: interno
     if (hecho.porDelante) return vscode.window.showWarningMessage(POR_DELANTE);
     if (hecho.cancelado) return vscode.window.showInformationMessage('No he tocado nada. Te lo vuelvo a proponer la próxima vez que abras esta carpeta.');
-    if (!hecho.ok) return vscode.window.showWarningMessage(hecho.mensaje || `No he podido prepararla para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    if (!hecho.ok) return avisarConSalida(hecho.mensaje || `No he podido prepararla para ${otro.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     if (asistentes.conQuien().id !== conQuienAntes.id) await asistentes.seguirCon(conQuienAntes.id);
     vigilarOtraVez();
     await this.repintarSinMover();
@@ -696,7 +697,7 @@ ${cabecera}
       const hecho = avisoDeCodex.ponerlo({ fuente, node: oferta.node });
       this.salida.appendLine(`[codex] aviso al terminar: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
       if (hecho.hecho !== 'puesto') {
-        vscode.window.showWarningMessage('No he podido dejar el aviso de Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+        avisarConSalida('No he podido dejar el aviso de Codex. Pulsa «Algo va mal» y pásale el código a tu tutor.');
         return;
       }
       this.dejarElAviso(avisoDeCodex.FRASE, QUITAR_EL_AVISO_DE_CODEX);
@@ -1398,6 +1399,10 @@ ${cabecera}
       refrescar: () => this.refrescar(true),
       volver: () => this.refrescar(),
       pedir: () => this.pedir(mensaje.prompt),
+      // Decisión 183: el botón de un aviso que decía «pídeselo al asistente». El
+      // texto viene de la pantalla y puede traer nombres de la carpeta: va en una
+      // línea y sin comillas, como todo rótulo que entra en un encargo.
+      queLoMireElAsistente: () => this.pedir(`En la barra me ha salido este aviso y no sé cómo seguir: ${unRotulo(mensaje.texto, 300)}. Mira qué pasa y arréglalo, o dime qué tengo que hacer.`),
       dejarLaClaveAsi: () => this.dejarLaClaveAsi(mensaje.proveedor, mensaje.huella),
       cuandoCaduca: () => this.apuntarCuandoCaduca(mensaje.proveedor, mensaje.en, mensaje.huella),
       hacerElRecordatorio: () => this.hacerElRecordatorio(mensaje.nombre),
@@ -1414,6 +1419,9 @@ ${cabecera}
       conversacionNueva: () => this.conversacionNueva(),
       pedirAyudaEnElForo: () => this.pedirAyudaEnElForo(),
       abrir: () => this.abrirUnaPagina(mensaje.url),
+      // Decisión 183: el motivo técnico de una pantalla que no se pudo pintar va al
+      // registro, que es lo que lee el informe de «Algo va mal»; a la vista, no.
+      falloAlPintar: () => this.salida.appendLine(`[panel] no se pudo pintar: ${unRotulo(mensaje.mensaje, 300)}`), // diccionario: interno
       bajarLaNueva: () => vscode.env.openExternal(version.dondeBajarla()),
       verLaRelease: () => vscode.env.openExternal(version.dondeVerla(this.versionDeLaBarra())),
       yaLoHeVisto: () => this.yaLoHeVisto(),
@@ -1762,7 +1770,9 @@ ${cabecera}
   // aviso del editor (revisión adversaria de la 155).
   avisarDeLosRecordatorios(aviso) {
     if (this.donde && this.donde.tipo === 'recordatorios') return this.verRecordatorios(aviso);
-    return aviso.malo ? vscode.window.showWarningMessage(aviso.texto) : vscode.window.showInformationMessage(aviso.texto);
+    const mandaAlInforme = /Algo va mal/.test(aviso.texto || '');
+    const delEditor = (texto) => (mandaAlInforme ? avisarConSalida(texto) : vscode.window.showWarningMessage(texto));
+    return aviso.malo ? delEditor(aviso.texto) : vscode.window.showInformationMessage(aviso.texto);
   }
 
   async ponerHorario(nombre) {
@@ -2863,6 +2873,8 @@ ${cabecera}
   // OpenAI, de las que da la tabla de los datos de clientes.
   esUnaPaginaNuestra(direccion) {
     if (Object.values(rutinas.DONDE).some((d) => d.guia === direccion.href)) return true;
+    // Donde se crea la cuenta de GitHub (decisión 183): lo pide un botón de la barra.
+    if (direccion.href === 'https://github.com/signup') return true;
     if (direccion.hostname === 'github.com') {
       return sitio.esNuestro(direccion.pathname.split('/').filter(Boolean).slice(0, 2).join('/'));
     }
@@ -3322,7 +3334,11 @@ ${cabecera}
     if (hecho.detalle) this.salida.appendLine(`[subir] ${hecho.detalle}`); // diccionario: interno
 
     await this.refrescar(true);
-    this.enviar({ tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok });
+    this.enviar({
+      tipo: 'aviso', texto: hecho.mensaje, malo: !hecho.ok,
+      // Sin internet, lo que se puede hacer es volver a intentarlo (decisión 183).
+      ...(hecho.sinRed ? { boton: { etiqueta: 'Volver a intentarlo', accion: { tipo: 'subirCopia' } } } : {}),
+    });
     return undefined;
   }
 

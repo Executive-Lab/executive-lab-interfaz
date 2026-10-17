@@ -4926,23 +4926,101 @@ exec git "$@"
     return 'cada uno lee las suyas';
   });
 
-  await comprobar('lo que puede hacer solo se escribe sin perder los enganches', () => {
-    // En `.claude/settings.json` viven los enganches del arnés. Escribir ahí
-    // pisando el fichero dejaría la carpeta a medias sin que se note.
+  await comprobar('lo que puede hacer solo se escribe donde el editor lo lee: sus ajustes de usuario, nunca la carpeta (decisión 182)', async () => {
+    // Fuente: code.claude.com/docs/en/permission-modes («Switch permission modes»)
+    // y /vs-code: la extensión nunca lee `.claude/settings.json` de la carpeta para
+    // el modo de arranque; manda `claudeCode.initialPermissionMode` de usuario (no
+    // acepta `auto`), luego lo último elegido, luego `~/.claude/settings.json`; y
+    // desde la 2.1.283 el de fábrica es Auto. Escribir en la carpeta no hacía nada.
     const ajustes = cargar('ajustes');
+    const clave = 'claudeCode.initialPermissionMode';
+    assert.equal(ajustes.CLAVE_PERMISO, clave);
     const fichero = path.join(vscode.guion.raiz, '.claude/settings.json');
     fs.mkdirSync(path.dirname(fichero), { recursive: true });
-    fs.writeFileSync(fichero, JSON.stringify({ hooks: { SessionStart: ['algo'] } }, null, 2));
+    const SUYO = `${JSON.stringify({ hooks: { SessionStart: ['algo'] }, permissions: { defaultMode: 'plan' } }, null, 2)}\n`;
+    fs.writeFileSync(fichero, SUYO);
+    const antes = { global: vscode.registrado.ajustes.global[clave], workspace: vscode.registrado.ajustes.workspace[clave] };
+    const ponerEn = (donde, valor) => { if (valor === undefined) delete vscode.registrado.ajustes[donde][clave]; else vscode.registrado.ajustes[donde][clave] = valor; };
+    const rechazaba = vscode.guion.rechazaAjuste;
+    vscode.guion.rechazaAjuste = () => false; // con la extensión de Claude puesta, la clave está registrada
+    try {
+      ponerEn('global'); ponerEn('workspace');
 
-    assert.equal(ajustes.comoEstamos().permiso, 'default', 'sin nada escrito, lo prudente');
-    assert.ok(ajustes.ponerPermiso('plan').ok);
+      // Sin valor, es Auto (no «Lo normal»): lo que pasa de verdad.
+      assert.equal(ajustes.permisoDeAhora(), 'auto', 'sin nada puesto no es Auto');
+      assert.equal(ajustes.comoEstamos().permiso, 'auto');
+      assert.ok(ajustes.PERMISOS.some((x) => x.id === 'auto'), 'Auto no sale entre las opciones');
+      assert.ok(!ajustes.PERMISOS.some((x) => x.id === 'bypassPermissions'));
+      // El `plan` que dejó la 181 o antes en la carpeta no cuenta para el editor.
+      assert.equal(ajustes.permisoDeAhora(), 'auto', 'se lee el de la carpeta, que el editor ignora');
 
-    const despues = JSON.parse(fs.readFileSync(fichero, 'utf8'));
-    assert.equal(despues.permissions.defaultMode, 'plan');
-    assert.deepEqual(despues.hooks.SessionStart, ['algo'], 'los enganches siguen ahí');
+      for (const cual of ['plan', 'acceptEdits', 'default']) {
+        const r = await ajustes.ponerPermiso(cual);
+        assert.ok(r.ok, r.mensaje);
+        assert.equal(vscode.registrado.ajustes.global[clave], cual, `${cual}: no se escribe en los ajustes de usuario`);
+        assert.equal(vscode.registrado.ajustes.workspace[clave], undefined, `${cual}: se escribe por carpeta`);
+        assert.equal(ajustes.comoEstamos().permiso, cual);
+        assert.match(r.mensaje, /todas tus carpetas/, 'no se dice que vale para todas');
+      }
+      // La carpeta, tal cual: ni se escribe ni se toca lo que ya había.
+      assert.equal(fs.readFileSync(fichero, 'utf8'), SUYO, 'se toca `.claude/settings.json` de la carpeta');
 
-    assert.ok(!ajustes.ponerPermiso('bypassPermissions').ok, 'quitarle el freno de mano no es un ajuste que ofrezcamos');
-    return 'escrito sin pisar nada';
+      // Auto es quitar lo escrito, nunca escribir «auto» (la extensión no lo acepta).
+      assert.ok((await ajustes.ponerPermiso('auto')).ok);
+      assert.ok(!(clave in vscode.registrado.ajustes.global), 'Auto se escribe como valor');
+      assert.equal(ajustes.permisoDeAhora(), 'auto');
+
+      // Saltarse los permisos no se ofrece, ni nada que no sea de la lista.
+      for (const raro of ['bypassPermissions', 'dontAsk', 'manual', '', undefined]) {
+        assert.ok(!(await ajustes.ponerPermiso(raro)).ok, `acepta «${raro}»`);
+      }
+      assert.ok(!(clave in vscode.registrado.ajustes.global) && !(clave in vscode.registrado.ajustes.workspace), 'una opción rara escribió algo');
+
+      // Leer: `manual` es `default`; el de carpeta no cuenta; uno raro puesto a mano no marca ninguna opción.
+      ponerEn('global', 'manual');
+      assert.equal(ajustes.permisoDeAhora(), 'default');
+      ponerEn('global'); ponerEn('workspace', 'acceptEdits');
+      assert.equal(ajustes.permisoDeAhora(), 'auto', 'el editor ignora el de carpeta y la barra lo enseña');
+      ponerEn('workspace'); ponerEn('global', 'bypassPermissions');
+      assert.equal(ajustes.permisoDeAhora(), 'bypassPermissions');
+      assert.ok(!ajustes.PERMISOS.some((x) => x.id === ajustes.comoEstamos().permiso), 'se marca como puesta una opción que no lo es');
+      ponerEn('global');
+
+      // Con el editor rechazando el ajuste, se dice y no se da por hecho.
+      const original = vscode.workspace.getConfiguration;
+      vscode.workspace.getConfiguration = () => ({ ...original(), update: async () => { throw new Error('no registrado'); } });
+      try {
+        const r = await ajustes.ponerPermiso('plan');
+        assert.equal(r.ok, false);
+        assert.match(r.mensaje, /Algo va mal/);
+      } finally {
+        vscode.workspace.getConfiguration = original;
+      }
+
+      // Sin la extensión de Claude el editor no conoce la clave: se dice, no se da por hecho.
+      vscode.guion.rechazaAjuste = (c) => c.startsWith('claudeCode.');
+      assert.equal((await ajustes.ponerPermiso('plan')).ok, false);
+      vscode.guion.rechazaAjuste = () => false;
+
+      // Con Codex no se inventa un ajuste que nadie lee.
+      const dondeM = cargar('donde');
+      const puede = dondeM.puedeTenerAjustes;
+      dondeM.puedeTenerAjustes = () => false;
+      try {
+        assert.equal((await ajustes.ponerPermiso('plan')).ok, false);
+        assert.ok(!(clave in vscode.registrado.ajustes.global));
+      } finally {
+        dondeM.puedeTenerAjustes = puede;
+      }
+    } finally {
+      vscode.guion.rechazaAjuste = rechazaba;
+      ponerEn('global', antes.global); ponerEn('workspace', antes.workspace);
+    }
+
+    // Y el código ya no escribe `permissions.defaultMode` en carpetas.
+    const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'ajustes.js'), 'utf8');
+    assert.ok(!/defaultMode|settings\.json/.test(fuente.replace(/\/\/.*$/gm, '')), 'ajustes.js escribe en la carpeta');
+    return 'va a los ajustes de usuario; Auto es no tener valor; la carpeta no se toca';
   });
 
   await comprobar('guardar solo no toca el historial de otra persona', async () => {
@@ -9089,6 +9167,12 @@ exec git "$@"
       ['reglas con automatismos', { tipo: 'reglas', ...cargar('reglas').queHay(), guardianes: [], automatismos: [{ id: 'session-start', nombre: 'La brújula al empezar', queHace: 'Recuerda cómo se trabaja aquí.', estado: 'activo', porQue: '' }, { id: 'worktree-reaper', nombre: 'Recogida de copias de trabajo', queHace: 'Recoge lo ya guardado.', estado: 'apagado', porQue: 'Apagado aquí, a propósito' }] }, /Y lo que hace solo, sin parar nada[\s\S]*La brújula al empezar[\s\S]*Activo[\s\S]*Recogida de copias de trabajo[\s\S]*Apagado aquí/],
       ['asistente', { tipo: 'asistente', ...cargar('asistentes').comoEstamos(), aviso: null }, /Claude|Codex/],
       ['comoTrabaja', { tipo: 'comoTrabaja', ...cargar('ajustes').comoEstamos(), aviso: null }, /Cada cuánto guarda solo/],
+      // Decisión 182: el estado real (sin valor es Auto) y que vale para todas las carpetas.
+      ['comoTrabaja, con Auto', { tipo: 'comoTrabaja', ...cargar('ajustes').comoEstamos(), permiso: 'auto', aviso: null },
+        /Que trabaje solo, con un revisor <span class="cuantos">ahora mismo[\s\S]*Vale para todas tus carpetas, no solo para esta\./
+      ],
+      ['comoTrabaja, con otro puesto a mano', { tipo: 'comoTrabaja', ...cargar('ajustes').comoEstamos(), permiso: 'bypassPermissions', aviso: null },
+        /Vale para todas tus carpetas[^<]*Ahora tienes puesto otro que no se cambia desde aquí/],
       ['laCara', { tipo: 'laCara', ...cargar('tema').comoEstamos(), aviso: null }, /Dale material/],
       ['proyectos', { tipo: 'proyectos', montones: cargar('proyectos').queHay() }, /Vender recambios/],
       ['agentes', { tipo: 'agentes', agentes: cargar('agentes').queHay() }, /cobros atrasados/i],
@@ -12795,7 +12879,7 @@ exec git "$@"
     const quitar = (r, que = null) => al.quitarLosDeLaBarra({ raiz: r, estaEnGit: fuera, que });
     const ajustes = (r) => path.join(r, '.claude', 'settings.local.json');
     const local = (r) => JSON.parse(fs.readFileSync(ajustes(r), 'utf8'));
-    const EL_NUESTRO = { matcher: 'permission_prompt|idle_prompt', hooks: [{ type: 'command', command: al.ORDEN_DE_AVISAR, timeout: 10 }] };
+    const EL_NUESTRO = { matcher: 'permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog', hooks: [{ type: 'command', command: al.ORDEN_DE_AVISAR, timeout: 10 }] };
 
     // La forma del enganche: como el freno, `node` a secas y la carpeta entre comillas,
     // y el relevo de la barra la reconoce como nuestra (enganches.js).
@@ -12807,7 +12891,10 @@ exec git "$@"
     assert.equal(local(conRuta).hooks.Notification[0].hooks[0].command, al.ORDEN_DE_AVISAR, 'la barra no la ve como nuestra: una ruta a node se queda');
     // Dos nombres exactos: solo letras, `_` y `|` (code.claude.com/docs/en/hooks, «Matcher patterns»).
     assert.match(al.CUANDO_AVISAR, /^[a-z_|]+$/);
-    assert.deepEqual(al.CUANDO_AVISAR.split('|').sort(), ['idle_prompt', 'permission_prompt']);
+    // Decisión 182: también los dos de un servicio conectado que pide un formulario o una página
+    // (code.claude.com/docs/en/hooks-guide, tabla de `notification_type`).
+    assert.deepEqual(al.CUANDO_AVISAR.split('|').sort(), ['elicitation_dialog', 'elicitation_url_dialog', 'idle_prompt', 'permission_prompt']);
+    assert.deepEqual(al.CUANDO_AVISAR_ANTES, ['permission_prompt|idle_prompt']);
 
     // Con el guion en la carpeta: las tres cosas, y la frase con las tres.
     const vacia = nueva();
@@ -12925,6 +13012,63 @@ exec git "$@"
       assert.equal((await quitar(r)).hecho, 'noCasa', `${que}: se cree`);
     }
 
+    // Decisión 182: una carpeta con el enganche de antes, puesto por la barra (constancia y huella),
+    // se pone al día sola y se dice; lo que la persona cambió, no se toca; y «Quitarlo» sigue quitándolo.
+    const VIEJO = { matcher: 'permission_prompt|idle_prompt', hooks: [{ type: 'command', command: al.ORDEN_DE_AVISAR, timeout: 10 }] };
+    const conElViejo = async () => {
+      const r = nueva();
+      await poner(r);
+      const f = local(r);
+      f.hooks.Notification = [VIEJO];
+      fs.writeFileSync(ajustes(r), JSON.stringify(f));
+      return r;
+    };
+    const deAntes = await conElViejo();
+    assert.equal(al.esElDeAvisar(VIEJO), true, 'quitarlo no reconoce el de antes');
+    assert.equal((await poner(deAntes, { soloMirar: true })).hecho, 'yaEstaba', 'mirar ofrece poner al día');
+    assert.deepEqual(local(deAntes).hooks.Notification, [VIEJO], 'mirar escribe');
+    const alDia = await poner(deAntes);
+    assert.deepEqual([alDia.hecho, alDia.idioma, alDia.preguntar, alDia.avisos, alDia.avisosAlDia], ['puesto', false, [], false, true]);
+    assert.deepEqual(local(deAntes).hooks.Notification, [EL_NUESTRO], 'no se pone al día el enganche de antes');
+    assert.equal(al.laFrase(alDia), 'He puesto al día los avisos de Claude: ahora también te avisan cuando un servicio conectado te pide rellenar algo o abrir una página.');
+    assert.deepEqual(al.loQueSePuso(alDia), ['avisos'], '«Quitarlo» no sabe qué quitar');
+    assert.equal((await poner(deAntes)).hecho, 'yaEstaba', 'se pone al día cada vez');
+    assert.equal(local(deAntes).language, 'español', 'toca lo demás');
+    assert.equal((await quitar(deAntes, ['avisos'])).hecho, 'quitado', 'tras ponerlo al día, no se quita');
+    assert.equal(local(deAntes).hooks, undefined);
+    // Con lo suyo al lado: se queda; el de antes se cambia en su sitio.
+    const conSuyo = await conElViejo();
+    const ENGANCHE_SUYO = SU_AVISO.hooks.Notification[0];
+    fs.writeFileSync(ajustes(conSuyo), JSON.stringify({ ...local(conSuyo), hooks: { Notification: [ENGANCHE_SUYO, VIEJO] } }));
+    assert.equal((await poner(conSuyo)).avisosAlDia, true);
+    assert.deepEqual(local(conSuyo).hooks.Notification, [ENGANCHE_SUYO, EL_NUESTRO], 'pisa o reordena lo suyo');
+    // Lo que cambió la persona (otro matcher, otro tope, otra orden), no se toca, aunque la constancia diga que fue nuestro.
+    for (const [que, suyo] of [
+      ['otro matcher', { ...VIEJO, matcher: 'permission_prompt' }],
+      ['otro tope', { ...VIEJO, hooks: [{ ...VIEJO.hooks[0], timeout: 30 }] }],
+      ['otra orden', { ...VIEJO, hooks: [{ ...VIEJO.hooks[0], command: 'say listo' }] }],
+      ['un campo de más', { ...VIEJO, de: 'mí' }],
+    ]) {
+      const r = await conElViejo();
+      fs.writeFileSync(ajustes(r), JSON.stringify({ ...local(r), hooks: { Notification: [suyo] } }));
+      const h = await poner(r);
+      assert.equal(h.hecho, 'yaEstaba', `${que}: se pone al día lo suyo`);
+      assert.deepEqual(local(r).hooks.Notification, [suyo], `${que}: se toca`);
+    }
+    // Sin constancia que case (plantada, o de otra carpeta), tampoco: el enganche viejo no cuenta como nuestro.
+    const plantada = await conElViejo();
+    fs.writeFileSync(path.join(plantada, ...al.CONSTANCIA), JSON.stringify({ ask: PREGUNTAR, language: 'español', avisos: true, huella: 'x'.repeat(64) }));
+    await poner(plantada);
+    assert.deepEqual(local(plantada).hooks.Notification, [VIEJO], 'se pone al día con una constancia que no casa');
+    const sinConstancia = await conElViejo();
+    fs.rmSync(path.join(sinConstancia, ...al.CONSTANCIA));
+    await poner(sinConstancia);
+    assert.deepEqual(local(sinConstancia).hooks.Notification, [VIEJO], 'se pone al día sin constancia');
+    // En git, no se toca; y con su botón (conSuSi), tampoco.
+    const viejoEnGit = await conElViejo();
+    assert.equal((await poner(viejoEnGit, { estaEnGit: () => true })).hecho, 'enGit');
+    assert.deepEqual(local(viejoEnGit).hooks.Notification, [VIEJO]);
+
     // En git, no; y suelto, también solo los avisos.
     const enGit = nueva();
     assert.equal((await poner(enGit, { estaEnGit: () => true })).hecho, 'enGit');
@@ -12935,6 +13079,61 @@ exec git "$@"
     assert.equal(correr('--quitar', '--solo=avisos', suelta), 'ajustes de Claude de esta carpeta: quitado');
     assert.deepEqual(local(suelta), { language: 'español', permissions: { ask: PREGUNTAR } }, 'suelto, se quita otra cosa');
     return 'puesto con el guion, sin pisar avisos de nadie; y «Quitarlo» quita solo lo que cuenta';
+  });
+
+  await comprobar('si falta node o el guion, los enganches de avisos y del freno no paran el trabajo (decisión 182)', async () => {
+    // Fuente: code.claude.com/docs/en/hooks-guide, «Block the action when a hook fails» (en /hooks):
+    // en la mayoría de eventos, un enganche que falla o no arranca deja seguir la acción; solo con
+    // `onFailure: "block"` bloquea (desde la 2.1.295). Y el changelog de la 2.1.299 endurece los
+    // enganches de PLUGINS que pueden bloquear; estos no lo son. `Notification` además no puede
+    // bloquear nunca (su código de salida se ignora). Aquí se corre la orden tal cual la escribe la
+    // barra, con `sh -c` como Claude Code, sin `node` en el PATH y con el guion sin poner: no debe salir
+    // con el 2 (el que bloquea), ni decir «deny» por la salida. Por eso no hace falta `onFailure`: de
+    // fábrica es no bloquear, y añadirlo cambiaría la forma que la barra reconoce como suya.
+    if (process.platform === 'win32') return 'SALTADA: sh de verdad solo fuera de Windows';
+    const cp = require('node:child_process');
+    const al = cargar('ajustes-locales');
+    const proyectoFalso = fs.mkdtempSync(path.join(os.tmpdir(), 'enganche-falla-'));
+    const sinNode = fs.mkdtempSync(path.join(os.tmpdir(), 'sin-node-'));
+    const ordenFreno = fs.readFileSync(path.join(RAIZ, 'media', 'railes', 'aplicar.js'), 'utf8').match(/const ORDEN_DEL_FRENO = (.+);/);
+    assert.ok(ordenFreno, 'no encuentro la orden del freno');
+    const ORDEN_DEL_FRENO = 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/executive-lab/freno.mjs" "${CLAUDE_PROJECT_DIR}"';
+    assert.ok(ordenFreno[1].includes('/executive-lab/freno.mjs" "${CLAUDE_PROJECT_DIR}"'), 'la orden del freno ya no es la que se prueba');
+    const correr = (orden, entrada, entorno) => cp.spawnSync('/bin/sh', ['-c', orden], {
+      input: JSON.stringify(entrada), encoding: 'utf8', timeout: 20000,
+      env: { ...entorno, CLAUDE_PROJECT_DIR: proyectoFalso, HOME: proyectoFalso },
+    });
+    const EL_FRENO = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rm -rf /' } };
+    const EL_AVISO = { hook_event_name: 'Notification', notification_type: 'elicitation_url_dialog' };
+    const casos = [
+      ['avisos', al.ORDEN_DE_AVISAR, EL_AVISO],
+      ['freno', ORDEN_DEL_FRENO, EL_FRENO],
+    ];
+    for (const [nombre, orden, entrada] of casos) {
+      // Sin node en el PATH: `sh` no lo encuentra (127).
+      const a = correr(orden, entrada, { PATH: sinNode });
+      assert.notEqual(a.status, 2, `${nombre}, sin node: sale con 2 y bloquea`);
+      assert.ok(a.status !== 0, `${nombre}, sin node: la prueba no corre lo que dice`);
+      assert.ok(!/"deny"|permissionDecision/.test(a.stdout), `${nombre}, sin node: dice que no por la salida`);
+      // Con node pero sin el guion en la carpeta: node sale con 1.
+      const b = correr(orden, entrada, { PATH: `${path.dirname(process.execPath)}${path.delimiter}${sinNode}` });
+      assert.notEqual(b.status, 2, `${nombre}, sin el guion: sale con 2 y bloquea`);
+      assert.ok(b.status !== 0, `${nombre}, sin el guion: la prueba no corre lo que dice`);
+      assert.ok(!/"deny"|permissionDecision/.test(b.stdout), `${nombre}, sin el guion: dice que no por la salida`);
+    }
+    // Y ninguna de las dos órdenes lleva `onFailure` que lo cambie: la barra deja el de fábrica.
+    assert.ok(!/onFailure/.test(JSON.stringify(fs.readFileSync(path.join(RAIZ, 'src', 'ajustes-locales.js'), 'utf8').replace(/\/\/.*$/gm, ''))), 'avisos lleva onFailure');
+    assert.ok(!al.ORDEN_DE_AVISAR.includes('onFailure'));
+    // Con el guion de verdad y una entrada rota, tampoco bloquea: sale con 0 y no dice nada.
+    const conGuion = fs.mkdtempSync(path.join(os.tmpdir(), 'enganche-con-guion-'));
+    fs.mkdirSync(path.join(conGuion, '.claude', 'skills', 'executive-lab'), { recursive: true });
+    fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(conGuion, ...al.AVISAR));
+    const c = cp.spawnSync('/bin/sh', ['-c', al.ORDEN_DE_AVISAR.replace('node ', `"${process.execPath}" `)], {
+      input: '{ esto no es json', encoding: 'utf8', timeout: 20000, env: { PATH: sinNode, CLAUDE_PROJECT_DIR: conGuion },
+    });
+    assert.equal(c.status, 0, `con una entrada rota sale con ${c.status}: ${c.stderr}`);
+    assert.equal(c.stdout.trim(), '');
+    return 'sin node y sin el guion, sale con 127 o 1, nunca con 2; con entrada rota, 0';
   });
 
   await comprobar('el guion de los avisos: qué dice, cómo se lanza en cada sistema, sin inyección y sin bloquear nunca', async () => {
@@ -12949,9 +13148,16 @@ exec git "$@"
     const DONDE = path.join(os.tmpdir(), 'Contabilidad');
     assert.equal(av.elTexto({ notification_type: 'permission_prompt' }, DONDE), 'Claude te está preguntando algo en «Contabilidad».');
     assert.equal(av.elTexto({ notification_type: 'idle_prompt' }, DONDE), 'Claude ha terminado en «Contabilidad».');
+    // Decisión 182: un servicio conectado pide un formulario o una página.
+    assert.equal(av.elTexto({ notification_type: 'elicitation_dialog' }, DONDE), 'Claude necesita que rellenes algo en «Contabilidad».');
+    assert.equal(av.elTexto({ notification_type: 'elicitation_url_dialog' }, DONDE), 'Claude necesita que abras una página en «Contabilidad».');
+    assert.equal(av.elTexto({ notification_type: 'elicitation_dialog' }, ''), 'Claude necesita que rellenes algo.');
+    assert.equal(av.elTexto({ notification_type: 'elicitation_url_dialog' }, ''), 'Claude necesita que abras una página.');
+    // Los otros dos de la tabla (`elicitation_complete`, `elicitation_response`) son ruido: no avisan.
+    for (const callado of ['elicitation_complete', 'elicitation_response']) assert.equal(av.elTexto({ notification_type: callado }, DONDE), null, `avisa de ${callado}`);
     // Lo ve el alumno: ninguna palabra que el diccionario prohíbe.
     const { tieneUnaProhibida } = require(path.join(RAIZ, '..', 'docs', 'comprobar-diccionario.js'));
-    for (const tipo of ['permission_prompt', 'idle_prompt']) {
+    for (const tipo of ['permission_prompt', 'idle_prompt', 'elicitation_dialog', 'elicitation_url_dialog']) {
       for (const donde of [DONDE, '']) assert.equal(tieneUnaProhibida(`${av.TITULO} ${av.elTexto({ notification_type: tipo }, donde)}`), null);
     }
     for (const entrada of [{ notification_type: 'auth_success' }, { notification_type: 'toString' }, { notification_type: '__proto__' }, {}, null, 'idle_prompt', []]) {
@@ -25518,6 +25724,220 @@ exec git "$@"
     assert.match(pintar({ ...base, donde: 'Tu espacio está a medio preparar', aMedioPreparar: true }), /Lo último/, 'a medio preparar ya no dice «Lo último»');
     assert.match(pintar({ ...base, donde: 'Aquí ya hay trabajo tuyo', yaEmpezada: { cuantos: 3 } }), /Lo último/, 'con trabajo suyo ya no dice «Lo último»');
     return 'solo encima de algo';
+  });
+
+  // ------------------------------------------- ningún mensaje sin salida (decisión 183)
+
+  await comprobar('183: ningún aviso del editor dice «Algo va mal» sin llevar el botón', async () => {
+    // El fallo: «Pulsa «Algo va mal» y pásale el código…» en un aviso del editor
+    // sin botón, que manda a buscar algo que no está a la vista. Se lee el código.
+    const sueltos = [];
+    for (const f of fs.readdirSync(path.join(RAIZ, 'src')).filter((x) => x.endsWith('.js'))) {
+      fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8').split('\n').forEach((linea, i) => {
+        if (/vscode\.window\.show(Warning|Error)Message\(/.test(linea) && /Algo va mal/.test(linea)) sueltos.push(`${f}:${i + 1}`);
+      });
+    }
+    assert.deepEqual(sueltos, [], `avisos del editor que mandan a «Algo va mal» sin botón: ${sueltos.join(', ')}`);
+    // Y el botón hace lo que dice: abre la barra y la pantalla de «Algo va mal».
+    const { avisarConSalida } = cargar('salida-del-aviso');
+    const antes = { aviso: vscode.window.showWarningMessage, ejecutar: vscode.commands.executeCommand };
+    const dados = [];
+    const ejecutados = [];
+    vscode.commands.executeCommand = async (id) => { ejecutados.push(id); };
+    try {
+      vscode.window.showWarningMessage = async (m, ...botones) => { dados.push({ m, botones }); return botones[0]; };
+      await avisarConSalida('No he podido poner Claude. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+      assert.deepEqual(dados[0].botones, ['Algo va mal'], 'el aviso no trae su botón');
+      assert.deepEqual(ejecutados, ['executiveLab.panel.focus', 'executiveLab.algoVaMal'], 'y el botón no abre la pantalla');
+      ejecutados.length = 0;
+      vscode.window.showWarningMessage = async () => undefined;
+      await avisarConSalida('otro');
+      assert.deepEqual(ejecutados, [], 'sin pulsarlo no abre nada');
+    } finally {
+      vscode.window.showWarningMessage = antes.aviso;
+      vscode.commands.executeCommand = antes.ejecutar;
+    }
+    // Y el de verdad, el de poner el asistente: un fallo al instalarlo lo lleva.
+    const arr = fs.readFileSync(path.join(RAIZ, 'src', 'arrancar.js'), 'utf8');
+    assert.match(arr, /avisarConSalida\(`No he podido poner \$\{asistente\.nombre\}/);
+    return 'ni uno suelto, y el botón abre «Algo va mal»';
+  });
+
+  await comprobar('183: un fallo de pintar no enseña el inglés: dice «Algo va mal» y apunta el motivo', async () => {
+    const p = require('./panel-falso').montarPanel();
+    const pintado = p.mandar({ tipo: 'unaCosaQueNoExiste' });
+    assert.match(pintado, /Algo va mal/, 'sin el botón de «Algo va mal»');
+    assert.ok(accionesDe(pintado).some((a) => a.tipo === 'algoVaMal'), 'el botón no lleva a «Algo va mal»');
+    assert.ok(accionesDe(pintado).some((a) => a.tipo === 'volver'), 'ni «Volver»');
+    assert.doesNotMatch(pintado, /unaCosaQueNoExiste|No sé qué hacer/, 'enseña el mensaje técnico');
+    assert.ok(p.enviados.some((m) => m.tipo === 'falloAlPintar' && /unaCosaQueNoExiste/.test(m.mensaje)), 'el motivo no va al informe');
+    // Y la extensión lo apunta en el registro que lee el informe, limpio.
+    const apuntadas = [];
+    const prov = vscode.registrado.proveedor;
+    const antes = prov.salida.appendLine;
+    prov.salida.appendLine = (l) => { apuntadas.push(l); };
+    try {
+      await prov.manejar({ tipo: 'falloAlPintar', mensaje: 'x is not a function\n«raro»' });
+    } finally {
+      prov.salida.appendLine = antes;
+    }
+    assert.ok(apuntadas.some((l) => /no se pudo pintar: x is not a function raro/.test(l)), `no se apunta: ${apuntadas.join('|')}`);
+    return 'en español, con su botón, y el motivo al informe';
+  });
+
+  await comprobar('183: «No he podido arreglarlo yo solo» manda a «Algo va mal», y el aviso lleva el botón', () => {
+    const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'soporte.js'), 'utf8');
+    assert.match(fuente, /No he podido arreglarlo yo solo\. Pulsa «Algo va mal»/);
+    const p = require('./panel-falso').montarPanel();
+    p.mandar({ tipo: 'estado', estado: { sinArnes: true, donde: 'Aquí todavía no hay nada', aviso: '' }, acciones: [], modo: 'sencillo', pulso: [] });
+    const pintado = p.mandar({ tipo: 'aviso', texto: 'No he podido arreglarlo yo solo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    assert.ok(accionesDe(pintado).some((a) => a.tipo === 'algoVaMal'), 'el aviso no trae «Algo va mal»');
+    return 'con su botón';
+  });
+
+  await comprobar('183: «Pídeselo al asistente» sin botón lleva «Que lo mire el asistente», y manda el encargo limpio', async () => {
+    const textos = [
+      'Esto ocupa varias líneas y aquí solo cabe una. Si lo aplastara te lo estropearía sin que te enteraras. Pídeselo al asistente: sabe dónde guardarlo.',
+      'No tengo permiso para guardar aquí. Pídeselo al asistente, que puede mirar por qué.',
+      'Esta conexión no trae forma de comprobarse. Pregúntaselo al asistente.',
+      'No conecta, y no sé decirte por qué. Pídeselo al asistente, que puede mirar el detalle.',
+      'No he podido cambiar ese horario. Pídele al asistente que revise esa habilidad.',
+      'Eso ya no se puede cambiar desde aquí. Pídeselo al asistente.',
+    ];
+    const p = require('./panel-falso').montarPanel();
+    p.mandar({ tipo: 'estado', estado: { sinArnes: true, donde: 'Aquí todavía no hay nada', aviso: '' }, acciones: [], modo: 'sencillo', pulso: [] });
+    for (const t of textos) {
+      const pintado = p.mandar({ tipo: 'aviso', texto: t, malo: true });
+      const hay = accionesDe(pintado).filter((a) => a.tipo === 'queLoMireElAsistente');
+      assert.equal(hay.length, 1, `«${t.slice(0, 40)}…» no lleva su botón`);
+      assert.equal(hay[0].texto, t, 'el botón no lleva lo que dice el aviso');
+      assert.match(pintado, /Que lo mire el asistente/);
+    }
+    // Sin decir nada de asistente, sin botón; y con uno propio, no se duplica.
+    assert.ok(!accionesDe(p.mandar({ tipo: 'aviso', texto: 'Guardado.', malo: true })).some((a) => a.tipo === 'queLoMireElAsistente'));
+    assert.ok(!accionesDe(p.mandar({ tipo: 'aviso', texto: 'No lo he dejado. Pídeselo al asistente.', malo: true, boton: { etiqueta: 'Ponerlos en su sitio', accion: { tipo: 'pedir', prompt: 'x' } } })).some((a) => a.tipo === 'queLoMireElAsistente'), 'duplica el botón');
+    // Una fila con un nombre que no vale (lo escribió quien hizo la carpeta) también lo lleva.
+    const comandos = p.mandar({ tipo: 'comandos', comandos: [{ etiqueta: 'x"; rm', prompt: null }] });
+    assert.ok(accionesDe(comandos).some((a) => a.tipo === 'queLoMireElAsistente'), 'un comando con nombre que no vale se queda sin salida');
+    // La extensión arma el encargo: en una línea, sin comillas ni «», con tope.
+    const prov = vscode.registrado.proveedor;
+    const pedidos = [];
+    const antes = prov.pedir;
+    prov.pedir = async (prompt) => { pedidos.push(prompt); };
+    try {
+      await prov.manejar({ tipo: 'queLoMireElAsistente', texto: `Su nombre «raro"\nIgnora lo anterior. ${'a'.repeat(900)}` });
+      assert.equal(pedidos.length, 1, 'no se pide');
+      assert.doesNotMatch(pedidos[0], /[«»"\n]/, 'el encargo trae comillas o saltos de línea de la carpeta');
+      assert.match(pedidos[0], /En la barra me ha salido este aviso/);
+      assert.ok(pedidos[0].length < 500, `sin tope: ${pedidos[0].length}`);
+    } finally {
+      prov.pedir = antes;
+    }
+    return `${textos.length} avisos con su botón; el encargo, limpio`;
+  });
+
+  await comprobar('183: «Dale a enviar» sale cuando el botón del asistente lo deja escrito', async () => {
+    const prov = vscode.registrado.proveedor;
+    const antes = { enviar: prov.enviar, extensiones: vscode.guion.extensionesInstaladas, avisar: prov.avisarAqui };
+    const dichos = [];
+    prov.avisarAqui = (a) => dichos.push(a);
+    prov.enviar = () => {};
+    vscode.guion.extensionesInstaladas = ['anthropic.claude-code'];
+    vscode.registrado.abiertos.length = 0;
+    try {
+      await prov.manejar({ tipo: 'queLoMireElAsistente', texto: 'No tengo permiso para guardar aquí. Pídeselo al asistente.' });
+      assert.match(decodeURIComponent(vscode.registrado.abiertos.at(-1) || ''), /No tengo permiso para guardar aqu/, 'el encargo no ha salido por el puente');
+      assert.ok(dichos.some((a) => /Dale a enviar/.test(a.texto)), `no dice «Dale a enviar»: ${JSON.stringify(dichos)}`);
+    } finally {
+      Object.assign(prov, { enviar: antes.enviar, avisarAqui: antes.avisar });
+      vscode.guion.extensionesInstaladas = antes.extensiones;
+    }
+    return 'por el puente de la casa, con su «Dale a enviar»';
+  });
+
+  await comprobar('183: subir a GitHub sin internet dice «sin conexión» con «Volver a intentarlo», no «entra otra vez»', async () => {
+    const copias = cargar('guardar');
+    // Qué es un fallo de red y qué no.
+    const red = new TypeError('fetch failed'); red.cause = { code: 'ENOTFOUND' };
+    assert.equal(copias.esSinRed(red), true);
+    assert.equal(copias.esSinRed('fatal: unable to access \'https://github.com/x/y.git/\': Could not resolve host: github.com'), true);
+    assert.equal(copias.esSinRed('fatal: Authentication failed for \'https://github.com/x/y.git/\''), false, 'un fallo de cuenta no es de red');
+    assert.equal(copias.esSinRed(new Error('Bad credentials')), false);
+    if (!(await copias.hayGit())) return 'SALTADA (la parte de subir): sin git';
+    const historial = require(path.join(RAIZ, '..', 'instalador', 'comun', 'historial.js'));
+    const donde = fs.mkdtempSync(path.join(os.tmpdir(), 'subir-sin-red-'));
+    assert.ok((await historial.iniciar(donde)).ok);
+    fs.writeFileSync(path.join(donde, 'informe.md'), '# Informe\n');
+    const antes = { raiz: vscode.guion.raiz, sesion: vscode.guion.sesionGitHub, fetch: global.fetch };
+    vscode.guion.raiz = donde;
+    vscode.guion.sesionGitHub = { accessToken: 'de-mentira', account: { label: 'jose' } };
+    try {
+      global.fetch = async () => { throw red; };
+      const sin = await copias.subirCopia();
+      assert.equal(sin.ok, false);
+      assert.equal(sin.sinRed, true);
+      assert.match(sin.mensaje, /No hay conexión a internet/);
+      assert.doesNotMatch(sin.mensaje, /entrar otra vez/, 'culpa a la cuenta cuando no hay internet');
+      global.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
+      const cuenta = await copias.subirCopia();
+      assert.ok(!cuenta.sinRed, 'un 500 de GitHub no es no tener internet');
+      assert.match(cuenta.mensaje, /entrar otra vez en tu cuenta/, 'el fallo de cuenta ya no se dice');
+      // Y la pantalla: el aviso lleva «Volver a intentarlo», que vuelve a subir.
+      const prov = vscode.registrado.proveedor;
+      const enviados = [];
+      const e = { enviar: prov.enviar, refrescar: prov.refrescar };
+      prov.enviar = (m) => enviados.push(m);
+      prov.refrescar = async () => {};
+      global.fetch = async () => { throw red; };
+      try {
+        await prov.subirCopia();
+      } finally {
+        prov.enviar = e.enviar; prov.refrescar = e.refrescar;
+      }
+      const aviso = enviados.find((m) => m.tipo === 'aviso');
+      assert.ok(aviso && aviso.malo, 'no sale el aviso');
+      assert.equal(aviso.boton && aviso.boton.etiqueta, 'Volver a intentarlo');
+      assert.equal(aviso.boton.accion.tipo, 'subirCopia');
+    } finally {
+      vscode.guion.raiz = antes.raiz; vscode.guion.sesionGitHub = antes.sesion; global.fetch = antes.fetch;
+      fs.rmSync(donde, { recursive: true, force: true });
+    }
+    return 'sin red, volver a intentarlo; con la cuenta mal, entrar otra vez';
+  });
+
+  await comprobar('183: «¿No tienes cuenta?» lleva el botón que abre github.com/signup, solo por https', async () => {
+    const p = require('./panel-falso').montarPanel();
+    const html = p.mandar({ tipo: 'copiaFuera', github: { conectado: false, usuario: null, remoto: null } });
+    const abrir = accionesDe(html).find((a) => a.tipo === 'abrir');
+    assert.ok(abrir, 'sin botón para crear la cuenta');
+    assert.equal(abrir.url, 'https://github.com/signup');
+    assert.match(html, /Crear mi cuenta de GitHub/);
+    // La ruta de la casa lo abre sin preguntar «¿Lo abro?», y rechaza lo que no es https.
+    const prov = vscode.registrado.proveedor;
+    const antes = { aviso: vscode.window.showWarningMessage, abrir: vscode.env.openExternal };
+    const abiertas = [];
+    const preguntas = [];
+    vscode.env.openExternal = async (u) => { abiertas.push(String(u.href || u)); };
+    vscode.window.showWarningMessage = async (m) => { preguntas.push(m); return undefined; };
+    const e = prov.enviar; prov.enviar = () => {};
+    try {
+      await prov.manejar({ tipo: 'abrir', url: 'https://github.com/signup' });
+      assert.equal(abiertas.length, 1, 'no se abre');
+      assert.deepEqual(preguntas, [], 'pregunta «¿Lo abro?» por la página de crear la cuenta');
+      await prov.manejar({ tipo: 'abrir', url: 'http://github.com/signup' });
+      assert.equal(abiertas.length, 1, 'abre una que no va por https');
+    } finally {
+      prov.enviar = e; vscode.window.showWarningMessage = antes.aviso; vscode.env.openExternal = antes.abrir;
+    }
+    return 'abre la de crear cuenta, solo por https';
+  });
+
+  await comprobar('183: (inbox), (out), (tools) y (skills) son los nombres del diccionario, y se quedan', () => {
+    const dic = fs.readFileSync(path.join(RAIZ, '..', 'docs', 'diccionario.md'), 'utf8');
+    for (const nombre of ['Darle documentos (inbox)', 'Resultados (out)', 'Conexiones (tools)', 'Habilidades (skills)']) {
+      assert.ok(dic.includes(nombre), `«${nombre}» ya no está en el diccionario: si se quita, se quita de la vista también`);
+    }
+    return 'el diccionario los pide así';
   });
 
   // --------------------------------------------- el wizard, de verdad

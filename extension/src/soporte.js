@@ -161,7 +161,7 @@ async function arreglar() {
   const { codigo, salida, error } = await rsc.arreglar();
   return codigo === 0
     ? { ok: true, mensaje: 'Arreglado. Vuelve a probar lo que estabas haciendo.' }
-    : { ok: false, mensaje: 'No he podido arreglarlo yo solo.', detalle: error || salida };
+    : { ok: false, mensaje: 'No he podido arreglarlo yo solo. Pulsa «Algo va mal» y pásale el código a tu tutor.', detalle: error || salida };
 }
 
 module.exports = { revisar, arreglar, codigoDeIncidencia };

@@ -8660,3 +8660,186 @@ aplicación entera, y ahora es un `composer.json`.
 Mutaciones, cada una puesta y restaurada desde copia: la pregunta de cuándo caduca sin mirar lo apuntado (cae
 la escena y dos de la 149); el botón con otra huella (cae la escena); la raíz sin saltarse con una aplicación
 (cae la nueva); la raíz sin mirarse nunca con `conLasDeLasApps` (cae la nueva, «dejan de protegerse»).
+
+## 181. Lo que se puede hacer solo al montar, se hace solo
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `lo-que-se-hace-solo-al-montar`
+
+La regla (P9): lo local, gratis y que se deshace lo hace la barra sola y lo dice en una frase con su
+«Quitarlo»; solo pregunta lo que sale del ordenador, no se deshace, cuesta dinero o decide su negocio. Una
+auditoría señaló cuatro fugas. Se comprobó cada una contra el código y las decisiones antes de tocar nada.
+
+**1. Copias solas: ya estaban encendidas, no se tocó el valor.** La 164 las dejó de fábrica en «cada hora»
+(`default: 1` en `package.json`, `DE_FABRICA = 1` en `ajustes.js`, con una prueba que exige que digan lo
+mismo), y una carpeta recién montada no escribe nada que las apague. Lo que faltaba era decirlo: al terminar
+de montar sale «Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo.» (o «un par
+de veces al día»), con su «Quitarlo» (`quitarElGuardadoSolo`: pone «Solo cuando yo lo diga» y dice «Quitado.
+Solo guardo una copia cuando pulses el botón.»). No se dice si de verdad no va a guardar: ajuste apagado,
+«seguir sin copias», o un historial que no es nuestro (`terreno.podemosGuardarSolo`).
+
+**2. El asistente que falta: el botón ya estaba, las preguntas no.** La 166 ya cambió «Díselo a tu tutor» por
+«Poner Claude/Codex» (`asistentes.falta`, panel y avisos), y se comprobó que no queda ninguno. Lo que
+preguntaba aún un «¿Lo pongo?» era lo que los ajustes ya habían pedido:
+- Al montar (`arrancar.conElAjuste`), con «Claude», «Codex» o «Los dos» y el asistente sin poner, se pone solo
+  y se dice al terminar: «He puesto {Codex} en este ordenador.» (`hecho.puestos`, `losQueSePusieron`).
+- Al abrir una carpeta con «Los dos» (`prepararParaLosDosYa`), igual: «He puesto {Claude} en este
+  ordenador, porque en los ajustes elegiste los dos asistentes.»
+- Si falla, el aviso lleva «Ponerlo ahora» (o «Ponerlos ahora»), que lo intenta otra vez; si vuelve a fallar,
+  «Algo va mal» (la 183). Con los dos y solo uno que falla, se sigue con el que sí está, y se dice.
+- Sigue preguntando «¿Cuál pongo?» sin ningún asistente y en automático: es elegir uno, y decide la persona.
+- Una extensión del editor no tiene «Quitarlo» propio: se quita desde el editor.
+
+**3. Vista sencilla: preguntaba, ahora se pone sola.** Se quitó «¿Dejo esta ventana en vista sencilla?». Al
+montar de cero se pone (`ponerLaVistaSencillaSola`, la misma `volverAModoSencillo` del botón «Modo sencillo»)
+y se dice, con «Quitarlo» (`verEditorCompleto`). Sin frase si ya estaba así. Tampoco sale el diálogo de
+«cerrar y abrir»: la frase lo cuenta.
+
+**4. «Dale a enviar» en el primer mensaje y en «He puesto al día».** Como la 166 hizo con `pedir`: con el
+texto escrito en su caja (`directo`) el aviso termina en «Te lo he dejado escrito en la conversación. Dale a
+enviar.»; copiado, ya lo dice el aviso del portapapeles. En la puesta al día el mensaje se manda antes del
+aviso para poder decirlo.
+
+**Varios «Quitarlo» a la vez.** `dejarElAviso` guardaba un solo botón. Ahora suma los que traen
+`etiquetaConVarios` (los de esta decisión y el de lo de Claude del montaje): con uno sale «Quitarlo»; con
+varios, cada uno dice qué quita (Quitar la vista sencilla · Quitar las copias solas · Quitar lo de Claude). Los
+demás avisos siguen como antes: el primer botón que llega. El aviso del montaje se guarda hasta el final del
+montaje para que «Dale a enviar» vaya con las demás frases y no las tape.
+
+**Las pruebas**: `humo.js` pasa de 497 a 499 (la de los ajustes de los asistentes se reescribió y se añadió una
+nueva con la escena del montaje: sin pregunta, frases, cada «Quitarlo», copiado/escrito, ajuste a 0/8,
+sin copias, historial de otra persona, y la puesta al día). Nueve mutaciones, cada una puesta y restaurada
+desde copia, y las nueve caen: sin «Dale a enviar» tras el primer mensaje; sin él en la puesta al día; la vista
+sencilla sin ponerse; copias solas dichas con el ajuste apagado; dichas sin copias; un solo botón; sin decir
+que se puso el otro asistente; sin apuntar lo puesto; sin el botón de reintento.
+
+## 182. Claude, al día con su documentación
+
+El 17-10-2026 se releyó la documentación oficial de Claude Code contra lo que la barra hace. Tres hallazgos.
+
+**1. «Qué puede hacer sin preguntarte» no hacía nada en el editor.** La barra escribía `permissions.defaultMode`
+en `.claude/settings.json` de la carpeta. Pero la extensión de VS Code no lee los ajustes del proyecto para el modo
+de arranque: «The extension never reads a project's `.claude/settings.json` or `.claude/settings.local.json` for the
+starting permission mode». El orden es: 1) `claudeCode.initialPermissionMode` (ajuste de usuario del editor:
+`default`, `manual`, `acceptEdits`, `plan` o `bypassPermissions`; «The setting doesn't accept `auto`»), 2) el
+último modo elegido en el selector (Manual, Edit automatically o Auto), 3) `permissions.defaultMode` de los ajustes
+gestionados o de `~/.claude/settings.json`, 4) el de fábrica; y desde la 2.1.283 el de fábrica es Auto en el
+terminal y en VS Code. Y el editor «reads `initialPermissionMode` from your user settings and ignores workspace
+values». Mientras tanto la pantalla decía «Lo normal» cuando no había nada, y era falso: lo normal era Auto.
+
+- `ajustes.js`: con el clic de la persona, se escribe `claudeCode.initialPermissionMode` en los ajustes de USUARIO
+  del editor (`ConfigurationTarget.Global`), por la API de configuración. Solo esa clave. Nunca `bypassPermissions`
+  (ni `dontAsk`, ni `manual`: no se ofrecen).
+- El estado es el real: sin valor, «Auto», que sale como cuarta opción, «Que trabaje solo, con un revisor». Como la
+  extensión no acepta `auto`, ponerlo es quitar lo escrito. `manual` se lee como `default`. Un valor de carpeta se
+  ignora, como hace el editor. Uno raro puesto a mano (`bypassPermissions`) no marca ninguna opción y se dice.
+- La pantalla dice que vale para todas sus carpetas, y que si en una conversación elige otro a mano el editor se
+  acuerda de ese (es el punto 2 del orden).
+- «Lo normal» sale de la frase de «Que me pregunte al cambiar algo»: ya no lo es.
+- **Lo que la barra ya había escrito en carpetas**: el terminal sí lo lee. «Sessions you start in a terminal honor
+  every value except `auto` and `bypassPermissions`» del `.claude/settings.json` del proyecto. Se deja como está, no
+  se toca ni se quita (es de la persona y sirve a quien use `claude` en el terminal). Pero la barra deja de
+  escribirlo: tener dos sitios que dicen cosas distintas era peor, y la barra es para el editor.
+- Con Codex sigue sin ofrecerse, y si el editor no conoce la clave (la extensión de Claude no está) se dice, no se
+  da por hecho.
+
+**2. Avisos que faltaban.** El enganche `Notification` de la 162 (`permission_prompt|idle_prompt`) no cubría
+`elicitation_dialog` («An MCP server opens an elicitation form and you haven't typed for about six seconds») ni
+`elicitation_url_dialog` («An MCP server asks you to open a browser URL…»), según la tabla de `notification_type`
+de la guía de enganches. Cuando un servicio conectado pide un formulario o abrir una página, Claude se queda
+esperando y nadie se entera, que es lo que la 162 quería evitar.
+
+- El matcher pasa a `permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog` (solo letras, `_` y
+  `|`: nombres exactos). `elicitation_complete` y `elicitation_response` no avisan: son ruido.
+- `avisar.mjs` (y su copia idéntica de los raíles) dice «Claude necesita que rellenes algo en «Contabilidad».» y
+  «Claude necesita que abras una página en «Contabilidad».».
+- **Migración (P9: es lo nuestro, local y se deshace)**: una carpeta con el enganche de antes puesto por la barra
+  (la constancia casa con su huella y el enganche está tal como lo dejó) se pone al día sola, en su sitio, al abrir
+  o montar, y se dice una vez: «He puesto al día los avisos de Claude: ahora también te avisan cuando un servicio
+  conectado te pide rellenar algo o abrir una página.», con su «Quitarlo». Lo que la persona cambió (otro matcher,
+  otro tope, otra orden, un campo más), o con una constancia que no casa, o en git, no se toca. La huella no
+  cambia: no cubre el matcher. «Quitarlo» reconoce los dos matchers.
+
+**3. Enganches que fallan.** El changelog dice que la 2.1.295 añadió `onFailure: "block"` y que la 2.1.299 cambió
+que las acciones que un enganche **de plugin** puede bloquear se rechacen si el enganche no recibe su entrada o no
+devuelve su respuesta. La guía de enganches («Block the action when a hook fails») dice que, en la mayoría de
+eventos, un enganche que falla, se corta o no arranca (el guion o el ejecutable no existe) «still carries out the
+action»; solo con `onFailure: "block"` bloquea. La excepción es Windows sin Git Bash, donde un `PreToolUse` o
+`PermissionRequest` en forma de shell sin `onFailure` puede bloquear la llamada; y `Notification` no bloquea nunca
+(«Exit code and stderr are ignored»).
+
+- Conclusión: los enganches de la barra no son de plugin, y los avisos no pueden bloquear. No hace falta
+  `onFailure` y no se pone: el valor de fábrica ya es no bloquear, y añadir el campo cambiaría la forma que la
+  barra reconoce como suya (y la que borra RSC al reescribir los suyos). Se mide con una prueba, no se da por
+  hecho.
+- La prueba corre las órdenes tal cual las escribe la barra (la de avisos y la del freno de los raíles) con `sh -c`,
+  sin `node` en el PATH (sale con 127) y con `node` pero sin el guion (sale con 1): ninguna sale con el 2, ni dice
+  `deny` por la salida. Y el guion de avisos con una entrada rota sale con 0 y sin decir nada.
+- El freno de RSC (`danger-guard`) es de RSC; el envoltorio `freno.mjs` es de los raíles. En Windows sin Git Bash
+  el de fábrica puede ser bloquear, y para un freno es lo razonable: queda anotado y no se cambia.
+
+**Fuentes** (leídas el 17-10-2026): https://code.claude.com/docs/en/permission-modes («Which mode a session
+starts in», «Switch permission modes»), https://code.claude.com/docs/en/vs-code (ajuste `initialPermissionMode`),
+https://code.claude.com/docs/en/hooks-guide (tabla de `notification_type`),
+https://code.claude.com/docs/en/hooks («Block the action when a hook fails») y
+https://code.claude.com/docs/en/changelog (2.1.295 y 2.1.299).
+
+**Las pruebas**: `humo.js` pasa de 497 a 498 (507 con `--con-arnes`). Una cambiada, la de lo que puede hacer solo (ahora a los ajustes
+de usuario del editor, Auto sin valor, la carpeta intacta, bypass fuera, el editor que rechaza, Codex), y una
+nueva junto a las de la 162 (sin `node` y sin guion, con `sh` de verdad). Se amplían las de los avisos (el
+matcher, los textos, la migración con sus casos de «no se toca») y la del panel (Auto marcado y «vale para todas
+tus carpetas»; otro puesto a mano).
+
+Mutaciones, cada una puesta y restaurada desde copia: ocho. Escribir por carpeta en vez de en los ajustes de usuario (cae la de lo que puede hacer solo); sin valor
+leído como «Lo normal» y no como Auto (cae la misma); la migración apagada (cae la de los avisos); la migración sin
+mirar la constancia (cae «se pone al día con una constancia que no casa»); «Quitarlo» sin reconocer el matcher de
+antes (cae la de los avisos); sin el texto de la página (caen los textos del guion); otro texto para el formulario
+(caen los textos); y el matcher sin los dos nuevos (cae la de los avisos).
+
+
+## 183. Ningún mensaje sin salida
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `ningun-callejon`
+
+La regla: cada mensaje que diga que algo falla, o que hay que hacer algo, lleva su botón para hacerlo, o
+«Algo va mal», que reúne el informe para el tutor. Una auditoría encontró siete callejones; se comprobó cada
+uno contra el código de main (0.55.0) y estos son los que eran y lo que se hizo.
+
+**1. Avisos del editor que decían «Pulsa «Algo va mal»…» sin botón.** Eran cuatro en `arrancar.js` (poner un
+asistente, los dos avisos de `conElAjuste`, crear la carpeta) y tres en `extension.js` (preparar para el otro
+asistente, el aviso de Codex, y los recordatorios que salían del editor). Todos pasan ahora por
+`avisarConSalida` (`src/salida-del-aviso.js`): el aviso lleva el botón «Algo va mal», que abre la barra y
+corre la misma pantalla que el comando. Los avisos de la barra ya lo traían (`bloqueAviso`). Una prueba lee
+`src/*.js` y cae si queda un `showWarningMessage` o `showErrorMessage` con «Algo va mal» en el texto.
+
+**2. `pintarElFallo`.** Enseñaba `error.message` en inglés y solo «Volver». Ahora dice la frase de siempre
+con «Pulsa «Algo va mal»…» y los botones «Algo va mal» y «Volver». El motivo técnico no se ve: la barra se lo
+manda a la extensión (`falloAlPintar`) y queda en el registro, que es lo que lee el informe.
+
+**3. `soporte.arreglar`.** «No he podido arreglarlo yo solo.» llevaba solo el punto: ahora añade «Pulsa «Algo
+va mal»…» y, como sale en un aviso de la barra, con su botón.
+
+**4. «Pídeselo / Pregúntaselo / Pídele al asistente» sin botón.** No se tocó cada texto: `bloqueAviso` añade
+«Que lo mire el asistente» a todo aviso malo que mande al asistente y no traiga ya su botón (los de
+`conexiones.js`, `extension.js` y los demás). También las filas de habilidades, comandos y agentes con un
+nombre que no vale, y el «no he podido usar» de la cara (`marca.js`). El botón manda `queLoMireElAsistente`
+con el texto del aviso; la extensión arma el encargo con `limpio.etiqueta` (una línea, sin comillas ni «»,
+con tope de 300) y lo pasa por `pedir`, o sea por el puente de la casa y con su «Dale a enviar» de la 166. Ya
+tenían botón y no se tocaron: las claves en git, «Que la termine» y «Pregúntaselo al asistente» de la búsqueda.
+
+**5. Subir a GitHub sin internet.** Decía «Prueba a entrar otra vez en tu cuenta» también sin conexión. Se
+separa por el error de la red (el `fetch` que se cae, o lo que dice git: «Could not resolve host»…): «No hay
+conexión a internet, y sin ella no puedo subirlo. Mira que estés conectado y vuelve a intentarlo.», con el
+botón «Volver a intentarlo». Un fallo de la cuenta (un 500, una credencial mala) sigue diciendo lo de antes.
+
+**6. «¿No tienes cuenta?».** Lleva «Crear mi cuenta de GitHub», que abre `https://github.com/signup` por la
+ruta `abrir` de la casa (solo https), y esa página se cuenta como nuestra para no preguntar «¿Lo abro?».
+
+**7. «(inbox)», «(out)», «(tools)» y «(skills)».** El diccionario las pide así (Darle documentos (inbox),
+Resultados (out), Conexiones (tools), Habilidades (skills)), de modo que se quedan. Una prueba comprueba que
+siguen en el diccionario, para que quitarlas de la vista obligue a cambiar las dos cosas.
+
+**Las pruebas**: `humo.js` pasa de 497 a 505. Ocho comprobaciones nuevas, una por callejón y una para «Dale a
+enviar». Siete mutaciones, cada una puesta y restaurada desde copia: el aviso de poner el asistente sin botón;
+el botón sin abrir «Algo va mal»; sin separar la falta de red; sin «Que lo mire el asistente»; el fallo de
+pintar con el mensaje en inglés; la página de crear cuenta sin contar como nuestra; el encargo sin limpiar.
+Todas las cayeron.

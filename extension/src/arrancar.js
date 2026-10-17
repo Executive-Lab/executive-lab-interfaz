@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 
 const proyecto = require('./proyecto');
+const { avisarConSalida } = require('./salida-del-aviso');
 const procesos = require('./procesos');
 const entorno = require('./entorno');
 const git = require('./git');
@@ -171,7 +172,7 @@ async function ponerElAsistente(asistente, { callado = false } = {}) {
     await vscode.commands.executeCommand('workbench.extensions.installExtension', asistente.extension);
     return true;
   } catch {
-    if (!callado) await vscode.window.showWarningMessage(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    if (!callado) await avisarConSalida(`No he podido poner ${asistente.nombre}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return false;
   }
 }
@@ -214,7 +215,7 @@ async function conElAjuste(ajuste) {
   }
   const hay = queridos.filter((a) => !fallan.includes(a));
   if (!hay.length) {
-    await vscode.window.showWarningMessage(`No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
+    await avisarConSalida(`No he podido poner ${fallan.map((a) => a.nombre).join(' ni ')}. Pulsa «Algo va mal» y pásale el código a tu tutor.`);
     return null;
   }
   return losIds(hay);
@@ -1478,7 +1479,7 @@ async function crearUnaCarpetaDentro(base, salida) {
     fs.mkdirSync(nueva, { recursive: true });
   } catch (error) {
     if (salida) salida.appendLine(`[arrancar] no se pudo crear ${nueva}: ${error.message}`); // diccionario: interno
-    await vscode.window.showWarningMessage('No he podido crear la carpeta. Pulsa «Algo va mal» y pásale el código a tu tutor.');
+    await avisarConSalida('No he podido crear la carpeta. Pulsa «Algo va mal» y pásale el código a tu tutor.');
     return { ok: false };
   }
   await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(nueva), { forceNewWindow: false });
