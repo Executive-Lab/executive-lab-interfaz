@@ -8,7 +8,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const deLa = (plataforma) => (plataforma === 'win32' ? path.win32 : path.posix);
+// Sin plataforma, el `path` del sistema: las pruebas que fingen otra plataforma con
+// `process.platform` no cambian cómo son las rutas de verdad del disco.
+const deLa = (plataforma) => (plataforma === 'win32' ? path.win32 : plataforma ? path.posix : path);
 
 // El sitio real de una ruta, con los enlaces resueltos y, en Windows, con las
 // mayúsculas que tiene en el disco. Si no se puede resolver, la ruta tal cual.
@@ -21,7 +23,7 @@ function sitioReal(ruta) {
 }
 
 // ¿`ruta` cae dentro de `base`, sin ser la propia `base`? Solo texto: no mira el disco.
-function estaDentro(base, ruta, plataforma = process.platform) {
+function estaDentro(base, ruta, plataforma = null) {
   if (typeof base !== 'string' || typeof ruta !== 'string' || !base || !ruta) return false;
   const p = deLa(plataforma);
   const relativa = p.relative(p.resolve(base), p.resolve(ruta));
@@ -29,7 +31,7 @@ function estaDentro(base, ruta, plataforma = process.platform) {
 }
 
 // ¿Son la misma ruta? En Windows, sin distinguir mayúsculas.
-function mismoSitio(a, b, plataforma = process.platform) {
+function mismoSitio(a, b, plataforma = null) {
   if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
   const p = deLa(plataforma);
   return p.relative(p.resolve(a), p.resolve(b)) === '';
