@@ -48,12 +48,12 @@ const CON_TAMANO = ['software', 'mixed'];
 
 // Las preguntas, y de dónde sale ya contestada cada una.
 //
-// Solo se pregunta lo que RSC necesita para su plan (decisión 184): de qué va,
-// qué construir si hay algo que construir, y el objetivo. Antes se preguntaban
-// también `alcance` y `personas` —RSC no las pide: iban al perfil y al primer
-// mensaje, que ya le pide al asistente completar el perfil conmigo— y `nivel`,
-// que tiene un valor por defecto (`non-technical`) y se cambia luego en «Cómo
-// te habla». Lo que ya hubiera en un perfil o en un recibo se respeta igual.
+// `alcance` y `personas` no las pide RSC: qué lleva la carpeta y cuánta gente
+// hay detrás van al perfil, al nombre que se sugiere y al primer mensaje. Por
+// eso solo se preguntan al montar de cero (`soloAlMontar`): un clon o un
+// montaje a medias no las vuelven a pedir. Y `nivel` es lo que decide cómo se
+// le habla desde el primer momento. Las tres son información suya: la 184 las
+// quitó y la 187 las devuelve (solo se hace solo lo que debe hacerse solo).
 //
 // `queConstruir` es el tamaño que se le manda a RSC, preguntado por lo que se
 // va a construir y no por «grande o pequeño», que para quien empieza es difícil
@@ -61,6 +61,8 @@ const CON_TAMANO = ['software', 'mixed'];
 const PREGUNTAS = [
   { id: 'asistente', delRecibo: (r) => (r.targets || [])[0] },
   { id: 'deQueVa', delRecibo: (r) => r.projectKind, valores: VALORES.deQueVa },
+  { id: 'alcance', soloAlMontar: true },
+  { id: 'personas', soloAlMontar: true },
   {
     id: 'queConstruir',
     delRecibo: (r) => r.softwareScope,
@@ -68,6 +70,7 @@ const PREGUNTAS = [
     soloSi: (resp) => CON_TAMANO.includes(resp.deQueVa),
   },
   { id: 'objetivo', delRecibo: (r) => r.goal },
+  { id: 'nivel', delRecibo: (r) => r.technicalLevel, valores: VALORES.nivel },
 ];
 
 const vale = (pregunta, valor) => typeof valor === 'string' && valor.trim()
@@ -296,14 +299,14 @@ function laRama(parte) {
 // mínimo y como máximo (A8). La brújula prometía «una sola cosa», y el arranque
 // pregunta más, y según las respuestas: el asistente, solo con los dos
 // instalados; qué va a construir, solo si hay algo que construir; el objetivo,
-// y otra si escribe el suyo; los nombres, dos (el de esto y el de la empresa, que
-// se puede dejar en blanco); y la web, que se puede dejar. Y lo que se confirma antes de tocar nada:
+// y otra si escribe el suyo; los nombres, uno con «La empresa entera» y dos si
+// no; y la web, que se puede dejar. Y lo que se confirma antes de tocar nada:
 // Documentos, el Escritorio o las Descargas enteras, y una carpeta dentro de
 // otro proyecto. Una prueba hace la entrevista entera por sus dos extremos y
 // mira que dé esto (revisión de F8, I1: contaba dos nombres siempre).
 const CUANTAS_VECES = {
-  asistente: [0, 1], deQueVa: [1, 1], queConstruir: [0, 1],
-  objetivo: [1, 2], nombres: [2, 2], web: [1, 1],
+  asistente: [0, 1], deQueVa: [1, 1], alcance: [1, 1], personas: [1, 1], queConstruir: [0, 1],
+  objetivo: [1, 2], nivel: [1, 1], nombres: [1, 2], web: [1, 1],
   laCarpeta: [1, 1], dentroDeOtro: [1, 1],
 };
 

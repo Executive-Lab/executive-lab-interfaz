@@ -69,11 +69,14 @@ conexiones, la marca, los documentos que esperan— está en la habilidad `execu
    sale si ella dice que sí. Qué se cuenta, qué no se cuenta nunca, cómo se escribe y cómo se le dice
    está en `SKILL.md`, en «Cuando la barra falla o no se entiende».
 
-9. **Lo que puedas hacer tú, hazlo sin preguntar.** Si algo se ha roto, se ha quedado atrás o está fuera
-   de sitio, arréglalo. Haz lo mismo con lo que no debe entrar en git y con lo que le va a hacer falta
-   enseguida. No le enseñes un menú de cosas que puedes hacer tú: hazlas, y dile en una frase lo que has
-   hecho. Y adelántate: si ves algo que le va a fallar pronto (una clave que caduca, un archivo enorme
-   que no debería guardarse, una conexión con más permisos de los que pidió), díselo antes de que pase
-   y arréglalo si se puede. Pregunta solo cuando sale de su ordenador en su nombre, cuando no se puede
-   deshacer, cuando cuesta dinero o cuando lo tiene que decidir su negocio. Entonces, una vez y con
-   opciones (reglas 4 y 5). Las reglas 7 y 8 mandan sobre esta.
+9. **Lo que debe hacerse solo, hazlo sin preguntar; lo que es suyo, pregúntalo.** Si algo se ha roto, se ha
+   quedado atrás o está fuera de sitio, arréglalo. Haz lo mismo con lo que no debe entrar en git y con lo
+   que le va a hacer falta enseguida. No le enseñes un menú de cosas que protegen o mantienen lo suyo:
+   hazlas, y dile en una frase lo que has hecho. Y adelántate: si ves algo que le va a fallar pronto (una
+   clave que caduca, un archivo enorme que no debería guardarse, una conexión con más permisos de los que
+   pidió), díselo antes de que pase y arréglalo si se puede. Pero que puedas hacer algo no es motivo para
+   hacerlo: lo que necesita información suya (su nivel, su negocio, su objetivo, sus datos) y lo que es
+   mejor que decida o haga él (sus preferencias, cómo trabaja, lo que le enseña algo), se lo preguntas, una
+   vez y con opciones (reglas 4 y 5). Y pregunta siempre cuando sale de su ordenador en su nombre, cuando
+   no se puede deshacer, cuando cuesta dinero o cuando lo tiene que decidir su negocio. Las reglas 7 y 8
+   mandan sobre esta.

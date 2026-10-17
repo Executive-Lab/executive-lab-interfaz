@@ -29,7 +29,8 @@
 //     «spinnerTipsEnabled»: vale en cualquier fichero). Como el idioma, y por lo mismo:
 //     este fichero manda sobre los otros dos, así que no se pone si alguien ya dijo
 //     algo de esa clave —aquí, en los ajustes de la carpeta o en los suyos de usuario—,
-//     ni si uno no se entiende. Se pone al día solo en las carpetas ya montadas.
+//     ni si uno no se entiende. Desde la 187 no se pone sola: los consejos enseñan
+//     algo, y la persona decide si los quiere (`conConsejos`, tras preguntarle).
 //     Los verbos del indicador, en cambio, son del editor y los pone el instalador.
 //   · Un enganche `Notification` (decisión 162) que llama a `avisar.mjs`, de la
 //     habilidad de la casa: un aviso del sistema cuando Claude te pregunta algo
@@ -234,7 +235,11 @@ function loQueFalta({ local, deLaCarpeta, suyos, conGuion = false }) {
 // solo se pone lo que el botón cuenta, el español y que pregunte antes de subir
 // (los avisos del sistema son otra cosa y no entran), y la constancia lo dice.
 // `soloMirar`: no escribe nada, dice qué haría (`sePuede`) para poder ofrecerlo.
-async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit = enGitASecas, conSuSi = false, soloMirar = false } = {}) {
+//
+// `conConsejos` (decisión 187): quitar los consejos de Claude no es de las cosas que
+// se hacen solas. Enseñan algo, y es la persona quien decide si los quiere. Solo se
+// ponen si se le ha preguntado y ha dicho que sí.
+async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit = enGitASecas, conSuSi = false, soloMirar = false, conConsejos = false } = {}) {
   if (!raiz) return { hecho: 'sinCarpeta' };
   const declaracion = leer(path.join(raiz, '.rsc.json'));
   if (!declaracion || !Array.isArray(declaracion.targets) || !declaracion.targets.includes('claude')) return { hecho: 'noEsParaClaude' };
@@ -279,8 +284,8 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
     idioma: sinQuitar.idioma && !antes.language,
     preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
     avisos: sinQuitar.avisos && !antes.avisos && !conSuSi,
-    // Como los avisos, no en la carpeta de alguien: su botón cuenta otras dos cosas.
-    consejos: sinQuitar.consejos && !antes.tips && !conSuSi,
+    // Solo con su sí (decisión 187), y no en la carpeta de alguien: su botón cuenta otras dos cosas.
+    consejos: sinQuitar.consejos && !antes.tips && !conSuSi && conConsejos,
   };
   // Decisión 182: el enganche de avisos que puso la barra con el matcher de antes
   // (la constancia lo dice y casa su huella) se pone al día; el que cambió la
@@ -290,7 +295,7 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   const sinNovedad = !falta.idioma && !falta.preguntar.length && !falta.avisos && !falta.consejos;
   if (sinNovedad && !avisosViejos) return { hecho: 'yaEstaba', fichero };
   if (soloMirar && sinNovedad) return { hecho: 'yaEstaba', fichero };
-  if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false, consejos: false };
+  if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false, consejos: falta.consejos };
 
   try {
     const nuevo = { ...local };

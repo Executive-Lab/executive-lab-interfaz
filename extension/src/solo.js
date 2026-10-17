@@ -1,4 +1,4 @@
-// Lo que se puede hacer solo, se hace solo (P9, decisión 142).
+// Lo que debe hacerse solo, se hace solo (P9, decisiones 142 y 187).
 //
 // Cada arreglo de «Qué falta por montar» que la barra hace ella misma
 // (`como: 'solo'`) y que cambia algo en la carpeta dice una de dos cosas:

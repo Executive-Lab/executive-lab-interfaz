@@ -45,11 +45,34 @@ const DE_QUE_VA = [
   { etiqueta: 'Un poco de todo', detalle: 'Todavía no lo tengo claro', kind: 'mixed' },
 ];
 
-// Lo que se pregunta en vez de «¿es algo pequeño o va para largo?», que para
-// quien empieza es difícil de decidir (C-21, decisión de Jose del 25-09-2026):
-// qué se va a construir, con ejemplos. Es lo único que va a RSC como tamaño del
-// software. «Qué lleva la carpeta» y «cuánta gente» se preguntaban también y
-// no iban a RSC: se quitaron en la 184 (el asistente lo pregunta en el perfil).
+// Las tres que se preguntan en vez de «¿es algo pequeño o va para largo?», que
+// para quien empieza es difícil de decidir (C-21, decisión de Jose del
+// 25-09-2026). Cada una contesta una sola cosa, y con un dato, no con una
+// opinión:
+//
+//   · qué lleva la carpeta — de una tarea suelta a la empresa entera;
+//   · cuánta gente hay detrás — no es lo mismo un departamento de tres que
+//     uno de cincuenta;
+//   · qué se va a construir — una landing no es una plataforma con usuarios.
+//
+// Solo la tercera va a RSC, como el tamaño del software: una empresa entera
+// puede querer una landing. Las otras dos van al perfil, al nombre que se
+// sugiere y al primer mensaje. Son información suya (decisión 187, que
+// devuelve lo que la 184 había quitado): se le pregunta, no se adivina.
+const QUE_LLEVA = [
+  { etiqueta: 'Una tarea concreta', detalle: 'Preparar un informe, ordenar unos papeles, una web de una página', alcance: 'tarea' },
+  { etiqueta: 'Un proyecto', detalle: 'Algo con principio y fin: un lanzamiento, una web con reservas, un estudio', alcance: 'proyecto' },
+  { etiqueta: 'Un departamento o un área', detalle: 'Lo de todos los días de un equipo: facturación, personal, marketing', alcance: 'departamento' },
+  { etiqueta: 'La empresa entera', detalle: 'Todas las áreas a la vez: ventas, facturas, personal, clientes', alcance: 'empresa' },
+];
+
+const CUANTAS_PERSONAS = [
+  { etiqueta: 'Solo yo', personas: 'solo-yo' },
+  { etiqueta: 'De 2 a 10', personas: '2-10' },
+  { etiqueta: 'De 11 a 50', personas: '11-50' },
+  { etiqueta: 'Más de 50', personas: 'mas-de-50' },
+];
+
 // Cada respuesta, con el tamaño que le toca en RSC. RSC solo distingue pequeño
 // de no pequeño, y sube solo si el objetivo habla de pagos, cobros, bases de
 // datos o integraciones: «No lo sé» empieza pequeño sin atar nada. «Nada, o casi
@@ -831,9 +854,12 @@ function deQueVaPorLoQueSeVe(parte) {
 const COMO_SE_PREGUNTA = {
   asistente: () => preguntarAsistente(),
   deQueVa: (yaDicho, parte) => elegir('Para empezar', '¿De qué va esto?', deQueVaPorLoQueSeVe(parte)),
+  alcance: () => elegir('Para empezar', '¿Qué vas a llevar en esta carpeta?', QUE_LLEVA),
+  personas: () => elegir('Para empezar', '¿Cuántas personas están metidas en esto?', CUANTAS_PERSONAS),
   queConstruir: (yaDicho) => elegir('Para empezar', '¿Qué vas a construir?',
     QUE_VAS_A_CONSTRUIR.filter((o) => !o.soloCon || o.soloCon === yaDicho.kind)),
   objetivo: (yaDicho, parte) => preguntarObjetivo(yaDicho.kind, { empezada: esDeAlguien(parte) }),
+  nivel: () => elegir('Sobre ti', '¿Qué tal te manejas con el ordenador?', COMO_TE_MANEJAS),
   nombres: (yaDicho) => preguntarNombres(yaDicho.objetivo, yaDicho.alcance),
 };
 
@@ -902,9 +928,6 @@ async function entrevistar(plan, parte, guardadas = null) {
   }
 
   const respuestas = { ...sabido, ...(guardadas || {}) };
-  // El nivel ya no se pregunta (decisión 184): el del recibo o el de «Cómo te
-  // habla» si vale, y si no, el menos técnico, que es lo que RSC da por hecho.
-  if (!rumbo.VALORES.nivel.includes(respuestas.nivel)) respuestas.nivel = 'non-technical';
   const nombres = parte.railes.nombres || null;
 
   for (const que of plan.preguntar) {
@@ -1734,6 +1757,6 @@ module.exports = {
   nombreDeLaCarpeta, confirmarLaCarpeta, confirmarDentroDeOtro, crearUnaCarpetaDentro, comoSeDiceQueNo, ponerLasCopias, apuntarLosEnganches,
   prepararTambienPara, ponerElBloque, preguntarAsistente, ponerElAsistente, losQueSePusieron,
   COMO_SE_ENTREGA, hayFreno, PIEZAS_DEL_PLAN, comoSeDiceLoQueCambia,
-  COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_VAS_A_CONSTRUIR,
+  COMO_SE_HACE, COMO_SE_PREGUNTA, DE_QUE_VA, QUE_LLEVA, CUANTAS_PERSONAS, QUE_VAS_A_CONSTRUIR,
   COMO_TE_MANEJAS, OBJETIVOS_POR_TIPO, SIN_COPIAS_HASTA_QUE_QUIERAS,
 };
