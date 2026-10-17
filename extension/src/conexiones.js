@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const proyecto = require('./proyecto');
+const rutas = require('./rutas');
 const procesos = require('./procesos');
 const entorno = require('./entorno');
 
@@ -99,7 +100,7 @@ function carpetaDe(proveedorId) {
 
   // Y el cinturón: caiga donde caiga, tiene que quedar dentro de 01-TOOLS.
   const completa = path.resolve(base, proveedorId);
-  if (!completa.startsWith(path.resolve(base) + path.sep)) return null;
+  if (!rutas.estaDentro(base, completa)) return null;
 
   return fs.existsSync(completa) ? completa : null;
 }

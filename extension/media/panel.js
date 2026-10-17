@@ -2094,7 +2094,8 @@ function lineaDeLasCopias() {
   if (!c) return '';
   return grupo({
     id: 'grupo:copias',
-    etiqueta: c.sinGuardar ? 'Hay cambios sin guardar' : `✓ Todo guardado, ${c.hace}`,
+    // `null`: no se ha podido mirar. No se dice «Todo guardado» sin saberlo (decisión 189).
+    etiqueta: c.sinGuardar === null ? 'No he podido mirar si hay cambios sin guardar' : c.sinGuardar ? 'Hay cambios sin guardar' : `✓ Todo guardado, ${c.hace}`,
     dentro: `
       ${boton({ etiqueta: 'Guardar en git', icono: '💾', pequeno: true, accion: { tipo: 'guardarCopia' } })}
       ${boton({ etiqueta: 'Ver las copias guardadas', icono: '🕑', pequeno: true, accion: { tipo: 'verCopias' } })}

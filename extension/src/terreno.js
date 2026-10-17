@@ -19,6 +19,7 @@ const path = require('node:path');
 const os = require('node:os');
 
 const proyecto = require('./proyecto');
+const rutas = require('./rutas');
 const procesos = require('./procesos');
 const sueltas = require('./sueltas');
 const git = require('./git');
@@ -201,7 +202,7 @@ function queHayEncima(raiz) {
   if (!raiz) return null;
   const casa = sitioReal(os.homedir());
   let arriba = path.dirname(sitioReal(raiz));
-  while (arriba !== path.dirname(arriba) && arriba !== casa) {
+  while (arriba !== path.dirname(arriba) && !rutas.mismoSitio(arriba, casa)) {
     if (fs.existsSync(path.join(arriba, '.git')) || fs.existsSync(path.join(arriba, '.rsc.json'))) {
       return { nombre: path.basename(arriba) };
     }
@@ -212,13 +213,7 @@ function queHayEncima(raiz) {
 
 // El sitio real de una carpeta, con los enlaces resueltos. Si no se puede
 // resolver, se compara tal cual: mejor eso que no mirar.
-const sitioReal = (r) => {
-  try {
-    return fs.realpathSync(r);
-  } catch {
-    return r;
-  }
-};
+const sitioReal = rutas.sitioReal;
 
 const comoEsEstaCarpeta = (raiz) => queCarpetaEs(raiz, { casa: os.homedir(), real: sitioReal });
 

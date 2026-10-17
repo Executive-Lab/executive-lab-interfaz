@@ -23836,10 +23836,10 @@ exec git "$@"
       assert.ok(!fs.lstatSync(path.join(donde, 'aa.hecho')).isSymbolicLink());
       assert.equal(fs.readFileSync(path.join(donde, 'aa.hecho'), 'utf8'), 'Añadida.\n');
       assert.ok(!fs.existsSync(path.join(donde, 'aa.habilidad')), 'el pedido sigue ahí');
-      // Si no se puede escribir, el pedido se quita igual: no se repite cada minuto.
+      // Si no se puede escribir, el pedido se queda (decisión 189): quien llama lo dice.
       fs.mkdirSync(path.join(donde, 'bb.hecho'));
       assert.equal(pedidosM.contestar(raiz, 'bb', 'x'), false);
-      assert.ok(!fs.existsSync(path.join(donde, 'bb.habilidad')), 'un pedido sin respuesta posible se queda para siempre');
+      assert.ok(fs.existsSync(path.join(donde, 'bb.habilidad')), 'un pedido sin respuesta se ha borrado: el asistente se queda esperando');
       assert.equal(pedidosM.contestar(raiz, '../fuera', 'x'), false, 'contesta fuera de la carpeta');
 
       // Qué hacer con cada uno.
@@ -26670,6 +26670,185 @@ exec git "$@"
     assert.match(pintar({ ...base, donde: 'Tu carpeta está a medio preparar', aMedioPreparar: true }), /Lo último/, 'a medio preparar ya no dice «Lo último»');
     assert.match(pintar({ ...base, donde: 'Aquí ya hay trabajo tuyo', yaEmpezada: { cuantos: 3 } }), /Lo último/, 'con trabajo suyo ya no dice «Lo último»');
     return 'solo encima de algo';
+  });
+
+  // ------------------------------------------- Windows y los errores que no se dicen (decisión 189)
+
+  await comprobar('189: una lista sale igual guardada con «\\r\\n» que con «\\n»', () => {
+    const fs2 = require('node:fs');
+    const montarUna = (salto) => {
+      const carpeta = fs2.mkdtempSync(path.join(os.tmpdir(), 'crlf-'));
+      const en = (...p) => path.join(carpeta, ...p);
+      const poner = (p, texto) => { fs2.mkdirSync(path.dirname(en(...p)), { recursive: true }); fs2.writeFileSync(en(...p), texto.replace(/\n/g, salto)); };
+      poner(['02-DOCS', 'wiki', 'harness', 'decisions.md'], '# Decisiones\n\n- Cobrar a treinta días siempre\n- Pedir las horas cada viernes\n');
+      poner(['02-DOCS', 'wiki', 'harness', 'user-profile.md'], '---\ntechnical_level: non-technical\naccompaniment: L3\n---\n\n# Perfil\n\n## Goals\n- Facturar sin errores\n- Cobrar antes\n\n## Constraints\n- No gastar más de cien euros\n');
+      poner(['02-DOCS', 'wiki', 'sdd', 'constitution.md'], '# Constitución\n\n## Primero, los clientes\n\nTexto.\n\n## Nada sin factura\n\nTexto.\n');
+      poner(['CLAUDE.md'], '# Reglas\n\n## Working rules\n- Siempre en español\n- Nunca borrar sin avisar\n');
+      return carpeta;
+    };
+    const leerTodo = (carpeta) => {
+      vscode.guion.raiz = carpeta;
+      return {
+        decisiones: cargar('diario').decisiones().map((d) => d.titulo),
+        metas: cargar('ajustes').comoEstamos().metas,
+        limites: cargar('ajustes').comoEstamos().limites,
+        innegociables: cargar('reglas').queHay().innegociables,
+        deLaCasa: cargar('reglas').queHay().deLaCasa,
+      };
+    };
+    const antes = vscode.guion.raiz;
+    try {
+      const conLF = leerTodo(montarUna('\n'));
+      const conCRLF = leerTodo(montarUna('\r\n'));
+      assert.equal(conLF.decisiones.length, 2, 'con «\\n» no salen las dos decisiones');
+      assert.equal(conLF.metas.length, 2);
+      assert.equal(conLF.limites.length, 1);
+      assert.equal(conLF.innegociables.length, 2);
+      assert.equal(conLF.deLaCasa.length, 2);
+      assert.deepEqual(conCRLF, conLF, 'guardado con «\\r\\n» sale distinto: una lista vacía, o con un «\\r» pegado');
+      assert.ok(!JSON.stringify(conCRLF).includes('\\r'), 'se ha colado un «\\r»');
+      return 'decisiones, metas, límites, principios y reglas de la casa';
+    } finally {
+      vscode.guion.raiz = antes;
+    }
+  });
+
+  await comprobar('189: cambiar cómo te habla respeta el salto de línea que ya tenía el perfil', () => {
+    const fs2 = require('node:fs');
+    const carpeta = fs2.mkdtempSync(path.join(os.tmpdir(), 'trato-crlf-'));
+    const perfil = path.join(carpeta, '02-DOCS', 'wiki', 'harness', 'user-profile.md');
+    fs2.mkdirSync(path.dirname(perfil), { recursive: true });
+    const antes = vscode.guion.raiz;
+    try {
+      vscode.guion.raiz = carpeta;
+      for (const [salto, otro] of [['\r\n', /(^|[^\r])\n/], ['\n', /\r/]]) {
+        // Sin la clave: entra en la cabecera, que es el camino que reescribía con «\n».
+        fs2.writeFileSync(perfil, `---${salto}empresa: Ferretería Soler${salto}---${salto}${salto}# Perfil${salto}`);
+        assert.ok(cargar('trato').ponerPalabras('technical').ok);
+        const escrito = fs2.readFileSync(perfil, 'utf8');
+        assert.match(escrito, /technical_level: technical/);
+        assert.ok(!otro.test(escrito), `mezcla saltos de línea con ${JSON.stringify(salto)}: ${JSON.stringify(escrito)}`);
+      }
+      return 'sin la clave, con «\\r\\n» y con «\\n»';
+    } finally {
+      vscode.guion.raiz = antes;
+    }
+  });
+
+  await comprobar('189: la marca se reconoce con rutas de Windows y con las de siempre', () => {
+    const marcaM = cargar('marca');
+    for (const ruta of [
+      'C:\\Users\\Ana\\Empresa\\02-DOCS\\wiki\\brand\\logo.png',
+      'c:\\users\\ana\\empresa\\02-DOCS\\wiki\\brand\\colores.pdf',
+      '/Users/ana/empresa/02-DOCS/wiki/brand/logo.svg',
+      'C:\\Users\\Ana\\Empresa\\02-DOCS\\wiki\\brand\\marca.md',
+    ]) assert.equal(marcaM.esDeLaMarca(ruta), true, `${ruta} no se toma por de la marca`);
+    for (const ruta of ['C:\\Users\\Ana\\Empresa\\02-DOCS\\wiki\\index.md', '/Users/ana/empresa/src/app.js', '']) {
+      assert.equal(marcaM.esDeLaMarca(ruta), false, `${ruta} se toma por de la marca`);
+    }
+    assert.match(fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8'), /marca\.esDeLaMarca\(uri\.fsPath\)/, 'el vigía ya no usa la comparación común');
+    return '4 de la marca, 3 que no';
+  });
+
+  await comprobar('189: comparar rutas no distingue mayúsculas en Windows, ni las confunde en el resto', () => {
+    const { estaDentro, mismoSitio } = cargar('rutas');
+    // Windows, escrito con «\», desde cualquier sistema.
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'C:\\Users\\Ana\\Empresa\\wiki\\brand\\logo.png', 'win32'), true);
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'c:\\users\\ana\\EMPRESA\\Wiki\\a.md', 'win32'), true, 'la unidad y las carpetas en otras mayúsculas');
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'C:\\Users\\Ana\\Empresa\\wiki-otra\\a.md', 'win32'), false, 'una hermana que empieza igual');
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'C:\\Users\\Ana\\Empresa\\wiki\\..\\..\\secreto.txt', 'win32'), false, 'sube y se sale');
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'D:\\Users\\Ana\\Empresa\\wiki\\a.md', 'win32'), false, 'otra unidad');
+    assert.equal(estaDentro('C:\\Users\\Ana\\Empresa\\wiki', 'C:\\Users\\Ana\\Empresa\\wiki', 'win32'), false, 'ella misma no está dentro');
+    assert.equal(mismoSitio('C:\\Users\\Ana', 'c:\\users\\ANA\\', 'win32'), true);
+    // Linux sí distingue.
+    assert.equal(estaDentro('/a/Wiki', '/a/wiki/x.md', 'linux'), false, 'en Linux wiki y Wiki son dos carpetas');
+    assert.equal(estaDentro('/a/wiki', '/a/wiki/x/y.md', 'linux'), true);
+    assert.equal(estaDentro('/a/wiki', '/a/wiki/../b', 'linux'), false);
+    assert.equal(mismoSitio('/a/Wiki', '/a/wiki', 'linux'), false);
+    // Y lo que no es una ruta no está dentro de nada.
+    assert.equal(estaDentro('', '/a', 'linux') || estaDentro('/a', null, 'linux'), false);
+    // Los cuatro sitios que lo usan.
+    for (const f of ['cerebro', 'conexiones', 'marca', 'terreno']) {
+      const codigo = fs.readFileSync(path.join(RAIZ, 'src', `${f}.js`), 'utf8');
+      assert.match(codigo, /require\('\.\/rutas'\)/, `${f}.js no usa el ayudante común`);
+      assert.ok(!/startsWith\([^)]*path\.sep\)/.test(codigo), `${f}.js sigue comparando rutas por texto`);
+    }
+    return '12 casos y 4 sitios';
+  });
+
+  await comprobar('189: un pedido que no se pudo contestar se queda, y quien contesta lo dice', () => {
+    const codigo = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
+    const llamadas = codigo.match(/pedidos\.contestar\(/g) || [];
+    assert.equal(llamadas.length, 1, `hay ${llamadas.length} sitios que contestan sin mirar si se pudo: solo debe haber uno, `
+      + 'el que dice el fallo');
+    assert.match(codigo, /if \(pedidos\.contestar\(raiz, id, texto\)\) return true;[\s\S]{0,400}avisarConSalida\('No he podido contestarle al asistente/);
+    return 'una sola llamada, con su aviso y su botón';
+  });
+
+  await comprobar('189: «cuántos cambios hay» distingue no poder mirar de que no haya ninguno', async () => {
+    const historialM = require(cargar('entorno').moduloComun('historial'));
+    const fs2 = require('node:fs');
+    const nada = path.join(fs2.mkdtempSync(path.join(os.tmpdir(), 'sin-mirar-')), 'no-existe');
+    assert.equal(await historialM.cuantosCambios(nada), null, 'no se ha podido mirar y dice que hay 0');
+    const guardarM = cargar('guardar');
+    const antes = vscode.guion.raiz;
+    try {
+      vscode.guion.raiz = nada;
+      assert.equal(await guardarM.cambiosSinGuardar(), null, 'la barra se lo cree: sin cambios');
+    } finally {
+      vscode.guion.raiz = antes;
+    }
+    const panel = fs.readFileSync(path.join(RAIZ, 'media', 'panel.js'), 'utf8');
+    assert.match(panel, /c\.sinGuardar === null \? 'No he podido mirar si hay cambios sin guardar'/, 'la barra dice «Todo guardado» sin saberlo');
+    return 'null en el historial, en guardar y en la barra';
+  });
+
+  await comprobar('189: si falla escribir el material de marca, el aviso dice cuál y por qué', async () => {
+    const fs2 = require('node:fs');
+    const { porQueNoSePudo } = cargar('por-que-no-se-escribio');
+    assert.match(porQueNoSePudo({ code: 'ENOSPC' }), /no queda sitio/);
+    assert.match(porQueNoSePudo({ code: 'EACCES' }), /permiso/);
+    assert.match(porQueNoSePudo({ code: 'EBUSY' }), /otro programa/);
+    assert.match(porQueNoSePudo(new Error('raro')), /no ha dicho por qué/);
+
+    const carpeta = fs2.mkdtempSync(path.join(os.tmpdir(), 'marca-mala-'));
+    const antes = vscode.guion.raiz;
+    try {
+      vscode.guion.raiz = carpeta;
+      // Un fichero donde tendría que ir la carpeta de la marca: no se puede crear, en ningún sistema.
+      fs2.mkdirSync(path.join(carpeta, '02-DOCS', 'wiki'), { recursive: true });
+      fs2.writeFileSync(path.join(carpeta, '02-DOCS', 'wiki', 'brand'), 'estorbo');
+      const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
+      const soltado = cargar('tema').guardarSoltado([{ nombre: 'logo.png', datos: png }]);
+      assert.equal(soltado.ok, false);
+      assert.match(soltado.mensaje, /No he podido preparar la carpeta de la marca: ya hay algo con ese nombre\./);
+      assert.ok(!/nada de eso/.test(soltado.mensaje), 'el aviso genérico');
+
+      const html = '<html><head><title>Ferretería Soler</title><meta name="theme-color" content="#d84315"></head><body></body></html>';
+      const cara = await cargar('web').sacarLaCara('https://ferreteriasoler.es', { bajar: async (url) => ({ cuerpo: Buffer.from(html), tipo: 'text/html', url }) });
+      assert.equal(cara.ok, false);
+      assert.match(cara.escritura, /No he podido crear la carpeta de la marca: ya hay algo con ese nombre\./);
+
+      // Con la carpeta de verdad pero sin permiso (solo donde se puede quitar el permiso).
+      if (process.platform !== 'win32' && !(process.getuid && process.getuid() === 0)) {
+        fs2.rmSync(path.join(carpeta, '02-DOCS', 'wiki', 'brand'));
+        fs2.mkdirSync(path.join(carpeta, '02-DOCS', 'wiki', 'brand'));
+        fs2.chmodSync(path.join(carpeta, '02-DOCS', 'wiki', 'brand'), 0o500);
+        try {
+          const sinPermiso = cargar('tema').guardarSoltado([{ nombre: 'logo.png', datos: png }, { nombre: 'colores.pdf', datos: png }]);
+          assert.equal(sinPermiso.ok, false);
+          assert.match(sinPermiso.mensaje, /«logo\.png»: no tengo permiso para escribir en esa carpeta\. Ni otros 1\./);
+          const marcaCara = await cargar('web').sacarLaCara('https://ferreteriasoler.es', { bajar: async (url) => ({ cuerpo: Buffer.from(html), tipo: 'text/html', url }) });
+          assert.equal(marcaCara.ok, false);
+          assert.match(marcaCara.escritura, /No he podido guardar los colores de tu web \(marca\.md\): no tengo permiso/);
+        } finally {
+          fs2.chmodSync(path.join(carpeta, '02-DOCS', 'wiki', 'brand'), 0o700);
+        }
+      }
+      return 'sin carpeta, y sin permiso donde se puede';
+    } finally {
+      vscode.guion.raiz = antes;
+    }
   });
 
   // ------------------------------------------- ningún mensaje sin salida (decisión 183)
