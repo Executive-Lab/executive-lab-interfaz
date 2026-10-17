@@ -56,7 +56,18 @@ function capacidades(carpetaDeLaExtension) {
   }
 }
 
-const pelar = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const pelarSinMas = (texto) => String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Decisión 188: el corpus (todo lo que la persona tiene escrito) puede pasar de
+// un MB y se pelaba entero en cada repintado, una vez por cada consulta. Se
+// recuerda el último texto largo y su pelado: mismo texto, mismo resultado.
+let ultimoLargo = { texto: null, pelado: null };
+const pelar = (texto) => {
+  const t = String(texto || '');
+  if (t.length < 20000) return pelarSinMas(t);
+  if (ultimoLargo.texto !== t) ultimoLargo = { texto: t, pelado: pelarSinMas(t) };
+  return ultimoLargo.pelado;
+};
 
 // ---------------------------------------------- lo que dijo al prepararla
 
@@ -109,11 +120,22 @@ function distintas(palabras) {
 //
 // Hacen falta dos palabras distintas, no una: con una sola, cualquier empresa
 // que nombre "cliente" de pasada recibiría la misma oferta, y eso es ruido.
+//
+// Decisión 188: con un corpus de más de un MB, cada consulta del catálogo recorre
+// ese texto entero, y esto corre en cada repintado. Si ni el texto, ni lo ya
+// instalado, ni el catálogo han cambiado, la respuesta es la misma: se recuerda
+// las últimas ocho (cada pantalla pregunta con su texto: el objetivo, lo que hay...).
+const ultimasPreguntas = new Map();
+
 function loQuePodriaAprender({ corpus = '', yaInstaladas = [], catalogo = [] }) {
   const texto = pelar(corpus);
   if (!texto) return [];
 
-  return catalogo
+  const clave = [yaInstaladas.join(','), catalogo.map((c) => `${c.id}:${(c.palabras || []).join('|')}`).join(';')].join('\n');
+  const recordada = ultimasPreguntas.get(texto);
+  if (recordada && recordada.clave === clave) return recordada.respuesta;
+
+  const respuesta = catalogo
     .filter((c) => !yaInstaladas.includes(c.id))
     .map((c) => {
       const aciertos = distintas(c.palabras.filter((p) => texto.includes(pelar(p))));
@@ -121,6 +143,9 @@ function loQuePodriaAprender({ corpus = '', yaInstaladas = [], catalogo = [] }) 
     })
     .filter((c) => c.aciertos >= 2)
     .sort((a, b) => b.aciertos - a.aciertos);
+  if (ultimasPreguntas.size >= 8) ultimasPreguntas.delete(ultimasPreguntas.keys().next().value);
+  ultimasPreguntas.set(texto, { clave, respuesta });
+  return respuesta;
 }
 
 // -------------------------------------------------------------- repetición

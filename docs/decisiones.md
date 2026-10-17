@@ -9114,6 +9114,84 @@ consejos preguntados en una carpeta que no montó la barra; la costumbre puesta 
 había propuesto; y la regla 9 del asistente sin mandar preguntar lo suyo.
 
 
+## 188. La barra no se atasca
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `la-barra-no-se-atasca`
+
+Una auditoría de rendimiento leyó un árbol viejo (135 commits por detrás), así que sus números de línea no
+valían y algo podía estar ya arreglado. Se comprobó cada punto contra main antes de tocarlo.
+
+**Lo que ya estaba.** De la 167: en `sueltas.estanSubidas`, la caché por el índice de git, `core.fsmonitor=false`,
+el tope de 5 s y el no correr en una carpeta sin confianza. De la 170: tope de lecturas y de subcarpetas en
+`ficherosDeAcceso`. De antes: `rsc memory resume` ya se recuerda un minuto (`rsc.retomar`). No se tocó nada de eso.
+
+**Medida.** Un guion propio (fuera del repo) monta una carpeta de mentira grande: 9.000 ficheros sueltos,
+300 carpetas con `.env.local`, un `.rsc.json` de 4,1 MB, un `log.md` de 7,4 MB, un `index.md` de 2,7 MB (32.000
+artículos), con git y todo añadido. Mide `proveedor.refrescar(true)`, lo que hace el vigía, con la
+continuación de RSC sustituida (ver abajo). Mediana de cinco repintados:
+
+| | antes (main) | después |
+|---|---|---|
+| un repintado | 9.289 ms | 609 ms (el primero, 1.460 ms) |
+
+Dónde se iba: el perfil dice que `proyecto.declaracion()` (leer y parsear `.rsc.json` en cada pregunta) era
+más de la mitad del tiempo de CPU; después, `consejos.loQuePodriaAprender` recorriendo un corpus de más de un
+MB una vez por consulta del catálogo. Aparte, y no es nuestro: `rsc memory resume` sobre esa carpeta tarda más
+de 20 s por su cuenta (RSC escanea la carpeta), llega a su tope y, como un fallo no se recuerda, se repetía en
+cada repintado. Sustituido en la medida para medir lo nuestro; con un `.rsc.json` normal tarda lo de siempre.
+
+**1. Repintados solapados y con la barra oculta** (`extension.js`, `repintarLoQueHaya`). Antes iba derecho a
+`refrescar(true)`. Ahora hay una bandera: si ya hay un repintado en marcha, no se lanza otro; se apunta que
+falta uno y, al acabar, se hace uno solo con lo último que haya (seis avisos seguidos son uno y uno). Con la
+barra escondida (`vista.visible === false`) no se repinta: se apunta «sucia» y `onDidChangeVisibility`
+repinta lo que tuviera delante al volver a verse (con `refrescar(true)`, o sea sin la caché de veinte segundos
+de la brújula); si no cambió nada, hace lo de siempre. Si el repintado falla, la bandera se quita.
+
+**2. git sin tope y con candados.** `instalador/comun/historial.js`: cada orden lleva su tope (las que solo
+leen, 15 s; subir, 180 s; el resto, 60 s) y `windowsHide`, y las que solo leen (`status`, `log`, `ls-files`,
+`ls-tree`, `rev-parse`, `show`, `diff`, `cat-file`) van con `--no-optional-locks`, para no quitarle el
+`index.lock` a un commit del asistente. `procesos.git` (`extension/src/procesos.js`): tope de 15 s (antes,
+los 180 s por defecto) y `--no-optional-locks` siempre (en las órdenes que escriben no hace nada). Es código
+común: `node extension/preparar-paquete.js` antes de las pruebas.
+
+**3. git síncrono en el repintado.** `estanSubidas` sigue con `execFileSync`, pero ya no corre casi nunca: la
+caché por el índice evita lanzarlo de nuevo, y ahora tampoco se lanza sin `.git` ni sin índice (antes, sin
+clave, se lanzaba en cada repintado para oír «no es un repositorio»). Usa el git de la casa
+(`entorno.git()`, no el del PATH), `--no-optional-locks` y `windowsHide`. No se hizo asíncrono: `resumen()` lo
+llaman siete sitios síncronos, y con la caché la parte síncrona queda en una vez por cambio del índice, con
+su tope de 5 s.
+
+**4. `.rsc.json` leído decenas de veces.** `proyecto.declaracion()` pasa por `lecturas.js` (módulo nuevo): una
+lectura por versión del fichero, con clave de fecha, fecha de cambio, tamaño e inodo. Cambia el fichero,
+cambia la clave y se lee otra vez; roto o borrado da `null` como antes. Lo que devuelve se comparte y es de
+solo lectura (se comprobó que ningún llamador lo modifica).
+
+**5. Lecturas grandes.** `cerebro.leer` (de él cuelgan `index.md`, `log.md` y `gaps.md`) lee con la caché y con
+un tope de 1 MB: de un fichero más grande se leen los primeros bytes hasta el último salto de línea entero y
+el resto no se mira (`log.md` va del más nuevo al más viejo, así que lo que se enseña no cambia). Las tres
+comparaciones de raíles de `terreno.js` leen sus ficheros por la misma caché. `lecturas.entradas` lee las
+carpetas con `opendir` y un tope de 5.000 entradas (20.000 en `ficherosDeClavesEn`, donde se busca un `.env` y
+es mejor mirar de más): `cerebro`, `papeles` (`sueltos` y `listar`) y `sueltas`. Y `consejos.js` recuerda el
+pelado del corpus largo y las respuestas de `loQuePodriaAprender` (las últimas ocho). Límite conocido: en una
+carpeta con más entradas que el tope, el recuento de documentos es «al menos» eso.
+
+**Las pruebas**: `humo.js` pasa de 520 a 526 (535 con `--con-arnes`). Seis comprobaciones con prefijo «188:» (un solo repintado a la vez; escondida
+no repinta y al verse sí; la caché de `.rsc.json` se invalida con otro tamaño, con otra fecha, rota y borrada;
+topes de lectura y de entradas; los git con tope y bandera, con un git de mentira que se cuelga, en una copia
+aparte del módulo para no cambiarle el motor al resto de la batería; `estanSubidas`). Se ajustó además la prueba
+de la 167, que esperaba `git` a secas y las banderas de antes.
+
+**Un fallo que salió después (PR #88).** Con el tope de 15 s, dos pruebas de antes («un push fallido no deja
+el token en el informe» y «al subir, la única clave es la de la barra») fallaban a veces: su git de mentira es
+un guion recién escrito y, en macOS, la primera vez que se ejecuta puede tardar más de 15 s (el sistema lo
+escanea antes de dejarlo correr). El `rev-parse` salía muerto por SIGTERM (`killed: true`, sin salida), no
+llegaba a ejecutarse el guion y el fichero que la prueba lee no existía. Antes no había tope y esperaba.
+No es un fallo del código: la prueba ahora ejecuta el guion una vez, sin tope, antes de usarlo, y sus
+mensajes dicen por qué no se subió. Lo que sí queda como riesgo real, anotado: un antivirus que escanee un
+`git.exe` nuevo en el primer uso puede pasar de 15 s y la barra lo dará por fallido; si se ve en la
+práctica, se sube el tope de lo que lee.
+Doce mutaciones, todas tumbadas (una primera, la del tope de `cerebro`, sobrevivía: se reforzó la prueba).
+
 ## 189. Windows y los errores que no se dicen
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `windows-y-errores`

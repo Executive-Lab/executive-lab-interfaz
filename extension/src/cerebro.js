@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
+const lecturas = require('./lecturas');
 const rutas = require('./rutas');
 const { quedaDentro } = require('./foto');
 
@@ -26,13 +27,16 @@ function humanizar(texto) {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
+// Con tope (decisión 188): `log.md` crece sin fin y `index.md` con cada
+// artículo; la barra solo enseña lo primero de cada uno. De lo que pase del
+// tope se lee hasta el último salto de línea entero y el resto no se mira. Y se
+// guarda mientras el fichero no cambie: un repintado los pedía varias veces.
+const TOPE_DE_LECTURA = 1024 * 1024;
 function leer(...partes) {
   const ruta = proyecto.ruta(...partes);
-  try {
-    return ruta ? fs.readFileSync(ruta, 'utf8') : null;
-  } catch {
-    return null;
-  }
+  if (!ruta) return null;
+  const texto = lecturas.texto(ruta, { tope: TOPE_DE_LECTURA });
+  return texto === undefined ? null : texto;
 }
 
 // Las plantillas de RSC traen filas de ejemplo con marcadores entre llaves o
@@ -79,7 +83,7 @@ function delDisco() {
 
   let carpetas;
   try {
-    carpetas = fs.readdirSync(wiki, { withFileTypes: true });
+    carpetas = lecturas.entradas(wiki);
   } catch {
     return [];
   }
@@ -90,7 +94,7 @@ function delDisco() {
       let dentro = [];
       try {
         // Solo ficheros de verdad: de un enlace del disco se leía el título (revisión, B5).
-        dentro = fs.readdirSync(path.join(wiki, e.name), { withFileTypes: true }).filter((f) => f.isFile()).map((f) => f.name);
+        dentro = lecturas.entradas(path.join(wiki, e.name)).filter((f) => f.isFile()).map((f) => f.name);
       } catch { /* una carpeta que no se puede leer no tumba las demás */ }
 
       return {
@@ -267,7 +271,7 @@ function todosLosDocumentos() {
   const recorrer = (carpeta) => {
     let entradas;
     try {
-      entradas = fs.readdirSync(carpeta, { withFileTypes: true });
+      entradas = lecturas.entradas(carpeta);
     } catch {
       return;
     }
@@ -399,7 +403,7 @@ function contar(partes, saltar = [], noCuentan = null) {
 
   let cuenta = 0;
   const recorrer = (donde) => {
-    for (const entrada of fs.readdirSync(donde, { withFileTypes: true })) {
+    for (const entrada of lecturas.entradas(donde)) {
       if (entrada.name.startsWith('.') || entrada.name === 'README.md') continue;
       if (noCuentan && donde === carpeta && noCuentan.test(entrada.name)) continue;
       if (entrada.isDirectory()) {
@@ -415,7 +419,7 @@ function contar(partes, saltar = [], noCuentan = null) {
 const esperandoLectura = () => {
   const inbox = proyecto.ruta(...INBOX);
   if (!inbox || !fs.existsSync(inbox)) return 0;
-  return fs.readdirSync(inbox, { withFileTypes: true })
+  return lecturas.entradas(inbox)
     .filter((e) => e.isFile() && !e.name.startsWith('.') && e.name !== 'README.md').length;
 };
 
@@ -426,7 +430,7 @@ function esperandoDesdeHace() {
   if (!inbox || !fs.existsSync(inbox)) return null;
 
   let masViejo = null;
-  for (const entrada of fs.readdirSync(inbox, { withFileTypes: true })) {
+  for (const entrada of lecturas.entradas(inbox)) {
     if (!entrada.isFile() || entrada.name.startsWith('.') || entrada.name === 'README.md') continue;
     try {
       const cuando = fs.statSync(path.join(inbox, entrada.name)).mtimeMs;

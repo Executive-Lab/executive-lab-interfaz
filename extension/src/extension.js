@@ -211,7 +211,12 @@ class Panel {
     vista.webview.onDidReceiveMessage((m) => this.manejar(m));
 
     // Al volver a mirar la barra lateral, la brújula se pone al día sola.
-    vista.onDidChangeVisibility(() => { if (vista.visible) this.refrescar(); });
+    // Si mientras estaba escondida cambió algo (decisión 188), se repinta lo que
+    // tenía delante con lo de ahora; si no, la brújula de siempre.
+    vista.onDidChangeVisibility(() => {
+      if (!vista.visible) return;
+      if (this.sucio) { this.sucio = false; this.repintarLoQueHaya().catch(() => {}); } else this.refrescar();
+    });
   }
 
   // La página entera. Se rehace solo cuando cambia la marca de la empresa,
@@ -797,7 +802,34 @@ ${cabecera}
   }
 
   // Repinta lo que el alumno tenga delante. Lo llama el vigía del arnés.
+  //
+  // Decisión 188: un repintado con una carpeta grande dura segundos, y el vigía
+  // sigue avisando mientras el asistente escribe. Sin freno, se solapaban —cada
+  // uno con sus lecturas y sus procesos— y la barra se atascaba. Ahora:
+  //  - con la barra escondida no se repinta: se apunta que está «sucia» y se
+  //    repinta al volver a verse (`resolveWebviewView`);
+  //  - si ya hay uno en marcha, no se lanza otro: se apunta que falta uno, y al
+  //    acabar se hace uno solo, con lo último que haya, por muchos avisos que
+  //    hayan llegado entre medias.
   async repintarLoQueHaya() {
+    if (this.vista && this.vista.visible === false) { this.sucio = true; return undefined; }
+    if (this.repintando) { this.repintadoEnCola = true; return this.repintando; }
+    this.repintando = (async () => {
+      try {
+        do {
+          this.repintadoEnCola = false;
+          await this.repintarAhora();
+        } while (this.repintadoEnCola && !(this.vista && this.vista.visible === false));
+        if (this.repintadoEnCola) this.sucio = true;
+      } finally {
+        this.repintando = null;
+        this.repintadoEnCola = false;
+      }
+    })();
+    return this.repintando;
+  }
+
+  async repintarAhora() {
     const d = this.donde;
     if (d.tipo === 'conexiones') return this.verConexiones();
     // Con el aviso que se queda (el de la guía en PDF, que escribe en `out/` y despierta al vigía).

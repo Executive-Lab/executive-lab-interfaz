@@ -6,6 +6,7 @@
 const vscode = require('vscode');
 const fs = require('node:fs');
 const path = require('node:path');
+const lecturas = require('./lecturas');
 
 function raiz() {
   const carpetas = vscode.workspace.workspaceFolders;
@@ -79,12 +80,16 @@ function arnesCompleto() {
 // Lo que dice `.rsc.json`, o null. Se traga cualquier error a propósito: casi
 // toda la barra solo quiere saber qué hay, y un fichero ilegible es, para eso,
 // lo mismo que no tenerlo.
+//
+// Decisión 188: un repintado la pedía decenas de veces y, en un `.rsc.json` de
+// varios MB, cada una era una lectura y un `JSON.parse`. Ahora se lee una vez
+// mientras el fichero no cambie (fecha, tamaño e inodo: ver `lecturas.js`). Es
+// de solo lectura y se comparte: quien quiera tocarlo, que lo copie.
 function declaracion() {
-  try {
-    return JSON.parse(fs.readFileSync(ruta('.rsc.json'), 'utf8'));
-  } catch {
-    return null;
-  }
+  const r = ruta('.rsc.json');
+  if (!r) return null;
+  const leida = lecturas.json(r);
+  return leida === undefined ? null : leida;
 }
 
 // Pero para arrancar NO es lo mismo, y por eso esto existe aparte.
