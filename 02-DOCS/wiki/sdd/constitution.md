@@ -105,15 +105,27 @@ VS Code descargado le hizo creer que esto era un proyecto de React.
 
 **Se comprueba**: `du -sh .` y la evidencia del plan en `.rsc.json`.
 
-## P9 · Lo que se puede hacer solo, se hace solo
+## P9 · Lo que debe hacerse solo, se hace solo
 
 Jose, 14-10-2026: *«lo que se pueda hacer automático (a través de RSC, con la extensión o como sea) se
 haga solo. La barra debe ser inteligente y proactiva»*. Sale de la clase del 13-10, la primera sin la
 barra: cada atasco era algo que alguien tuvo que hacer a mano.
 
-Si la barra, el arnés o el asistente pueden hacer algo sin la persona, lo hacen **en cuanto lo ven**,
-sin esperar a que nadie pulse, y lo dicen en una frase. Solo se pone un botón cuando hace falta su sí,
-y eso pasa en cuatro casos:
+Jose, 17-10-2026, corrigiéndola: *«ojo: diferencia. debe hacerse solo lo que debe hacerse solo, no lo que
+puede. Lo que es mejor que haga el alumno o que requiere info del alumno hay que pedírsela»*. Que la barra
+**pueda** hacer algo no basta para que lo haga: lo local, gratis y reversible se leyó como «todo, sin
+preguntar», y no es eso.
+
+El criterio, en llano:
+
+- **Se hace solo** lo que protege o mantiene sin que la persona tenga que pensarlo: las copias, poner
+  al día, arreglar lo que es de la barra, y lo que hace falta para que funcione. Se hace **en cuanto se
+  ve**, sin esperar a que nadie pulse, y se dice en una frase.
+- **Se le pregunta** lo que necesita información suya (su nivel, su negocio, su objetivo, sus datos) y lo
+  que es mejor que decida o haga él: sus preferencias, cómo trabaja, lo que le enseña algo. Una vez, con
+  opciones y a un clic (P1). Un valor por defecto no es una respuesta: no se contesta por la persona.
+
+Y aunque algo deba hacerse solo, hay cuatro casos en los que se propone a un clic y no se hace sin su sí:
 
 - **sale de su ordenador en su nombre**: un aviso, una publicación, subir algo (decisión 131);
 - **no se puede deshacer**: borrar, sobrescribir lo suyo o bajar la versión del arnés (P4);
@@ -132,6 +144,8 @@ vídeo enorme que iba a entrar en git o una conexión con más permisos de los q
 **Se comprueba**: `humo.js` barre `terreno.js` entero. Cada arreglo que la barra hace ella misma y
 que cambia algo dice `alAbrir: true` o `retiene` con uno de los cuatro casos, y lo que se hace solo
 tiene quien lo haga al abrir (`solo.js`). Otras pruebas cubren el resto:
+- lo que pide información suya o es una preferencia suya se pregunta, y no se rellena por defecto: su
+  nivel con el ordenador, qué lleva la carpeta, cuánta gente hay detrás y la vista sencilla (decisión 187);
 - no se hace nada solo sin confianza, en una carpeta recién traída ni sobre un arnés más nuevo que el
   de la clase;
 - sin nadie delante, el montaje no abre ninguna ventana ni crea el historial;

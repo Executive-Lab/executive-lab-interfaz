@@ -1275,9 +1275,10 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
       const { min, max } = cargar('rumbo').cuantasPreguntas({ recibo: null, railes: null });
       assert.ok(min > 1 && max >= min, `un recuento que no cuadra: ${min}–${max}`);
       // Fijado: si cambian las preguntas del arranque, cambia lo que se promete en pantalla.
-      // Una menos desde la decisión 145: el dial ya no se pregunta. Y desde la 184,
-      // tampoco qué lleva la carpeta, cuánta gente hay ni cómo se maneja la persona.
-      assert.deepEqual({ min, max }, { min: 5, max: 8 }, 'en una carpeta vacía se pregunta de 5 a 8 veces');
+      // Una menos desde la decisión 145: el dial ya no se pregunta. La 184 quitó qué
+      // lleva la carpeta, cuánta gente hay y cómo se maneja la persona, y la 187 las
+      // devuelve: es información suya.
+      assert.deepEqual({ min, max }, { min: 7, max: 11 }, 'en una carpeta vacía se pregunta de 7 a 11 veces');
       const estado = await cargar('brujula').estado({ fresco: true });
       assert.doesNotMatch(estado.aviso, /una sola cosa/, 'se promete una sola pregunta');
       assert.match(estado.aviso, new RegExp(`entre ${min} y ${max} preguntas`), `no dice cuántas: ${estado.aviso}`);
@@ -1294,7 +1295,6 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
   await comprobar('el recuento es el de la entrevista de verdad: la más corta y la más larga', async () => {
     // Revisión de F8, importante 1. La cuenta daba dos nombres siempre, y con «La
     // empresa entera» se preguntaba uno: la pantalla prometía de 9 a 12 y se hacían 8.
-    // Desde la 184 no hay «La empresa entera»: son siempre dos.
     // La prueba de arriba fijaba lo que devolvía la propia cuenta, sin mirar la
     // entrevista. Aquí se hace la entrevista entera por sus dos extremos, con un
     // arnés fingido, y se cuentan las respuestas que se gastan.
@@ -1320,11 +1320,11 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     try {
       const { min, max } = cargar('rumbo').cuantasPreguntas({ recibo: null, railes: null });
       const corta = await entrevista(['anthropic.claude-code'], [
-        'Llevar el día a día', 'Organizar el papeleo', 'Ferretería Soler', '', '',
+        'Llevar el día a día', 'La empresa entera', 'Solo yo', 'Organizar el papeleo', 'Lo justo', 'Ferretería Soler', '',
       ]);
       const larga = await entrevista(['anthropic.claude-code', 'openai.chatgpt'], [
-        'Claude', 'Un poco de todo', 'Algo que irá sumando piezas', 'Otra cosa — te la cuento yo',
-        'Llevar la web de la tienda', 'Web nueva', 'Tienda Soler', '',
+        'Claude', 'Un poco de todo', 'Un proyecto', 'Solo yo', 'Algo que irá sumando piezas', 'Otra cosa — te la cuento yo',
+        'Llevar la web de la tienda', 'Me defiendo', 'Web nueva', 'Tienda Soler', '',
       ]);
       assert.deepEqual({ min, max }, { min: corta, max: larga }, 'la cuenta no es la de la entrevista');
       return `de ${corta} a ${larga}, como dice la pantalla`;
@@ -9553,22 +9553,21 @@ exec git "$@"
     const sinNombres = rumbo.elegirRama({ ...base, recibo: { record: entero }, railes: { nombres: null } });
     assert.deepEqual(sinNombres.preguntar, ['nombres'], 'un clon pregunta una, no ocho');
 
-    // Sin recibo se preguntan cinco (eran ocho hasta la 184, que quitó qué lleva la
-    // carpeta, cuánta gente hay y cómo se maneja). Qué va a construir solo se llega
-    // a preguntar si hay algo que construir, y eso se decide al contestar.
+    // Sin recibo se preguntan ocho (la 184 quitó tres y la 187 las devuelve: qué lleva
+    // la carpeta, cuánta gente hay y cómo se maneja son información suya). Qué va a
+    // construir solo se llega a preguntar si hay algo que construir, y eso se decide
+    // al contestar.
     const aPelo = rumbo.elegirRama({ ...base, estado: 'empezada', recibo: null, railes: { nombres: null } });
-    assert.deepEqual(aPelo.preguntar, ['asistente', 'deQueVa', 'queConstruir', 'objetivo', 'nombres']);
-    for (const ya of ['alcance', 'personas', 'nivel']) assert.ok(!aPelo.preguntar.includes(ya), `«${ya}» se vuelve a preguntar (decisión 184)`);
+    assert.deepEqual(aPelo.preguntar, ['asistente', 'deQueVa', 'alcance', 'personas', 'queConstruir', 'objetivo', 'nivel', 'nombres']);
 
-    // Y un valor que RSC no aceptaría se pregunta igual, aunque esté escrito. El
-    // nivel ya no se pregunta: uno que no vale se cambia por el de siempre al montar.
+    // Y un valor que RSC no aceptaría se pregunta igual, aunque esté escrito.
     const torcido = rumbo.elegirRama({
       ...base,
       recibo: { record: { ...entero, projectKind: 'cosa rara', technicalLevel: 'experto', accompaniment: 'L9' } },
       railes: { nombres: { arnes: 'X' } },
     });
-    assert.deepEqual(torcido.preguntar.sort(), ['deQueVa', 'queConstruir'], 'lo que no vale se vuelve a preguntar, y el dial ya no se pregunta');
-    return '0 · 1 · 5 · 1';
+    assert.deepEqual(torcido.preguntar.sort(), ['deQueVa', 'nivel', 'queConstruir'], 'lo que no vale se vuelve a preguntar, y el dial ya no se pregunta');
+    return '0 · 1 · 8 · 1';
   });
 
   // ── Las preguntas del arranque, jugadas ──────────────────────────────────
@@ -9628,34 +9627,53 @@ exec git "$@"
     return { respuestas: hecho, vistas, preguntas: vistas.map((v) => v.pregunta) };
   };
 
-  await comprobar('qué lleva la carpeta, cuánta gente y cómo se maneja ya no se preguntan; lo que ya había se respeta', async () => {
-    // Decisión 184. RSC no pide `alcance` ni `personas` (iban al perfil y al primer
-    // mensaje, que ya le pide al asistente completar el perfil), y `nivel` tiene
-    // valor por defecto y se cambia luego en «Cómo te habla».
+  await comprobar('qué lleva la carpeta, cuánta gente y cómo se maneja se preguntan otra vez, con sus opciones; lo que ya había se respeta', async () => {
+    // Decisión 187 (P9: se hace solo lo que debe hacerse solo). La 184 las quitó por
+    // no ir a RSC; pero son información suya, y el nivel decide cómo se le habla
+    // desde el primer momento. `alcance` y `personas` se usan: perfil, nombre
+    // sugerido y primer mensaje. El nivel va a RSC.
     const arrancarM = cargar('arrancar');
-    const SOBRAN = ['¿Qué vas a llevar en esta carpeta?', '¿Cuántas personas están metidas en esto?', '¿Qué tal te manejas con el ordenador?'];
+    const SALEN = ['¿Qué vas a llevar en esta carpeta?', '¿Cuántas personas están metidas en esto?', '¿Qué tal te manejas con el ordenador?'];
     for (const tipo of arrancarM.DE_QUE_VA) {
-      const { respuestas, preguntas } = await entrevistarCon({ '¿De qué va esto?': tipo.etiqueta });
-      for (const sobra of SOBRAN) assert.ok(!preguntas.includes(sobra), `con «${tipo.etiqueta}» se sigue preguntando «${sobra}»`);
-      assert.equal(respuestas.nivel, 'non-technical', 'sin preguntarlo, el nivel es el de siempre');
-      assert.ok(!respuestas.alcance && !respuestas.personas, 'inventa lo que no se ha preguntado');
+      const { respuestas, preguntas } = await entrevistarCon({
+        '¿De qué va esto?': tipo.etiqueta,
+        '¿Qué vas a llevar en esta carpeta?': 'Un departamento o un área',
+        '¿Cuántas personas están metidas en esto?': 'De 11 a 50',
+        '¿Qué tal te manejas con el ordenador?': 'Me defiendo',
+      });
+      for (const sale of SALEN) assert.ok(preguntas.includes(sale), `con «${tipo.etiqueta}» no se pregunta «${sale}»`);
+      assert.equal(respuestas.alcance, 'departamento');
+      assert.equal(respuestas.personas, '11-50');
+      assert.equal(respuestas.nivel, 'mixed', 'el nivel que contesta es el que llega a RSC');
     }
-    assert.equal(arrancarM.COMO_SE_PREGUNTA.alcance, undefined);
-    assert.equal(arrancarM.COMO_SE_PREGUNTA.personas, undefined);
-    assert.equal(arrancarM.COMO_SE_PREGUNTA.nivel, undefined);
+    assert.equal(typeof arrancarM.COMO_SE_PREGUNTA.alcance, 'function');
+    assert.equal(typeof arrancarM.COMO_SE_PREGUNTA.personas, 'function');
+    assert.equal(typeof arrancarM.COMO_SE_PREGUNTA.nivel, 'function');
+    assert.deepEqual(arrancarM.COMO_TE_MANEJAS.map((o) => o.etiqueta), ['Lo justo', 'Me defiendo', 'Programo, o he programado']);
 
-    // El nombre se pregunta siempre con las dos cajas: ya no hay «La empresa entera».
-    const nombres = await entrevistarCon({});
-    assert.equal(nombres.vistas.filter((v) => v.caja && /[Cc]ómo (llamamos|se llama)/.test(v.pregunta)).length, 2, 'el nombre y la empresa: dos cajas');
+    // Sin contestar nada, la primera opción: «Lo justo», el menos técnico.
+    const sinDecir = await entrevistarCon({});
+    assert.equal(sinDecir.respuestas.nivel, 'non-technical');
+
+    // Con «La empresa entera» el nombre es una sola caja; con otra, dos.
+    const entera = await entrevistarCon({ '¿Qué vas a llevar en esta carpeta?': 'La empresa entera' });
+    assert.equal(entera.vistas.filter((v) => v.caja && /[Cc]ómo (llamamos|se llama)/.test(v.pregunta)).length, 1, 'La empresa entera: una caja de nombre');
+    const otra = await entrevistarCon({ '¿Qué vas a llevar en esta carpeta?': 'Un proyecto' });
+    assert.equal(otra.vistas.filter((v) => v.caja && /[Cc]ómo (llamamos|se llama)/.test(v.pregunta)).length, 2, 'el nombre y la empresa: dos cajas');
 
     // Lo que un perfil ya traía no se pierde al volver a montar.
-    const conPerfil = { ...PARTE_VACIA, railes: { nombres: null, alcance: 'departamento', personas: '11-50' } };
-    const { hecho: devuelto } = await conRespuestas({}, () => arrancarM.entrevistar(cargar('rumbo').elegirRama(conPerfil), conPerfil));
+    const conPerfil = {
+      ...PARTE_VACIA, estado: 'clonado',
+      recibo: { record: { projectKind: 'operations', goal: 'x', technicalLevel: 'mixed', targets: ['claude'] } },
+      railes: { nombres: null, alcance: 'departamento', personas: '11-50' },
+    };
+    const { hecho: devuelto, vistas: deVuelta } = await conRespuestas({}, () => arrancarM.entrevistar(cargar('rumbo').elegirRama(conPerfil), conPerfil));
     assert.equal(devuelto.alcance, 'departamento');
     assert.equal(devuelto.personas, '11-50');
+    assert.ok(!deVuelta.some((v) => SALEN.includes(v.pregunta)), 'un clon no las vuelve a preguntar');
 
-    // Un nivel del recibo que RSC no aceptaría se cambia por el de siempre; uno
-    // que sí vale (el de «Cómo te habla» o el del recibo) se respeta.
+    // Un nivel del recibo que RSC acepta no se vuelve a preguntar (el de «Cómo te
+    // habla» manda sobre él); uno que no acepta, sí.
     const conRecibo = (technicalLevel) => ({
       ...PARTE_VACIA, estado: 'clonado',
       recibo: { record: { projectKind: 'operations', goal: 'x', technicalLevel, targets: ['claude'] } },
@@ -9663,15 +9681,16 @@ exec git "$@"
     });
     vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'nivel-sin-perfil-'));
     try {
-      for (const [nivel, saldra] of [['experto', 'non-technical'], ['mixed', 'mixed'], ['technical', 'technical']]) {
+      for (const [nivel, saldra, seVuelveAPreguntar] of [['experto', 'technical', true], ['mixed', 'mixed', false], ['technical', 'technical', false]]) {
         const parte = conRecibo(nivel);
-        const { hecho } = await conRespuestas({}, () => arrancarM.entrevistar(cargar('rumbo').elegirRama(parte), parte));
+        const { hecho, vistas } = await conRespuestas({ '¿Qué tal te manejas con el ordenador?': 'Programo, o he programado' }, () => arrancarM.entrevistar(cargar('rumbo').elegirRama(parte), parte));
+        assert.equal(vistas.some((v) => v.pregunta === '¿Qué tal te manejas con el ordenador?'), seVuelveAPreguntar, `con «${nivel}» en el recibo`);
         assert.equal(hecho.nivel, saldra, `con «${nivel}» en el recibo sale «${hecho.nivel}»`);
       }
     } finally {
       vscode.guion.raiz = empresa;
     }
-    return 'sin las tres · nivel por defecto · el perfil se respeta';
+    return 'las tres se preguntan · el nivel llega · el recibo se respeta';
   });
 
   await comprobar('el nombre viene rellenado con el de la carpeta, limpio y legible', async () => {
@@ -10524,7 +10543,7 @@ exec git "$@"
         // Y monta en cuanto está, sin otro clic.
         assert.ok(git.eventos.indexOf('termina') < git.eventos.indexOf('monta'), `monta antes de que git esté, o no monta: ${orden}`);
         // Cada pregunta, una vez: al volver con git puesto no se repiten.
-        assert.ok(preguntas.length >= 5, `pocas preguntas: ${preguntas.join(' · ')}`);
+        assert.ok(preguntas.length >= 6, `pocas preguntas: ${preguntas.join(' · ')}`);
         assert.equal(new Set(preguntas).size, preguntas.length, `se repite alguna: ${preguntas.join(' · ')}`);
         // Mientras espera, lo dice.
         assert.ok(esperas.includes(`${arrancarM.ESPERANDO_A_GIT} [Seguir sin copias→seguirSinCopias]`), `no dice que espera a git, con su salida: ${esperas.join(' | ')}`);
@@ -10557,7 +10576,7 @@ exec git "$@"
       assert.equal(sinRed.hecho.gitNoSePuso, true);
       assert.equal(sinRed.hecho.mensaje, 'No he podido descargar git: mira que haya conexión y pulsa «Volver a intentarlo».');
       assert.deepEqual(lasSalidas(sinRed.hecho), ['Volver a intentarlo→arrancar', 'Seguir sin copias→seguirSinCopias']);
-      assert.ok(sinRed.preguntas.length >= 5, 'no se ha preguntado mientras');
+      assert.ok(sinRed.preguntas.length >= 6, 'no se ha preguntado mientras');
       const guardado = memoria.get(respuestasM.CLAVE);
       assert.ok(guardado && guardado.rama === 'desdeCero' && guardado.respuestas.kind && guardado.respuestas.objetivo, `no guarda lo contestado: ${JSON.stringify(guardado)}`);
       assert.ok(!fs.existsSync(path.join(vacia, '.rsc.json')) && !fs.existsSync(path.join(vacia, '.git')), 'ha montado sin git');
@@ -10735,12 +10754,9 @@ exec git "$@"
     assert.equal(solo(plan, guardadas), true, 'con todo contestado no se termina solo');
     assert.equal(solo(plan, null), false, 'una carpeta vacía se monta sola sin que nadie conteste');
     assert.equal(solo(plan, { ...guardadas, rama: 'encimaDeLoQueHay' }), false, 'la carpeta ha cambiado y se monta igual');
-    for (const campo of ['objetivo', 'kind', 'nombres', 'asistente', 'web']) {
+    // Con la 187 vuelven `nivel`, `alcance` y `personas`: sin ellas no se termina solo.
+    for (const campo of ['objetivo', 'kind', 'nivel', 'nombres', 'alcance', 'personas', 'asistente', 'web']) {
       assert.equal(solo(plan, { ...guardadas, respuestas: sinUna(campo) }), false, `sin «${campo}» se monta solo`);
-    }
-    // Lo que ya no se pregunta (decisión 184) no impide terminar solo.
-    for (const campo of ['nivel', 'alcance', 'personas']) {
-      assert.equal(solo(plan, { ...guardadas, respuestas: sinUna(campo) }), true, `sin «${campo}», que ya no se pregunta, no termina solo`);
     }
     assert.equal(solo(plan, { ...guardadas, respuestas: { ...todas, kind: 'software' } }), false, 'sin qué va a construir se monta solo');
     assert.equal(solo(plan, { ...guardadas, respuestas: { ...todas, kind: 'software', tamano: 'small' } }), true);
@@ -12739,9 +12755,10 @@ exec git "$@"
     const vacia = nueva();
     const hecho = await poner(vacia);
     assert.equal(hecho.hecho, 'puesto');
-    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR }, spinnerTipsEnabled: false });
+    // Sin los consejos de Claude: enseñan algo, y se preguntan (decisión 187).
+    assert.deepEqual(local(vacia), { language: 'español', permissions: { ask: PREGUNTAR } });
     assert.ok(fs.existsSync(constancia(vacia)), 'sin constancia no se puede quitar');
-    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja y preguntándote antes de subir nada a GitHub.');
+    assert.equal(al.laFrase(hecho), 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub.');
     assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
 
     // Con lo suyo (lo que deja la memoria de RSC): intacto, con sus permisos, y sin fichero a medias.
@@ -12750,7 +12767,7 @@ exec git "$@"
     fs.writeFileSync(path.join(suya, '.claude', 'settings.local.json'), JSON.stringify(SUYOS));
     fs.chmodSync(path.join(suya, '.claude', 'settings.local.json'), 0o600);
     assert.equal((await poner(suya)).hecho, 'puesto');
-    assert.deepEqual(local(suya), { ...SUYOS, language: 'español', spinnerTipsEnabled: false, permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)', ...PREGUNTAR] } }, 'se pisa algo suyo');
+    assert.deepEqual(local(suya), { ...SUYOS, language: 'español', permissions: { allow: ['Bash(npm test *)'], ask: ['Bash(rm *)', ...PREGUNTAR] } }, 'se pisa algo suyo');
     if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(suya, '.claude', 'settings.local.json')).mode & 0o777, 0o600, 'cambian los permisos del fichero');
     assert.deepEqual(fs.readdirSync(path.join(suya, '.claude')).filter((f) => f !== 'settings.local.json'), [], 'queda un fichero a medias');
 
@@ -12771,7 +12788,7 @@ exec git "$@"
     fs.writeFileSync(path.join(suyo, 'settings.json'), JSON.stringify({ language: 'english', permissions: { deny: ['Bash(gh pr create *)'] } }));
     const conElSuyo = nueva();
     await al.ponerLosDeLaBarra({ raiz: conElSuyo, claude: suyo, estaEnGit: fuera });
-    assert.deepEqual(local(conElSuyo), { permissions: { ask: ['Bash(git push *)'] }, spinnerTipsEnabled: false }, 'se pisa lo que dicen sus ajustes de usuario');
+    assert.deepEqual(local(conElSuyo), { permissions: { ask: ['Bash(git push *)'] } }, 'se pisa lo que dicen sus ajustes de usuario');
 
     // Un `ask` o un `deny` que ya están, también con la otra forma de escribirlos, se
     // respetan. Un `allow` no cuenta: el `ask` le gana igual, y uno plantado bastaba
@@ -12995,9 +13012,9 @@ exec git "$@"
       proveedor.soltarElAviso();
       const juntos = enviados.filter((m) => m.tipo === 'aviso');
       assert.equal(juntos.length, 1, 'salen por separado');
-      assert.equal(juntos[0].texto, 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja y preguntándote antes de subir nada a GitHub. Al abrir la carpeta he arreglado solo «Lo que debería estar puesto».');
+      assert.equal(juntos[0].texto, 'He dejado a Claude hablándote en español y preguntándote antes de subir nada a GitHub. Al abrir la carpeta he arreglado solo «Lo que debería estar puesto».');
       // Y quita lo que cuenta ese aviso, nada más (decisión 162).
-      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar', 'consejos'] } }, 'sin «Quitarlo»');
+      assert.deepEqual(juntos[0].boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['idioma', 'preguntar'] } }, 'sin «Quitarlo»');
       // «Quitarlo» quita lo de la barra, lo dice, y no vuelve al abrir.
       enviados.length = 0;
       await proveedor.manejar({ tipo: 'quitarLoDeClaude' });
@@ -13027,7 +13044,7 @@ exec git "$@"
       const hechoDelMontaje = await arrancarM.hacerLosPasos({ rama: 'adoptar', pasos: [{ id: 'ponerLosRailes', escribe: true, etiqueta: 'poniendo los raíles' }] },
         null, {}, contexto, vscode.window.createOutputChannel());
       // Los raíles traen el guion de los avisos, así que al montar van los tres (decisión 162).
-      const LAS_TRES = 'He dejado a Claude hablándote en español, sin consejos en inglés mientras trabaja, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.';
+      const LAS_TRES = 'He dejado a Claude hablándote en español, preguntándote antes de subir nada a GitHub y avisándote cuando termine o te necesite, aunque estés en otra ventana.';
       assert.deepEqual(hechoDelMontaje.dichos, [LAS_TRES], 'el montaje no junta lo que se dijo');
       // …y la barra lo enseña.
       const elMontaje = arrancarM.arrancar;
@@ -13520,12 +13537,12 @@ exec git "$@"
       proveedor.donde = { tipo: 'principal' };
       proveedor.avisoPendiente = null;
       const hecho = await proveedor.ponerLoDeClaudeAlAbrir();
-      assert.deepEqual([hecho.hecho, hecho.idioma, hecho.preguntar, hecho.avisos, hecho.consejos], ['puesto', false, [], true, true], 'al abrir una carpeta de la 157 se ponen los avisos y, de la 185, los consejos');
+      assert.deepEqual([hecho.hecho, hecho.idioma, hecho.preguntar, hecho.avisos, hecho.consejos], ['puesto', false, [], true, false], 'al abrir una carpeta de la 157 se ponen los avisos y, desde la 187, no los consejos: se preguntan');
       assert.equal(local().hooks.Notification.length, 1, 'al abrir no se enganchan los avisos');
       proveedor.soltarElAviso();
       const dicho = enviados.find((m) => m.tipo === 'aviso');
-      assert.equal(dicho && dicho.texto, 'He dejado a Claude sin consejos en inglés mientras trabaja y avisándote cuando termine o te necesite, aunque estés en otra ventana.');
-      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['avisos', 'consejos'] } }, 'el botón quita más de lo que cuenta');
+      assert.equal(dicho && dicho.texto, 'He dejado a Claude avisándote cuando termine o te necesite, aunque estés en otra ventana.');
+      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['avisos'] } }, 'el botón quita más de lo que cuenta');
       // El botón, tal cual viene (P6).
       enviados.length = 0;
       await proveedor.manejar(dicho.boton.accion);
@@ -14652,7 +14669,7 @@ exec git "$@"
       const git = process.env.GIT_CONFIG_GLOBAL;
       process.env.GIT_CONFIG_GLOBAL = path.join(casa, '.gitconfig');
       vscode.guion.raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'permiso-entero-'));
-      vscode.guion.respuestas = ['Llevar el día a día', 'Organizar el papeleo', 'Ferretería Soler', '', ''];
+      vscode.guion.respuestas = ['Llevar el día a día', 'La empresa entera', 'Solo yo', 'Organizar el papeleo', 'Lo justo', 'Ferretería Soler', ''];
       try {
         const entero = await arrancarM.arrancar({ extensionPath: RAIZ, workspaceState: { get: () => undefined, update: async () => {} } }, vscode.window.createOutputChannel());
         assert.equal(entero.ok, true, entero.mensaje || 'se canceló');
@@ -15660,28 +15677,23 @@ exec git "$@"
     }
   });
 
-  await comprobar('las palabras no se preguntan al montar: valen las de «Cómo te habla», y si no valen, las de siempre', async () => {
-    // Decisión 184. Antes B11 cedía ante lo que se contestara en ese mismo montaje
-    // (C-19); ya no se pregunta, y se cambia en «Cómo te habla».
+  await comprobar('si en ese montaje se cambian las palabras, gana lo nuevo', async () => {
+    // B11 cede ante lo que se conteste en ese mismo montaje (C-19). Con la 187 el nivel
+    // vuelve a preguntarse (lo había quitado la 184).
     const rscM = cargar('rsc');
     const antes = rscM.correr;
     const pedidos = [];
     rscM.correr = rscQueApunta(pedidos);
-    // En el recibo, un nivel que RSC no acepta.
+    // En el recibo, un nivel que RSC no acepta: se vuelve a preguntar.
     const RECORD = { projectKind: 'operations', goal: 'x', technicalLevel: 'experto', targets: ['claude'] };
     try {
       vscode.guion.raiz = carpetaParaCompletar(RECORD, { palabras: 'mixed' });
-      const { hecho, vistas } = await conRespuestas({},
+      const { hecho, vistas } = await conRespuestas({ '¿Qué tal te manejas con el ordenador?': 'Programo, o he programado' },
         () => cargar('arrancar').arrancar(CONTEXTO_SIN_MEMORIA_AJENA, { appendLine() {} }));
       assert.equal(hecho.rama, 'completar', hecho.mensaje);
-      assert.ok(!vistas.some((v) => /manejas con el ordenador/.test(v.pregunta || '')), 'se vuelve a preguntar cómo se maneja');
-      assert.equal(valorDe(pedidos[0], '--technical-level'), 'mixed', 'gana el de «Cómo te habla»');
-      // Sin palabras en el perfil, con un nivel roto en el recibo: el de siempre.
-      pedidos.length = 0;
-      vscode.guion.raiz = carpetaParaCompletar(RECORD);
-      await conRespuestas({}, () => cargar('arrancar').arrancar(CONTEXTO_SIN_MEMORIA_AJENA, { appendLine() {} }));
-      assert.equal(valorDe(pedidos[0], '--technical-level'), 'non-technical', 'a RSC le llega un nivel que no acepta');
-      return 'mixed, el de «Cómo te habla» · non-technical si no vale ninguno';
+      assert.ok(vistas.some((v) => /manejas con el ordenador/.test(v.pregunta || '')), 'no se pregunta cómo se maneja');
+      assert.equal(valorDe(pedidos[0], '--technical-level'), 'technical', 'gana el del perfil y no el que se acaba de contestar');
+      return 'technical, el que se contestó';
     } finally {
       rscM.correr = antes;
       vscode.guion.raiz = empresa;
@@ -15759,8 +15771,7 @@ exec git "$@"
     // «Cómo te habla» y el asistente las leen ahí también.
     const rscM = cargar('rsc');
     const antes = rscM.correr;
-    // En el recibo, un nivel que RSC no acepta; las palabras de «Cómo te habla»
-    // son las que valen (decisión 184: ya no se preguntan al montar).
+    // En el recibo, un nivel que RSC no acepta: se vuelve a preguntar.
     const RECORD = { projectKind: 'operations', goal: 'x', technicalLevel: 'experto', targets: ['claude'] };
     try {
       // Con el RSC de hoy, que borra el cuerpo, y con uno que ya lo conserve y
@@ -15770,10 +15781,10 @@ exec git "$@"
         const como = conserva ? 'con un RSC que conserva el cuerpo' : 'con el RSC de hoy';
         const carpeta = carpetaParaCompletar(RECORD);
         const perfil = path.join(carpeta, '02-DOCS', 'wiki', 'harness', 'user-profile.md');
-        fs.writeFileSync(perfil, PERFIL_DE_INIT('L1').replace(/non-technical/g, 'technical'));
+        fs.writeFileSync(perfil, PERFIL_DE_INIT('L1'));
         rscM.correr = rscQueReescribeElPerfil(carpeta, 'Llevar las facturas', { acaba: 'INCOMPLETE', conserva });
         vscode.guion.raiz = carpeta;
-        const { hecho } = await conRespuestas({},
+        const { hecho } = await conRespuestas({ '¿Qué tal te manejas con el ordenador?': 'Programo, o he programado' },
           () => cargar('arrancar').arrancar(CONTEXTO_SIN_MEMORIA_AJENA, { appendLine() {} }));
         assert.equal(hecho.rama, 'completar', hecho.mensaje);
         const ahora = fs.readFileSync(perfil, 'utf8');
@@ -19489,7 +19500,7 @@ exec git "$@"
   });
 
   // ───────────────────────── decisión 185: lo nuevo de Claude que le sirve al alumno
-  await comprobar('185: los consejos de Claude, apagados en su carpeta, sin pisar lo decidido, con «Quitarlo» y puestos al día en las ya montadas', async () => {
+  await comprobar('185 y 187: los consejos de Claude, apagados en su carpeta solo con su sí, sin pisar lo decidido, con «Quitarlo» y ofrecidos en las ya montadas', async () => {
     const al = cargar('ajustes-locales');
     const nueva = () => {
       const r = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-consejos-'));
@@ -19505,16 +19516,29 @@ exec git "$@"
     const fichero = (r) => path.join(r, '.claude', 'settings.local.json');
     const local = (r) => JSON.parse(fs.readFileSync(fichero(r), 'utf8'));
     const CLAVE = 'spinnerTipsEnabled';
+    // Decisión 187: los consejos enseñan algo, y se quitan solo si la persona dijo que sí.
+    const CON = { conConsejos: true };
 
-    // Se pone a false, se apunta, y la frase lo dice.
+    // Sin su sí, no se tocan: lo demás se pone solo, los consejos no.
     const vacia = nueva();
-    const hecho = await poner(vacia);
+    const sinSuSi = await poner(vacia);
+    assert.equal(sinSuSi.hecho, 'puesto');
+    assert.equal(sinSuSi.consejos, false, 'quita los consejos sin preguntar');
+    assert.equal(local(vacia)[CLAVE], undefined, 'quita los consejos sin preguntar');
+    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'al abrir otra vez, tampoco');
+    // Y qué se preguntaría: mirar no escribe nada.
+    const miraria = await poner(vacia, { ...CON, soloMirar: true });
+    assert.deepEqual([miraria.hecho, miraria.consejos], ['sePuede', true]);
+    assert.equal(local(vacia)[CLAVE], undefined, 'mirar escribe');
+    // Con su sí, se pone a false, se apunta, y la frase lo dice.
+    const hecho = await poner(vacia, CON);
     assert.equal(local(vacia)[CLAVE], false, 'no apaga los consejos');
     assert.equal(hecho.consejos, true);
-    assert.deepEqual(al.loQueSePuso(hecho), ['idioma', 'preguntar', 'consejos']);
+    assert.deepEqual(al.loQueSePuso(hecho), ['consejos']);
     assert.equal(al.laFrase({ consejos: true }), 'He dejado a Claude sin consejos en inglés mientras trabaja.');
     assert.equal(JSON.parse(fs.readFileSync(path.join(vacia, ...al.CONSTANCIA), 'utf8')).tips, true, 'la constancia no lo dice');
-    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'se pone dos veces');
+    assert.equal((await poner(vacia, CON)).hecho, 'yaEstaba', 'se pone dos veces');
+    assert.equal((await poner(vacia, { ...CON, soloMirar: true })).hecho, 'yaEstaba', 'se vuelve a preguntar lo ya puesto');
 
     // Lo que ya dijo, sí o no, en cualquiera de los tres sitios, manda; y lo que no se entiende, tampoco se toca.
     for (const [donde, valor, escribir] of [
@@ -19524,35 +19548,35 @@ exec git "$@"
     ]) {
       const r = nueva();
       escribir(r);
-      await poner(r);
+      await poner(r, CON);
       const puesto = fs.existsSync(fichero(r)) ? local(r) : {};
       assert.equal(puesto[CLAVE], valor, `se pisa lo dicho ${donde}`);
     }
     const suyos = fs.mkdtempSync(path.join(os.tmpdir(), 'n185-suyos-'));
     fs.writeFileSync(path.join(suyos, 'settings.json'), JSON.stringify({ [CLAVE]: true }));
     const conLosSuyos = nueva();
-    await al.ponerLosDeLaBarra({ raiz: conLosSuyos, claude: suyos, estaEnGit: fuera });
+    await al.ponerLosDeLaBarra({ raiz: conLosSuyos, claude: suyos, estaEnGit: fuera, ...CON });
     assert.equal(local(conLosSuyos)[CLAVE], undefined, 'se pisa lo que dicen sus ajustes de usuario');
 
     // «Quitarlo»: solo si sigue como se dejó; lo quitado no vuelve.
     assert.equal((await quitar(vacia, ['consejos'])).hecho, 'quitado');
     assert.equal(local(vacia)[CLAVE], undefined, '«Quitarlo» no lo quita');
     assert.equal(local(vacia).language, 'español', 'quitar los consejos se lleva el español');
-    assert.equal((await poner(vacia)).hecho, 'yaEstaba', 'lo quitado vuelve');
+    assert.equal((await poner(vacia, CON)).hecho, 'yaEstaba', 'lo quitado vuelve');
     const cambiada = nueva();
-    await poner(cambiada);
+    await poner(cambiada, CON);
     const c = local(cambiada); c[CLAVE] = true; fs.writeFileSync(fichero(cambiada), JSON.stringify(c));
     await quitar(cambiada, ['consejos']);
     assert.equal(local(cambiada)[CLAVE], true, 'quita lo que ahora es suyo');
     // Sin el que (todo): también se lleva los consejos.
     const todo = nueva();
-    await poner(todo);
+    await poner(todo, CON);
     await quitar(todo);
     assert.equal(local(todo)[CLAVE], undefined);
 
     // Una constancia plantada con otra cosa no vale; y la de antes de la 185 sigue valiendo.
     const plantada = nueva();
-    await poner(plantada);
+    await poner(plantada, CON);
     const marca = path.join(plantada, ...al.CONSTANCIA);
     const m = JSON.parse(fs.readFileSync(marca, 'utf8')); m.tips = 'sí';
     fs.writeFileSync(marca, JSON.stringify(m));
@@ -19564,8 +19588,10 @@ exec git "$@"
     fs.writeFileSync(path.join(vieja, ...al.CONSTANCIA), JSON.stringify({
       ask: al.PREGUNTAR, language: 'español', huella: al.laHuella(vieja, { language: 'español', ask: al.PREGUNTAR }),
     }));
-    const alDia = await poner(vieja);
-    assert.deepEqual([alDia.hecho, alDia.idioma, alDia.preguntar, alDia.consejos], ['puesto', false, [], true], 'una carpeta de la 157 no se pone al día');
+    assert.equal((await poner(vieja)).hecho, 'yaEstaba', 'una carpeta de la 157 se pone al día sin preguntar');
+    assert.equal((await poner(vieja, { ...CON, soloMirar: true })).consejos, true, 'no se le ofrece a una carpeta de la 157');
+    const alDia = await poner(vieja, CON);
+    assert.deepEqual([alDia.hecho, alDia.idioma, alDia.preguntar, alDia.consejos], ['puesto', false, [], true], 'una carpeta de la 157 no se pone al día con su sí');
     assert.equal(al.laFrase(alDia), 'He dejado a Claude sin consejos en inglés mientras trabaja.');
     assert.equal(local(vieja).language, 'español');
     assert.equal((await quitar(vieja, ['consejos'])).hecho, 'quitado');
@@ -19574,11 +19600,129 @@ exec git "$@"
     // En una carpeta de alguien, con su botón, no: ese botón cuenta el español y lo de subir, y nada más.
     const deAlguien = nueva();
     fs.mkdirSync(path.join(deAlguien, '.claude', 'skills'), { recursive: true });
-    const mirado = await poner(deAlguien, { conSuSi: true, soloMirar: true });
+    const mirado = await poner(deAlguien, { conSuSi: true, soloMirar: true, ...CON });
     assert.equal(mirado.consejos, false, 'ofrece los consejos en una carpeta de alguien');
-    await poner(deAlguien, { conSuSi: true });
+    await poner(deAlguien, { conSuSi: true, ...CON });
     assert.equal(local(deAlguien)[CLAVE], undefined, 'pone los consejos en una carpeta de alguien');
-    return 'puestos y dichos · lo decidido, respetado en los tres sitios · «Quitarlo» solo si sigue igual · las ya montadas, al día · no en la de alguien';
+    return 'solo con su sí · lo decidido, respetado en los tres sitios · «Quitarlo» solo si sigue igual · las ya montadas, ofrecidos · no en la de alguien';
+  });
+
+  await comprobar('187: la regla P9 dice «debe hacerse solo», en la constitución y en la regla 9 del asistente, y nada vigente dice «lo que se puede»', () => {
+    const raiz = path.join(RAIZ, '..');
+    const constitucion = fs.readFileSync(path.join(raiz, '02-DOCS', 'wiki', 'sdd', 'constitution.md'), 'utf8');
+    assert.match(constitucion, /^## P9 · Lo que debe hacerse solo, se hace solo$/m, 'la constitución no tiene el título nuevo');
+    assert.doesNotMatch(constitucion, /^## P9 · Lo que se puede/m, 'la constitución conserva el título viejo');
+    const p9 = constitucion.slice(constitucion.indexOf('## P9')).replace(/\s+/g, ' ');
+    for (const frase of ['no lo que puede', 'Se hace solo', 'Se le pregunta', 'su nivel, su negocio, su objetivo, sus datos', 'sale de su ordenador en su nombre', 'no se puede deshacer', 'cuesta dinero', 'lo decide su negocio']) {
+      assert.ok(p9.includes(frase), `P9 no dice «${frase}»`);
+    }
+    // La regla para el asistente va con los raíles, y la de la propia carpeta de la barra es la misma.
+    const delAsistente = ['extension/media/railes/executive-lab/siempre.md', 'skills/executive-lab/siempre.md', '.claude/skills/executive-lab/siempre.md']
+      .map((f) => fs.readFileSync(path.join(raiz, f), 'utf8'));
+    for (const texto of delAsistente) {
+      assert.match(texto, /^9\. \*\*Lo que debe hacerse solo, hazlo sin preguntar; lo que es suyo, pregúntalo\.\*\*/m, 'la regla 9 no es la nueva');
+      assert.ok(texto.includes('se lo preguntas'), 'la regla 9 no manda preguntar lo suyo');
+      assert.doesNotMatch(texto, /Lo que puedas hacer tú, hazlo sin preguntar/, 'la regla 9 vieja sigue');
+    }
+    assert.equal(delAsistente[0], delAsistente[1], 'la copia de los raíles y la de skills/ no coinciden');
+    return 'P9 y la regla 9 del asistente, con «debe hacerse solo»';
+  });
+
+  await comprobar('187: los consejos de Claude se preguntan al abrir y al montar: con «Sí» se quitan y se dicen, con «No» no vuelve, y cerrarlo no apunta nada', async () => {
+    const al = cargar('ajustes-locales');
+    const terrenoM = cargar('terreno');
+    const proveedor = vscode.registrado.proveedor;
+    const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
+    const CLAVE = 'spinnerTipsEnabled';
+    const PREGUNTA = 'Mientras trabaja, Claude enseña consejos sueltos, y salen en inglés. ¿Los quito?';
+    const r = fs.mkdtempSync(path.join(os.tmpdir(), 'consejos-pregunta-'));
+    fs.writeFileSync(path.join(r, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'], skills: ['orient'], catalogVersion: cargar('rsc').VERSION_DE_RESPALDO }));
+    fs.mkdirSync(path.join(r, '.claude', 'skills', 'executive-lab'), { recursive: true });
+    fs.mkdirSync(path.join(r, '.rsc'));
+    fs.writeFileSync(path.join(r, '.claude', 'settings.local.json'), JSON.stringify({ language: 'español', permissions: { ask: PREGUNTAR } }));
+    fs.writeFileSync(path.join(r, ...al.CONSTANCIA), JSON.stringify({ language: 'español', ask: PREGUNTAR, huella: al.laHuella(r, { language: 'español', ask: PREGUNTAR }) }));
+    fs.copyFileSync(path.join(RAIZ, 'media', 'railes', 'executive-lab', 'avisar.mjs'), path.join(r, ...al.AVISAR));
+    const local = () => JSON.parse(fs.readFileSync(path.join(r, '.claude', 'settings.local.json'), 'utf8'));
+    const memoria = proveedor.contexto.workspaceState;
+    const CLAVE_NO = 'executiveLab.consejosDeClaudeRechazados';
+    const antes = {
+      aqui: terrenoM.montadaAqui, confianza: vscode.guion.confianza, eleccion: vscode.guion.eleccion, vista: proveedor.vista,
+      donde: proveedor.donde, aviso: proveedor.avisoPendiente, no: memoria.get(CLAVE_NO),
+    };
+    const enviados = [];
+    const preguntas = () => vscode.registrado.mensajes.filter((m) => m.includes(PREGUNTA));
+    try {
+      terrenoM.montadaAqui = async () => true;
+      vscode.guion.raiz = r;
+      vscode.guion.confianza = true;
+      await memoria.update(CLAVE_NO, undefined);
+      await proveedor.contexto.workspaceState.update('executiveLab.carpetaConocida', true);
+      proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
+      proveedor.donde = { tipo: 'principal' };
+      proveedor.avisoPendiente = null;
+
+      // Al abrir, lo que protege se pone solo y los consejos no.
+      await proveedor.ponerLoDeClaudeAlAbrir();
+      assert.equal(local()[CLAVE], undefined, 'al abrir quita los consejos sin preguntar');
+      proveedor.soltarElAviso();
+
+      // Cerrar la pregunta sin contestar: no apunta nada, y no toca nada.
+      vscode.guion.eleccion = undefined;
+      vscode.registrado.mensajes.length = 0;
+      assert.equal(await proveedor.preguntarLosConsejos(), null);
+      assert.equal(preguntas().length, 1, `no pregunta, o pregunta más de una vez: ${vscode.registrado.mensajes.join(' | ')}`);
+      assert.equal(local()[CLAVE], undefined, 'sin contestar, los quita');
+      assert.equal(memoria.get(CLAVE_NO), undefined, 'cerrarla apunta un no');
+
+      // «No, déjalos»: se apunta y no vuelve a salir en esta carpeta.
+      vscode.guion.eleccion = 'No, déjalos';
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.preguntarLosConsejos();
+      assert.equal(preguntas().length, 1);
+      assert.equal(local()[CLAVE], undefined, 'con «No» los quita');
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.preguntarLosConsejos();
+      assert.equal(preguntas().length, 0, 'vuelve a preguntar tras un «No»');
+      await memoria.update(CLAVE_NO, undefined);
+
+      // Sin confianza, o en una carpeta que la barra no montó aquí, no se pregunta.
+      vscode.guion.eleccion = 'Sí, quitarlos';
+      vscode.guion.confianza = false;
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.preguntarLosConsejos();
+      vscode.guion.confianza = true;
+      terrenoM.montadaAqui = async () => false;
+      await proveedor.preguntarLosConsejos();
+      assert.equal(preguntas().length, 0, 'pregunta sin confianza o en una carpeta de alguien');
+      terrenoM.montadaAqui = async () => true;
+
+      // «Sí, quitarlos»: se quitan, se dice con su «Quitarlo», y ya no se pregunta más.
+      enviados.length = 0;
+      vscode.registrado.mensajes.length = 0;
+      const hecho = await proveedor.preguntarLosConsejos();
+      assert.equal(hecho.hecho, 'puesto');
+      assert.equal(local()[CLAVE], false, 'con «Sí» no los quita');
+      const dicho = enviados.find((m) => m.tipo === 'aviso');
+      assert.equal(dicho && dicho.texto, 'He dejado a Claude sin consejos en inglés mientras trabaja.');
+      assert.deepEqual(dicho.boton, { etiqueta: 'Quitarlo', accion: { tipo: 'quitarLoDeClaude', que: ['consejos'] } });
+      vscode.registrado.mensajes.length = 0;
+      await proveedor.preguntarLosConsejos();
+      assert.equal(preguntas().length, 0, 'vuelve a preguntar con los consejos ya quitados');
+
+      // Con «Quitarlo» se vuelven a ver, y no se vuelve a preguntar: lo quitó a propósito.
+      await proveedor.manejar(dicho.boton.accion);
+      assert.equal(local()[CLAVE], undefined, '«Quitarlo» no los devuelve');
+      await proveedor.preguntarLosConsejos();
+      assert.equal(preguntas().length, 0, 'tras «Quitarlo» vuelve a preguntar');
+      return 'al abrir no se quitan · «Sí» los quita y se dice · «No» no vuelve · cerrarlo no apunta · sin confianza o de alguien, no se pregunta';
+    } finally {
+      terrenoM.montadaAqui = antes.aqui;
+      vscode.guion.confianza = antes.confianza;
+      vscode.guion.eleccion = antes.eleccion;
+      await memoria.update(CLAVE_NO, antes.no);
+      Object.assign(proveedor, { vista: antes.vista, donde: antes.donde, avisoPendiente: antes.aviso });
+      vscode.guion.raiz = empresa;
+    }
   });
 
   await comprobar('185: los verbos de Claude, en español, del instalador a los ajustes del editor, sin pisar lo suyo y con constancia', async () => {
@@ -20053,9 +20197,9 @@ exec git "$@"
     }
   });
 
-  await comprobar('los recordatorios: a su hora con su botón, y la costumbre se convierte en recordatorio sola', async () => {
+  await comprobar('los recordatorios: a su hora con su botón, y la costumbre se propone como recordatorio (decisión 187)', async () => {
     // Decisión 144. El «cada lunes» vive en la habilidad (`cuando`, en cron), la
-    // barra lo recuerda a su hora, y si ve la costumbre en los botones lo pone sola (P9).
+    // barra lo recuerda a su hora, y si ve la costumbre en los botones lo propone (P9, decisión 187).
     const cuandoM = cargar('cuando');
     const hora = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime(); // octubre de 2026; el 12 es lunes
     const ahora = hora(14, 10, 30);
@@ -20188,19 +20332,34 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'ahoraNoRecordatorio', nombre: 'seguir' });
       assert.equal(await proveedor.elRecordatorioQueToca(), null, '«Ahora no» no lo deja para luego');
 
-      // La costumbre: tres lunes pulsando «Empezar algo nuevo», y se pone sola.
+      // La costumbre: tres lunes pulsando «Empezar algo nuevo», y se le propone (decisión 187: cuándo
+      // hace algo es cómo trabaja él; la 144 lo ponía sola).
       // Los tres lunes anteriores a esta semana, a las 10: pasados, pase lo que pase hoy.
       const lunes = [1, 2, 3].map((n) => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7 * n); d.setHours(10, 0, 0, 0); return d.getTime(); });
       await almacen.update('executiveLab.usosDeBotones', lunes.map((t) => ({ nombre: 'empezar', t })));
-      const puesta = await proveedor.ponerLasCostumbres();
-      assert.equal(puesta && puesta.nombre, 'empezar', 'la costumbre no se pone sola');
-      assert.match(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando: "0 10 \* \* 1"/, 'no queda escrita');
-      assert.equal((await proveedor.elRecordatorioQueToca()), null, 'recién puesta por costumbre, toca ya');
-      // Se dice una vez; «No hace falta» la quita y no vuelve.
+      const skillEmpezar = () => fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8');
+      const propuesta = await proveedor.ponerLasCostumbres();
+      assert.deepEqual([propuesta && propuesta.nombre, propuesta && propuesta.propuesta], ['empezar', true], 'la costumbre no se propone');
+      assert.doesNotMatch(skillEmpezar(), /cuando:/, 'se pone sin su sí');
+      assert.equal((await proveedor.ponerLasCostumbres()).nombre, 'empezar', 'sin contestar, la propuesta desaparece');
+      assert.doesNotMatch(skillEmpezar(), /cuando:/, 'sin contestar, se pone');
+      // «No hace falta»: no se ha puesto nada, y no vuelve.
       await proveedor.manejar({ tipo: 'noHaceFaltaLaCostumbre', nombre: 'empezar' });
-      assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, '«No hace falta» no la quita');
-      assert.equal(await proveedor.ponerLasCostumbres(), null, 'la que dijo que no hacía falta vuelve');
-      assert.doesNotMatch(fs.readFileSync(path.join(carpeta, '.claude', 'skills', 'empezar', 'SKILL.md'), 'utf8'), /cuando:/, 'se vuelve a poner');
+      assert.doesNotMatch(skillEmpezar(), /cuando:/, '«No hace falta» la pone');
+      assert.equal(await proveedor.ponerLasCostumbres(), null, 'la que dijo que no hacía falta vuelve a proponerse');
+      assert.doesNotMatch(skillEmpezar(), /cuando:/, 'se vuelve a poner');
+      // «Sí, recuérdamelo»: ahora sí, y empieza a contar desde ahora.
+      await almacen.update('executiveLab.costumbresPuestas', {});
+      assert.equal((await proveedor.ponerLasCostumbres()).propuesta, true);
+      await proveedor.manejar({ tipo: 'ponerLaCostumbre', nombre: 'empezar' });
+      assert.match(skillEmpezar(), /cuando: "0 10 \* \* 1"/, 'no queda escrita');
+      assert.equal((await proveedor.elRecordatorioQueToca()), null, 'recién puesta con su sí, toca ya');
+      assert.equal(await proveedor.ponerLasCostumbres(), null, 'una vez puesta, se sigue proponiendo');
+      // Sin una propuesta delante, «Sí» no pone nada.
+      rec.ponerCuando('empezar', null);
+      await proveedor.manejar({ tipo: 'ponerLaCostumbre', nombre: 'empezar' });
+      assert.doesNotMatch(skillEmpezar(), /cuando:/, 'pone una que no se había propuesto');
+      await almacen.update('executiveLab.costumbresPuestas', {});
 
       // Uno que puso el asistente y el alumno quitó no vuelve por costumbre, aunque lo pulse cada lunes.
       rec.ponerCuando('ayuda', '0 10 * * 1');
@@ -20229,6 +20388,13 @@ exec git "$@"
       const conCostumbre = pintar({ ...base, costumbrePuesta: { nombre: 'empezar', etiqueta: 'Empezar algo nuevo', enPalabras: 'cada lunes a las 10:00' } });
       assert.match(conCostumbre, /Sueles pulsar «Empezar algo nuevo» cada lunes hacia las 10:00, así que te lo recordaré a esa hora\./);
       assert.match(conCostumbre, /noHaceFaltaLaCostumbre/);
+      // Y la propuesta (decisión 187): una pregunta con su sí, no un hecho.
+      const propuesta187 = pintar({ ...base, costumbrePuesta: { nombre: 'empezar', etiqueta: 'Empezar algo nuevo', enPalabras: 'cada lunes a las 10:00', propuesta: true } });
+      assert.match(propuesta187, /Sueles pulsar «Empezar algo nuevo» cada lunes hacia las 10:00\. ¿Te lo recuerdo a esa hora\?/);
+      assert.match(propuesta187, /Sí, recuérdamelo/);
+      assert.match(propuesta187, /ponerLaCostumbre/);
+      assert.match(propuesta187, /noHaceFaltaLaCostumbre/);
+      assert.doesNotMatch(propuesta187, /así que te lo recordaré|entendidaLaCostumbre/, 'la propuesta dice que ya lo ha puesto');
       // En Habilidades, un enlace a su pantalla, con el mismo nombre; y solo si hay algo.
       const habilidades = pintar({ tipo: 'saberes', hayRecordatorios: true });
       assert.match(habilidades, /data-accion="[^"]*verRecordatorios[^>]*>\s*(<span class="icono"[^>]*>[^<]*<\/span>)?\s*<span class="texto">Recordatorios<\/span>/, 'Habilidades no lleva a Recordatorios');
@@ -20238,7 +20404,7 @@ exec git "$@"
       await proveedor.manejar({ tipo: 'quitarRecordatorio', nombre: 'seguir' });
       assert.doesNotMatch(fs.readFileSync(seguir, 'utf8'), /cuando:/, 'quitarlo no lo quita');
       assert.match(enviados.filter((m) => m.tipo === 'aviso').at(-1).texto, /Ya no te recordaré «Seguir donde lo dejé»\./);
-      return 'a su hora, una vez · hecho o para luego · la costumbre, sola y con vuelta atrás';
+      return 'a su hora, una vez · hecho o para luego · la costumbre, propuesta y con su sí';
     } finally {
       for (const [k, v] of Object.entries(guardado)) await almacen.update(k, v);
       proveedor.enviar = antes.enviar;
@@ -25440,12 +25606,13 @@ exec git "$@"
 
   // ------------------------------- lo que se hace solo al montar (decisión 181)
   //
-  // Lo local, gratis y que se deshace lo hace la barra sola y lo dice, con su
-  // «Quitarlo» (P9). Ya estaba hecho en la 164 que las copias solas van
-  // encendidas de fábrica, y en la 166 que «Falta Claude» lleva su botón: aquí se
-  // prueba lo que faltaba (decirlo y poder quitarlo, y la vista sencilla sin
-  // preguntar) y que «Dale a enviar» sale según cómo llegó el primer mensaje.
-  await comprobar('al montar, la vista sencilla y las copias solas se ponen solas, se dicen con su «Quitarlo» y «Dale a enviar» sale según llegó el mensaje', elPrimerDia.conGit(async () => {
+  // Lo que protege o mantiene lo hace la barra sola y lo dice, con su «Quitarlo»
+  // (P9). Ya estaba hecho en la 164 que las copias solas van encendidas de fábrica,
+  // y en la 166 que «Falta Claude» lleva su botón: aquí se prueba lo que faltaba
+  // (decirlo y poder quitarlo) y que «Dale a enviar» sale según cómo llegó el primer
+  // mensaje. La vista sencilla, que la 181 puso sola, es una preferencia suya: desde
+  // la 187 se vuelve a preguntar, una vez y a un clic.
+  await comprobar('al montar, las copias solas se dicen con su «Quitarlo», la vista sencilla se pregunta, y «Dale a enviar» sale según llegó el mensaje', elPrimerDia.conGit(async () => {
     const arrancarM = cargar('arrancar');
     const puenteM = cargar('puente');
     const ajustesM = cargar('ajustes');
@@ -25466,13 +25633,13 @@ exec git "$@"
       ok: true, rama: 'desdeCero', mensaje: 'Ferretería Soler ya está listo.', objetivo: 'Poner orden en mis facturas',
       nombres: { arnes: 'Ferretería Soler', empresa: 'Ferretería Soler' }, dichos: [], pegas: [], encargos: [], ...extra,
     });
-    const montar = async ({ extra, como = 'directo', vistaYa = false, guardarSolo } = {}) => {
+    const montar = async ({ extra, como = 'directo', vistaYa = false, guardarSolo, vista } = {}) => {
       for (const c of clavesAjuste) delete vscode.registrado.ajustes.workspace[c];
       if (vistaYa) vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'] = true;
       if (guardarSolo !== undefined) vscode.registrado.ajustes.workspace[ajustesM.CLAVE_GUARDADO] = guardarSolo;
       arrancarM.arrancar = montaje(extra);
       puenteM.enviar = async () => como;
-      vscode.guion.eleccion = undefined;
+      vscode.guion.eleccion = vista;
       enviados.length = 0;
       vscode.registrado.mensajes.length = 0;
       await proveedor.arrancar();
@@ -25485,24 +25652,35 @@ exec git "$@"
       await proveedor.contexto.workspaceState.update('executiveLab.sigueSinCopias', undefined);
       proveedor.vista = { visible: true, webview: { postMessage: (m) => enviados.push(m) } };
 
-      // Sin preguntar por la vista sencilla: se pone, y se dice con las copias y con «Dale a enviar».
+      // La vista sencilla se pregunta (decisión 187: es una preferencia suya), con sus
+      // dos botones. Sin contestar, o con «No», no se pone; con «Sí», se pone.
       let r = await montar();
-      assert.ok(!r.mensajes.some((m) => /vista sencilla/.test(m)), `pregunta por la vista sencilla: ${r.mensajes.join(' | ')}`);
-      assert.equal(vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'], true, 'no la pone');
-      assert.match(r.ultimo.texto, /^He dejado esta ventana en vista sencilla, sin barras ni ficheros a la vista\. Se ve del todo al cerrar y abrir la ventana\. Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo\./);
+      const pregunta = r.mensajes.filter((m) => /vista sencilla/.test(m));
+      assert.equal(pregunta.length, 1, `no pregunta por la vista sencilla, una vez: ${r.mensajes.join(' | ')}`);
+      assert.match(pregunta[0], /^INFO Ferretería Soler ya está listo\. ¿Dejo esta ventana en vista sencilla, sin barras ni ficheros a la vista\?$/);
+      assert.notEqual(vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'], true, 'la pone sin que nadie diga que sí');
+      r = await montar({ vista: 'No, déjala como está' });
+      assert.notEqual(vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'], true, 'la pone con «No»');
+      r = await montar({ vista: 'Sí, más sencillo' });
+      assert.equal(vscode.registrado.ajustes.workspace['executiveLab.vistaSencilla'], true, 'no la pone con «Sí»');
+      // Ya estaba así: no se pregunta lo que ya está.
+      r = await montar({ vistaYa: true });
+      assert.ok(!r.mensajes.some((m) => /vista sencilla/.test(m)), `pregunta por la vista sencilla estando ya puesta: ${r.mensajes.join(' | ')}`);
+
+      // Lo que sí va solo se dice, con las copias y con «Dale a enviar».
+      r = await montar();
+      assert.match(r.ultimo.texto, /^Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo\./);
+      assert.ok(!/vista sencilla/.test(r.ultimo.texto), 'dice que ha puesto la vista sencilla sin ponerla');
       assert.ok(r.ultimo.texto.endsWith(DALE), `no dice «Dale a enviar»: ${r.ultimo.texto}`);
-      assert.deepEqual((r.ultimo.botones || []).map((b) => [b.etiqueta, b.accion.tipo]), [['Quitar la vista sencilla', 'verEditorCompleto'], ['Quitar las copias solas', 'quitarElGuardadoSolo']], 'no lleva cada Quitarlo');
       assert.equal(proveedor.avisoPendiente, null, 'se queda un aviso sin soltar');
 
       // Con una sola cosa dicha, su botón es «Quitarlo».
-      r = await montar({ vistaYa: true });
-      assert.ok(!/vista sencilla/.test(r.ultimo.texto), 'dice que la ha puesto si ya estaba');
       assert.deepEqual(r.ultimo.boton && [r.ultimo.boton.etiqueta, r.ultimo.boton.accion.tipo], ['Quitarlo', 'quitarElGuardadoSolo']);
       assert.ok(!r.ultimo.botones, 'con uno solo salen varios');
-      // Con lo que ya se decía de los ajustes de Claude, tres, cada uno con su nombre.
+      // Con lo que ya se decía de los ajustes de Claude, dos, cada uno con su nombre.
       r = await montar({ extra: { dichos: ['He dejado a Claude hablándote en español.'] } });
-      assert.deepEqual((r.ultimo.botones || []).map((b) => b.etiqueta), ['Quitar lo de Claude', 'Quitar la vista sencilla', 'Quitar las copias solas']);
-      assert.ok(r.ultimo.texto.startsWith('He dejado a Claude hablándote en español. He dejado esta ventana'));
+      assert.deepEqual((r.ultimo.botones || []).map((b) => b.etiqueta), ['Quitar lo de Claude', 'Quitar las copias solas']);
+      assert.ok(r.ultimo.texto.startsWith('He dejado a Claude hablándote en español. Guardo una copia sola'));
 
       // «Dale a enviar» solo si el texto quedó escrito en su caja: copiado, ya lo dice el aviso del portapapeles.
       r = await montar({ como: 'copiado' });
@@ -25543,9 +25721,9 @@ exec git "$@"
         const texto = enviados.filter((m) => m.tipo === 'aviso').map((m) => m.texto).join(' ');
         assert.match(texto, /^Lo he puesto al día con la versión que trae la barra\./);
         assert.equal(texto.includes(DALE), dice, `puesta al día, con el mensaje «${como}»: ${texto}`);
-        assert.ok(!/vista sencilla|copia sola/.test(texto), 'en una puesta al día no se pone nada de esto');
+        assert.ok(!/vista sencilla|copia sola/.test(texto), 'en una puesta al día no se pone ni se pregunta nada de esto');
       }
-      return 'vista sencilla sola · copias dichas · cada Quitarlo con su nombre · Dale a enviar según llegó, en el montaje y en la puesta al día';
+      return 'vista sencilla preguntada · copias dichas · cada Quitarlo con su nombre · Dale a enviar según llegó, en el montaje y en la puesta al día';
     } finally {
       proveedor.vista = antes.vista;
       vscode.guion.raiz = antes.raiz;
@@ -26770,7 +26948,10 @@ exec git "$@"
       // seis: como solo corre con --con-arnes, nadie lo vio.
       vscode.guion.respuestas = [
         'Llevar el día a día',            // de qué va
+        'Un departamento o un área',      // qué lleva la carpeta
+        'De 2 a 10',                      // cuánta gente hay detrás
         'Organizar el papeleo',           // qué quiere resolver
+        'Lo justo',                       // cómo se maneja
         'Contratos',                      // cómo se llama esto
         'Nexus Consulting',               // y su empresa
         '',                               // la web: en blanco, que es opcional
@@ -26904,9 +27085,12 @@ exec git "$@"
       vscode.guion.raiz = nueva;
       vscode.guion.respuestas = [
         'Construir algo',                 // de qué va
+        'Un proyecto',                    // qué lleva la carpeta
+        'Solo yo',                        // cuánta gente hay detrás
         'Algo que irá sumando piezas',    // qué va a construir
         'Montar una web sencilla',        // qué quiere resolver
-        'Web nueva',                      // cómo se llama esto
+        'Me defiendo',                    // cómo se maneja
+        'Web nueva',                      // cómo se llama el proyecto
         '',                               // y su empresa, en blanco
         '',                               // la web, en blanco
       ];
@@ -26947,10 +27131,12 @@ exec git "$@"
       vscode.guion.raiz = nueva;
       vscode.guion.respuestas = [
         'Un poco de todo',                // de qué va
+        'La empresa entera',              // qué lleva la carpeta
+        'De 2 a 10',                      // cuánta gente hay detrás
         'Nada, o casi nada',              // qué va a construir
         'Poner orden en mis facturas',    // qué quiere resolver
-        'Ferretería Soler',               // cómo se llama esto
-        '',                               // y su empresa, en blanco
+        'Lo justo',                       // cómo se maneja
+        'Ferretería Soler',               // cómo se llama su empresa: con la empresa entera, una sola caja
         '',                               // la web, en blanco
       ];
       try {
@@ -26984,7 +27170,7 @@ exec git "$@"
       try {
         vscode.guion.raiz = origen;
         vscode.guion.respuestas = [
-          'Llevar el día a día', 'Organizar el papeleo',
+          'Llevar el día a día', 'Un proyecto', 'Solo yo', 'Organizar el papeleo', 'Lo justo',
           'Papeles', '', '',  // el nombre, la empresa en blanco y la web en blanco
         ];
         const montado = await cargar('arrancar').arrancar(contexto, vscode.window.createOutputChannel());
