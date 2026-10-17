@@ -1061,7 +1061,8 @@ function pantallaComoTrabaja({
 
     <h2>Qué puede hacer sin preguntarte</h2>
     ${hayPermisos
-      ? elegir(permisos, permiso, { tipo: 'ponerPermiso' })
+      ? `${elegir(permisos, permiso, { tipo: 'ponerPermiso' })}
+    <p class="detalle">Vale para todas tus carpetas, no solo para esta. Si en una conversación eliges otro a mano, el editor se acuerda de ese.${permisos.some((p) => p.id === permiso) ? '' : ' Ahora tienes puesto otro que no se cambia desde aquí.'}</p>`
       : nada('Esto lo lleva tu asistente por su cuenta, en sus propios ajustes. Desde aquí no se toca.')}
 
     <hr class="separador">
