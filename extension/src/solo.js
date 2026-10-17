@@ -74,12 +74,17 @@ async function hacerloSolo(tareas, hacer, apuntar = () => {}) {
 // «a, b y c»
 const enLista = (cosas) => (cosas.length < 2 ? cosas.join('') : `${cosas.slice(0, -1).join(', ')} y ${cosas[cosas.length - 1]}`);
 
-// La frase que lo cuenta. Con Claude, si se tocó algo que lee al empezar una
-// conversación, se dice que la abra otra vez, con la frase de siempre.
-function laFrase(hechas, reabrirClaude = false) {
+// Lo que se dice cuando hay que abrir la conversación otra vez, con el nombre de
+// quien sea (decisión 190: Claude y Codex, igual).
+const REABRIR = (nombre) => `Cierra la conversación con ${nombre} y ábrela otra vez para que lo coja.`;
+
+// La frase que lo cuenta. Si se tocó algo que el asistente lee al empezar una
+// conversación, se dice que la abra otra vez, con la frase de siempre: `reabrir`
+// es `true` (Claude, como antes) o el nombre del asistente (decisión 190).
+function laFrase(hechas, reabrir = false) {
   if (!hechas || !hechas.length) return null;
   const dicha = enLista([...new Set(hechas)].map((n) => `«${n}»`));
-  return `Al abrir la carpeta he arreglado solo ${dicha}.${reabrirClaude ? ' Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : ''}`;
+  return `Al abrir la carpeta he arreglado solo ${dicha}.${reabrir ? ` ${REABRIR(reabrir === true ? 'Claude' : reabrir)}` : ''}`;
 }
 
-module.exports = { CASOS, esDeIr, YA_AL_ACTIVAR, ORDEN, queSeHaceSolo, hacerloSolo, laFrase };
+module.exports = { CASOS, esDeIr, YA_AL_ACTIVAR, ORDEN, queSeHaceSolo, hacerloSolo, laFrase, REABRIR };

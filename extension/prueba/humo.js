@@ -35,6 +35,8 @@ const CODEX_DE_MENTIRA = fs.mkdtempSync(path.join(os.tmpdir(), 'asistentes-codex
 process.env.CODEX_HOME = CODEX_DE_MENTIRA;
 // Y el `claude` de verdad no se lanza para saber si hay sesión (decisión 186).
 require(path.join(RAIZ, 'src', 'sesion-del-asistente')).modulo.ejecutar = async () => ({ codigo: -1, salida: '' });
+// Y el `codex` del PATH de quien corre esto no cuenta para saber si lo tiene (decisión 190).
+require(path.join(RAIZ, 'src', 'asistentes')).terminal.hayEnElPath = () => false;
 // Los ficheros de la plantilla de conexiones, como los deja RSC: el suelo los
 // pide todos, no solo la carpeta (G7). Salen del paquete que viaja dentro.
 // Sin el paquete —`node_modules` no va en git— la batería reventaba aquí,
@@ -3877,18 +3879,58 @@ exec git "$@"
       await rsc.retomar();
       assert.equal(veces, 2, 'al olvidar, se vuelve a preguntar');
 
-      // Y un fallo no se recuerda: recordarlo dejaría la barra sin
-      // continuación un minuto entero por un tropiezo de una vez. Es la
-      // trampa que ya mordió con el catálogo de capacidades.
+      // Decisión 190: un fallo (o un tiempo agotado) también se recuerda, cinco
+      // minutos: en una carpeta grande `memory resume` pasa de los 20 s y se
+      // repetía en cada repintado. Pasado ese rato, se vuelve a preguntar.
       rsc.olvidarLaContinuacion();
-      procesos.node = async () => ({ codigo: 1, salida: '', error: 'reventó' });
-      assert.equal(await rsc.retomar(), null, 'un fallo devuelve null');
+      let intentos = 0;
       procesos.node = async (args) => {
-        if (args.some((a) => a === 'resume')) { veces += 1; return { codigo: 0, salida: 'ya va', error: '' }; }
+        if (args.some((a) => a === 'resume')) { intentos += 1; return { codigo: -1, salida: '', error: 'Ha tardado demasiado y lo he parado.' }; }
         return { codigo: 0, salida: '', error: '' };
       };
-      assert.equal(await rsc.retomar(), 'ya va', 'y el siguiente intento sí pregunta');
-      assert.equal(veces, 3, 'porque el fallo no se guardó');
+      assert.equal(await rsc.retomar(), null, 'un fallo devuelve null');
+      for (let i = 0; i < 4; i += 1) assert.equal(await rsc.retomar(), null);
+      assert.equal(intentos, 1, 'un fallo se recuerda: cinco repintados, un proceso');
+
+      const ahora = Date.now;
+      try {
+        Date.now = () => ahora() + 4 * 60000;
+        await rsc.retomar();
+        assert.equal(intentos, 1, 'a los cuatro minutos sigue recordado');
+        Date.now = () => ahora() + 5 * 60000 + 1000;
+        procesos.node = async (args) => {
+          if (args.some((a) => a === 'resume')) { intentos += 1; return { codigo: 0, salida: 'ya va', error: '' }; }
+          return { codigo: 0, salida: '', error: '' };
+        };
+        assert.equal(await rsc.retomar(), 'ya va', 'pasados los cinco minutos se vuelve a preguntar');
+        assert.equal(intentos, 2);
+      } finally {
+        Date.now = ahora;
+      }
+
+      // Dos repintados a la vez comparten el mismo proceso.
+      rsc.olvidarLaContinuacion();
+      let lanzados = 0;
+      procesos.node = async (args) => {
+        if (args.some((a) => a === 'resume')) { lanzados += 1; await new Promise((r) => setTimeout(r, 50)); return { codigo: 0, salida: 'junto', error: '' }; }
+        return { codigo: 0, salida: '', error: '' };
+      };
+      const dos = await Promise.all([rsc.retomar(), rsc.retomar()]);
+      assert.deepEqual(dos, ['junto', 'junto']);
+      assert.equal(lanzados, 1, 'a la vez, un solo proceso');
+
+      // Y pintar no espera a uno lento: devuelve null al plazo y lo que tarde
+      // queda recordado para el siguiente repintado.
+      rsc.olvidarLaContinuacion();
+      procesos.node = async (args) => {
+        if (args.some((a) => a === 'resume')) { await new Promise((r) => setTimeout(r, 300)); return { codigo: 0, salida: 'tarde', error: '' }; }
+        return { codigo: 0, salida: '', error: '' };
+      };
+      const t0 = Date.now();
+      assert.equal(await rsc.retomarSinEsperar(40), null, 'no espera al lento');
+      assert.ok(Date.now() - t0 < 250, 'y pinta sin esperarlo');
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal(await rsc.retomarSinEsperar(40), 'tarde', 'el siguiente repintado ya lo tiene');
     } finally {
       procesos.node = deVerdad;
       rsc.olvidarLaContinuacion();
@@ -27333,6 +27375,290 @@ exec git "$@"
       vscode.guion.raiz = antes.raiz; vscode.guion.confianza = antes.confianza;
       fs.rmSync(carpeta, { recursive: true, force: true });
     }
+  });
+
+  // ------------------------------- Codex al mismo nivel, y cerrar limpio (decisión 190)
+  await comprobar('190: con Codex se dice lo mismo que con Claude cuando hay que abrir la conversación otra vez', async () => {
+    const soloM = cargar('solo');
+    const asistentesM = cargar('asistentes');
+    assert.match(soloM.laFrase(['A'], true), /Cierra la conversación con Claude y ábrela otra vez para que lo coja\.$/);
+    assert.match(soloM.laFrase(['A'], 'Codex'), /Cierra la conversación con Codex y ábrela otra vez para que lo coja\.$/);
+    assert.doesNotMatch(soloM.laFrase(['A'], false), /Cierra la conversación/);
+    assert.equal(asistentesM.paraQueLoCoja('codex'), 'Cierra la conversación con Codex y ábrela otra vez para que lo coja.');
+    assert.equal(asistentesM.paraQueLoCoja('cursor'), null, 'con uno que no conocemos no se inventa');
+
+    // Y en la barra: el botón de arreglar el relevo con una carpeta de Codex.
+    const relevoM = cargar('relevo');
+    const proveedor = vscode.registrado.proveedor;
+    const clave = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') || 'PATH';
+    const antesPath = process.env[clave];
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'z190-codex-'));
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ targets: ['codex'] }));
+    const antes = { enviar: proveedor.enviar, refrescar: proveedor.refrescar, almacen: proveedor.contexto.globalStorageUri, raiz: vscode.guion.raiz, instaladas: vscode.guion.extensionesInstaladas };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    proveedor.refrescar = async () => {};
+    try {
+      vscode.guion.raiz = carpeta;
+      vscode.guion.extensionesInstaladas = ['openai.chatgpt'];
+      process.env[clave] = '';
+      const almacen = fs.mkdtempSync(path.join(os.tmpdir(), 'z190-almacen-'));
+      proveedor.contexto.globalStorageUri = { fsPath: almacen };
+      await proveedor.arreglarElRelevo();
+      assert.deepEqual(enviados.pop(), { tipo: 'aviso', texto: 'Cierra la conversación con Codex y ábrela otra vez para que lo coja.' });
+    } finally {
+      process.env[clave] = antesPath;
+      proveedor.enviar = antes.enviar;
+      proveedor.refrescar = antes.refrescar;
+      proveedor.contexto.globalStorageUri = antes.almacen;
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      relevoM.ponerAlActivar({ carpeta: null });
+    }
+    const ext = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
+    assert.doesNotMatch(ext, /conClaude \? 'Ya está\. Cierra/, 'el botón del bloque sigue distinguiendo a Claude');
+    return 'Claude y Codex, con su nombre; el bloque, el freno y lo solo, por el mismo camino';
+  });
+
+  await comprobar('190: Codex solo por terminal no sale con «falta el asistente», y lo que necesita la extensión lo dice así', async () => {
+    const asistentesM = cargar('asistentes');
+    const codex = asistentesM.porId('codex');
+    const claude = asistentesM.porId('claude');
+    const declaracion = path.join(empresa, '.rsc.json');
+    const antes = { hay: asistentesM.terminal.hayEnElPath, sesion: asistentesM.terminal.haySesion, instaladas: vscode.guion.extensionesInstaladas, raiz: vscode.guion.raiz, rsc: fs.readFileSync(declaracion, 'utf8') };
+    try {
+      vscode.guion.extensionesInstaladas = [];
+      asistentesM.terminal.hayEnElPath = () => false;
+      asistentesM.terminal.haySesion = () => false;
+      assert.equal(asistentesM.estaPuesto(codex), false, 'sin nada, falta');
+      assert.match(asistentesM.falta(codex).texto, /^Falta Codex en este ordenador/);
+
+      asistentesM.terminal.hayEnElPath = (n) => n === 'codex';
+      assert.equal(asistentesM.estaInstalado(codex), false, 'la extensión sigue sin estar');
+      assert.equal(asistentesM.estaPuesto(codex), true, 'con `codex` en el PATH, lo tiene');
+      asistentesM.terminal.hayEnElPath = () => false;
+      asistentesM.terminal.haySesion = () => true;
+      assert.equal(asistentesM.estaPuesto(codex), true, 'con su sesión en ~/.codex, lo tiene');
+      assert.equal(asistentesM.estaPuesto(claude), false, 'con Claude no se mira la terminal');
+      const dice = asistentesM.falta(codex);
+      assert.doesNotMatch(dice.texto, /^Falta/, 'quien lo usa por terminal no «lo tiene que poner»');
+      assert.match(dice.texto, /fuera del editor/);
+      assert.match(dice.texto, /ponerlo también en el editor/);
+      assert.deepEqual(dice.boton, { etiqueta: 'Poner Codex', accion: { tipo: 'ponerElAsistente', cual: 'codex' } });
+      assert.equal(asistentesM.comoEstamos().cuales.find((a) => a.id === 'codex').enTerminal, true);
+
+      // La principal: ni tarjeta de falta ni botón.
+      vscode.guion.raiz = empresa;
+      fs.writeFileSync(declaracion, JSON.stringify({ ...JSON.parse(antes.rsc), targets: ['codex'] }, null, 2));
+      cargar('brujula').olvidar();
+      const sinTerminal = await cargar('brujula').estado({ fresco: true });
+      assert.equal(sinTerminal.faltaElAsistente, null, 'por terminal, la principal dice que falta');
+      asistentesM.terminal.haySesion = () => false;
+      cargar('brujula').olvidar();
+      const sinNada = await cargar('brujula').estado({ fresco: true });
+      assert.equal(sinNada.faltaElAsistente, 'Codex', 'sin nada, sí');
+    } finally {
+      asistentesM.terminal.hayEnElPath = antes.hay;
+      asistentesM.terminal.haySesion = antes.sesion;
+      vscode.guion.extensionesInstaladas = antes.instaladas;
+      vscode.guion.raiz = antes.raiz;
+      fs.writeFileSync(declaracion, antes.rsc);
+      cargar('brujula').olvidar();
+    }
+    return 'PATH o sesión: lo tiene; sin nada, falta; lo que pide la extensión se dice como tal';
+  });
+
+  await comprobar('190: el PATH se mira de verdad (sin lanzar nada)', async () => {
+    const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'asistentes.js'), 'utf8');
+    const trozo = fuente.slice(fuente.indexOf('const terminal = {'), fuente.indexOf('const enTerminal'));
+    const mirar = new Function('require', 'process', `${trozo}; return terminal;`)(require, process);
+    const clave = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') || 'PATH';
+    const antesPath = process.env[clave];
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'z190-bin-'));
+    try {
+      process.env[clave] = bin;
+      assert.equal(mirar.hayEnElPath('codex'), false, 'con una carpeta vacía lo encuentra');
+      fs.writeFileSync(path.join(bin, process.platform === 'win32' ? 'codex.exe' : 'codex'), '');
+      assert.equal(mirar.hayEnElPath('codex'), true, 'con el fichero no lo encuentra');
+      fs.mkdirSync(path.join(bin, 'otro'));
+      assert.equal(mirar.hayEnElPath('otro'), false, 'una carpeta no es un programa');
+    } finally {
+      process.env[clave] = antesPath;
+    }
+    return 'vacío no, con `codex` sí, una carpeta no';
+  });
+
+  await comprobar('190: «Seguir donde lo dejé» recuerda también el fallo, y pintar no espera por él', async () => {
+    const rsc = cargar('rsc');
+    const procesos = cargar('procesos');
+    const deVerdad = procesos.node;
+    try {
+      rsc.olvidarLaContinuacion();
+      let intentos = 0;
+      procesos.node = async (args) => {
+        if (args.some((a) => a === 'resume')) { intentos += 1; return { codigo: -1, salida: '', error: 'Ha tardado demasiado y lo he parado.' }; }
+        return { codigo: 0, salida: '', error: '' };
+      };
+      for (let i = 0; i < 5; i += 1) assert.equal(await rsc.retomar(), null);
+      assert.equal(intentos, 1, 'un fallo se vuelve a lanzar en cada repintado');
+      const ahora = Date.now;
+      try {
+        Date.now = () => ahora() + 4 * 60000;
+        await rsc.retomar();
+        assert.equal(intentos, 1, 'a los cuatro minutos ya se vuelve a lanzar');
+        Date.now = () => ahora() + 5 * 60000 + 1000;
+        await rsc.retomar();
+        assert.equal(intentos, 2, 'pasados los cinco minutos no se vuelve a lanzar');
+      } finally { Date.now = ahora; }
+
+      // Dos repintados a la vez, un solo proceso.
+      rsc.olvidarLaContinuacion();
+      let lanzados = 0;
+      procesos.node = async (args) => {
+        if (args.some((a) => a === 'resume')) { lanzados += 1; await new Promise((r) => setTimeout(r, 50)); return { codigo: 0, salida: 'junto', error: '' }; }
+        return { codigo: 0, salida: '', error: '' };
+      };
+      assert.deepEqual(await Promise.all([rsc.retomar(), rsc.retomar()]), ['junto', 'junto']);
+      assert.equal(lanzados, 1);
+
+      // Y la brújula no espera por uno lento.
+      rsc.olvidarLaContinuacion();
+      procesos.node = async (args) => {
+        if (args.some((a) => a === 'resume')) { await new Promise((r) => setTimeout(r, 400)); return { codigo: 0, salida: 'tarde', error: '' }; }
+        return { codigo: 0, salida: '', error: '' };
+      };
+      const t0 = Date.now();
+      assert.equal(await rsc.retomarSinEsperar(40), null);
+      assert.ok(Date.now() - t0 < 300, 'pinta esperando al lento');
+      await new Promise((r) => setTimeout(r, 500));
+      assert.equal(await rsc.retomarSinEsperar(40), 'tarde', 'lo que tardó no queda recordado');
+      const fuente = fs.readFileSync(path.join(RAIZ, 'src', 'brujula.js'), 'utf8');
+      assert.match(fuente, /rsc\.retomarSinEsperar\(\)/, 'la brújula espera a `retomar`');
+    } finally {
+      procesos.node = deVerdad;
+      rsc.olvidarLaContinuacion();
+      cargar('brujula').olvidar();
+    }
+    return 'fallo recordado 5 min, uno a la vez, y la brújula no espera';
+  });
+
+  await comprobar('190: al cerrar se terminan los procesos que lanzó la barra, y solo esos', async () => {
+    const cp = require('node:child_process');
+    const procesos = cargar('procesos');
+    // Uno ajeno, que no es nuestro y no se toca.
+    const ajeno = cp.spawn(process.execPath, ['-e', 'setTimeout(()=>{},30000)'], { stdio: 'ignore' });
+    const mio = procesos.ejecutar(process.execPath, ['-e', 'setTimeout(()=>{},30000)'], { cwd: os.tmpdir(), tiempoMaximo: 60000 });
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(procesos.losVivos(), 1, 'no apunta el proceso lanzado');
+      const matados = procesos.terminarLosMios();
+      assert.equal(matados, 1);
+      const hecho = await mio;
+      assert.notEqual(hecho.codigo, 0, 'sigue vivo');
+      assert.equal(procesos.losVivos(), 0, 'se queda con un proceso en la lista');
+      assert.equal(ajeno.exitCode, null, 'ha tocado un proceso que no era suyo');
+      process.kill(ajeno.pid, 0);
+      // Los que acaban solos salen de la lista.
+      await procesos.ejecutar(process.execPath, ['-e', '0'], { cwd: os.tmpdir() });
+      assert.equal(procesos.losVivos(), 0, 'uno que acabó se queda en la lista');
+    } finally {
+      ajeno.kill();
+    }
+    return 'termina el suyo, no toca el ajeno';
+  });
+
+  await comprobar('190: al cerrar se cancelan los relojes del arranque, y cambiar la primera carpeta rearma el vigía y olvida lo de la anterior', async () => {
+    const ext = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
+    const activar = ext.slice(ext.indexOf('function activate(contexto)'), ext.indexOf('function deactivate()'));
+    assert.doesNotMatch(activar, /\bsetTimeout\(/, 'queda un reloj suelto en el arranque');
+    assert.equal((activar.match(/\bluego\(/g) || []).length, 3, 'los de 1,5 s, 3 s y 8 s');
+    assert.match(ext.slice(ext.indexOf('async function vestir')), /luego\(\(\) => disfraz\.aplicar/, 'el reintento del disfraz (8 s) queda suelto');
+    assert.match(ext.slice(ext.indexOf('function deactivate()')), /clearTimeout\(reloj\)[\s\S]*terminarLosMios/);
+
+    // Los relojes guardados se cancelan de verdad.
+    const extM = cargar('extension');
+    assert.equal(typeof extM.deactivate, 'function');
+    extM.deactivate();
+
+    // Y cambiar de carpeta.
+    assert.ok(vscode.registrado.alCambiarCarpetas.length > 0, 'la barra no escucha el cambio de carpeta');
+    const brujulaM = cargar('brujula');
+    const rscM = cargar('rsc');
+    const procesos = cargar('procesos');
+    const deVerdad = procesos.node;
+    let lanzados = 0;
+    procesos.node = async (args) => {
+      if (args.some((a) => a === 'resume')) { lanzados += 1; return { codigo: 0, salida: 'Seguíamos con la A', error: '' }; }
+      return { codigo: 0, salida: '', error: '' };
+    };
+    const raizAntes = vscode.guion.raiz;
+    const otra = fs.mkdtempSync(path.join(os.tmpdir(), 'z190-otra-'));
+    const proveedor = vscode.registrado.proveedor;
+    const refrescar = proveedor.refrescar;
+    const pintadas = [];
+    proveedor.refrescar = async () => { pintadas.push(1); };
+    try {
+      rscM.olvidarLaContinuacion();
+      assert.equal(await rscM.retomar(), 'Seguíamos con la A');
+      await rscM.retomar();
+      assert.equal(lanzados, 1);
+      const vigiasAntes = vscode.registrado.vigia;
+      // La misma primera carpeta: no hace nada.
+      await Promise.all(vscode.registrado.alCambiarCarpetas.map((o) => o()));
+      assert.equal(vscode.registrado.vigia, vigiasAntes, 'rearma sin que haya cambiado la carpeta');
+      // Otra primera carpeta.
+      vscode.guion.raiz = otra;
+      await Promise.all(vscode.registrado.alCambiarCarpetas.map((o) => o()));
+      assert.notEqual(vscode.registrado.vigia, vigiasAntes, 'no rearma el vigía');
+      await rscM.retomar();
+      assert.equal(lanzados, 2, 'sigue con la continuación de la carpeta de antes');
+      assert.ok(pintadas.length >= 1, 'no repinta');
+    } finally {
+      procesos.node = deVerdad;
+      proveedor.refrescar = refrescar;
+      vscode.guion.raiz = raizAntes;
+      await Promise.all(vscode.registrado.alCambiarCarpetas.map((o) => o()));
+      brujulaM.olvidar();
+    }
+    return '3 relojes guardados · el cierre los cancela · la carpeta nueva rearma el vigía y olvida';
+  });
+
+  await comprobar('190: guardar solo no se solapa consigo mismo', async () => {
+    const copias = cargar('guardar');
+    const ext = fs.readFileSync(path.join(RAIZ, 'src', 'extension.js'), 'utf8');
+    const cuerpo = ext.slice(ext.indexOf('function guardarSolo('), ext.indexOf('const dondeVaElRelevo'));
+    assert.match(cuerpo, /if \(guardando\) return;/);
+    assert.match(cuerpo, /finally \{\s*guardando = false;/);
+    // De verdad: un guardado lento, y un reloj que salta dos veces.
+    const reloj = [];
+    const setIntervalDeVerdad = global.setInterval;
+    global.setInterval = (fn) => { reloj.push(fn); return { unref() {} }; };
+    const clearDeVerdad = global.clearInterval;
+    global.clearInterval = () => {};
+    const guardarSiToca = copias.guardarSiToca;
+    let empezados = 0;
+    let acabar;
+    const lento = new Promise((r) => { acabar = r; });
+    copias.guardarSiToca = async () => { empezados += 1; await lento; return { hecho: 'nada' }; };
+    try {
+      const trozo = new Function('require', 'copias', 'ajustes', 'panel', 'salida', 'Date', `${cuerpo.slice(0, cuerpo.indexOf('\n}\n') + 3)}; return guardarSolo(panel, salida);`);
+      const ajustesM = { cadaCuantoGuarda: () => 1 };
+      const sitio = trozo(require, copias, ajustesM, { eligioSinCopias: () => false, refrescar: async () => {} }, { appendLine() {} }, Date);
+      const a = reloj[0]();
+      const b = reloj[0]();
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(empezados, 1, 'el segundo guardado arranca con el primero a medias');
+      acabar();
+      await Promise.all([a, b]);
+      await reloj[0]();
+      assert.equal(empezados, 2, 'terminado el primero, el siguiente no arranca');
+      sitio.dispose();
+    } finally {
+      global.setInterval = setIntervalDeVerdad;
+      global.clearInterval = clearDeVerdad;
+      copias.guardarSiToca = guardarSiToca;
+    }
+    return 'uno a la vez; terminado, el siguiente sí';
   });
 
   // --------------------------------------------- el wizard, de verdad

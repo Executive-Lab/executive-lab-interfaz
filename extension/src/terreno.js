@@ -794,7 +794,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
   // hacen nada— y aquí no salía por ningún lado. Lo sabíamos de sobra
   // (`asistentes.comoEstamos`) y no lo decíamos.
   const conQuien = asistentes.elDeAhora();
-  const loTiene = conQuien ? asistentes.estaInstalado(conQuien) : false;
+  const loTiene = conQuien ? asistentes.estaPuesto(conQuien) : false;
 
   // Si lo que el arnés hace solo tiene con qué arrancar (C2): lo decide el
   // relevo al abrirse la barra (`relevo.js`).
@@ -875,7 +875,7 @@ async function radiografia({ aFondo = null, sigueSinCopias = false } = {}) {
     ...(conEnganches ? [conArreglo({
       nombre: 'Lo que el arnés hace solo',
       estado: tarde ? 'aMedias' : (arrancan ? 'si' : 'no'),
-      detalle: tarde ? 'Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : (arrancan ? 'Listo' : 'No arranca en este ordenador'),
+      detalle: tarde ? (asistentes.paraQueLoCoja(donde.paraQuien()) || 'Cierra la conversación con Claude y ábrela otra vez para que lo coja.') : (arrancan ? 'Listo' : 'No arranca en este ordenador'),
     }, { como: 'solo', etiqueta: 'Arreglarlo', accion: { tipo: 'arreglarElRelevo' }, alAbrir: true })] : []),
     // ── Lo que cuelga del arnés, mientras no hay arnés ────────────────────
     //
