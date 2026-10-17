@@ -27166,7 +27166,8 @@ exec git "$@"
       for (let i = 0; i < 50; i++) assert.deepEqual(proyecto.declaracion().targets, ['claude']);
       assert.equal(lecturas.contador.lecturas - base, 1, 'cincuenta preguntas, más de una lectura del disco');
       // Cambia el tamaño: se lee otra vez.
-      fs.writeFileSync(fichero, JSON.stringify({ targets: ['codex'], n: 22 }));
+      // (Con «n: 22» medía lo mismo que antes; en Windows la fecha no siempre cambia en el mismo instante.)
+      fs.writeFileSync(fichero, JSON.stringify({ targets: ['codex'], n: 222 }));
       assert.deepEqual(proyecto.declaracion().targets, ['codex'], 'cambió el fichero y sigue la caché');
       // Mismo tamaño, otra fecha: también.
       fs.writeFileSync(fichero, JSON.stringify({ targets: ['claude'], n: 33 }));
