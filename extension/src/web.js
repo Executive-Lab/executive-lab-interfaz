@@ -36,6 +36,7 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 const proyecto = require('./proyecto');
+const { porQueNoSePudo } = require('./por-que-no-se-escribio');
 const marca = require('./marca');
 const color = require('./color');
 const frontmatter = require('./frontmatter');
@@ -307,17 +308,25 @@ async function sacarLaCara(web, { bajar = descargar } = {}) {
     : (color.luz(fondo) > 0.5 ? '#1a1a1a' : '#f5f5f5');
 
   const carpeta = path.join(raiz, ...marca.CARPETA);
-  fs.mkdirSync(carpeta, { recursive: true });
+  try {
+    fs.mkdirSync(carpeta, { recursive: true });
+  } catch (error) {
+    return { ok: false, motivo: `no he podido crear la carpeta de la marca: ${error.message}`, escritura: `No he podido crear la carpeta de la marca: ${porQueNoSePudo(error)}.` };
+  }
 
   let logo = null;
+  let logoSinGuardar = null;
   if (leido.logo) {
+    let bajado = null;
     try {
-      const bajado = await bajar(leido.logo.url, { limite: LIMITE_LOGO });
-      if (bajado.cuerpo.length > 0) {
-        logo = `logo.${leido.logo.ext}`;
-        fs.writeFileSync(path.join(carpeta, logo), bajado.cuerpo);
-      }
+      bajado = await bajar(leido.logo.url, { limite: LIMITE_LOGO });
     } catch { /* sin logotipo se escribe el nombre: `marca.js` ya lo hace */ }
+    if (bajado && bajado.cuerpo.length > 0) {
+      try {
+        fs.writeFileSync(path.join(carpeta, `logo.${leido.logo.ext}`), bajado.cuerpo);
+        logo = `logo.${leido.logo.ext}`;
+      } catch (error) { logoSinGuardar = `No he podido guardar el logotipo: ${porQueNoSePudo(error)}.`; }
+    }
   }
 
   // Un cinturón más, porque este nombre sale de una web ajena y acaba en una
@@ -343,9 +352,13 @@ async function sacarLaCara(web, { bajar = descargar } = {}) {
     'puede afinarla mirando la web con calma; al reescribir este fichero, quita `provisional`.',
     '',
   ].join('\n');
-  fs.writeFileSync(path.join(carpeta, marca.FICHERO), registro);
+  try {
+    fs.writeFileSync(path.join(carpeta, marca.FICHERO), registro);
+  } catch (error) {
+    return { ok: false, motivo: `no he podido escribir ${marca.FICHERO}: ${error.message}`, escritura: `No he podido guardar los colores de tu web (${marca.FICHERO}): ${porQueNoSePudo(error)}.` };
+  }
 
-  return { ok: true, nombre, acento: leido.acento, fondo, logo: Boolean(logo) };
+  return { ok: true, nombre, acento: leido.acento, fondo, logo: Boolean(logo), logoSinGuardar };
 }
 
 module.exports = { sacarLaCara, extraer, extraerDeCss, descargar, normalizar, esGris, nombreDelTitulo, logoDe };

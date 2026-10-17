@@ -192,6 +192,56 @@ const mismo = (a, b) => path.resolve(String(a).trim()).toLowerCase() === path.re
     return 'py -3';
   });
 
+  // Decisión 189: lo de rutas y saltos de línea, con el disco y el git de Windows.
+  await comprobar('rutas de verdad: con otras mayúsculas es el mismo sitio, y la marca se reconoce con «\\»', () => {
+    const { estaDentro, mismoSitio, sitioReal } = cargar('rutas');
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'Rutas-'));
+    const hija = path.join(base, 'Wiki', 'Brand');
+    fs.mkdirSync(hija, { recursive: true });
+    const enMinusculas = path.join(base.toLowerCase(), 'wiki', 'brand', 'logo.png');
+    assert.ok(path.sep === '\\', 'esto no es Windows');
+    assert.equal(estaDentro(base, enMinusculas), true, 'la misma carpeta, en minúsculas, no está dentro');
+    assert.equal(mismoSitio(base, base.toUpperCase()), true);
+    assert.equal(estaDentro(base, `${base}-otra\\a.md`), false, 'una hermana que empieza igual');
+    // El sitio real trae las mayúsculas que tiene en el disco, escriban como escriban.
+    const real = sitioReal(path.join(base.toLowerCase(), 'wiki', 'brand'));
+    assert.ok(real.endsWith(path.join('Wiki', 'Brand')), `el sitio real no trae las mayúsculas del disco: ${real}`);
+    // Y la marca, con una ruta como la que da VS Code en Windows.
+    assert.equal(cargar('marca').esDeLaMarca(path.join(base, '02-DOCS', 'wiki', 'brand', 'logo.png')), true);
+    return 'mayúsculas, hermana y «\\»';
+  });
+
+  await comprobar('el historial dice «no he podido mirar» y no «sin cambios» (git de Windows)', async () => {
+    const historialM = require(path.join(RAIZ, '..', 'instalador', 'comun', 'historial.js'));
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'cambios-'));
+    assert.equal(await historialM.cuantosCambios(path.join(carpeta, 'no-existe')), null);
+    const git = (...a) => cp.spawnSync('git', ['-C', carpeta, ...a], { encoding: 'utf8' });
+    assert.equal(git('init', '-q').status, 0);
+    assert.equal(await historialM.cuantosCambios(carpeta), 0, 'una carpeta limpia son 0');
+    fs.writeFileSync(path.join(carpeta, 'a.txt'), 'uno\r\ndos\r\n');
+    assert.equal(await historialM.cuantosCambios(carpeta), 1, 'un fichero nuevo es 1');
+    return 'null, 0 y 1';
+  });
+
+  await comprobar('un perfil guardado con «\\r\\n» se lee entero y se reescribe con «\\r\\n»', () => {
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'perfil-'));
+    const perfil = path.join(carpeta, '02-DOCS', 'wiki', 'harness', 'user-profile.md');
+    fs.mkdirSync(path.dirname(perfil), { recursive: true });
+    fs.writeFileSync(perfil, '---\r\nempresa: Soler\r\n---\r\n\r\n# Perfil\r\n\r\n## Goals\r\n- Facturar sin errores\r\n- Cobrar antes\r\n');
+    const vscode = require('./vscode-falso.js');
+    const antes = vscode.guion.raiz;
+    try {
+      vscode.guion.raiz = carpeta;
+      assert.deepEqual(cargar('ajustes').comoEstamos().metas, ['Facturar sin errores', 'Cobrar antes']);
+      assert.ok(cargar('trato').ponerPalabras('technical').ok);
+      const escrito = fs.readFileSync(perfil, 'utf8');
+      assert.ok(!/(^|[^\r])\n/.test(escrito), `se ha mezclado con «\\n»: ${JSON.stringify(escrito)}`);
+      return 'lista entera, salto igual';
+    } finally {
+      vscode.guion.raiz = antes;
+    }
+  });
+
   console.log(`\n${fallos.length ? `${fallos.length} fallos` : 'todo bien'}\n`);
   process.exit(fallos.length ? 1 : 0);
 })();

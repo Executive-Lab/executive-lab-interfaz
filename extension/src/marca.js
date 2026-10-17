@@ -16,6 +16,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const proyecto = require('./proyecto');
+const rutas = require('./rutas');
 const frontmatter = require('./frontmatter');
 const color = require('./color');
 const medidas = require('./medidas');
@@ -39,7 +40,7 @@ function carpeta() {
 function logoDe(campos, donde) {
   if (typeof campos.logo !== 'string' || !LOGOS.test(campos.logo)) return null;
   const completa = path.resolve(donde, campos.logo);
-  if (!completa.startsWith(donde + path.sep) || !fs.existsSync(completa)) return null;
+  if (!rutas.estaDentro(donde, completa) || !fs.existsSync(completa)) return null;
   return completa;
 }
 
@@ -321,4 +322,11 @@ function queLePedimos(web, yaHayPrimerIntento = false) {
   ].filter((l) => l !== null).join('\n');
 }
 
-module.exports = { leer, estilo, queLePedimos, TIPOGRAFIAS, CARPETA, FICHERO };
+// ¿Es de la marca lo que ha cambiado? Con «/» siempre: en Windows `fsPath` va con
+// «\\» (decisiones 167 y 189), y comparado con «/» el logotipo no repintaba.
+function esDeLaMarca(rutaDelFichero) {
+  const ruta = String(rutaDelFichero || '').replace(/\\/g, '/');
+  return ruta.includes(`${CARPETA.join('/')}/`) || ruta.includes(FICHERO);
+}
+
+module.exports = { leer, estilo, queLePedimos, esDeLaMarca, TIPOGRAFIAS, CARPETA, FICHERO };

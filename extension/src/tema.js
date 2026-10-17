@@ -24,6 +24,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
+const { porQueNoSePudo } = require('./por-que-no-se-escribio');
 const marca = require('./marca');
 
 const CABE = 8 * 1024 * 1024;
@@ -35,6 +36,15 @@ function carpeta() {
   return donde;
 }
 
+// Lo mismo, pero sin reventar: si no se puede crear, se dice cuál y por qué (decisión 189).
+function carpetaOAviso() {
+  try {
+    return { donde: carpeta() };
+  } catch (error) {
+    return { aviso: { ok: false, mensaje: `No he podido preparar la carpeta de la marca: ${porQueNoSePudo(error)}.` } };
+  }
+}
+
 // Sin pisar lo que ya esté: el asistente puede haber dejado ahí su trabajo.
 function sitioLibre(donde, nombre) {
   const extension = path.extname(nombre);
@@ -44,12 +54,24 @@ function sitioLibre(donde, nombre) {
   return destino;
 }
 
+// Lo que se dice al terminar: qué se guardó y, de lo que no, cuál y por qué (decisión 189).
+function resultado(puestos, fallos, sinNada) {
+  const frase = (f) => `«${f.nombre}»: ${porQueNoSePudo(f.error)}`;
+  if (!puestos.length) {
+    return { ok: false, fallos, mensaje: fallos.length ? `No he podido guardar ${frase(fallos[0])}.${fallos.length > 1 ? ` Ni otros ${fallos.length - 1}.` : ''}` : sinNada };
+  }
+  const guardado = `Guardado${puestos.length === 1 ? '' : 's'} ${puestos.length}.`;
+  return { ok: true, puestos, fallos, mensaje: fallos.length ? `${guardado} No he podido guardar ${frase(fallos[0])}.` : guardado };
+}
+
 // Lo que llega arrastrado, ya leído por el panel: la extensión solo escribe.
 function guardarSoltado(ficheros) {
-  const donde = carpeta();
+  const { donde, aviso } = carpetaOAviso();
+  if (aviso) return aviso;
   if (!donde) return { ok: false, mensaje: 'Esta carpeta todavía no está preparada.' };
 
   const puestos = [];
+  const fallos = [];
   for (const fichero of ficheros || []) {
     if (!fichero || typeof fichero.nombre !== 'string') continue;
     let bytes;
@@ -63,12 +85,10 @@ function guardarSoltado(ficheros) {
     try {
       fs.writeFileSync(destino, bytes);
       puestos.push(path.basename(destino));
-    } catch { /* uno que falle no tumba los demás */ }
+    } catch (error) { fallos.push({ nombre: path.basename(destino), error }); } // uno que falle no tumba los demás
   }
 
-  return puestos.length
-    ? { ok: true, puestos, mensaje: `Guardado${puestos.length === 1 ? '' : 's'} ${puestos.length}.` }
-    : { ok: false, mensaje: 'No he podido guardar nada de eso.' };
+  return resultado(puestos, fallos, 'No he podido guardar nada de eso.');
 }
 
 // Y lo que se elige con el diálogo de siempre.
@@ -80,20 +100,21 @@ async function elegirMaterial() {
   });
   if (!elegidos || !elegidos.length) return { ok: true, puestos: [], cancelado: true };
 
-  const donde = carpeta();
+  const { donde, aviso } = carpetaOAviso();
+  if (aviso) return aviso;
   if (!donde) return { ok: false, mensaje: 'Esta carpeta todavía no está preparada.' };
 
   const puestos = [];
+  const fallos = [];
   for (const uri of elegidos) {
+    const nombre = path.basename(uri.fsPath);
     try {
-      const destino = sitioLibre(donde, path.basename(uri.fsPath));
+      const destino = sitioLibre(donde, nombre);
       fs.copyFileSync(uri.fsPath, destino);
       puestos.push(path.basename(destino));
-    } catch { /* idem */ }
+    } catch (error) { fallos.push({ nombre, error }); }
   }
-  return puestos.length
-    ? { ok: true, puestos, mensaje: `Guardado${puestos.length === 1 ? '' : 's'} ${puestos.length}.` }
-    : { ok: false, mensaje: 'No he podido copiar eso.' };
+  return resultado(puestos, fallos, 'No he podido copiar eso.');
 }
 
 // Lo que hay ahora mismo en esa carpeta, aparte del récord: es lo que el

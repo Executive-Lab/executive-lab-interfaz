@@ -434,12 +434,12 @@ function puntosDe(texto, seccion = null) {
   if (seccion) {
     const desde = texto.search(new RegExp(`^##\\s+${seccion}\\s*$`, 'mi'));
     if (desde === -1) return [];
-    const resto = texto.slice(desde).split('\n').slice(1).join('\n');
+    const resto = texto.slice(desde).split(/\r?\n/).slice(1).join('\n');
     const hasta = resto.search(/^##\s+/m);
     trozo = hasta === -1 ? resto : resto.slice(0, hasta);
   }
 
-  return trozo.split('\n')
+  return trozo.split(/\r?\n/)
     .map((l) => l.match(/^\s*[-*]\s+(.{4,})$/))
     .filter(Boolean)
     .map((m) => m[1].trim())
@@ -454,7 +454,7 @@ function principios(texto) {
   const conGuion = puntosDe(texto);
   if (conGuion.length) return conGuion;
 
-  return texto.split('\n')
+  return texto.split(/\r?\n/)
     .map((l) => l.match(/^#{2,4}\s+(.{4,})$/))
     .filter(Boolean)
     .map((m) => m[1].trim())

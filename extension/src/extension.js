@@ -902,7 +902,9 @@ ${cabecera}
       if (!ultima) return null;
       const hace = copias.haceUnRato(ultima.cuando);
       const subir = Boolean(await copias.puedeSubir()) || Boolean(await github.remoto());
-      return { hace, sinGuardar: Boolean(await copias.cambiosSinGuardar()), subir };
+      const cambios = await copias.cambiosSinGuardar();
+      // `null`: no se pudo mirar, y la barra no dice «todo guardado» (decisión 189).
+      return { hace, sinGuardar: cambios === null ? null : cambios > 0, subir };
     } catch (error) {
       this.salida.appendLine(`[copias] ${error.message}`); // diccionario: interno
       return null;
@@ -1079,7 +1081,7 @@ ${cabecera}
       esperandoDesdeHace: cerebro.esperandoDesdeHace(),
       conexionesAMedias: conexiones.proveedores().filter((p) => p.faltan > 0),
       diasSinCopia: ultima ? Math.floor((Date.now() - new Date(ultima.cuando).getTime()) / 86400000) : null,
-      cambiosSinGuardar: await copias.cambiosSinGuardar(),
+      cambiosSinGuardar: (await copias.cambiosSinGuardar()) || 0,
       peticiones: this.almacen().get(CLAVE_PETICIONES) || [],
       corpus: this.corpus(),
       yaInstaladas: rsc.habilidadesPuestas(),
@@ -1214,11 +1216,11 @@ ${cabecera}
     this.aceptados = this.aceptados || new Set();
     // Lo que espera a que la persona conteste no ocupa sitio: los demás se atienden
     // (revisión de corrección, 2 y 6).
-    const hay = pedidos.losQueHay(raiz).filter((id) => !this.preguntados.has(id)).slice(0, pedidos.POR_VEZ);
+    const hay = pedidos.losQueHay(raiz).filter((id) => !this.preguntados.has(id) && !(this.sinRespuesta && this.sinRespuesta.has(`${raiz}:${id}`))).slice(0, pedidos.POR_VEZ);
     if (!hay.length) return;
     for (const id of hay) pedidos.olvidarLaRespuesta(raiz, id);
     const catalogo = consejos.capacidades(this.contexto.extensionPath);
-    const contestar = (id, que, mas = {}) => pedidos.contestar(raiz, id, pedidos.respuesta(que, { id, comoSePide: saberes.comoSePide(id), ...mas }));
+    const contestar = (id, que, mas = {}) => this.dejarLaRespuesta(raiz, id, pedidos.respuesta(que, { id, comoSePide: saberes.comoSePide(id), ...mas }));
     const confianza = vscode.workspace.isTrusted !== false;
     const porDelante = rsc.vaPorDelante();
     let anadidas = 0;
@@ -1265,6 +1267,18 @@ ${cabecera}
     if (anadidas) await this.refrescar(true);
   }
 
+  // Contestarle al asistente, y si no se puede escribir la respuesta, decirlo
+  // (decisión 189): el pedido se queda, el asistente sigue esperando y la persona
+  // tiene que saberlo. Una vez por pedido, y no se reintenta cada minuto.
+  dejarLaRespuesta(raiz, id, texto) {
+    if (pedidos.contestar(raiz, id, texto)) return true;
+    if (!this.sinRespuesta) this.sinRespuesta = new Set();
+    this.sinRespuesta.add(`${raiz}:${id}`);
+    this.salida.appendLine(`[pedidos] ${id}: no se pudo escribir la respuesta`); // diccionario: interno
+    this.unaVez(`sinRespuesta:${id}`, () => avisarConSalida('No he podido contestarle al asistente, y se queda esperando. Pulsa «Algo va mal» y pásale el código a tu tutor.'));
+    return false;
+  }
+
   // Sin poder hacerlo sola, se pregunta, una vez por pedido. Con «Añadirla» se
   // añade como si pudiera sola, en la vuelta siguiente y con las mismas guardas: si
   // el arnés está ocupado, espera, y si va por delante, se le dice al asistente
@@ -1278,7 +1292,7 @@ ${cabecera}
       this.preguntados.delete(id);
       const raiz = proyecto.raiz();
       if (!pedidos.sigue(raiz, id)) return undefined;
-      if (quiere !== 'Añadirla') return pedidos.contestar(raiz, id, pedidos.respuesta('noQuiere'));
+      if (quiere !== 'Añadirla') return this.dejarLaRespuesta(raiz, id, pedidos.respuesta('noQuiere'));
       this.aceptados.add(id);
       return this.atenderLosPedidos();
     }).catch((error) => this.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
@@ -4229,10 +4243,12 @@ ${cabecera}
     const cara = await web.sacarLaCara(direccion);
     if (!cara.ok) this.salida.appendLine(`[cara] ${direccion}: ${cara.motivo}`); // diccionario: interno
     await this.refrescar(true);
+    // Una escritura que falló se dice, con cuál y por qué (decisión 189); el resto de motivos, no.
+    if (!cara.ok && cara.escritura) this.enviar({ tipo: 'aviso', texto: cara.escritura, malo: true });
     if (cara.ok) {
       this.enviar({
         tipo: 'aviso',
-        texto: `Ya lleva la cara de ${cara.nombre}${cara.logo ? ', con su logotipo' : ''}. Le he pedido al asistente que la afine.`,
+        texto: `Ya lleva la cara de ${cara.nombre}${cara.logo ? ', con su logotipo' : ''}. Le he pedido al asistente que la afine.${cara.logoSinGuardar ? ` ${cara.logoSinGuardar}` : ''}`,
       });
     }
     return cara;
@@ -4403,10 +4419,9 @@ function vigilarElArnes(contexto, panel) {
     if (pedidos.esUnEncargo(uri.fsPath)) return;
     // Un pedido del asistente se atiende ya, no en el repintado (decisión 150).
     if (pedidos.esUnPedido(uri.fsPath)) panel.atenderLosPedidos().catch((error) => panel.salida.appendLine(`[pedidos] ${error.message}`)); // diccionario: interno
-    // Con «/» siempre: en Windows `fsPath` va con «\», y la marca no se repintaba
-    // al cambiar el logotipo, solo al cambiar `marca.md` (decisión 167).
-    const ruta = String(uri.fsPath).replace(/\\/g, '/');
-    const esMarca = ruta.includes(`${marca.CARPETA.join('/')}/`) || ruta.includes(marca.FICHERO);
+    // En Windows `fsPath` va con «\»: `marca.esDeLaMarca` la pasa a «/» antes de
+    // comparar, y el logotipo repinta igual que `marca.md` (decisiones 167 y 189).
+    const esMarca = marca.esDeLaMarca(uri.fsPath);
     // El índice del buscador se hizo con lo que había antes de este cambio.
     buscador.olvidar();
     // Cambiar de asistente cambia dónde vive todo lo suyo, y eso se escribe en

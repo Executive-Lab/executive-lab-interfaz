@@ -159,8 +159,10 @@ function sigue(raiz, id) {
   }
 }
 
-// Contestar y quitar el pedido. Devuelve si la respuesta quedó escrita. El pedido
-// se quita igual: uno que no se puede contestar no se repite cada minuto.
+// Contestar y quitar el pedido. Devuelve si la respuesta quedó escrita. Si no se
+// pudo escribir, el pedido se queda (decisión 189): quitarlo dejaba al asistente
+// esperando una respuesta que no iba a llegar, sin que nadie lo supiera. Quien
+// llama mira el resultado, lo dice y no lo repite cada minuto.
 function contestar(raiz, id, texto) {
   const donde = carpeta(raiz);
   if (!donde || !id || /[\\/]/.test(id)) return false;
@@ -171,10 +173,11 @@ function contestar(raiz, id, texto) {
     fs.writeFileSync(hecho, `${texto}\n`, { flag: 'wx' });
     escrita = true;
   } catch { /* una carpeta con ese nombre, o sin permiso: sin respuesta */ }
+  if (!escrita) return false;
   try {
     fs.unlinkSync(path.join(donde, `${id}${PIDE}`));
   } catch { /* ya no estaba */ }
-  return escrita;
+  return true;
 }
 
 // ── Y al revés: lo que la barra le deja al asistente (decisión 166) ───────
