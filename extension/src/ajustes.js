@@ -4,9 +4,14 @@
 //
 //   1. **Qué puede hacer sin preguntarte.** Es el ajuste que más miedo da a
 //      alguien no técnico —"¿y si me borra algo?"— y vivía en un fichero de
-//      configuración que no se enseña. Se escribe en `.claude/settings.json`,
-//      que es de Claude; Codex lo lleva por su cuenta y eso se dice en pantalla
-//      en vez de fingir que lo controlamos.
+//      configuración que no se enseña. Desde la decisión 182 se escribe donde el
+//      editor lo lee de verdad: `claudeCode.initialPermissionMode`, en los ajustes
+//      de USUARIO del editor, y vale para todas sus carpetas. Antes iba a
+//      `permissions.defaultMode` de `.claude/settings.json`, y la extensión de
+//      VS Code no lee los ajustes del proyecto para el modo de arranque
+//      (code.claude.com/docs/en/permission-modes, «Switch permission modes»). Codex
+//      lo lleva por su cuenta y eso se dice en pantalla en vez de fingir que lo
+//      controlamos.
 //   2. **Cada cuánto guarda solo.** No existía: guardar era siempre a mano, y
 //      quien no se acuerda de pulsar el botón no tiene copias. Justo el público
 //      de esto.
@@ -14,7 +19,6 @@
 //      carpeta y no se vuelven a ver nunca.
 
 const fs = require('node:fs');
-const path = require('node:path');
 const vscode = require('vscode');
 const proyecto = require('./proyecto');
 const identidad = require('./identidad');
@@ -22,51 +26,45 @@ const identidad = require('./identidad');
 // ------------------------------------------- qué puede hacer sin preguntar
 
 // Los modos de Claude Code, dichos por lo que le pasa a quien lo usa. El
-// cuarto que existe —saltarse los permisos— no se ofrece: no es un ajuste, es
-// quitarle el freno de mano a alguien que no sabe que lo tiene.
+// que salta todos los permisos no se ofrece: no es un ajuste, es quitarle el
+// freno de mano a alguien que no sabe que lo tiene. `auto` es el de fábrica del
+// editor (desde la 2.1.283) y no se escribe: la extensión no lo acepta como valor
+// (`initialPermissionMode` admite default, manual, acceptEdits, plan y
+// bypassPermissions), así que «ponerlo» es quitar lo escrito.
 const PERMISOS = [
   { id: 'plan', nombre: 'Que me lo proponga antes', frase: 'Te cuenta lo que va a hacer y espera a que digas que sí. Lo más prudente.' },
-  { id: 'default', nombre: 'Que me pregunte al cambiar algo', frase: 'Lee y mira por su cuenta, pero te pide permiso antes de tocar nada. Lo normal.' },
+  { id: 'default', nombre: 'Que me pregunte al cambiar algo', frase: 'Lee y mira por su cuenta, pero te pide permiso antes de tocar nada.' },
   { id: 'acceptEdits', nombre: 'Que cambie ficheros sin preguntar', frase: 'Va más rápido y te interrumpe menos. Ten copias al día.' },
+  { id: 'auto', nombre: 'Que trabaje solo, con un revisor', frase: 'Va a su ritmo y un segundo revisor para lo que parezca peligroso. Es como viene de fábrica.' },
 ];
 
+const CLAVE_PERMISO = 'claudeCode.initialPermissionMode';
 const donde = require('./donde');
 
-function leerJson() {
-  const ruta = donde.ficheroDeAjustes();
-  if (!ruta || !fs.existsSync(ruta)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(ruta, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
+// Lo que el editor tiene puesto de verdad: solo cuenta el ajuste de usuario (el de
+// carpeta lo ignora la extensión de Claude). Sin nada, Auto; `manual` es otro
+// nombre de `default`; y un valor que no es de la lista —saltarse los permisos,
+// puesto a mano— se devuelve tal cual y no se marca ninguna.
 function permisoDeAhora() {
-  const ajustes = leerJson() || {};
-  const cual = ajustes.permissions && ajustes.permissions.defaultMode;
-  return PERMISOS.some((p) => p.id === cual) ? cual : 'default';
+  const visto = vscode.workspace.getConfiguration().inspect(CLAVE_PERMISO) || {};
+  const puesto = visto.globalValue;
+  if (puesto === undefined || puesto === null || puesto === '') return 'auto';
+  return puesto === 'manual' ? 'default' : puesto;
 }
 
-// Se escribe respetando todo lo demás del fichero: ahí viven los enganches del
-// arnés, y perderlos dejaría la carpeta a medias sin que se note.
-function ponerPermiso(cual) {
+// En los ajustes de usuario del editor, con el sí de quien pulsa. Solo esa clave.
+async function ponerPermiso(cual) {
   if (!PERMISOS.some((p) => p.id === cual)) return { ok: false, mensaje: 'Eso no es una de las opciones.' };
 
-  // Solo Claude tiene esto. Con Codex no se inventa un fichero que nadie lee.
-  const ruta = donde.ficheroDeAjustes();
-  if (!ruta) return { ok: false, mensaje: 'Esto lo lleva tu asistente por su cuenta, no se ajusta desde aquí.' };
-
-  const ajustes = leerJson() || {};
-  const nuevo = { ...ajustes, permissions: { ...(ajustes.permissions || {}), defaultMode: cual } };
+  // Solo con Claude. Con Codex no se inventa un ajuste que nadie lee.
+  if (!donde.puedeTenerAjustes()) return { ok: false, mensaje: 'Esto lo lleva tu asistente por su cuenta, no se ajusta desde aquí.' };
 
   try {
-    fs.mkdirSync(path.dirname(ruta), { recursive: true });
-    fs.writeFileSync(ruta, `${JSON.stringify(nuevo, null, 2)}\n`);
+    await vscode.workspace.getConfiguration().update(CLAVE_PERMISO, cual === 'auto' ? undefined : cual, vscode.ConfigurationTarget.Global);
   } catch {
     return { ok: false, mensaje: 'No he podido guardarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.' };
   }
-  return { ok: true, mensaje: 'Hecho. Se nota en la próxima conversación que abras.' };
+  return { ok: true, mensaje: 'Hecho. Vale para todas tus carpetas y se nota en la próxima conversación que abras.' };
 }
 
 // ---------------------------------------------------- cada cuánto guarda
@@ -151,5 +149,5 @@ function comoEstamos() {
 }
 
 module.exports = {
-  comoEstamos, ponerPermiso, ponerCadaCuanto, cadaCuantoGuarda, PERMISOS, CADA_CUANTO, CLAVE_GUARDADO, DE_FABRICA,
+  CLAVE_PERMISO, permisoDeAhora, comoEstamos, ponerPermiso, ponerCadaCuanto, cadaCuantoGuarda, PERMISOS, CADA_CUANTO, CLAVE_GUARDADO, DE_FABRICA,
 };

@@ -8660,3 +8660,86 @@ aplicación entera, y ahora es un `composer.json`.
 Mutaciones, cada una puesta y restaurada desde copia: la pregunta de cuándo caduca sin mirar lo apuntado (cae
 la escena y dos de la 149); el botón con otra huella (cae la escena); la raíz sin saltarse con una aplicación
 (cae la nueva); la raíz sin mirarse nunca con `conLasDeLasApps` (cae la nueva, «dejan de protegerse»).
+
+## 182. Claude, al día con su documentación
+
+El 17-10-2026 se releyó la documentación oficial de Claude Code contra lo que la barra hace. Tres hallazgos.
+
+**1. «Qué puede hacer sin preguntarte» no hacía nada en el editor.** La barra escribía `permissions.defaultMode`
+en `.claude/settings.json` de la carpeta. Pero la extensión de VS Code no lee los ajustes del proyecto para el modo
+de arranque: «The extension never reads a project's `.claude/settings.json` or `.claude/settings.local.json` for the
+starting permission mode». El orden es: 1) `claudeCode.initialPermissionMode` (ajuste de usuario del editor:
+`default`, `manual`, `acceptEdits`, `plan` o `bypassPermissions`; «The setting doesn't accept `auto`»), 2) el
+último modo elegido en el selector (Manual, Edit automatically o Auto), 3) `permissions.defaultMode` de los ajustes
+gestionados o de `~/.claude/settings.json`, 4) el de fábrica; y desde la 2.1.283 el de fábrica es Auto en el
+terminal y en VS Code. Y el editor «reads `initialPermissionMode` from your user settings and ignores workspace
+values». Mientras tanto la pantalla decía «Lo normal» cuando no había nada, y era falso: lo normal era Auto.
+
+- `ajustes.js`: con el clic de la persona, se escribe `claudeCode.initialPermissionMode` en los ajustes de USUARIO
+  del editor (`ConfigurationTarget.Global`), por la API de configuración. Solo esa clave. Nunca `bypassPermissions`
+  (ni `dontAsk`, ni `manual`: no se ofrecen).
+- El estado es el real: sin valor, «Auto», que sale como cuarta opción, «Que trabaje solo, con un revisor». Como la
+  extensión no acepta `auto`, ponerlo es quitar lo escrito. `manual` se lee como `default`. Un valor de carpeta se
+  ignora, como hace el editor. Uno raro puesto a mano (`bypassPermissions`) no marca ninguna opción y se dice.
+- La pantalla dice que vale para todas sus carpetas, y que si en una conversación elige otro a mano el editor se
+  acuerda de ese (es el punto 2 del orden).
+- «Lo normal» sale de la frase de «Que me pregunte al cambiar algo»: ya no lo es.
+- **Lo que la barra ya había escrito en carpetas**: el terminal sí lo lee. «Sessions you start in a terminal honor
+  every value except `auto` and `bypassPermissions`» del `.claude/settings.json` del proyecto. Se deja como está, no
+  se toca ni se quita (es de la persona y sirve a quien use `claude` en el terminal). Pero la barra deja de
+  escribirlo: tener dos sitios que dicen cosas distintas era peor, y la barra es para el editor.
+- Con Codex sigue sin ofrecerse, y si el editor no conoce la clave (la extensión de Claude no está) se dice, no se
+  da por hecho.
+
+**2. Avisos que faltaban.** El enganche `Notification` de la 162 (`permission_prompt|idle_prompt`) no cubría
+`elicitation_dialog` («An MCP server opens an elicitation form and you haven't typed for about six seconds») ni
+`elicitation_url_dialog` («An MCP server asks you to open a browser URL…»), según la tabla de `notification_type`
+de la guía de enganches. Cuando un servicio conectado pide un formulario o abrir una página, Claude se queda
+esperando y nadie se entera, que es lo que la 162 quería evitar.
+
+- El matcher pasa a `permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog` (solo letras, `_` y
+  `|`: nombres exactos). `elicitation_complete` y `elicitation_response` no avisan: son ruido.
+- `avisar.mjs` (y su copia idéntica de los raíles) dice «Claude necesita que rellenes algo en «Contabilidad».» y
+  «Claude necesita que abras una página en «Contabilidad».».
+- **Migración (P9: es lo nuestro, local y se deshace)**: una carpeta con el enganche de antes puesto por la barra
+  (la constancia casa con su huella y el enganche está tal como lo dejó) se pone al día sola, en su sitio, al abrir
+  o montar, y se dice una vez: «He puesto al día los avisos de Claude: ahora también te avisan cuando un servicio
+  conectado te pide rellenar algo o abrir una página.», con su «Quitarlo». Lo que la persona cambió (otro matcher,
+  otro tope, otra orden, un campo más), o con una constancia que no casa, o en git, no se toca. La huella no
+  cambia: no cubre el matcher. «Quitarlo» reconoce los dos matchers.
+
+**3. Enganches que fallan.** El changelog dice que la 2.1.295 añadió `onFailure: "block"` y que la 2.1.299 cambió
+que las acciones que un enganche **de plugin** puede bloquear se rechacen si el enganche no recibe su entrada o no
+devuelve su respuesta. La guía de enganches («Block the action when a hook fails») dice que, en la mayoría de
+eventos, un enganche que falla, se corta o no arranca (el guion o el ejecutable no existe) «still carries out the
+action»; solo con `onFailure: "block"` bloquea. La excepción es Windows sin Git Bash, donde un `PreToolUse` o
+`PermissionRequest` en forma de shell sin `onFailure` puede bloquear la llamada; y `Notification` no bloquea nunca
+(«Exit code and stderr are ignored»).
+
+- Conclusión: los enganches de la barra no son de plugin, y los avisos no pueden bloquear. No hace falta
+  `onFailure` y no se pone: el valor de fábrica ya es no bloquear, y añadir el campo cambiaría la forma que la
+  barra reconoce como suya (y la que borra RSC al reescribir los suyos). Se mide con una prueba, no se da por
+  hecho.
+- La prueba corre las órdenes tal cual las escribe la barra (la de avisos y la del freno de los raíles) con `sh -c`,
+  sin `node` en el PATH (sale con 127) y con `node` pero sin el guion (sale con 1): ninguna sale con el 2, ni dice
+  `deny` por la salida. Y el guion de avisos con una entrada rota sale con 0 y sin decir nada.
+- El freno de RSC (`danger-guard`) es de RSC; el envoltorio `freno.mjs` es de los raíles. En Windows sin Git Bash
+  el de fábrica puede ser bloquear, y para un freno es lo razonable: queda anotado y no se cambia.
+
+**Fuentes** (leídas el 17-10-2026): https://code.claude.com/docs/en/permission-modes («Which mode a session
+starts in», «Switch permission modes»), https://code.claude.com/docs/en/vs-code (ajuste `initialPermissionMode`),
+https://code.claude.com/docs/en/hooks-guide (tabla de `notification_type`),
+https://code.claude.com/docs/en/hooks («Block the action when a hook fails») y
+https://code.claude.com/docs/en/changelog (2.1.295 y 2.1.299).
+
+**Las pruebas**: `humo.js` pasa de 497 a 498 (507 con `--con-arnes`). Una cambiada, la de lo que puede hacer solo (ahora a los ajustes
+de usuario del editor, Auto sin valor, la carpeta intacta, bypass fuera, el editor que rechaza, Codex), y una
+nueva junto a las de la 162 (sin `node` y sin guion, con `sh` de verdad). Se amplían las de los avisos (el
+matcher, los textos, la migración con sus casos de «no se toca») y la del panel (Auto marcado y «vale para todas
+tus carpetas»; otro puesto a mano).
+
+Mutaciones, cada una puesta y restaurada desde copia: ocho. Escribir por carpeta en vez de en los ajustes de usuario (cae la de lo que puede hacer solo); sin valor
+leído como «Lo normal» y no como Auto (cae la misma); la migración apagada (cae la de los avisos); la migración sin
+mirar la constancia (cae «se pone al día con una constancia que no casa»); «Quitarlo» sin reconocer el matcher de
+antes (cae la de los avisos); sin el texto de la página (caen los textos del guion); otro texto para el formulario
+(caen los textos); y el matcher sin los dos nuevos (cae la de los avisos).

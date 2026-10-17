@@ -10,6 +10,10 @@
 //     En el editor sale unos seis segundos después de que pregunte.
 //   · `idle_prompt`: «Claude ha terminado en «Contabilidad».» Sale un minuto
 //     después de terminar, si no se ha escrito nada desde entonces.
+//   · `elicitation_dialog` y `elicitation_url_dialog` (decisión 182): un servicio
+//     conectado (MCP) pide rellenar un formulario o abrir una página, y llevas unos
+//     seis segundos sin escribir. «Claude necesita que rellenes algo en «Contabilidad».»
+//     y «Claude necesita que abras una página en «Contabilidad».»
 //
 // Y con Codex (decisión 171), que lo lanza su `notify` del `config.toml` de usuario
 // (learn.chatgpt.com/docs/config-file/config-advanced): el JSON no llega por la
@@ -53,6 +57,8 @@ export const TITULO = 'Executive Lab';
 const QUE_DICE = {
   permission_prompt: (donde) => (donde ? `Claude te está preguntando algo en «${donde}».` : 'Claude te está preguntando algo.'),
   idle_prompt: (donde) => (donde ? `Claude ha terminado en «${donde}».` : 'Claude ha terminado.'),
+  elicitation_dialog: (donde) => (donde ? `Claude necesita que rellenes algo en «${donde}».` : 'Claude necesita que rellenes algo.'),
+  elicitation_url_dialog: (donde) => (donde ? `Claude necesita que abras una página en «${donde}».` : 'Claude necesita que abras una página.'),
   'agent-turn-complete': (donde) => (donde ? `Codex ha terminado en «${donde}».` : 'Codex ha terminado.'),
 };
 
