@@ -22900,11 +22900,12 @@ exec git "$@"
     const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza };
     vscode.guion.raiz = carpeta;
     vscode.guion.confianza = true;
-    cp.execFileSync = (programa, args, ...resto) => { if (programa === 'git') llamadas.push(args); return original(programa, args, ...resto); };
+    const gitDeLaCasa = cargar('entorno').git();
+    cp.execFileSync = (programa, args, ...resto) => { if (programa === gitDeLaCasa) llamadas.push(args); return original(programa, args, ...resto); };
     try {
       assert.equal(sueltasM.resumen().subidas, 1, 've lo que ya está en git');
       assert.equal(llamadas.length, 1);
-      assert.deepEqual(llamadas[0].slice(0, 3), ['-c', 'core.fsmonitor=false', 'ls-files'], 'git corre con el fsmonitor de la carpeta');
+      assert.deepEqual(llamadas[0].slice(0, 4), ['--no-optional-locks', '-c', 'core.fsmonitor=false', 'ls-files'], 'git corre con el fsmonitor de la carpeta o con candados');
       // Los repintados siguientes no vuelven a preguntar a git.
       sueltasM.resumen(); sueltasM.deLasAppsEnLasCopias();
       assert.equal(llamadas.length, 1, 'cada repintado corre git otra vez');
