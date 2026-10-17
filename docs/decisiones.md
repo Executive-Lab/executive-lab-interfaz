@@ -8585,3 +8585,35 @@ Codex) y se arregló la prueba: ahora se habla con Claude y con Codex montado.
 
 Batería entera, una vez, desde la raíz del worktree: `humo.js` 492, `humo.js --con-arnes` 501, `mapeos-codex.js` 30,
 `contrato.js` 15, `empresas-distintas.js`, `comprobar-diccionario.js` y `revisar-powershell.js` en verde.
+
+## 179. Más pruebas sin fallos en falso
+
+Tres pruebas de `humo.js` fallaban a veces con la máquina cargada, y una de ellas tumbaba la batería entera
+sin dejar ninguna comprobación en rojo. Ninguna era un fallo del código. Como en la 174, dependían de cuándo
+pasaban las cosas, no de lo que hacen.
+
+- **`MODULE_NOT_FOUND` con `--con-arnes`, sin nada en rojo.** Las pruebas anteriores a `activate()` (la brújula,
+  «Algo va mal», el diagnóstico) llaman al RSC de verdad, y `rsc.saberDondeEstamos()` solo se llamaba dentro de
+  `activate()`. Hasta entonces `rsc.js` no sabía dónde estaba el arnés que viaja en `media/harness` y caía en
+  `npx --yes @ericrisco/rsc@3.0.22`: unas 16 llamadas a npx por pasada (medido con el registro de npm y con un
+  rastro temporal en `lanzar`). npx baja el paquete a `~/.npm/_npx/<hash>`, una caché que comparten todos los
+  procesos del Mac, así que dos baterías a la vez, en worktrees distintos, se pisan ese `node_modules`. Es la
+  causa más probable, no una reproducida: con la caché caliente, ocho npx a la vez no fallaron. Lo que sí se
+  midió es que cada pasada tocaba esa caché compartida y la red, y que ya no lo hace. Ahora la prueba llama a
+  `saberDondeEstamos(RAIZ)` al empezar, como la barra al abrirse, y cada batería usa solo su arnés: cero
+  registros nuevos de npx por pasada. El código no cambia: en el editor `activate()` ya lo hace antes de nada.
+- **Las pruebas de la 177** (comprobación distinta cada vez: «se toca un fichero suyo», «un mensaje viejo
+  escribe en una carpeta de la barra»). Reproducido con carga: 3 de 12 pasadas solo de la 177. `activate()`
+  deja relojes (a los 3 s: lo de Claude, los raíles, lo de Codex; a los 8 s y cada minuto: los recordatorios;
+  cada cuarto de hora: guardar), y están hechos para una carpeta que no cambia en toda la sesión. En la batería
+  cada prueba apunta `vscode.guion.raiz` a la suya, así que un reloj que salta en mitad de otra escribía un
+  `settings.local.json` o un `.gitignore` en la carpeta de esa prueba, o mandaba avisos a su pantalla. No es
+  una carrera del código: es la prueba la que cambia la carpeta por debajo. La prueba del arranque recoge
+  los relojes que deja `activate()` y los para; lo que quiere cada prueba lo llama ella.
+- **«las credenciales que no son un .env»**: «una URL con credenciales repetida no puede costar 119 ms» (2 de 12
+  pasadas con cuatro baterías a la vez). Mide que la lectura no sea cuadrática, no que la máquina vaya sobrada:
+  el tope pasa de 100 ms a 3 s, y con 84.000 letras una lectura cuadrática tarda minutos.
+
+Comprobado con dieciocho procesos de carga dando vueltas: 15 pasadas seguidas de la 177, el arranque y las
+credenciales sin un fallo (antes, 3 de 12), y 5 pasadas enteras con `--con-arnes` de 503 comprobaciones, sin
+un fallo y sin una sola llamada a npx.
