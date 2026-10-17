@@ -9180,7 +9180,7 @@ topes de lectura y de entradas; los git con tope y bandera, con un git de mentir
 aparte del módulo para no cambiarle el motor al resto de la batería; `estanSubidas`). Se ajustó además la prueba
 de la 167, que esperaba `git` a secas y las banderas de antes.
 
-**Un fallo que salió después (PR #88).** Con el tope de 15 s, dos pruebas de la 169 («un push fallido no deja
+**Un fallo que salió después (PR #88).** Con el tope de 15 s, dos pruebas de antes («un push fallido no deja
 el token en el informe» y «al subir, la única clave es la de la barra») fallaban a veces: su git de mentira es
 un guion recién escrito y, en macOS, la primera vez que se ejecuta puede tardar más de 15 s (el sistema lo
 escanea antes de dejarlo correr). El `rev-parse` salía muerto por SIGTERM (`killed: true`, sin salida), no
