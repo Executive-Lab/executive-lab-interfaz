@@ -8617,3 +8617,46 @@ pasaban las cosas, no de lo que hacen.
 Comprobado con dieciocho procesos de carga dando vueltas: 15 pasadas seguidas de la 177, el arranque y las
 credenciales sin un fallo (antes, 3 de 12), y 5 pasadas enteras con `--con-arnes` de 503 comprobaciones, sin
 un fallo y sin una sola llamada a npx.
+
+## 180. Dos cabos sueltos de Conexiones
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `conectar-sin-perderse`
+
+Los dos que quedaban en el «Next» de la 167.
+
+**1. La captura 4g: «No lo sé» y la pregunta volvía.** No se reproduce. La prueba nueva hace la escena entera
+con el panel de verdad: se pinta la pantalla de la conexión con la clave puesta y probada, se pulsa el botón
+«No lo sé» tal como salió en el HTML, se manda lo que ese botón manda al editor, se repinta con lo que
+devuelve y se vuelve a pintar una vez más (lo que hace el vigía). Sale «Apuntado. Si un día deja de
+funcionar, te diré que puede haber caducado.», sin pregunta y con «Cambiar», y lo mismo con «No caduca» y
+«En 90 días». La huella que lleva el botón es exactamente la de la clave de ahora: la pregunta y la
+comparación la sacan de `conexiones.huella()` y el panel solo la copia. Lo único que hace volver la pregunta
+sin «Apuntado» es que la huella del botón no sea la de la clave en el momento del clic (`apuntarCuandoCaduca`
+repinta sin apuntar), y eso solo pasa si la clave cambió entre pintar y pulsar, o si la escena de la captura
+mandó una huella inventada. No hay nada que arreglar en el código; queda la prueba, que falla si el botón
+lleva otra huella o si la pregunta no se calla tras apuntar.
+
+**2. Los ficheros de acceso de la raíz de una aplicación.** Con la 167, el `.env` de la raíz de una carpeta
+que es entera una aplicación ya estaba en su sitio, pero sus ficheros de acceso (cuentas de servicio, `.pem`…)
+seguían saliendo como fuera de sitio: «Hay 1 fichero de acceso fuera de sitio · Que las ordene» y un encargo
+para llevarlo a `01-TOOLS/<X>/keys/`, con lo que la aplicación dejaba de encontrarlo. Lo coherente con P4 y P9
+y con la 135/167: lo de una aplicación está en su sitio y no se mueve.
+
+- `ficherosDeAcceso()` no mira la raíz si la carpeta entera es una aplicación, igual que `buscar()` con los
+  `.env`. Con `conLasDeLasApps` (lo de `paraProteger`) sí.
+- Siguen siendo credenciales: no entran en una copia y sus valores se tapan. Y si están en git, sale el aviso
+  de la 135 («de tu aplicación dentro de tus copias», «la aplicación de la carpeta principal», sin moverlas y
+  con «Que deje de guardarlas»), que ya contaba lo que `paraProteger` trae y `buscar`/`ficherosDeAcceso` no.
+- Lo de las subcarpetas no cambia: cada una cuenta por lo que tenga ella, como con las claves.
+- No hay textos nuevos: se reutilizan los de la 135 y la 167.
+
+**Las pruebas**: `humo.js` pasa de 495 a 497 (506 con `--con-arnes`). Dos comprobaciones nuevas, junto a las de la 149 y la 167: la
+escena de «No lo sé» (con tres opciones y repintando) y los ficheros de acceso de la raíz de una aplicación
+(fuera de sitio sin ella, en su sitio con ella, protegidos, lo de dentro sigue contando y el aviso de git sin
+el contenido). `panel-con-clics.js` deja elegir qué botón se pulsa entre varios del mismo tipo. Una de la 170
+llevaba un `package.json` en la raíz como ejemplo de «un `.json` que no es una credencial»: lo hacía una
+aplicación entera, y ahora es un `composer.json`.
+
+Mutaciones, cada una puesta y restaurada desde copia: la pregunta de cuándo caduca sin mirar lo apuntado (cae
+la escena y dos de la 149); el botón con otra huella (cae la escena); la raíz sin saltarse con una aplicación
+(cae la nueva); la raíz sin mirarse nunca con `conLasDeLasApps` (cae la nueva, «dejan de protegerse»).

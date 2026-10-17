@@ -8064,7 +8064,8 @@ exec git "$@"
     }));
     // A2: un .pem en una carpeta de primer nivel, y dos .json que NO cuentan.
     escribir('auto/publicar.pem', '-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n');
-    escribir('package.json', JSON.stringify({ name: 'lo-mio', version: '1.0.0', private: true }));
+    // Un .json cualquiera en la raíz; no `package.json`, que la haría una aplicación entera (decisión 180).
+    escribir('composer.json', JSON.stringify({ name: 'lo-mio/lo-mio', version: '1.0.0' }));
     escribir('auto/tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }));
     // Uno suelto dentro de una herramienta, y otro ya en su sitio.
     escribir('01-TOOLS/DRIVE/.env.example', 'DRIVE_FOLDER_ID=\n');
@@ -8087,7 +8088,7 @@ exec git "$@"
       assert.equal(porDonde['credentials.json'].queEs, 'Una cuenta de servicio de Google');
       // A2 · el .pem sí; package.json y tsconfig.json no.
       assert.ok(porDonde['auto/publicar.pem'], 'un .pem cuenta por su nombre');
-      assert.ok(!porDonde['package.json'] && !porDonde['auto/tsconfig.json'], 'un .json cualquiera no es una credencial');
+      assert.ok(!porDonde['composer.json'] && !porDonde['auto/tsconfig.json'], 'un .json cualquiera no es una credencial');
       // A3 · de quién es cada uno, y el emparejamiento es por trozos enteros:
       // `mi-drive` casa con DRIVE, `mi-drive-viejo` también (lleva el trozo),
       // pero `midrive` no, porque entonces `API` casaría con cualquier cosa.
@@ -20332,6 +20333,58 @@ exec git "$@"
     }
   });
 
+  await comprobar('cuándo caduca, la escena real: pulsar «No lo sé» con lo que manda el botón apunta y no vuelve a preguntar (decisión 180)', async () => {
+    // La captura 4g de la 167: después de «No lo sé» volvía a salir la pregunta,
+    // sin «Apuntado». Se pulsa el botón de lo pintado, se manda tal cual al
+    // editor y se repinta con lo que devuelve.
+    const { montarPanelConClics } = require('./panel-con-clics');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'caduca-escena-'));
+    const suya = path.join(carpeta, '01-TOOLS', 'Agenda');
+    fs.mkdirSync(suya, { recursive: true });
+    fs.writeFileSync(path.join(carpeta, '.rsc.json'), JSON.stringify({ version: 1, targets: ['claude'] }));
+    fs.writeFileSync(path.join(suya, '.env.example'), 'AGENDA_API_KEY=\n');
+    fs.writeFileSync(path.join(suya, 'test_connection.js'), "console.log('OK');");
+    const proveedor = vscode.registrado.proveedor;
+    const almacen = proveedor.almacen();
+    const CLAVES = ['executiveLab.pruebasDeConexion', 'executiveLab.cuandoCaducanLasClaves', 'executiveLab.caducidadesAvisadas'];
+    const antes = { raiz: vscode.guion.raiz, enviar: proveedor.enviar, guardado: CLAVES.map((k) => almacen.get(k)) };
+    const enviados = [];
+    proveedor.enviar = (m) => enviados.push(m);
+    const ultimo = (tipo) => [...enviados].reverse().find((m) => m.tipo === tipo);
+    vscode.guion.raiz = carpeta;
+    try {
+      for (const k of CLAVES) await almacen.update(k, {});
+      const p = montarPanelConClics();
+      for (const [en, texto] of [['noSe', 'Sin fecha de caducidad.'], ['nunca', 'No caduca.'], ['90', null]]) {
+        await almacen.update('executiveLab.cuandoCaducanLasClaves', {});
+        await proveedor.manejar({ tipo: 'guardarClave', proveedor: 'Agenda', clave: 'AGENDA_API_KEY', valor: `buena-${en}` });
+        await proveedor.manejar({ tipo: 'probar', proveedor: 'Agenda' });
+        await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Agenda' });
+        let html = p.mandar(ultimo('conexion'));
+        assert.match(html, /¿Cuándo caduca esta clave\?/, `${en}: no se pregunta`);
+        const mandados = p.enviados.length;
+        p.pulsar('cuandoCaduca', (a) => a.en === en);
+        const mensaje = p.enviados[mandados];
+        assert.equal(mensaje.huella, cargar('conexiones').huella('Agenda'), `${en}: el botón lleva otra huella que la de la clave`);
+        await proveedor.manejar(mensaje);
+        const pantalla = ultimo('conexion');
+        assert.ok(pantalla.aviso && /^Apuntado/.test(pantalla.aviso.texto), `${en}: sin «Apuntado»`);
+        html = p.mandar(pantalla);
+        assert.doesNotMatch(html, /¿Cuándo caduca esta clave\?/, `${en}: vuelve a salir la pregunta`);
+        assert.match(html, />\s*Cambiar\s*</, `${en}: sin «Cambiar»`);
+        if (texto) assert.match(html, new RegExp(texto.replace('.', '\\.')));
+        // Y repintar otra vez (el vigía, o volver a la conexión) no la trae de vuelta.
+        await proveedor.manejar({ tipo: 'verConexion', proveedor: 'Agenda' });
+        assert.doesNotMatch(p.mandar(ultimo('conexion')), /¿Cuándo caduca esta clave\?/, `${en}: al repintar vuelve la pregunta`);
+      }
+      return '«No lo sé», «No caduca» y «En 90 días» apuntan con la huella que lleva el botón, y repintar no vuelve a preguntar';
+    } finally {
+      for (const [i, k] of CLAVES.entries()) await almacen.update(k, antes.guardado[i]);
+      proveedor.enviar = antes.enviar;
+      vscode.guion.raiz = antes.raiz;
+    }
+  });
+
   await comprobar('cada clase de acceso, su forma: clave, usuario y contraseña, fichero, entrar con tu cuenta y dirección; sin decirlo, como antes', async () => {
     // Decisión 156 (F5 del plan de simplificar la barra). El asistente escribe en
     // CREDENTIALS.md qué clase de acceso pide, en una línea junto a la URL, y la
@@ -21947,6 +22000,55 @@ exec git "$@"
       vscode.guion.respuestas = antes.respuestas;
       vscode.guion.eleccion = antes.eleccion;
       vscode.guion.escrito = antes.escrito;
+    }
+  });
+
+  await comprobar('los ficheros de acceso de la raíz de una aplicación están en su sitio, como su .env: no se mueven, se protegen y, si están en git, se avisa (decisión 180)', async () => {
+    const sueltasM = cargar('sueltas');
+    const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'app-raiz-'));
+    const poner = (rel, txt) => {
+      fs.mkdirSync(path.dirname(path.join(carpeta, rel)), { recursive: true });
+      fs.writeFileSync(path.join(carpeta, rel), txt);
+    };
+    // Las partes de la clave se juntan al ejecutar: nada que parezca una clave en el código.
+    const cuenta = JSON.stringify({ type: 'service_account', client_email: 'robot@la-tienda.iam.gserviceaccount.com', private_key: ['-----BEGIN', 'PRIVATE KEY-----\nfalsa\n-----END PRIVATE KEY-----\n'].join(' ') });
+    poner('service-account.json', cuenta);
+    poner('privada.pem', ['-----BEGIN', 'PRIVATE KEY-----\nfalsa\n-----END PRIVATE KEY-----\n'].join(' '));
+    const proveedor = vscode.registrado.proveedor;
+    const antes = { raiz: vscode.guion.raiz, confianza: vscode.guion.confianza };
+    vscode.guion.raiz = carpeta;
+    try {
+      // Sin aplicación, fuera de sitio, como siempre.
+      assert.deepEqual(sueltasM.ficherosDeAcceso().map((f) => f.donde).sort(), ['privada.pem', 'service-account.json']);
+      assert.equal(sueltasM.resumen().ficherosDeAcceso.length, 2);
+      // Con el package.json arriba, la carpeta entera es la aplicación: están en su sitio.
+      poner('package.json', '{"name":"la-tienda"}\n');
+      assert.deepEqual(sueltasM.ficherosDeAcceso(), [], 'los ficheros de acceso de una aplicación salen como fuera de sitio');
+      assert.equal(sueltasM.resumen(), null, 'la tarjeta de fuera de sitio sale con una aplicación entera');
+      // Siguen siendo credenciales: no entran en una copia y sus valores se tapan.
+      assert.deepEqual(sueltasM.paraProteger().ficheros.map((f) => f.donde).sort(), ['privada.pem', 'service-account.json'], 'dejan de protegerse');
+      assert.equal(sueltasM.ficherosDeAcceso(sueltasM.herramientas(), { conLasDeLasApps: true }).length, 2);
+      // Lo de una carpeta de dentro sigue contando por lo que tenga ella.
+      poner('datos/otra-cuenta.pem', ['-----BEGIN', 'PRIVATE KEY-----\nfalsa\n-----END PRIVATE KEY-----\n'].join(' '));
+      assert.deepEqual(sueltasM.ficherosDeAcceso().map((f) => f.donde), ['datos/otra-cuenta.pem'], 'lo de dentro deja de contar');
+      fs.rmSync(path.join(carpeta, 'datos'), { recursive: true });
+      // Ya en git: se avisa como con las claves de la 135, con su carpeta principal y sin tocar nada.
+      const git = (...a) => require('node:child_process').spawnSync('git', a, { cwd: carpeta, encoding: 'utf8' });
+      if (git('init', '-q').status === 0) {
+        vscode.guion.confianza = true;
+        git('add', '-f', 'service-account.json');
+        const enLasCopias = sueltasM.deLasAppsEnLasCopias();
+        assert.ok(enLasCopias, 'un fichero de acceso de la aplicación en git no se avisa');
+        assert.deepEqual(enLasCopias.ficheros, ['service-account.json']);
+        assert.equal(enLasCopias.deAcceso, 1);
+        assert.deepEqual(enLasCopias.carpetas, ['']);
+        assert.match(enLasCopias.prompt, /No las muevas\./);
+        assert.doesNotMatch(enLasCopias.prompt, /falsa/, 'el encargo lleva el contenido');
+      }
+      return 'de una aplicación entera son suyos: no salen como fuera de sitio, se protegen y, en git, se avisa';
+    } finally {
+      vscode.guion.raiz = antes.raiz;
+      vscode.guion.confianza = antes.confianza;
     }
   });
 

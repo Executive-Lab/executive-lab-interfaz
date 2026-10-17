@@ -81,8 +81,9 @@ function montarPanelConClics(fichero = path.join(__dirname, '..', 'media', 'pane
   return {
     mandar(mensaje) { oyentes.message({ data: mensaje }); return pintado; },
     escribir(selector, valor) { escrito[selector] = valor; },
-    pulsar(tipo) {
-      const b = clics.find((c) => c.accion.tipo === tipo);
+    // `cual`: con varios botones del mismo tipo, el que cumple esto (p. ej. `(a) => a.en === 'noSe'`).
+    pulsar(tipo, cual = () => true) {
+      const b = clics.find((c) => c.accion.tipo === tipo && cual(c.accion));
       if (!b) throw new Error(`no hay botón ${tipo}`);
       b.fn();
     },

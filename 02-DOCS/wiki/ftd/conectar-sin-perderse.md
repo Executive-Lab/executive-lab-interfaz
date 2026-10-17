@@ -97,8 +97,8 @@ prueba en `humo.js` (426 a 431) y su mutación tumbada (9 de 9):
 ## Next
 
 - La fila 2 de la tarjeta, si se encuentra una forma barata de saber que algo está roto.
-- Decidir los ficheros de acceso de la raíz de una aplicación.
-- La captura 4g de la revisión: después de «No lo sé» volvía a salir la pregunta, sin «Apuntado». No lo he
-  investigado. Por el código, solo pasa si la huella que lleva el botón no es la de la clave de ahora; las
-  pruebas de la 149 lo apuntan bien. Puede ser la huella que mandó la escena.
 - Verlo en un VS Code de verdad, en Mac y en Windows.
+
+## Decisión 180
+
+Los dos cabos que quedaban se cerraron en la decisión 180: la captura 4g no se reproduce (la escena entera, con el botón y el repintado, apunta bien; queda la prueba) y los ficheros de acceso de la raíz de una aplicación están en su sitio, como su `.env`.
