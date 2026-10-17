@@ -8743,3 +8743,77 @@ leído como «Lo normal» y no como Auto (cae la misma); la migración apagada (
 mirar la constancia (cae «se pone al día con una constancia que no casa»); «Quitarlo» sin reconocer el matcher de
 antes (cae la de los avisos); sin el texto de la página (caen los textos del guion); otro texto para el formulario
 (caen los textos); y el matcher sin los dos nuevos (cae la de los avisos).
+
+## 184. El primer día, con menos preguntas
+
+Una auditoría del primer día (17-10-2026) contó lo que se le pregunta a alguien que elige una carpeta y pulsa
+«Preparar esta carpeta»: de 7 a 11 preguntas seguidas (de qué va, qué lleva, cuántas personas, qué construir,
+objetivo, cómo se maneja, nombre, empresa y web), más el asistente si hay dos instalados. Cinco puntos, cada uno
+comprobado en el código y en las decisiones antes de tocarlo.
+
+**1. Quedan de 5 a 8 preguntas.** Se quitan tres, porque ninguna se le manda a RSC y las tres tienen otro sitio:
+- **«¿Qué vas a llevar en esta carpeta?» (`alcance`) y «¿Cuántas personas están metidas en esto?» (`personas`).** Las
+  puso la decisión 116 (punto 5 de lo que decidió Jose) para no preguntar «¿pequeño o largo?», con el argumento de que
+  *«no es lo mismo un departamento de 3 personas que de 50»*. Pero la 117 ya dejó dicho que **solo la tercera,
+  «¿Qué vas a construir?», decide el tamaño que va a RSC**; las otras dos iban al perfil (`alcance:`, `personas:`), a
+  la sugerencia del nombre y al primer mensaje. Y el primer mensaje ya le pide al asistente «Completa conmigo el
+  perfil: a qué me dedico…», que es donde eso se pregunta de una en una y con conversación. Se respeta lo que 116 y 117
+  decidieron sobre **qué se pregunta a RSC** (`¿Qué vas a construir?` se queda, entera); lo que se quita es lo que
+  se decidió preguntar *además*, y no llegaba a RSC. **Lo que un perfil ya traía no se pierde**: al volver a montar,
+  `alcance` y `personas` siguen volviendo al perfil, y el primer mensaje los dice si están.
+- **«¿Qué tal te manejas con el ordenador?» (`nivel`).** Tenía valor por defecto (`non-technical`, que es lo que RSC da
+  por hecho y lo que `trato.js` enseña sin perfil) y se cambia después en «Cómo te habla». Ahora sale el que ya haya
+  (el de «Cómo te habla», o el del recibo si vale) y, si no vale ninguno, `non-technical`: a RSC nunca le llega un
+  nivel que no acepta. Las tres opciones siguen existiendo, donde se cambia.
+- **Se quedan**: el asistente (solo con los dos instalados), de qué va, qué construir (solo con construir algo o un
+  poco de todo), el objetivo, el nombre (con su empresa) y la web. **Empresa y web no se quitan**: son opcionales y se
+  dejan en blanco con Intro, pero no hay otro sitio donde ponerlas después (la web saca los colores y el logotipo del
+  panel). Sin «La empresa entera» ya no hay una sola caja de nombre: son siempre dos, y la cuenta de la brújula
+  («entre 5 y 8 preguntas») sale de ahí.
+
+**2. El nombre viene rellenado con el de la carpeta**, sin guiones ni subrayados y con la primera en mayúscula
+(`mi-tienda_2026` sale «Mi tienda 2026»). Quien no quiera pensar le da a Intro; quien quiera otro, lo escribe. Si la
+carpeta no tiene nada legible, vale el nombre que sugiere el objetivo (Facturación, Clientes…), como antes. La empresa
+no se rellena: no es la carpeta. El diccionario ya decía «se tira del nombre de la carpeta» (`## No se llama
+"empresa"`) y la caja salía vacía.
+
+**3. Elegir una carpeta nueva ya es empezar a prepararla.** Elegir la carpeta desde la barra («Elegir una carpeta»,
+«Cambiar de carpeta» o el diálogo de «Elegir otra carpeta») es decir «quiero trabajar aquí». Abrir una carpeta recarga
+la ventana, así que la barra apunta antes de abrir la ruta elegida y la hora en el almacén del editor
+(`executiveLab.carpetaElegida`), y la barra de después lo recoge, al abrir y después de retomar lo que esperaba a git.
+Empieza a prepararla sola, **como si se pulsara «Preparar esta carpeta»**, solo si:
+- la eligió desde la barra, y es esa carpeta y no otra, hace menos de cinco minutos (el apunte se borra al recogerlo,
+  lo use o no: abrir cualquier carpeta por otro camino, o volver a abrir esta otro día, no empieza nada);
+- hay confianza en la carpeta;
+- está vacía (nueva), no es delicada (Escritorio, Documentos, Descargas) ni prohibida (la personal), no va dentro de
+  otro proyecto, y no tiene `.rsc.json` ni recibo;
+- no hay respuestas guardadas de otra vez (eso lo retoma `retomarLaPreparacion`) ni el arnés está ocupado.
+
+En cualquier otro caso, como antes: su pantalla y su botón. Las preguntas se hacen igual: empieza «sola» quiere decir
+sin el segundo clic, no sin la persona. «Crear una carpeta nueva» (punto 4) cuenta como elegirla.
+
+**4. Sin carpeta abierta, «Crear una carpeta nueva».** La pantalla de entrada solo tenía «Elegir una carpeta». Ahora,
+debajo y en discreto, «Crear una carpeta nueva» (`crearUnaCarpetaDentro`, dentro de la personal, como la salida de la
+decisión 116 B1) para quien no tiene ninguna. Y como crearla es elegirla, y es nueva, empieza a prepararse (punto 3).
+
+**5. Una palabra para la carpeta.** Se contaron tres: «carpeta» (la inmensa mayoría de la pantalla: Preparar esta
+carpeta, Elegir una carpeta, Crear una carpeta), «proyecto» («Cambiar de proyecto») y «espacio» («Tu espacio está a
+medio preparar»). **El diccionario no era coherente**: su primera fila traduce «carpeta del proyecto / repo / workspace»
+a «Mi trabajo», pero ni una sola pantalla usa «Mi trabajo» para la carpeta (solo es el título de la ventana mientras
+no tiene nombre), y a la vez la fila de «abrir otra carpeta» mandaba «Cambiar de proyecto». Se unifica en **carpeta**,
+que es lo que dice todo lo demás y lo que se ve en el diálogo del sistema («Elige la carpeta con la que quieres
+trabajar»): «Cambiar de carpeta», «Tu carpeta está a medio preparar», «lo que esta carpeta traía puesto» y «esta
+carpeta declara un arnés». La primera fila del diccionario se reescribe para decirlo. **No se toca** «un proyecto»
+como cosa que alguien lleva (la categoría de las opciones y del objetivo, «el proyecto que sea»), ni los textos para el
+asistente, ni «el proyecto» de RSC («Esta carpeta está dentro de otro proyecto», que habla de otro repositorio).
+
+### Cómo se probó
+
+`humo.js`: la cuenta pasa de 7–11 a 5–8 y se comprueba contra la entrevista de verdad por sus dos extremos; una prueba
+nueva para las tres preguntas quitadas (y que el perfil y el nivel del recibo se respetan), otra para el nombre
+rellenado, otra para elegir una carpeta (nueva y desde la barra: sola y una sola vez; por otro camino, de otra, vieja,
+con cosas, con `.rsc.json`, sin confianza o con lo contestado guardado: no) y otra para la pantalla sin carpeta y para
+la palabra única. Las respuestas del guion de los montajes de verdad (`--con-arnes`, `empresas-distintas.js`) pierden
+las tres preguntas. Ocho mutaciones, cada una puesta y restaurada desde copia: volver a preguntar `personas` (cae la
+cuenta); el nombre sin rellenar; el apunte que no caduca; sin mirar que la carpeta esté vacía; sin apuntar al elegir;
+sin el botón de crear; cualquier carpeta vale; y sin nivel por defecto. Todas caen.

@@ -46,7 +46,7 @@ const YA_CONTESTADO = {
   sinGit: 'Ya me has contestado lo que hacía falta. Al pulsar pongo git y la termino de preparar.',
 };
 const conLoContestado = (estado) => (estado.esperandoAGit
-  ? { ...estado, donde: 'Tu espacio está a medio preparar', aviso: estado.faltaGit ? YA_CONTESTADO.sinGit : YA_CONTESTADO.conGit }
+  ? { ...estado, donde: 'Tu carpeta está a medio preparar', aviso: estado.faltaGit ? YA_CONTESTADO.sinGit : YA_CONTESTADO.conGit }
   : estado);
 
 // Nombres del diccionario para las dos carpetas del arnés.
@@ -187,7 +187,7 @@ async function calcular() {
         listo: false,
         sinArnes: true,
         aMedioPreparar: true,
-        donde: 'Tu espacio está a medio preparar',
+        donde: 'Tu carpeta está a medio preparar',
         hiciste: null,
         aviso: 'Se quedó algo sin montar, seguramente porque se cerró antes de tiempo. Se termina en un momento y no se pierde nada de lo que ya haya.',
         ...(await loDeGit()),
@@ -244,7 +244,7 @@ async function calcular() {
       listo: false,
       sinArnes: true,
       aMedioPreparar: true,
-      donde: 'Tu espacio está a medio preparar',
+      donde: 'Tu carpeta está a medio preparar',
       hiciste: null,
       aviso: 'Se quedó algo sin montar, seguramente porque se cerró antes de tiempo. Se termina en un momento y no se pierde nada de lo que ya haya.',
       ...(await loDeGit()),
