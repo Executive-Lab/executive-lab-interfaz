@@ -27276,7 +27276,8 @@ exec git "$@"
         const t0 = Date.now();
         try {
           const cuantos = await historial.cuantosCambios(repo, { git: falso, recalcular: true });
-          assert.equal(cuantos, 0);
+          // Un git cortado por el tope no es «0 cambios»: no se ha podido mirar (decisión 189).
+          assert.equal(cuantos, null);
         } finally { historial.TOPE.lee = tope; }
         assert.ok(Date.now() - t0 < 3000, `el git colgado tardó ${Date.now() - t0} ms: el tope no corta`);
       }
