@@ -26855,7 +26855,18 @@ exec git "$@"
   });
 
   await comprobar('188: los git llevan su tope y los que solo leen, --no-optional-locks', async () => {
-    const historial = require(path.join(RAIZ, 'media', 'comun', 'historial.js'));
+    // Una copia aparte del módulo: `historial` recuerda el motor que eligió, y esta
+    // prueba lo cambia (git de mentira, `recalcular`): con el de todos se lo dejaría
+    // cambiado al resto de la batería.
+    const historial = (() => {
+      const Modulo = require('node:module');
+      const id = path.join(RAIZ, 'media', 'comun', 'historial.js');
+      const suyo = new Modulo(id, module);
+      suyo.filename = id;
+      suyo.paths = Modulo._nodeModulePaths(path.dirname(id));
+      suyo._compile(fs.readFileSync(id, 'utf8'), id);
+      return suyo.exports;
+    })();
     assert.equal(historial.topeDe(['status']), 15000, 'un status sin tope de 15 s');
     assert.equal(historial.topeDe(['log']), 15000);
     assert.ok(historial.topeDe(['push']) > historial.topeDe(['commit']), 'subir tiene que poder tardar más que guardar');
@@ -26899,7 +26910,6 @@ exec git "$@"
       assert.match(fuente, /const git = \(\.\.\.args\) => ejecutar\(entorno\.git\(\), \[\.\.\.ARGS_DE_GIT, \.\.\.args\], \{ tiempoMaximo: TOPE_DE_GIT \}\)/, 'procesos.git sin tope');
       return 'status/log con la bandera, add/commit sin ella; un git colgado se corta';
     } finally {
-      historial.queMotor({ recalcular: true });
       fs.rmSync(taller, { recursive: true, force: true });
     }
   });
