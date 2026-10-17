@@ -8661,6 +8661,57 @@ Mutaciones, cada una puesta y restaurada desde copia: la pregunta de cuándo cad
 la escena y dos de la 149); el botón con otra huella (cae la escena); la raíz sin saltarse con una aplicación
 (cae la nueva); la raíz sin mirarse nunca con `conLasDeLasApps` (cae la nueva, «dejan de protegerse»).
 
+## 181. Lo que se puede hacer solo al montar, se hace solo
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `lo-que-se-hace-solo-al-montar`
+
+La regla (P9): lo local, gratis y que se deshace lo hace la barra sola y lo dice en una frase con su
+«Quitarlo»; solo pregunta lo que sale del ordenador, no se deshace, cuesta dinero o decide su negocio. Una
+auditoría señaló cuatro fugas. Se comprobó cada una contra el código y las decisiones antes de tocar nada.
+
+**1. Copias solas: ya estaban encendidas, no se tocó el valor.** La 164 las dejó de fábrica en «cada hora»
+(`default: 1` en `package.json`, `DE_FABRICA = 1` en `ajustes.js`, con una prueba que exige que digan lo
+mismo), y una carpeta recién montada no escribe nada que las apague. Lo que faltaba era decirlo: al terminar
+de montar sale «Guardo una copia sola cada hora, mientras tengas esto abierto y haya algo nuevo.» (o «un par
+de veces al día»), con su «Quitarlo» (`quitarElGuardadoSolo`: pone «Solo cuando yo lo diga» y dice «Quitado.
+Solo guardo una copia cuando pulses el botón.»). No se dice si de verdad no va a guardar: ajuste apagado,
+«seguir sin copias», o un historial que no es nuestro (`terreno.podemosGuardarSolo`).
+
+**2. El asistente que falta: el botón ya estaba, las preguntas no.** La 166 ya cambió «Díselo a tu tutor» por
+«Poner Claude/Codex» (`asistentes.falta`, panel y avisos), y se comprobó que no queda ninguno. Lo que
+preguntaba aún un «¿Lo pongo?» era lo que los ajustes ya habían pedido:
+- Al montar (`arrancar.conElAjuste`), con «Claude», «Codex» o «Los dos» y el asistente sin poner, se pone solo
+  y se dice al terminar: «He puesto {Codex} en este ordenador.» (`hecho.puestos`, `losQueSePusieron`).
+- Al abrir una carpeta con «Los dos» (`prepararParaLosDosYa`), igual: «He puesto {Claude} en este
+  ordenador, porque en los ajustes elegiste los dos asistentes.»
+- Si falla, el aviso lleva «Ponerlo ahora» (o «Ponerlos ahora»), que lo intenta otra vez; si vuelve a fallar,
+  «Algo va mal» (la 183). Con los dos y solo uno que falla, se sigue con el que sí está, y se dice.
+- Sigue preguntando «¿Cuál pongo?» sin ningún asistente y en automático: es elegir uno, y decide la persona.
+- Una extensión del editor no tiene «Quitarlo» propio: se quita desde el editor.
+
+**3. Vista sencilla: preguntaba, ahora se pone sola.** Se quitó «¿Dejo esta ventana en vista sencilla?». Al
+montar de cero se pone (`ponerLaVistaSencillaSola`, la misma `volverAModoSencillo` del botón «Modo sencillo»)
+y se dice, con «Quitarlo» (`verEditorCompleto`). Sin frase si ya estaba así. Tampoco sale el diálogo de
+«cerrar y abrir»: la frase lo cuenta.
+
+**4. «Dale a enviar» en el primer mensaje y en «He puesto al día».** Como la 166 hizo con `pedir`: con el
+texto escrito en su caja (`directo`) el aviso termina en «Te lo he dejado escrito en la conversación. Dale a
+enviar.»; copiado, ya lo dice el aviso del portapapeles. En la puesta al día el mensaje se manda antes del
+aviso para poder decirlo.
+
+**Varios «Quitarlo» a la vez.** `dejarElAviso` guardaba un solo botón. Ahora suma los que traen
+`etiquetaConVarios` (los de esta decisión y el de lo de Claude del montaje): con uno sale «Quitarlo»; con
+varios, cada uno dice qué quita (Quitar la vista sencilla · Quitar las copias solas · Quitar lo de Claude). Los
+demás avisos siguen como antes: el primer botón que llega. El aviso del montaje se guarda hasta el final del
+montaje para que «Dale a enviar» vaya con las demás frases y no las tape.
+
+**Las pruebas**: `humo.js` pasa de 505 a 507 (516 con `--con-arnes`; la de los ajustes de los asistentes se reescribió y se añadió una
+nueva con la escena del montaje: sin pregunta, frases, cada «Quitarlo», copiado/escrito, ajuste a 0/8,
+sin copias, historial de otra persona, y la puesta al día). Nueve mutaciones, cada una puesta y restaurada
+desde copia, y las nueve caen: sin «Dale a enviar» tras el primer mensaje; sin él en la puesta al día; la vista
+sencilla sin ponerse; copias solas dichas con el ajuste apagado; dichas sin copias; un solo botón; sin decir
+que se puso el otro asistente; sin apuntar lo puesto; sin el botón de reintento.
+
 ## 182. Claude, al día con su documentación
 
 El 17-10-2026 se releyó la documentación oficial de Claude Code contra lo que la barra hace. Tres hallazgos.
