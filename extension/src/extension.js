@@ -453,7 +453,7 @@ ${cabecera}
     }
 
     // Lo que trae o arregla el arnés lo lee Claude al empezar una conversación.
-    const frase = solo.laFrase(hechas, donde.paraQuien() === 'claude' && hechas.length > 0);
+    const frase = solo.laFrase(hechas, hechas.length > 0 && ((asistentes.porId(donde.paraQuien()) || {}).nombre || false));
     this.dejarElAviso(frase);
     // Sin sacar a nadie de donde está: se repinta lo que tenga delante, y la
     // frase sale cuando esté en la principal.
@@ -3936,7 +3936,7 @@ ${cabecera}
     await this.refrescar(true);
     return this.enviar(puesto.modo === 'ninguno'
       ? { tipo: 'aviso', texto: 'No he podido arreglarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true }
-      : { tipo: 'aviso', texto: 'Cierra la conversación con Claude y ábrela otra vez para que lo coja.' });
+      : { tipo: 'aviso', texto: asistentes.paraQueLoCoja(donde.paraQuien()) || 'Ya está.' });
   }
 
   // El botón del freno pendiente (C-4): con el sí de quien lo pulsa, se engancha
@@ -3950,7 +3950,7 @@ ${cabecera}
     this.salida.appendLine(`[railes] el freno: ${ok}`); // diccionario: interno
     await this.refrescar(true);
     return this.enviar(ok
-      ? { tipo: 'aviso', texto: 'Ya está. Cierra la conversación con Claude y ábrela otra vez para que lo coja.' }
+      ? { tipo: 'aviso', texto: `Ya está. ${asistentes.paraQueLoCoja(donde.paraQuien()) || ''}`.trim() }
       : { tipo: 'aviso', texto: 'No he podido ponerlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
   }
 
@@ -4054,9 +4054,9 @@ ${cabecera}
     const ok = await arrancar.ponerElBloque(this.contexto) && terreno.tieneElBloque();
     this.salida.appendLine(`[railes] lo de siempre, a mano: ${ok}`); // diccionario: interno
     await this.refrescar(true);
-    const conClaude = donde.paraQuien() === 'claude';
+    const reabrir = asistentes.paraQueLoCoja(donde.paraQuien());
     return this.enviar(ok
-      ? { tipo: 'aviso', texto: conClaude ? 'Ya está. Cierra la conversación con Claude y ábrela otra vez para que lo coja.' : 'Ya está.' }
+      ? { tipo: 'aviso', texto: reabrir ? `Ya está. ${reabrir}` : 'Ya está.' }
       : { tipo: 'aviso', texto: 'No he podido ponerlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
   }
 
@@ -4402,12 +4402,26 @@ ${cabecera}
   }
 }
 
+// Decisión 190: los `setTimeout` sueltos del arranque se guardan para poder
+// cancelarlos al cerrar (`deactivate`): uno que salta con la extensión ya cerrada
+// toca cosas que ya no están.
+const sueltos = new Set();
+function luego(fn, ms) {
+  const reloj = setTimeout(() => {
+    sueltos.delete(reloj);
+    fn();
+  }, ms);
+  sueltos.add(reloj);
+  if (reloj.unref) reloj.unref();
+  return reloj;
+}
+
 // El disfraz base se pone en el primer arranque. Las claves de Claude solo
 // existen cuando su extensión ya está activa, así que lo que no entre se
 // reintenta una vez.
 async function vestir(contexto, salida) {
   const { primeraVez, aplicadas, pendientes } = await disfraz.aplicar(contexto, salida);
-  if (pendientes.length) setTimeout(() => disfraz.aplicar(contexto, salida).catch(() => {}), 8000);
+  if (pendientes.length) luego(() => disfraz.aplicar(contexto, salida).catch(() => {}), 8000);
   if (primeraVez && aplicadas) {
     await disfraz.proponerReabrir('Ya está todo preparado. Para que se vea bien, hay que cerrar y abrir de nuevo.');
   }
@@ -4455,10 +4469,11 @@ function loQueMira() {
 // `.rsc.json` (la elección va aparte, E1), y era lo que rearmaba el vigía: sin
 // esto se seguían vigilando las carpetas del anterior (revisión de F5, I4).
 let vigilarOtraVez = () => {};
+// Decisión 190: al cambiar la primera carpeta se vigila la nueva.
+let vigilarOtraCarpeta = () => {};
 
 function vigilarElArnes(contexto, panel) {
-  const carpetas = vscode.workspace.workspaceFolders;
-  if (!carpetas || !carpetas.length) return;
+  const carpetaDeAhora = () => (vscode.workspace.workspaceFolders || [])[0];
 
   let vigia = null;
   let mirando = null;
@@ -4497,8 +4512,11 @@ function vigilarElArnes(contexto, panel) {
 
   function armar() {
     if (vigia) vigia.dispose();
+    vigia = null;
+    const carpeta = carpetaDeAhora();
+    if (!carpeta) return;
     mirando = loQueMira();
-    vigia = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(carpetas[0], mirando));
+    vigia = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(carpeta, mirando));
     vigia.onDidCreate(alCambiar);
     vigia.onDidChange(alCambiar);
     vigia.onDidDelete(alCambiar);
@@ -4506,6 +4524,7 @@ function vigilarElArnes(contexto, panel) {
 
   armar();
   vigilarOtraVez = () => { if (loQueMira() !== mirando) armar(); };
+  vigilarOtraCarpeta = () => { clearTimeout(reloj); armar(); };
   contexto.subscriptions.push({ dispose: () => { clearTimeout(reloj); if (vigia) vigia.dispose(); } });
 }
 
@@ -4558,8 +4577,13 @@ function guardarSolo(panel, salida) {
   // no obliga a reiniciar nada, y un portátil que se suspende no pierde el turno.
   const MIRAR_CADA = 15 * 60 * 1000;
   let ultima = Date.now();
+  // Decisión 190: si un guardado tarda más que el intervalo, el siguiente no
+  // arranca otro a la vez.
+  let guardando = false;
 
   const reloj = setInterval(async () => {
+    if (guardando) return;
+    guardando = true;
     try {
       const hecho = await copias.guardarSiToca({ horas: ajustes.cadaCuantoGuarda(), desde: ultima, sigueSinCopias: panel.eligioSinCopias() });
       if (hecho.hecho !== 'guardada') return;
@@ -4571,6 +4595,8 @@ function guardarSolo(panel, salida) {
       if (hecho.excluidos && hecho.excluidos.length) salida.appendLine(`[guardarSolo] fuera de la copia: ${hecho.excluidos.join(', ')}`); // diccionario: interno
     } catch (error) {
       salida.appendLine(`[guardarSolo] ${error.stack || error.message}`);
+    } finally {
+      guardando = false;
     }
   }, MIRAR_CADA);
 
@@ -4642,7 +4668,7 @@ function activate(contexto) {
   // con el editor cerrado (decisión 144).
   const mirar = () => panel.mirarLosRecordatorios().catch((error) => salida.appendLine(`[recordatorios] ${error.message}`)); // diccionario: interno
   const relojDeRecordatorios = setInterval(mirar, 60 * 1000);
-  const primeraMirada = setTimeout(mirar, 8000);
+  const primeraMirada = luego(mirar, 8000);
   // Que no sean ellos los que mantengan vivo el proceso: el editor ya lo hace.
   for (const reloj of [relojDeRecordatorios, primeraMirada]) if (reloj && reloj.unref) reloj.unref();
   contexto.subscriptions.push({ dispose: () => { clearInterval(relojDeRecordatorios); clearTimeout(primeraMirada); } });
@@ -4701,6 +4727,20 @@ function activate(contexto) {
 
   vigilarElArnes(contexto, panel);
 
+  // Decisión 190: si cambia la primera carpeta, el vigía mira la nueva y se
+  // olvida lo que se sabía de la anterior (la brújula y la continuación). Sin
+  // esto la barra seguía vigilando y rotulando la carpeta de antes.
+  let primeraCarpeta = proyecto.raiz();
+  contexto.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    const ahora = proyecto.raiz();
+    if (ahora === primeraCarpeta) return undefined;
+    primeraCarpeta = ahora;
+    brujula.olvidar();
+    rsc.olvidarLaContinuacion();
+    vigilarOtraCarpeta();
+    return panel.refrescar(true).catch((e) => salida.appendLine(`[carpeta] ${e.message}`)); // diccionario: interno
+  }));
+
   // El ajuste del asistente, cambiado con la barra abierta, se nota sin recargar
   // (decisión 158). Devuelve la promesa solo para que la prueba la pueda esperar.
   contexto.subscriptions.push(vscode.workspace.onDidChangeConfiguration((cambio) => {
@@ -4714,7 +4754,7 @@ function activate(contexto) {
 
   // Y el chat de Claude ya abierto en el centro: el alumno no tiene que
   // buscarlo. Su extensión puede tardar en activarse; se le da un momento.
-  setTimeout(() => puente.abrirConversacion().catch(() => {}), 1500);
+  luego(() => puente.abrirConversacion().catch(() => {}), 1500);
 
   // El disfraz se pone solo en una instalación de verdad. Quien prueba la
   // extensión desde el código no quiere que le desaparezca su editor: ahí se
@@ -4729,7 +4769,7 @@ function activate(contexto) {
   // es decidir, así que va solo y sin preguntar (decisión 108). Callado: si
   // sale bien no hay nada que contarle a nadie, y si sale mal la lista de
   // piezas lo dice con su botón.
-  setTimeout(async () => {
+  luego(async () => {
     // Lo que una barra anterior dejó escrito en los enganches —la ruta del Node
     // de este ordenador, y la marca que la escondía de git— se deshace al abrir.
     // Es nuestro, y deshacerlo no es decidir (C3, decisión 119).
@@ -4763,6 +4803,12 @@ function activate(contexto) {
   }, 3000);
 }
 
-function deactivate() {}
+// Al cerrar (decisión 190): se cancelan los relojes sueltos del arranque y se
+// terminan los procesos que lanzó la barra y siguen vivos, solo los nuestros.
+function deactivate() {
+  for (const reloj of sueltos) clearTimeout(reloj);
+  sueltos.clear();
+  try { require('./procesos').terminarLosMios(); } catch { /* cerrando */ }
+}
 
 module.exports = { activate, deactivate };

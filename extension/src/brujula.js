@@ -252,7 +252,7 @@ async function calcular() {
     });
   }
 
-  const [continuacion, copias] = await Promise.all([rsc.retomar(), guardar.copias(1)]);
+  const [continuacion, copias] = await Promise.all([rsc.retomarSinEsperar(), guardar.copias(1)]);
   const [ultimoAprendido] = cerebro.aprendidoUltimamente(1);
   const sabe = cerebro.cuantoSabe();
   const conectados = conexiones.proveedores().length;
@@ -281,13 +281,13 @@ async function calcular() {
   // cuando la tarjeta podría salir: el de Claude lanza un proceso.
   const aplazado = Boolean(sesionDelAsistente.loAplazado());
   const sesion = sinEmpezar || aplazado ? await sesionDelAsistente.haySesion(quien) : null;
-  const conTarjeta = (sinEmpezar && sesion !== 'si') || (aplazado && asistentes.estaInstalado(quien));
+  const conTarjeta = (sinEmpezar && sesion !== 'si') || (aplazado && asistentes.estaPuesto(quien));
 
   // Que falte el asistente no es solo un problema del primer día: si alguien lo
   // desinstala, o abre esta carpeta en otro ordenador, la barra sigue pintando
   // botones que no van a contestar. Antes esto solo se decía cuando no se había
   // empezado nada, así que a partir del segundo día se callaba.
-  const faltaElAsistente = !asistentes.estaInstalado(quien);
+  const faltaElAsistente = !asistentes.estaPuesto(quien);
   const conGit = await guardar.hayGit();
 
   // ── Montado, pero sin ajustar ─────────────────────────────────────────
@@ -331,7 +331,7 @@ async function calcular() {
     ponerElAsistente: faltaElAsistente ? asistentes.falta(quien).boton : null,
     primerPaso: conTarjeta ? {
       asistente: quien.nombre,
-      instalado: asistentes.estaInstalado(quien),
+      instalado: asistentes.estaPuesto(quien),
       // Solo cuando hay algo esperando: así la forma de antes no cambia.
       ...(aplazado ? { esperaElEncargo: true, sesion } : {}),
     } : null,

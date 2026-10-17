@@ -1117,7 +1117,9 @@ function pantallaAsistente({ ahora, ajuste = 'automatico', montada = false, cual
           ? (a.mandaTexto
             ? 'Puesto en este ordenador. Los botones le mandan el texto directamente.'
             : 'Puesto en este ordenador. Los botones abren su barra y te dejan el texto copiado, porque no admite que se lo pasen.')
-          : 'No está en este ordenador.')}</p>
+          : (a.enTerminal
+            ? 'Lo tienes fuera del editor. Para que los botones le hablen desde aquí, ponlo también en el editor.'
+            : 'No está en este ordenador.'))}</p>
         ${/* Se pone con un clic, y se vuelve aquí (decisión 166). */''}
         ${a.instalado ? '' : boton({ etiqueta: `Poner ${a.nombre}`, icono: '⬇️', pequeno: true, accion: { tipo: 'ponerElAsistente', cual: a.id, desde: 'asistente' } })}
         ${a.instalado && a.id !== ahora && !a.delArnes

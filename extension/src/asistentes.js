@@ -76,14 +76,55 @@ const porId = (id) => ASISTENTES.find((a) => a.id === id) || null;
 
 const estaInstalado = (a) => Boolean(vscode.extensions.getExtension(a.extension));
 
+// Decisión 190: Codex también se usa solo por terminal, sin la extensión del
+// editor. Se sabe sin coste y sin lanzar nada: `codex` en el PATH, o la sesión en
+// `~/.codex` (reutiliza lo de la 186). Con Claude no se mira: su ejecutable lo
+// trae la propia extensión. Cambiable: las pruebas no miran el ordenador de nadie.
+const terminal = {
+  hayEnElPath(nombre) {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const sufijos = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : [''];
+    for (const carpeta of String(process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+      for (const sufijo of sufijos) {
+        try {
+          if (fs.statSync(path.join(carpeta, nombre + sufijo)).isFile()) return true;
+        } catch { /* ahí no está */ }
+      }
+    }
+    return false;
+  },
+  haySesion: () => require('./sesion-del-asistente').sesionDeCodex() === 'si',
+};
+const enTerminal = (a) => Boolean(a) && a.id === 'codex' && (terminal.hayEnElPath('codex') || terminal.haySesion());
+
+// Lo tiene puesto en este ordenador, de una forma o de otra. Lo que necesita la
+// extensión (que los botones le escriban, abrirle la barra) sigue mirando
+// `estaInstalado`.
+const estaPuesto = (a) => estaInstalado(a) || enTerminal(a);
+
 // Lo que se dice cuando falta, con el botón que lo pone (decisión 166). Decía
 // «Díselo a tu tutor», y la barra ya sabía ponerlo: es una extensión del editor,
 // y ponerla es un clic suyo. Una sola frase para todos los sitios donde se dice.
 const falta = (a) => ({
-  texto: `Falta ${a.nombre} en este ordenador, y sin él no puedo hablar con nadie.`,
+  // Quien lo usa por terminal no «lo tiene que poner»: lo que falta es la
+  // extensión, y solo para que los botones le hablen desde aquí (decisión 190).
+  texto: !estaInstalado(a) && enTerminal(a)
+    ? `Ya tienes ${a.nombre}, pero fuera del editor. Para que los botones le hablen desde aquí, hay que ponerlo también en el editor.`
+    : `Falta ${a.nombre} en este ordenador, y sin él no puedo hablar con nadie.`,
   malo: true,
   boton: { etiqueta: `Poner ${a.nombre}`, accion: { tipo: 'ponerElAsistente', cual: a.id } },
 });
+
+// Decisión 190: lo que el asistente solo lee al empezar una conversación (los
+// raíles, `AGENTS.md` o `CLAUDE.md`, los enganches, los ajustes) no lo ve una
+// conversación que ya estaba abierta. Con Claude y con Codex es igual, y se dice
+// igual, con su nombre. Con otro asistente, nada: no se sabe cómo lo lee.
+const { REABRIR } = require('./solo');
+const paraQueLoCoja = (id) => {
+  const a = porId(id);
+  return a ? REABRIR(a.nombre) : null;
+};
 
 // A cuáles se instaló el arnés. RSC lo guarda en `.rsc.json`.
 function losDelArnes() {
@@ -192,6 +233,8 @@ function comoEstamos() {
       id: a.id,
       nombre: a.nombre,
       instalado: estaInstalado(a),
+      // Por terminal, sin la extensión (decisión 190).
+      enTerminal: !estaInstalado(a) && enTerminal(a),
       // Si el arnés se montó para él. Se puede hablar con uno no declarado,
       // pero conviene decirlo.
       delArnes: delArnes.includes(a.id),
@@ -294,4 +337,4 @@ async function elegir(id, { montar } = {}) {
   return { ok: true, mensaje: `Hecho. A partir de ahora los botones hablan con ${cual.nombre}.${conOtroNombre}${sinFrenos}` };
 }
 
-module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, porId, falta, comoEstamos, elegir, AJUSTE, VALORES_DEL_AJUSTE, elAjuste, seguirCon };
+module.exports = { ASISTENTES, saberDondeGuardar, conQuien, elDeAhora, losDelArnes, estaInstalado, estaPuesto, REABRIR, paraQueLoCoja, enTerminal, terminal, porId, falta, comoEstamos, elegir, AJUSTE, VALORES_DEL_AJUSTE, elAjuste, seguirCon };

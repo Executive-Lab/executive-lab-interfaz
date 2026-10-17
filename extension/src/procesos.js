@@ -9,6 +9,22 @@ const { spawn } = require('node:child_process');
 const proyecto = require('./proyecto');
 const entorno = require('./entorno');
 
+// Decisión 190: los procesos que lanza la barra y siguen vivos, para poder
+// terminarlos al cerrar (`terminarLosMios`). Solo los nuestros, por su proceso:
+// nunca se busca nada por nombre ni se toca lo que lanzó otro.
+const vivos = new Set();
+
+function terminarLosMios() {
+  const propios = [...vivos];
+  vivos.clear();
+  for (const hijo of propios) {
+    try { hijo.kill(); } catch { /* ya no está */ }
+    const insistir = setTimeout(() => { try { hijo.kill('SIGKILL'); } catch { /* ya no está */ } }, 2000);
+    if (insistir.unref) insistir.unref();
+  }
+  return propios.length;
+}
+
 function ejecutar(programa, args, opciones = {}) {
   const { cwd = proyecto.raiz(), tiempoMaximo = 180000, env, verbatim = false } = opciones;
 
@@ -30,6 +46,11 @@ function ejecutar(programa, args, opciones = {}) {
       resolve({ codigo: -1, salida: '', error: e.message });
       return;
     }
+
+    vivos.add(proceso);
+    const yaNo = () => vivos.delete(proceso);
+    proceso.once('close', yaNo);
+    proceso.once('error', yaNo);
 
     let salida = '';
     let error = '';
@@ -98,4 +119,4 @@ function delPath(programa, args, opciones) {
   return ejecutar('cmd.exe', ['/d', '/s', '/c', `"${linea}"`], { ...opciones, verbatim: true });
 }
 
-module.exports = { ejecutar, git, node, bash, delPath };
+module.exports = { terminarLosMios, losVivos: () => vivos.size, ejecutar, git, node, bash, delPath };

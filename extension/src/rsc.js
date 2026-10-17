@@ -184,27 +184,60 @@ function lanzar(args, opciones) {
 // para nada que necesite estar al segundo. Y `olvidar()` para cuando se cambia
 // de carpeta, que ahí sí es otro registro.
 const CUANTO_DURA = 60000;
-let recordado = { cuando: 0, texto: null, raiz: null };
+// Decisión 190: un fallo o un tiempo agotado también se recuerda, más rato. En una
+// carpeta grande `memory resume` pasa de los 20 s, y como un fallo no se
+// recordaba, se volvía a lanzar —y a esperar— en cada repintado. Cinco minutos:
+// sin continuación durante ese rato, que es lo mismo que ya pasaba mientras
+// fallaba, y sin un proceso nuevo por repintado.
+const CUANTO_DURA_UN_FALLO = 5 * 60000;
+let recordado = { cuando: 0, texto: null, raiz: null, fallo: false };
+let enCurso = null; // { raiz, promesa }: dos repintados seguidos no lanzan dos procesos
 
-const olvidarLaContinuacion = () => { recordado = { cuando: 0, texto: null, raiz: null }; };
+const olvidarLaContinuacion = () => { recordado = { cuando: 0, texto: null, raiz: null, fallo: false }; enCurso = null; };
+
+const loRecordado = (aqui) => (recordado.cuando
+  && recordado.raiz === aqui
+  && Date.now() - recordado.cuando < (recordado.fallo ? CUANTO_DURA_UN_FALLO : CUANTO_DURA)
+  ? { texto: recordado.texto } : null);
 
 async function retomar() {
   const aqui = proyecto.raiz();
-  const vale = recordado.cuando
-    && recordado.raiz === aqui
-    && Date.now() - recordado.cuando < CUANTO_DURA;
-  if (vale) return recordado.texto;
+  const visto = loRecordado(aqui);
+  if (visto) return visto.texto;
+  if (enCurso && enCurso.raiz === aqui) return enCurso.promesa;
 
-  const { codigo, salida } = await correr(['memory', 'resume'], { tiempoMaximo: 20000 });
-  // Un fallo no se recuerda: recordar un intento que no salió deja la barra
-  // sin continuación durante un minuto por un tropiezo de una vez. Es la misma
-  // trampa que ya mordió en el catálogo de capacidades.
-  if (codigo !== 0) return null;
+  const promesa = (async () => {
+    const { codigo, salida } = await correr(['memory', 'resume'], { tiempoMaximo: 20000 });
+    // Un fallo se recuerda (más rato que un acierto): repetirlo al momento no lo arregla.
+    if (codigo !== 0) {
+      if (proyecto.raiz() === aqui) recordado = { cuando: Date.now(), texto: null, raiz: aqui, fallo: true };
+      return null;
+    }
+    const texto = salida.trim();
+    const limpio = !texto || /^\(no local continuation/i.test(texto) ? null : texto;
+    if (proyecto.raiz() === aqui) recordado = { cuando: Date.now(), texto: limpio, raiz: aqui, fallo: false };
+    return limpio;
+  })();
+  const mia = { raiz: aqui, promesa };
+  enCurso = mia;
+  try {
+    return await promesa;
+  } finally {
+    if (enCurso === mia) enCurso = null;
+  }
+}
 
-  const texto = salida.trim();
-  const limpio = !texto || /^\(no local continuation/i.test(texto) ? null : texto;
-  recordado = { cuando: Date.now(), texto: limpio, raiz: aqui };
-  return limpio;
+// Para pintar: lo recordado si lo hay; si no, se lanza y se espera lo justo. Lo
+// que tarde más no frena la pantalla: sigue en marcha, se recuerda al acabar y
+// sale en el siguiente repintado.
+async function retomarSinEsperar(plazo = 2000) {
+  let reloj;
+  const tarde = new Promise((resolve) => { reloj = setTimeout(() => resolve(null), plazo); if (reloj.unref) reloj.unref(); });
+  try {
+    return await Promise.race([retomar().catch(() => null), tarde]);
+  } finally {
+    clearTimeout(reloj);
+  }
 }
 
 // Los asistentes a los que se les pone o se les quita una habilidad: todos los declarados
@@ -612,7 +645,7 @@ const queArnes = () => entorno.entradaDelArnes(proyecto.raiz(), carpetaDeLaExten
 module.exports = {
   loQueTocaElSync,
   queArnes,
-  correr, retomar, revisar, salud, sincronizar, reevaluar, arreglarEnSeco, arreglar, arreglarSolo,
+  correr, retomar, retomarSinEsperar, revisar, salud, sincronizar, reevaluar, arreglarEnSeco, arreglar, arreglarSolo,
   comoEstaDeSalud, queHayQueArreglar, queRecomienda, comoAcaboElMontaje, leerElPlanEnSeco, cambiosDePolitica,
   queGuardianes, queCopiasDelArnes, queFaltaEnDisco, estaEntero, LOS_GUARDIANES,
   olvidarLaContinuacion,

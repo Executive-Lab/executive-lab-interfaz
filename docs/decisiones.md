@@ -9155,3 +9155,50 @@ marca) y una cambiada (el pedido sin respuesta se queda). Tres en `windows.js` (
 git de Windows con `null`/0/1, perfil `\r\n`), que solo corren en la máquina `windows`.
 **Mutaciones**, todas caen: sin `\r?\n` en `laCorta`; `esDeLaMarca` sin pasar `\` a `/`; `estaDentro` por texto;
 `contestar` sin devolver `false` antes de borrar; `cuantosCambios` devolviendo 0; `trato.js` con `\n` fijo.
+
+## 190. Codex al mismo nivel, y cerrar limpio
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `codex-al-nivel-y-cerrar-limpio`
+
+Una auditoría leyó un árbol viejo. Cada punto se comprobó contra main (la 189) antes de tocarlo.
+
+**1. Codex se entera de lo nuevo como Claude.** No estaba: con Codex el aviso de `ponerElBloque` decía solo
+«Ya está.», y `arreglarElRelevo`, `ponerElFreno`, la frase de «lo que se hace solo al abrir» (`solo.laFrase`) y
+el detalle de «Lo que el arnés hace solo» pedían reabrir solo con Claude o nada. Ahora `asistentes.paraQueLoCoja`
+y `solo.REABRIR` dicen lo mismo con el nombre de quien sea: «Cierra la conversación con Codex y ábrela otra vez
+para que lo coja.» (Codex también lee `AGENTS.md` y los enganches al empezar.) Con un asistente que no conocemos
+no se inventa: «Ya está.».
+
+**2. Codex por terminal.** `asistentes.estaInstalado` sigue mirando solo la extensión `openai.chatgpt`, que es lo
+que necesitan los botones para escribirle. Nuevo `asistentes.estaPuesto`: la extensión, o `codex` en el `PATH`
+(un `statSync` por carpeta, sin lanzar nada), o su sesión en `~/.codex` (`sesion-del-asistente.sesionDeCodex`, de
+la 186). La brújula, la radiografía y la tarjeta del primer día usan `estaPuesto`: quien lo usa por terminal ya
+no sale con «Falta Codex». Lo que sí necesita la extensión (los botones que le hablan, abrirle la barra) lo dice
+así: «Ya tienes Codex, pero fuera del editor. Para que los botones le hablen desde aquí, hay que ponerlo también
+en el editor.», con su «Poner Codex». Con Claude no se mira la terminal: su ejecutable lo trae la extensión.
+
+**3. «Seguir donde lo dejé».** `rsc.retomar` recuerda ahora también un fallo o un tiempo agotado, cinco minutos
+(el acierto sigue un minuto), y dos repintados a la vez comparten el mismo proceso. `rsc.retomarSinEsperar` (lo
+usa la brújula) espera como mucho dos segundos: lo que tarde más sigue en marcha, se recuerda al acabar y sale en
+el siguiente repintado. La barra no se frena por una carpeta grande.
+
+**4. Cerrar limpio.** `procesos.ejecutar` apunta cada proceso que lanza y lo olvida al cerrarse; `deactivate()`
+llama a `procesos.terminarLosMios()` (los suyos, por su proceso, nunca por nombre; `SIGKILL` a los dos segundos si
+no se van) y cancela los relojes sueltos del arranque, que ahora van por `luego()` (los de 1,5 s, 3 s, 8 s del
+primer vistazo a los recordatorios y 8 s del reintento del disfraz). Y `onDidChangeWorkspaceFolders`: si cambia la
+primera carpeta, el vigía de ficheros se rearma sobre la nueva (antes `vigilarElArnes` no arrancaba si no había
+carpeta al abrir, y se quedaba mirando la primera), y se olvidan la brújula y la continuación.
+
+**5. `guardarSolo` no se solapa.** Un `guardando` evita que el siguiente turno arranque otro guardado a la vez si
+el anterior tarda más que su intervalo (se libera en `finally`).
+
+**Fuera**: `arrancar.js` y los «los dos» (`faltaParaLosDos`) siguen mirando la extensión: preparar la carpeta para
+el otro asistente por el ajuste de los dos sí necesita que esté puesto en el editor.
+
+**Las pruebas**: `humo.js` pasa a 534 (543 con `--con-arnes`). Siete comprobaciones nuevas (reabrir con Codex, Codex
+por terminal, el `PATH` de verdad, el fallo recordado y la brújula sin esperar, los procesos al cerrar, los relojes
+y el cambio de carpeta, y `guardarSolo`) y una cambiada (antes un fallo no se recordaba). `mapeos-codex` 30,
+`contrato` 15, `empresas-distintas`, diccionario y PowerShell, limpios.
+**Mutaciones**, todas caen: el fallo sin recordar; sin `if (guardando) return`; `enTerminal` siempre falso; sin
+apuntar el proceso; sin rearmar el vigía al cambiar de carpeta; la frase de reabrir fija en «Claude»; sin cancelar
+los relojes al cerrar; sin compartir el proceso en curso.
