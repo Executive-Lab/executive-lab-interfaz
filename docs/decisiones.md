@@ -8918,6 +8918,69 @@ cuenta); el nombre sin rellenar; el apunte que no caduca; sin mirar que la carpe
 sin el botón de crear; cualquier carpeta vale; y sin nivel por defecto. Todas caen.
 
 
+## 185. Lo nuevo de Claude que le sirve al alumno
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `lo-nuevo-de-claude`
+
+De una investigación de la documentación oficial de Claude Code. Cada punto se comprobó el 17-10-2026 antes
+de tocar nada; las páginas son estas:
+
+- <https://code.claude.com/docs/en/remote-control>, «Requirements»: *«On Team and Enterprise, an Owner must
+  first enable the Remote Control toggle in Claude Code admin settings»*; *«If you set
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_GROWTHBOOK`, Remote Control is unavailable»*; *«API keys
+  are not supported»*. Y: *«In project or local settings, Claude Code … ignores a `true`»* (por eso
+  `remoteControlAtStartup` sigue yendo solo en los ajustes de usuario, como la 143).
+- <https://code.claude.com/docs/en/vs-code>, tabla de ajustes: `attachOpenFile` (por defecto `true`, *«When off,
+  only your selected text is added. Requires Claude Code v2.1.271 or later»*) y `spinnerVerbs`
+  (`{"mode": "append", "verbs": []}`, *«with the same `mode` and `verbs` fields as the CLI's `spinnerVerbs`»*).
+- <https://code.claude.com/docs/en/settings-reference>, `spinnerVerbs`: `mode` es `"append"` (añade a los
+  suyos) o `"replace"` (solo los tuyos; con la lista vacía, vuelven los suyos); alcance «Any file».
+  `spinnerTipsEnabled`: booleano, `false` oculta los consejos, alcance «Any file», o sea también
+  `.claude/settings.local.json`.
+
+Los tres puntos estaban documentados como se decía. Una precisión: DISABLE_TELEMETRY y DO_NOT_TRACK **no**
+apagan el control remoto (solo con Trusted Devices), así que no se miran.
+
+**1. El control remoto que no puede activarse.** La barra no hablaba de él en ninguna pantalla. Ayuda lleva
+ahora «Seguir desde el móvil», solo con Claude puesto (`lo-nuevo-de-claude.js`, `paraAyuda`): dice que la
+barra lo deja activado pero no siempre funciona; que hace falta un plan de pago (con una clave de pago por uso,
+no); que en Team o Enterprise quien lleva la cuenta tiene que activarlo antes; y que se lo pida. Si el
+`process.env` del editor tiene `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` o `DISABLE_GROWTHBOOK` (con un valor
+que no sea vacío, `0` ni `false`), añade solo entonces que en este ordenador está apagado y que se lo diga a
+quien se lo instaló; sin nombrar la variable. No se mira el bloque `env` de los ajustes de Claude: la doc dice
+que también vale ahí, y es un hueco conocido. `control-remoto.js` y `ponerElControlRemoto` no cambian.
+
+**2. Español en lo que enseña Claude mientras trabaja.** `claudeCode.spinnerVerbs` con `mode: "replace"` y
+doce verbos en español, en `DE_CLAUDE` de `ajustes-del-editor.js`: lo pone el instalador y, para quien solo
+instaló la barra, la barra al arrancar, con la constancia, el respeto a lo decidido y el quitar-solo-si-sigue-igual
+de la 163/168; `probar.sh` lo mira con su valor y `probar.ps1`, que es ASCII, con su forma (modo y doce) y que la
+constancia diga lo mismo. Se elige `replace` y no `append` porque con `append` salen también los verbos en inglés.
+`spinnerTipsEnabled: false` va en `.claude/settings.local.json` con la maquinaria de la 157 (`ajustes-locales.js`):
+cuarta cosa de la lista (`consejos`, `tips` en la constancia y la huella), no se pone si alguien ya dijo algo de
+esa clave en los tres sitios, «Quitarlo» la quita solo si sigue a `false`, no vuelve, y en las carpetas ya
+montadas se pone sola al abrir y se dice (como los avisos en la 182; la constancia de antes sigue casando
+porque `tips` solo entra en la huella si está). No se ofrece en la carpeta de alguien (177): ese botón cuenta
+el español y lo de subir. Frase: «He dejado a Claude sin consejos en inglés mientras trabaja.»
+
+**3. Que Claude no vea el fichero abierto.** Un botón de un clic, «Que Claude solo vea lo que le pegues», en
+«Si trabajas con datos de clientes» (nueva parte de `datos-de-clientes.json`, con `interruptor`). Escribe
+`claudeCode.attachOpenFile: false` en los ajustes de **usuario** del editor, y la pantalla dice que vale para
+todas sus carpetas. «Que vuelva a ver el fichero abierto» lo deshace: quita la clave si la pusimos nosotros
+(se apunta en el estado global), y si ya lo tenía a `false` de antes lo deja a `true`. Sin la extensión de
+Claude el editor no conoce la clave, así que la parte ni sale. Pide Claude Code 2.1.271 o más; con una
+anterior se ignora sin más. La fecha de «comprobado» de esa tabla no se toca: la 185 solo comprobó esa
+línea, en la página de Claude Code, no las de privacidad.
+
+**4. Para más adelante.** Los plugins (`install-plugin`) y `open?session=` (falta saber de dónde sale el id de
+la sesión). No se han tocado.
+
+**Las pruebas**: `humo.js` pasa a 515 (524 con `--con-arnes`) con la 184 traída; cuatro comprobaciones nuevas (los consejos; los verbos,
+del instalador al fichero; Ayuda y el control remoto con y sin la variable y sin Claude; el interruptor, que se
+deshace) y las de la 157, la 162, la 163 y la 168 cambiadas para el valor nuevo. Ocho mutaciones, cada una puesta y
+restaurada desde copia, y todas caen: consejos sin mirar los ajustes de usuario; «Quitarlo» sin mirar que siga a
+`false`; el interruptor en la carpeta y no en el usuario; `0` y `false` como variable puesta; Ayuda sin mirar si
+hay Claude; Ayuda sin leer el entorno; los verbos en `append`; y el interruptor sin Claude.
+
 ## 186. Las cuentas, sin rodeos
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `las-cuentas-sin-rodeos`

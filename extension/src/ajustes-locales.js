@@ -23,6 +23,14 @@
 //     en `ask` o en `deny`, aquí o en sus ajustes de usuario, se respeta. Un
 //     `allow` no cuenta: el `ask` le gana igual, y uno plantado en este fichero
 //     bastaba para que no se pusiera nunca (revisión de seguridad de la 157, B5).
+//   · `"spinnerTipsEnabled": false` (decisión 185): Claude enseña bajo el indicador
+//     un consejo suelto sobre sí mismo mientras trabaja, y esos consejos salen en
+//     inglés. Con `false` no sale ninguno (code.claude.com/docs/en/settings-reference,
+//     «spinnerTipsEnabled»: vale en cualquier fichero). Como el idioma, y por lo mismo:
+//     este fichero manda sobre los otros dos, así que no se pone si alguien ya dijo
+//     algo de esa clave —aquí, en los ajustes de la carpeta o en los suyos de usuario—,
+//     ni si uno no se entiende. Se pone al día solo en las carpetas ya montadas.
+//     Los verbos del indicador, en cambio, son del editor y los pone el instalador.
 //   · Un enganche `Notification` (decisión 162) que llama a `avisar.mjs`, de la
 //     habilidad de la casa: un aviso del sistema cuando Claude te pregunta algo
 //     (`permission_prompt`) o ha terminado (`idle_prompt`), o un servicio conectado
@@ -71,7 +79,8 @@ const PREGUNTAR = ['Bash(git push *)', 'Bash(gh pr create *)'];
 const FICHERO = ['.claude', 'settings.local.json'];
 const CONSTANCIA = ['.rsc', 'executive-lab-ajustes-locales.json'];
 // Lo que la barra sabe poner aquí, por su nombre: lo que se puede quitar por separado.
-const LO_QUE_SE_PONE = ['idioma', 'preguntar', 'avisos'];
+const LO_QUE_SE_PONE = ['idioma', 'preguntar', 'avisos', 'consejos'];
+const SIN_CONSEJOS = 'spinnerTipsEnabled';
 
 // Los avisos del sistema (decisión 162). La orden, como la del freno.
 const AVISAR = ['.claude', 'skills', 'executive-lab', 'avisar.mjs'];
@@ -127,10 +136,10 @@ const yaLoDice = (ajustes, regla) => ['deny', 'ask'].includes(queDice(ajustes, r
 // La huella de lo que dejó la barra, atada a la carpeta donde lo dejó: una
 // constancia traída de otro sitio no casa. Los avisos solo entran si están, así
 // que una constancia de la 157 sigue casando.
-function laHuella(raiz, { language = null, ask = [], avisos = false } = {}) {
+function laHuella(raiz, { language = null, ask = [], avisos = false, tips = false } = {}) {
   let donde = raiz;
   try { donde = fs.realpathSync(raiz); } catch { /* la que hay */ }
-  const que = JSON.stringify({ donde, language, ask: [...ask].sort(), ...(avisos ? { avisos: true } : {}) });
+  const que = JSON.stringify({ donde, language, ask: [...ask].sort(), ...(avisos ? { avisos: true } : {}), ...(tips ? { tips: true } : {}) });
   return crypto.createHash('sha256').update(que).digest('hex');
 }
 
@@ -142,7 +151,8 @@ function laConstancia(raiz) {
   const ask = Array.isArray(anotado.ask) ? anotado.ask : [];
   if (!ask.every((r) => PREGUNTAR.includes(r)) || ![undefined, IDIOMA].includes(anotado.language)) return null;
   if (![undefined, true].includes(anotado.avisos)) return null;
-  const nuestro = { language: anotado.language || null, ask, avisos: anotado.avisos === true };
+  if (![undefined, true].includes(anotado.tips)) return null;
+  const nuestro = { language: anotado.language || null, ask, avisos: anotado.avisos === true, tips: anotado.tips === true };
   return anotado.huella === laHuella(raiz, nuestro) ? nuestro : null;
 }
 
@@ -202,11 +212,13 @@ function enGitASecas(raiz, relativo) {
   }
 }
 
-// Lo que haría falta poner, sin poner nada: { idioma, preguntar, avisos }.
+// Lo que haría falta poner, sin poner nada: { idioma, preguntar, avisos, consejos }.
 // `conGuion`: si `avisar.mjs` ya está en la carpeta.
 function loQueFalta({ local, deLaCarpeta, suyos, conGuion = false }) {
   const idioma = !tiene(local, 'language') && Boolean(deLaCarpeta) && !tiene(deLaCarpeta, 'language')
     && Boolean(suyos) && !tiene(suyos, 'language');
+  const consejos = !tiene(local, SIN_CONSEJOS) && Boolean(deLaCarpeta) && !tiene(deLaCarpeta, SIN_CONSEJOS)
+    && Boolean(suyos) && !tiene(suyos, SIN_CONSEJOS);
   // Unos permisos con otra forma no se entienden: no se tocan.
   const permisos = local.permissions;
   const seEntienden = permisos === undefined
@@ -214,7 +226,7 @@ function loQueFalta({ local, deLaCarpeta, suyos, conGuion = false }) {
   const preguntar = seEntienden ? PREGUNTAR.filter((regla) => !yaLoDice(local, regla) && !yaLoDice(suyos, regla)) : [];
   // Los avisos, solo si nadie dice nada de ellos en ninguno de los tres sitios.
   const avisos = conGuion && [local, deLaCarpeta, suyos].every((ajustes) => queDicenDeAvisar(ajustes) === 'nada');
-  return { idioma, preguntar, avisos };
+  return { idioma, preguntar, avisos, consejos };
 }
 
 // `conSuSi` (decisión 177): en una carpeta de alguien, a quien la barra no le pone
@@ -253,7 +265,7 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
   // mano o con «Quitarlo»): se respeta, y no se vuelve a poner en cada apertura
   // (revisión de corrección de la 157, M2). De la constancia solo cuenta lo que
   // tiene su huella.
-  const antes = laConstancia(raiz) || { language: null, ask: [], avisos: false };
+  const antes = laConstancia(raiz) || { language: null, ask: [], avisos: false, tips: false };
   // El guion, de verdad un fichero de la carpeta: sin él, cada aviso fallaría.
   const guion = path.join(raiz, ...AVISAR);
   let conGuion = false;
@@ -267,16 +279,18 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
     idioma: sinQuitar.idioma && !antes.language,
     preguntar: sinQuitar.preguntar.filter((r) => !antes.ask.includes(r)),
     avisos: sinQuitar.avisos && !antes.avisos && !conSuSi,
+    // Como los avisos, no en la carpeta de alguien: su botón cuenta otras dos cosas.
+    consejos: sinQuitar.consejos && !antes.tips && !conSuSi,
   };
   // Decisión 182: el enganche de avisos que puso la barra con el matcher de antes
   // (la constancia lo dice y casa su huella) se pone al día; el que cambió la
   // persona, no se toca. No es poner algo nuevo, es lo nuestro al día.
   const avisosViejos = antes.avisos && !conSuSi && esUnObjeto(local.hooks) && Array.isArray(local.hooks.Notification)
     && local.hooks.Notification.some(esElDeAntes);
-  const sinNovedad = !falta.idioma && !falta.preguntar.length && !falta.avisos;
+  const sinNovedad = !falta.idioma && !falta.preguntar.length && !falta.avisos && !falta.consejos;
   if (sinNovedad && !avisosViejos) return { hecho: 'yaEstaba', fichero };
   if (soloMirar && sinNovedad) return { hecho: 'yaEstaba', fichero };
-  if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false };
+  if (soloMirar) return { hecho: 'sePuede', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: false, consejos: false };
 
   try {
     const nuevo = { ...local };
@@ -285,6 +299,7 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
       const permisos = local.permissions || {};
       nuevo.permissions = { ...permisos, ask: [...(permisos.ask || []), ...falta.preguntar] };
     }
+    if (falta.consejos) nuevo[SIN_CONSEJOS] = false;
     if (falta.avisos) {
       const enganches = local.hooks || {};
       nuevo.hooks = { ...enganches, Notification: [...(enganches.Notification || []), elEngancheDeAvisar()] };
@@ -298,6 +313,7 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
       language: falta.idioma || antes.language ? IDIOMA : null,
       ask: PREGUNTAR.filter((r) => falta.preguntar.includes(r) || antes.ask.includes(r)),
       avisos: falta.avisos || antes.avisos,
+      tips: falta.consejos || antes.tips,
     };
     fs.mkdirSync(path.dirname(constancia), { recursive: true });
     escribir(constancia, {
@@ -307,17 +323,18 @@ async function ponerLosDeLaBarra({ raiz, claude = carpetaDeClaude(), estaEnGit =
       ...(anotado.language ? { language: anotado.language } : {}),
       ask: anotado.ask,
       ...(anotado.avisos ? { avisos: true } : {}),
+      ...(anotado.tips ? { tips: true } : {}),
       huella: laHuella(raiz, anotado),
     });
   } catch (error) {
     return { hecho: 'fallo', fichero, error: error.message };
   }
-  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: falta.avisos, ...(avisosViejos && !falta.avisos ? { avisosAlDia: true } : {}) };
+  return { hecho: 'puesto', fichero, idioma: falta.idioma, preguntar: falta.preguntar, avisos: falta.avisos, consejos: falta.consejos, ...(avisosViejos && !falta.avisos ? { avisosAlDia: true } : {}) };
 }
 
 // Lo que se puso en una vez, por su nombre, para que «Quitarlo» quite eso y nada más.
-const loQueSePuso = ({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false } = {}) => [
-  ...(idioma ? ['idioma'] : []), ...(preguntar.length ? ['preguntar'] : []), ...(avisos || avisosAlDia ? ['avisos'] : []),
+const loQueSePuso = ({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false, consejos = false } = {}) => [
+  ...(idioma ? ['idioma'] : []), ...(preguntar.length ? ['preguntar'] : []), ...(avisos || avisosAlDia ? ['avisos'] : []), ...(consejos ? ['consejos'] : []),
 ];
 
 // Solo lo que puso la barra (la constancia, con su huella) y sigue como lo dejó:
@@ -358,6 +375,10 @@ async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas, que = null } 
       if (!Object.keys(nuevo.permissions).length) delete nuevo.permissions;
     }
   }
+  if (quitar.has('consejos') && anotado.tips && nuevo[SIN_CONSEJOS] === false) {
+    delete nuevo[SIN_CONSEJOS];
+    quitado = true;
+  }
   // El enganche de los avisos, solo si sigue tal como lo dejó la barra.
   const enganches = nuevo.hooks;
   if (quitar.has('avisos') && anotado.avisos && esUnObjeto(enganches) && Array.isArray(enganches.Notification)) {
@@ -376,11 +397,12 @@ async function quitarLosDeLaBarra({ raiz, estaEnGit = enGitASecas, que = null } 
 }
 
 // La frase de lo que se puso (P9: lo que se hace solo se dice).
-function laFrase({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false } = {}) {
+function laFrase({ idioma = false, preguntar = [], avisos = false, avisosAlDia = false, consejos = false } = {}) {
   const alDia = 'He puesto al día los avisos de Claude: ahora también te avisan cuando un servicio conectado te pide rellenar algo o abrir una página.';
-  if (avisosAlDia && !idioma && !preguntar.length && !avisos) return alDia;
+  if (avisosAlDia && !idioma && !preguntar.length && !avisos && !consejos) return alDia;
   const cosas = [
     idioma ? 'hablándote en español' : null,
+    consejos ? 'sin consejos en inglés mientras trabaja' : null,
     preguntar.length ? 'preguntándote antes de subir nada a GitHub' : null,
     avisos ? 'avisándote cuando termine o te necesite, aunque estés en otra ventana' : null,
   ].filter(Boolean);

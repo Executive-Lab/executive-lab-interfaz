@@ -101,6 +101,7 @@ const sesionDelAsistente = require('./sesion-del-asistente');
 const avisoDeCodex = require('./aviso-de-codex');
 const enganchesDeCodex = require('./enganches-de-codex');
 const loDelEditor = require('./lo-del-editor');
+const loNuevoDeClaude = require('./lo-nuevo-de-claude');
 const lasRespuestas = require('./respuestas');
 const porDondeIbas = require('./por-donde-ibas');
 
@@ -1509,6 +1510,7 @@ ${cabecera}
       verAyuda: () => this.verAyuda(),
       verEstaBarra: () => this.verEstaBarra(),
       verDatosDeClientes: () => this.verDatosDeClientes(),
+      soloLoQueLePegues: () => this.soloLoQueLePegues(mensaje.cual),
       entendidoLoDeLosDatos: () => this.entendidoLoDeLosDatos(),
       dejarListoLoDeCodex: () => this.dejarListoLoDeCodex(),
       entendidoLoDeCodex: () => this.entendidoLoDeCodex(),
@@ -2748,7 +2750,13 @@ ${cabecera}
       avisos: this.losAvisosQueEsperan(),
       // Qué barra es esta, y si hay otra: aquí sale aunque se apartara con «Ahora no».
       version: await this.laVersionParaEnsenar(),
+      // El control remoto, si Claude está puesto: cuándo no puede funcionar (decisión 185).
+      controlRemoto: loNuevoDeClaude.paraAyuda({ conClaude: this.conClaudePuesto() }),
     });
+  }
+
+  conClaudePuesto() {
+    return asistentes.ASISTENTES.some((a) => a.id === 'claude' && asistentes.estaInstalado(a));
   }
 
   async laVersionParaEnsenar() {
@@ -2847,7 +2855,20 @@ ${cabecera}
     if (!tabla) return this.enviar({ tipo: 'aviso', texto: 'No he podido abrirlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
     this.donde = { tipo: 'quieto' };
     if (this.laTarjetaDeLosDatos()) await this.yaSeDijoLoDeLosDatos();
-    return this.enviar({ tipo: 'datosDeClientes', tabla: clientes.paraLeer(tabla) });
+    const conClaude = this.conClaudePuesto();
+    return this.enviar({ tipo: 'datosDeClientes', tabla: clientes.paraLeer(tabla, { conClaude }), soloLoPegado: conClaude && loNuevoDeClaude.soloLoPegado() });
+  }
+
+  // «Que Claude solo vea lo que le pegues» (decisión 185): un clic, en los ajustes de
+  // usuario del editor. Vuelve a la misma pantalla, ya cambiada.
+  async soloLoQueLePegues(cual) {
+    try {
+      await loNuevoDeClaude.ponerSoloLoPegado(this.contexto, cual === true);
+    } catch (error) {
+      this.salida.appendLine(`[editor] ${loNuevoDeClaude.CLAVE_VE_LO_ABIERTO}: ${error.message}`); // diccionario: interno
+      return this.enviar({ tipo: 'aviso', texto: 'No he podido cambiarlo. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    }
+    return this.verDatosDeClientes();
   }
 
   // ── Abrir una página (revisión de seguridad de la 153) ────────────────

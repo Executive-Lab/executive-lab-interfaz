@@ -39,8 +39,14 @@ function laTabla(carpetaDeLaExtension) {
 }
 
 // Lo que se pinta en Ayuda: sin las notas ni la tarjeta.
-function paraLeer(tabla) {
-  const { titulo, entradilla, partes = [], pie, fuentes = [] } = tabla;
+//
+// Sin Claude puesto, lo que es un ajuste de Claude no sale (decisión 185): su botón
+// escribe una clave que el editor no conoce hasta que está su extensión.
+function paraLeer(tabla, { conClaude = true } = {}) {
+  const { titulo, entradilla, pie, fuentes = [] } = tabla;
+  const partes = (tabla.partes || [])
+    .map((p) => ({ ...p, lineas: (p.lineas || []).filter((l) => conClaude || !l.interruptor) }))
+    .filter((p) => p.lineas.length);
   return { titulo, entradilla, partes, pie, fuentes };
 }
 
