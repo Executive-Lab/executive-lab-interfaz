@@ -9174,7 +9174,7 @@ es mejor mirar de más): `cerebro`, `papeles` (`sueltos` y `listar`) y `sueltas`
 pelado del corpus largo y las respuestas de `loQuePodriaAprender` (las últimas ocho). Límite conocido: en una
 carpeta con más entradas que el tope, el recuento de documentos es «al menos» eso.
 
-**Las pruebas**: `humo.js` pasa de 518 a 524 (533 con `--con-arnes`). Seis comprobaciones con prefijo «188:» (un solo repintado a la vez; escondida
+**Las pruebas**: `humo.js` pasa de 520 a 526 (535 con `--con-arnes`). Seis comprobaciones con prefijo «188:» (un solo repintado a la vez; escondida
 no repinta y al verse sí; la caché de `.rsc.json` se invalida con otro tamaño, con otra fecha, rota y borrada;
 topes de lectura y de entradas; los git con tope y bandera, con un git de mentira que se cuelga, en una copia
 aparte del módulo para no cambiarle el motor al resto de la batería; `estanSubidas`). Se ajustó además la prueba
