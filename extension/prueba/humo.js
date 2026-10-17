@@ -2813,6 +2813,12 @@ contraseña de entrar: es una llave aparte que se puede anular sin tocar la cuen
     const guardar = cargar('guardar');
     if (!(await guardar.hayGit())) return 'SALTADA: sin git';
     const TOKEN = 'ghp_TOKENDEPRUEBA1234567890';
+    const cp = require('node:child_process');
+    // La primera vez que se ejecuta un guion recién escrito, macOS puede tardar más de
+    // los 15 s que da la barra a un git que solo lee (lo escanea antes de dejarlo
+    // correr): rev-parse salía muerto por SIGTERM y el git de mentira «no llegaba a
+    // ejecutarse». Se ejecuta una vez, sin tope, antes de usarlo (decisión 188).
+    const calentar = (guion, apuntes) => { cp.spawnSync(guion, ['--version'], { stdio: 'ignore' }); fs.rmSync(apuntes, { force: true }); };
     const donde = fs.mkdtempSync(path.join(os.tmpdir(), 'subir-que-falla-'));
     const apuntes = path.join(donde, '..', `${path.basename(donde)}-argv.txt`);
     const falso = path.join(donde, '..', `${path.basename(donde)}-git`);
@@ -2828,14 +2834,17 @@ for a in "$@"; do
 done
 exec git "$@"
 `, { mode: 0o755 });
+    calentar(falso, apuntes);
     try {
       assert.ok((await historial.iniciar(donde)).ok);
       fs.writeFileSync(path.join(donde, 'a.txt'), 'uno');
-      await historial.guardar(donde, 'Primera');
+      const primera = await historial.guardar(donde, 'Primera');
+      assert.ok(primera.ok, `la primera copia del git de mentira no se guardó: ${primera.error}`);
       const hecho = await historial.subir(donde, { url: 'https://github.com/empresa/copia.git', token: TOKEN }, { git: falso, recalcular: true });
       assert.equal(hecho.ok, false, 'el git de mentira siempre falla al subir');
       const formas = [TOKEN, encodeURIComponent(TOKEN), Buffer.from(`${TOKEN}:x-oauth-basic`).toString('base64')];
       for (const forma of formas) assert.ok(!String(hecho.error).includes(forma), `el error lleva el token: ${hecho.error}`);
+      assert.ok(fs.existsSync(apuntes), `el git de mentira no llegó a ejecutarse al subir: ${hecho.error}`);
       const llamado = fs.readFileSync(apuntes, 'utf8');
       for (const forma of formas) assert.ok(!llamado.includes(forma), 'el token va en la orden, a la vista mientras corre');
       // Y lo que se apunta llega al informe sin él.
@@ -2860,6 +2869,12 @@ exec git "$@"
     const guardar = cargar('guardar');
     if (!(await guardar.hayGit())) return 'SALTADA: sin git';
     const historial = require(path.join(RAIZ, '..', 'instalador', 'comun', 'historial.js'));
+    const cp = require('node:child_process');
+    // La primera vez que se ejecuta un guion recién escrito, macOS puede tardar más de
+    // los 15 s que da la barra a un git que solo lee (lo escanea antes de dejarlo
+    // correr): rev-parse salía muerto por SIGTERM y el git de mentira «no llegaba a
+    // ejecutarse». Se ejecuta una vez, sin tope, antes de usarlo (decisión 188).
+    const calentar = (guion, apuntes) => { cp.spawnSync(guion, ['--version'], { stdio: 'ignore' }); fs.rmSync(apuntes, { force: true }); };
     const donde = fs.mkdtempSync(path.join(os.tmpdir(), 'subir-sin-ayudas-'));
     const apuntes = path.join(donde, '..', `${path.basename(donde)}-entorno.txt`);
     const falso = path.join(donde, '..', `${path.basename(donde)}-git`);
@@ -2871,11 +2886,14 @@ for a in "$@"; do
 done
 exec git "$@"
 `, { mode: 0o755 });
+    calentar(falso, apuntes);
     try {
       assert.ok((await historial.iniciar(donde)).ok);
       fs.writeFileSync(path.join(donde, 'a.txt'), 'uno');
-      await historial.guardar(donde, 'Primera');
-      await historial.subir(donde, { url: 'https://github.com/empresa/copia.git', token: 'ghp_TOKENDEPRUEBA1234567890' }, { git: falso, recalcular: true });
+      const primera = await historial.guardar(donde, 'Primera');
+      assert.ok(primera.ok, `la primera copia del git de mentira no se guardó: ${primera.error}`);
+      const subida = await historial.subir(donde, { url: 'https://github.com/empresa/copia.git', token: 'ghp_TOKENDEPRUEBA1234567890' }, { git: falso, recalcular: true });
+      assert.ok(fs.existsSync(apuntes), `el git de mentira no llegó a ejecutarse al subir: ${subida.error}`);
       const entorno = Object.fromEntries(fs.readFileSync(apuntes, 'utf8').split('\n').filter(Boolean).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
       assert.equal(entorno.GIT_TERMINAL_PROMPT, '0', 'git se queda esperando una respuesta que nadie va a dar');
       const pares = Array.from({ length: Number(entorno.GIT_CONFIG_COUNT) }, (_, i) => [entorno[`GIT_CONFIG_KEY_${i}`], entorno[`GIT_CONFIG_VALUE_${i}`]]);
@@ -27055,6 +27073,9 @@ exec git "$@"
     const apunte = path.join(taller, 'pedido.txt');
     const falso = path.join(taller, 'git-falso');
     fs.writeFileSync(falso, `#!/bin/sh\necho "$@" >> '${apunte}'\nexit 0\n`, { mode: 0o755 });
+    // Calentado sin tope: la primera ejecución de un guion nuevo puede tardar en macOS.
+    require('node:child_process').spawnSync(falso, ['--version'], { stdio: 'ignore' });
+    fs.rmSync(apunte, { force: true });
     const repo = path.join(taller, 'repo');
     fs.mkdirSync(repo);
     try {

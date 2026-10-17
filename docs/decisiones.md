@@ -9179,4 +9179,14 @@ no repinta y al verse sí; la caché de `.rsc.json` se invalida con otro tamaño
 topes de lectura y de entradas; los git con tope y bandera, con un git de mentira que se cuelga, en una copia
 aparte del módulo para no cambiarle el motor al resto de la batería; `estanSubidas`). Se ajustó además la prueba
 de la 167, que esperaba `git` a secas y las banderas de antes.
+
+**Un fallo que salió después (PR #88).** Con el tope de 15 s, dos pruebas de la 169 («un push fallido no deja
+el token en el informe» y «al subir, la única clave es la de la barra») fallaban a veces: su git de mentira es
+un guion recién escrito y, en macOS, la primera vez que se ejecuta puede tardar más de 15 s (el sistema lo
+escanea antes de dejarlo correr). El `rev-parse` salía muerto por SIGTERM (`killed: true`, sin salida), no
+llegaba a ejecutarse el guion y el fichero que la prueba lee no existía. Antes no había tope y esperaba.
+No es un fallo del código: la prueba ahora ejecuta el guion una vez, sin tope, antes de usarlo, y sus
+mensajes dicen por qué no se subió. Lo que sí queda como riesgo real, anotado: un antivirus que escanee un
+`git.exe` nuevo en el primer uso puede pasar de 15 s y la barra lo dará por fallido; si se ve en la
+práctica, se sube el tope de lo que lee.
 Doce mutaciones, todas tumbadas (una primera, la del tope de `cerebro`, sobrevivía: se reforzó la prueba).
