@@ -125,7 +125,6 @@ const quitarSoloEsto = (que) => ({ etiqueta: 'Quitarlo', accion: { tipo: 'quitar
 // Lo que el montaje hace solo (decisión 181), cada cosa con su «Quitarlo». Con una
 // sola sale «Quitarlo»; con varias, cada una dice qué quita.
 const QUITAR_EL_GUARDADO_SOLO = { etiqueta: 'Quitarlo', etiquetaConVarios: 'Quitar las copias solas', accion: { tipo: 'quitarElGuardadoSolo' } };
-const QUITAR_LA_VISTA_SENCILLA = { etiqueta: 'Quitarlo', etiquetaConVarios: 'Quitar la vista sencilla', accion: { tipo: 'verEditorCompleto' } };
 const QUITAR_LO_DE_CLAUDE_DEL_MONTAJE = { ...QUITAR_LO_DE_CLAUDE, etiquetaConVarios: 'Quitar lo de Claude' };
 const DALE_A_ENVIAR = 'Te lo he dejado escrito en la conversación. Dale a enviar.';
 
@@ -171,6 +170,7 @@ const CLAVE_AVISADOS = 'executiveLab.recordatoriosAvisados';
 const CLAVE_COSTUMBRES = 'executiveLab.costumbresPuestas';
 const CLAVE_RECORDATORIOS_VISTOS = 'executiveLab.recordatoriosVistos';
 const CLAVE_SILENCIADOS = 'executiveLab.consejosApartados';
+const CLAVE_CONSEJOS_RECHAZADOS = 'executiveLab.consejosDeClaudeRechazados';
 // Las tarjetas de las claves (decisión 167), apartadas con «Ahora no»: vuelven a
 // la semana, antes que un consejo, porque una clave mal guardada puede costar dinero.
 const CLAVES_APARTADAS_DURANTE = 7 * 24 * 60 * 60 * 1000;
@@ -381,7 +381,7 @@ ${cabecera}
     if (this.contexto.workspaceState && !this.carpetaConocida()) await this.contexto.workspaceState.update(CLAVE_CONOCIDA, true);
   }
 
-  // ── Lo que se puede hacer solo, se hace solo (P9, decisión 142) ─────────
+  // ── Lo que debe hacerse solo, se hace solo (P9, decisiones 142 y 187) ─────────
   //
   // Al abrir la carpeta, lo que «Qué falta por montar» marca `alAbrir` se hace
   // sin esperar a nadie, y se cuenta en una frase. Lo que falla se queda en su
@@ -638,6 +638,33 @@ ${cabecera}
     // lo demás: soltarla ya hacía que la siguiente frase la tapara (revisión de
     // corrección de la 157, B5).
     this.dejarElAviso(ajustesLocales.laFrase(hecho), quitarSoloEsto(ajustesLocales.loQueSePuso(hecho)));
+    return hecho;
+  }
+
+  // Los consejos de Claude, preguntados (decisión 187). Claude enseña bajo el indicador
+  // un consejo suelto sobre sí mismo, y salen en inglés: quitarlos es de lo que
+  // enseña algo, así que lo decide la persona. Una vez por carpeta: «No, déjalos» no
+  // vuelve a salir; cerrarlo sin contestar, hasta la próxima vez que se abra.
+  async preguntarLosConsejos({ soltar = true } = {}) {
+    const raiz = proyecto.raiz();
+    if (vscode.workspace.isTrusted === false || !raiz) return null;
+    const memoria = this.contexto.workspaceState;
+    if (memoria && memoria.get(CLAVE_CONSEJOS_RECHAZADOS)) return null;
+    if (!(await terreno.montadaAqui())) return null;
+    const mirado = await ajustesLocales.ponerLosDeLaBarra({ raiz, estaEnGit: arrancar.estaEnGitConLaBarra, soloMirar: true, conConsejos: true }).catch(() => null);
+    if (!mirado || mirado.hecho !== 'sePuede' || !mirado.consejos) return null;
+    const quitar = 'Sí, quitarlos';
+    const dejar = 'No, déjalos';
+    const quiere = await vscode.window.showInformationMessage(
+      'Mientras trabaja, Claude enseña consejos sueltos, y salen en inglés. ¿Los quito?', quitar, dejar,
+    );
+    if (quiere === dejar && memoria) await memoria.update(CLAVE_CONSEJOS_RECHAZADOS, true);
+    if (quiere !== quitar) return null;
+    const hecho = await ajustesLocales.ponerLosDeLaBarra({ raiz, estaEnGit: arrancar.estaEnGitConLaBarra, conConsejos: true });
+    this.salida.appendLine(`[claude] consejos, con su sí: ${hecho.hecho}${hecho.error ? ` (${hecho.error})` : ''}`); // diccionario: interno
+    if (hecho.hecho !== 'puesto') return hecho;
+    this.dejarElAviso(ajustesLocales.laFrase(hecho), quitarSoloEsto(ajustesLocales.loQueSePuso(hecho)));
+    if (soltar) this.soltarElAviso();
     return hecho;
   }
 
@@ -1453,7 +1480,11 @@ ${cabecera}
       ponerHorario: () => this.ponerHorario(mensaje.nombre),
       queSeHagaSola: () => this.queSeHagaSola(),
       entendidaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, false),
-      noHaceFaltaLaCostumbre: () => this.dejarDeDecirLaCostumbre(mensaje.nombre, true),
+      noHaceFaltaLaCostumbre: () => {
+        const c = (this.almacen().get(CLAVE_COSTUMBRES) || {})[mensaje.nombre];
+        return c && c.propuesta ? this.rechazarLaCostumbre(mensaje.nombre) : this.dejarDeDecirLaCostumbre(mensaje.nombre, true);
+      },
+      ponerLaCostumbre: () => this.aceptarLaCostumbre(mensaje.nombre),
       conversacionNueva: () => this.conversacionNueva(),
       pedirAyudaEnElForo: () => this.pedirAyudaEnElForo(),
       abrir: () => this.abrirUnaPagina(mensaje.url),
@@ -1909,24 +1940,21 @@ ${cabecera}
     return (await this.losRecordatoriosQueTocan())[0] || null;
   }
 
-  // P9: si un botón se pulsa con costumbre, se pone su recordatorio sin
-  // preguntar —se quita con un clic— y se dice una vez. Una costumbre que el
-  // alumno dijo que no hacía falta no vuelve a ponerse.
+  // Si un botón se pulsa con costumbre, se le propone su recordatorio: cuándo se
+  // hace algo es cómo trabaja él, y la barra no lo decide (decisión 187; la 144 lo
+  // ponía sola). Una costumbre que dijo que no hacía falta no vuelve a proponerse.
+  // Las que una barra de antes ya puso se dicen una vez, como entonces.
   async ponerLasCostumbres() {
     try {
       const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
       for (const c of recordatorios.costumbres(this.almacen().get(CLAVE_USOS) || [])) {
         if (puestas[c.nombre]) continue;
-        const hecho = recordatorios.ponerCuando(c.nombre, c.cron);
-        if (!hecho.ok) continue;
-        puestas[c.nombre] = { cron: c.cron, etiqueta: c.etiqueta, enPalabras: c.enPalabras, porDecir: true };
-        // Empieza a contar desde ahora: hoy ya lo ha hecho él.
-        await this.almacen().update(CLAVE_RECORDATORIOS, { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}), [c.nombre]: Date.now() });
-        this.salida.appendLine(`[recordatorios] puesto por costumbre: ${c.nombre} (${c.cron})`); // diccionario: interno
+        puestas[c.nombre] = { cron: c.cron, etiqueta: c.etiqueta, enPalabras: c.enPalabras, porDecir: true, propuesta: true };
+        this.salida.appendLine(`[recordatorios] costumbre propuesta: ${c.nombre} (${c.cron})`); // diccionario: interno
       }
       await this.almacen().update(CLAVE_COSTUMBRES, puestas);
       const [nombre, dicha] = Object.entries(puestas).find(([, p]) => p.porDecir) || [];
-      return nombre ? { nombre, etiqueta: dicha.etiqueta, enPalabras: dicha.enPalabras } : null;
+      return nombre ? { nombre, etiqueta: dicha.etiqueta, enPalabras: dicha.enPalabras, propuesta: dicha.propuesta === true } : null;
     } catch (error) {
       this.salida.appendLine(`[recordatorios] ${error.message}`); // diccionario: interno
       return null;
@@ -1977,6 +2005,30 @@ ${cabecera}
     if (this.donde && this.donde.tipo === 'recordatorios') return this.verRecordatorios({ texto: `Ya no te recordaré «${hecho.boton.etiqueta}».` });
     await this.refrescar(true);
     return this.enviar({ tipo: 'aviso', texto: hecho.ok ? `Ya no te recordaré «${hecho.boton.etiqueta}».` : 'No he podido quitar ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: !hecho.ok });
+  }
+
+  // «Sí, recuérdamelo» (decisión 187): ahora sí se pone su recordatorio, y empieza a
+  // contar desde ahora, porque hoy ya lo ha hecho él.
+  async aceptarLaCostumbre(nombre) {
+    const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+    const c = puestas[nombre];
+    if (!c || !c.propuesta) return this.refrescar(true);
+    const hecho = recordatorios.ponerCuando(nombre, c.cron);
+    if (!hecho.ok) return this.enviar({ tipo: 'aviso', texto: 'No he podido ponerte ese recordatorio. Pulsa «Algo va mal» y pásale el código a tu tutor.', malo: true });
+    puestas[nombre] = { ...c, porDecir: false, propuesta: false };
+    await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+    await this.almacen().update(CLAVE_RECORDATORIOS, { ...(this.almacen().get(CLAVE_RECORDATORIOS) || {}), [nombre]: Date.now() });
+    this.salida.appendLine(`[recordatorios] puesto con su sí: ${nombre} (${c.cron})`); // diccionario: interno
+    await this.refrescar(true);
+    return this.enviar({ tipo: 'aviso', texto: `Hecho. Te recordaré «${c.etiqueta}» ${c.enPalabras}.` });
+  }
+
+  // «No hace falta» a una propuesta: no se ha puesto nada, y no vuelve.
+  async rechazarLaCostumbre(nombre) {
+    const puestas = { ...(this.almacen().get(CLAVE_COSTUMBRES) || {}) };
+    puestas[nombre] = { ...(puestas[nombre] || {}), quitado: true, porDecir: false, propuesta: false };
+    await this.almacen().update(CLAVE_COSTUMBRES, puestas);
+    return this.refrescar(true);
   }
 
   async dejarDeDecirLaCostumbre(nombre, quitarla) {
@@ -4136,14 +4188,15 @@ ${cabecera}
       return undefined;
     }
 
-    // Lo local, gratis y que se deshace se hace solo y se dice, cada cosa con su
-    // «Quitarlo» (decisión 181, P9). Antes se preguntaba por la vista sencilla.
-    const vista = await this.ponerLaVistaSencillaSola();
+    // Lo que protege o mantiene se hace solo y se dice, con su «Quitarlo»
+    // (decisión 181, P9). La vista sencilla no: es una preferencia suya, y se le
+    // pregunta, una vez y a un clic (decisión 187).
+    await this.preguntarLaVistaSencilla(hecho);
+    await this.preguntarLosConsejos({ soltar: false }).catch((e) => this.salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
     const guardado = await this.fraseDelGuardadoSolo(hecho);
     // Sale al pintar la principal, aquí abajo.
     this.dejarElAviso(puestos);
     for (const dicho of dichos) this.dejarElAviso(dicho, QUITAR_LO_DE_CLAUDE_DEL_MONTAJE);
-    this.dejarElAviso(vista, vista ? QUITAR_LA_VISTA_SENCILLA : null);
     this.dejarElAviso(guardado, guardado ? QUITAR_EL_GUARDADO_SOLO : null);
     this.dejarElAviso(sinCopias);
     // Se pinta la principal sin soltar el aviso: va al final, junto con «Dale a enviar».
@@ -4320,20 +4373,20 @@ ${cabecera}
     }
   }
 
-  // Al montar, sin preguntar (decisión 181): es de esta ventana y se deshace con
-  // «Ver el editor completo». Sin frase si ya estaba así.
-  async ponerLaVistaSencillaSola() {
+  // Al montar, se pregunta (decisión 187): cómo quiere ver su ventana es una
+  // preferencia suya, no algo que la barra deba adivinar. Se puede ser alguien que
+  // solo está mirando cómo funciona esto. Sin pregunta si ya está así.
+  async preguntarLaVistaSencilla(hecho) {
     try {
-      if (disfraz.quiereVistaSencilla()) return null;
-      const { ok, mensaje } = await disfraz.volverAModoSencillo(this.contexto, this.salida);
-      if (!ok) {
-        this.salida.appendLine(`[vistaSencilla] no se ha podido poner sola: ${mensaje}`); // diccionario: interno
-        return null;
-      }
-      return 'He dejado esta ventana en vista sencilla, sin barras ni ficheros a la vista. Se ve del todo al cerrar y abrir la ventana.';
+      if (disfraz.quiereVistaSencilla()) return;
+      const sencilla = await vscode.window.showInformationMessage(
+        `${hecho.mensaje} ¿Dejo esta ventana en vista sencilla, sin barras ni ficheros a la vista?`,
+        'Sí, más sencillo',
+        'No, déjala como está',
+      );
+      if (sencilla === 'Sí, más sencillo') await this.modoSencillo();
     } catch (error) {
       this.salida.appendLine(`[vistaSencilla] ${error.message}`); // diccionario: interno
-      return null;
     }
   }
 
@@ -4705,10 +4758,13 @@ function activate(contexto) {
     // Lo de esta persona en los ajustes de Claude, y Codex con una versión que ya
     // no existe (decisión 157).
     await panel.ponerLoDeClaudeAlAbrir().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
+    // Los consejos de Claude se preguntan, no se quitan solos (decisión 187). Sin
+    // esperar: la pregunta no tiene que parar lo demás.
+    panel.preguntarLosConsejos().catch((e) => salida.appendLine(`[claude] ${e.message}`)); // diccionario: interno
     await panel.arreglarCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
     // Y el aviso al terminar de Codex, si se quiere (decisión 171): se ofrece, no se pone solo.
     await panel.ofrecerElAvisoDeCodex().catch((e) => salida.appendLine(`[codex] ${e.message}`)); // diccionario: interno
-    // Y lo demás que se puede hacer solo, después de los raíles (P9).
+    // Y lo demás que debe hacerse solo, después de los raíles (P9).
     await panel.hacerSoloLoQueSePuede().catch((e) => salida.appendLine(`[solo] ${e.message}`)); // diccionario: interno
     // Y con «Los dos» en los ajustes, la carpeta también para el otro (decisión 158).
     await panel.prepararParaLosDos().catch((e) => salida.appendLine(`[losDos] ${e.message}`)); // diccionario: interno

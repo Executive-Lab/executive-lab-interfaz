@@ -9041,6 +9041,78 @@ montaje con GitHub. La batería no lanza el `claude` de verdad: lo sustituye al 
    {Claude}. Pulsa «Algo va mal» y pásale el código a tu tutor.»
 Pruebas: `humo.js` sigue en 514 (las comprobaciones de la 186 crecen por dentro). Cinco mutaciones, todas caen.
 
+## 187. Solo lo que debe hacerse solo
+
+**Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `solo-lo-que-debe`
+
+Jose corrigió P9, literal: *«ojo: diferencia. debe hacerse solo lo que debe hacerse solo, no lo que puede. Lo que es
+mejor que haga el alumno o que requiere info del alumno hay que pedírsela»*. La constitución decía «Lo que se puede
+hacer solo, se hace solo», y las decisiones 181 y 184 lo leyeron como «todo lo local, gratis y reversible, sin
+preguntar». Esta decisión cambia la regla y repasa lo que la barra hace sin preguntar.
+
+**La regla (P9, «Lo que debe hacerse solo, se hace solo»).**
+- **Se hace solo** lo que protege o mantiene sin que la persona tenga que pensarlo: las copias, poner al día, arreglar lo
+  que es de la barra, y lo que hace falta para que funcione.
+- **Se le pregunta** lo que necesita información suya (su nivel, su negocio, su objetivo, sus datos) y lo que es mejor que
+  decida o haga él (sus preferencias, cómo trabaja, lo que le enseña algo). Una vez, con opciones y a un clic.
+- Siguen valiendo las cuatro excepciones de siempre (sale del ordenador, no se deshace, cuesta dinero, decide su negocio),
+  que se proponen a un clic. La regla vigente está en `02-DOCS/wiki/sdd/constitution.md` y, para el asistente, en la
+  regla 9 de `siempre.md` (los tres sitios donde está: `skills/`, `extension/media/railes/` y `.claude/skills/`). La
+  historia de las decisiones viejas no se toca.
+
+**El repaso.** Lo que la barra hace sin preguntar, con el criterio nuevo:
+
+| Qué | Dónde | Decisión | Veredicto | Por qué |
+|---|---|---|---|---|
+| Copias solas cada hora | `ajustes.js`, `guardar.js`, `fraseDelGuardadoSolo` | 164, 181 | **Se queda solo** | Protege su trabajo sin que lo piense. Se dice en una frase, con «Quitarlo» |
+| Punto de partida y poner git al pulsar «Preparar esta carpeta» | `arrancar.js` | 164, 165 | **Se queda solo** | Mantiene: sin historial no hay copias. Su clic en Preparar es el sí de instalar git |
+| Poner el asistente que falta, con «Claude», «Codex» o «Los dos» en los ajustes | `arrancar.conElAjuste`, `prepararParaLosDosYa` | 158, 181 | **Se queda solo** | Ya lo pidió él en los ajustes, y hace falta para que funcione. Sin ajuste, sigue preguntando «¿Cuál pongo?» |
+| Preparar la carpeta para el otro asistente con «Los dos» | `prepararParaLosDos` | 158 | **Se queda solo** | Ya lo pidió él en los ajustes |
+| «Dale a enviar» tras el primer mensaje y «He puesto al día» | `extension.js` | 166, 181 | **Se queda solo** | Es una frase, no decide nada |
+| **Vista sencilla** al montar | `extension.js` (`preguntarLaVistaSencilla`) | 181 | **Pasa a pregunta** | Es una preferencia suya: cómo quiere ver su ventana. «¿Dejo esta ventana en vista sencilla…?», una vez y a un clic |
+| **«¿Qué tal te manejas con el ordenador?»** (`nivel`) | `arrancar.js`, `rumbo.js` | 184 | **Vuelve a preguntarse** | Es información suya y decide cómo se le habla desde el primer momento. El valor llega a RSC como antes (`--technical-level`) |
+| **«¿Qué vas a llevar en esta carpeta?»** (`alcance`) y **«¿Cuántas personas están metidas en esto?»** (`personas`) | `arrancar.js`, `rumbo.js` | 184 | **Vuelven a preguntarse** | Se usan, así que no se quedan fuera (la prueba, abajo): van al perfil (`alcance:`, `personas:`), al nombre que se sugiere (una tarea no se llama como un departamento: con «La empresa entera» hay una sola caja de nombre) y al primer mensaje («En esta carpeta llevo…») |
+| Nombre rellenado con el de la carpeta | `arrancar.nombreDeLaCarpeta` | 184 | **Se queda, y se sigue preguntando** | Lo rellenado es una sugerencia que él confirma o cambia (Intro): no se contesta por la persona |
+| Empezar a preparar al elegir una carpeta nueva | `arrancar.tomarLaEleccion` | 184 | **Se queda** | Elegir la carpeta es su acción, y las preguntas se hacen igual: empieza «sola» quiere decir sin el segundo clic, no sin la persona |
+| Español en los ajustes de Claude de la carpeta (`language`) | `ajustes-locales.js` | 157 | **Se queda solo** | Hace falta para que funcione: en la clase del 13-10 el asistente se puso a hablar en catalán |
+| `ask` antes de `git push` y `gh pr create` | `ajustes-locales.js` | 157, 177 | **Se queda solo** | Protege: es un freno, y subir sale de su ordenador en su nombre |
+| Avisos del sistema cuando Claude termina o te necesita | `ajustes-locales.js` | 162, 182 | **Se queda solo** | Hace falta para que funcione: Claude se quedaba esperando un sí y nadie se enteraba. Con «Quitarlo» |
+| **Consejos de Claude** (`spinnerTipsEnabled: false`) | `ajustes-locales.js` (`conConsejos`), `extension.js` (`preguntarLosConsejos`) | 185 | **Pasa a pregunta** | Los consejos enseñan algo, y es él quien decide si los quiere. «Mientras trabaja, Claude enseña consejos sueltos, y salen en inglés. ¿Los quito?» Una vez por carpeta; «No, déjalos» no vuelve |
+| Verbos del indicador de Claude en español | `ajustes-del-editor.js` (instalador y barra) | 185 | **Se queda solo** | Es el idioma de lo que se ve, parte de que funcione en español |
+| «Que Claude solo vea lo que le pegues» | Ayuda, datos de clientes | 185 | Ya era pregunta | Es un botón suyo |
+| **Recordatorio por costumbre** (la barra ve que pulsa un botón el mismo día y le pone su `cuando`) | `extension.js` (`ponerLasCostumbres`, `aceptarLaCostumbre`) | 144 | **Pasa a pregunta** | Cuándo se hace algo es cómo trabaja él. «Sueles pulsar «X» cada lunes hacia las 10:00. ¿Te lo recuerdo?» · Sí, recuérdamelo · No hace falta (no vuelve) |
+| Control remoto de Claude y vista enfocada, puestos por el instalador y por la barra al arrancar | `control-remoto.js`, `ajustes-del-editor.js` | 143, 163 | **Se queda, a decidir por Jose** | Los pidió Jose expresamente («que automáticamente se ponga»). Es una preferencia suya de cómo trabaja, y dudo: la barra no puede cambiar lo del instalador sin tocar el Mac, Windows y sus pruebas. Queda apuntado para que decida |
+| Raíles al día, arreglos «al abrir», marcas de RSC (`.no-audit`, `.no-worktree-cleanup`, `.no-gitmoji`, `.no-worktree-isolation`, `.team-safe-3`), lo pesado fuera de las copias | `terreno.js`, `solo.js`, `decidir.js`, `aplicar.js` | 142, 147, 157, 161 | **Se queda solo** | Mantiene lo que es de la barra, y sin ello no funciona (el guardián de gitmoji denegaría cada copia) |
+| Poner la barra al día | `version.js` | 132, 136, 166 | **Se queda solo** | Mantiene lo que es de la barra; ya tiene su opción de que le pregunte |
+| «Seguir donde lo dejé» con por dónde ibas, ideas y adaptaciones de la barra | `por-donde-ibas.js`, `ideas.js` | 152, 160 | **Se queda** | Solo informan: no cambian nada ni deciden por él. Lo que cambia algo (conectar, mover documentos) ya se pregunta |
+| Conectar, mover documentos, subir a GitHub, avisos a Executive Lab, el aviso de Codex | varias | 131, 152, 171, 177 | Ya eran pregunta | Salen de su ordenador, decide su negocio o cuestan |
+
+**Qué se comprobó antes de devolver `alcance` y `personas`.** La 184 las quitó porque «ninguna se le manda a RSC».
+Es verdad, pero se usan: `ponerLosNombres` las escribe en el perfil (`ponerEnElPerfil`) y `identidad.js` las lee para
+volver a escribirlas cuando RSC reescribe el perfil; `preguntarNombres` las usa para decidir la pregunta del nombre y
+si hay una caja o dos; y `loQueLlevaLaCarpeta` las dice en el primer mensaje. Una pregunta cuyo dato se usa no se quita:
+se pregunta. La respuesta «Completa conmigo el perfil» del primer mensaje no las sustituye: ese perfil lo completa el
+asistente después, y estas dos son lo primero que decide cómo se llama la carpeta.
+
+**Qué cambia en la pantalla.**
+- Preparar vuelve a hacer de 7 a 11 preguntas (la brújula lo dice con el número que cuenta `rumbo`).
+- Al terminar de montar, sale «¿Dejo esta ventana en vista sencilla…?» y, con Claude, la de los consejos. La puesta al día
+  no pregunta nada de eso.
+- Al abrir una carpeta ya montada, los consejos se preguntan una vez; los que ya estaban quitados no se tocan.
+- Los recordatorios por costumbre salen como propuesta en la principal, no ya puestos.
+
+**Las pruebas**: `humo.js` pasa de 518 a 520 (529 con `--con-arnes`): dos nuevas (la de P9 y la regla 9 del asistente, y la
+de los consejos preguntados al abrir y al montar) y las de la 184, la 181, la 185, la 157, la 162 y la 144 cambiadas a
+lo que se pregunta; `mapeos-codex.js` 30, `contrato.js` 15, `empresas-distintas.js` en verde (con el guion de respuestas
+de antes de la 184), el diccionario y `revisar-powershell.js` sin pegas. Las respuestas de los montajes de verdad
+(`--con-arnes`, `empresas-distintas.js`) recuperan las tres preguntas.
+
+Once mutaciones, cada una puesta y restaurada desde copia, y las once caen: sin la pregunta del nivel; sin `alcance` ni
+`personas`; el nivel contestado sin guardarse (llega siempre `non-technical`); la vista sencilla puesta sin preguntar; la
+vista sencilla preguntada aunque ya esté puesta; los consejos quitados sin su sí; «No, déjalos» sin apuntarse; los
+consejos preguntados en una carpeta que no montó la barra; la costumbre puesta sin su sí; «Sí» a una costumbre que no se
+había propuesto; y la regla 9 del asistente sin mandar preguntar lo suyo.
+
 ## 188. La barra no se atasca
 
 **Fecha:** 17 de octubre de 2026 · **Estado:** hecho en el código · **Vía rápida** `la-barra-no-se-atasca`

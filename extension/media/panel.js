@@ -2345,10 +2345,16 @@ function lasTarjetas() {
       ${boton({ etiqueta: 'Hacerlo ahora', icono: '▸', principal: true, accion: { tipo: 'hacerElRecordatorio', nombre: r.nombre } })}
       ${boton({ etiqueta: 'Ahora no', discreto: true, accion: { tipo: 'ahoraNoRecordatorio', nombre: r.nombre } })}
     </div>`;
-  // Y la costumbre que la barra acaba de convertir en recordatorio: se hizo
-  // sola (P9), así que se dice, una vez, y se puede deshacer.
+  // Y la costumbre que la barra ha visto: se le propone el recordatorio, y no se
+  // pone sin su sí (decisión 187: cuándo hace algo es cómo trabaja él). Las que una
+  // barra de antes ya puso sola se dicen una vez, y se pueden deshacer.
   const c = estado.costumbrePuesta;
-  const laCostumbre = !c ? '' : `
+  const laCostumbre = !c ? '' : c.propuesta ? `
+    <div class="consejo">
+      <p class="que">${texto(`Sueles pulsar «${c.etiqueta}» ${c.enPalabras.replace(' a las ', ' hacia las ')}. ¿Te lo recuerdo a esa hora?`)}</p>
+      ${boton({ etiqueta: 'Sí, recuérdamelo', icono: '✓', principal: true, accion: { tipo: 'ponerLaCostumbre', nombre: c.nombre } })}
+      ${boton({ etiqueta: 'No hace falta', discreto: true, accion: { tipo: 'noHaceFaltaLaCostumbre', nombre: c.nombre } })}
+    </div>` : `
     <div class="consejo">
       <p class="que">${texto(`Sueles pulsar «${c.etiqueta}» ${c.enPalabras.replace(' a las ', ' hacia las ')}, así que te lo recordaré a esa hora.`)}</p>
       ${boton({ etiqueta: 'Entendido', icono: '✓', principal: true, accion: { tipo: 'entendidaLaCostumbre', nombre: c.nombre } })}
